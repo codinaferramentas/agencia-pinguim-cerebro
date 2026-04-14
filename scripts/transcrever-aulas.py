@@ -7,6 +7,12 @@ import os
 import sys
 import glob
 from pathlib import Path
+
+# Fix Windows encoding
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+os.environ["PYTHONIOENCODING"] = "utf-8"
+
 from faster_whisper import WhisperModel
 
 # Configuração
@@ -84,10 +90,12 @@ def main():
     model = WhisperModel("base", device="cpu", compute_type="int8")
     print("Modelo carregado!\n")
 
-    # Encontrar todos os vídeos
+    # Encontrar todos os vídeos (usar os.walk em vez de glob por causa de [CICLO] no path)
     videos = []
-    for ext in ["*.mp4", "*.mkv", "*.webm"]:
-        videos.extend(glob.glob(os.path.join(AULAS_DIR, "**", ext), recursive=True))
+    for root, dirs, files in os.walk(AULAS_DIR):
+        for f in files:
+            if f.lower().endswith(('.mp4', '.mkv', '.webm')):
+                videos.append(os.path.join(root, f))
 
     videos.sort()
 
