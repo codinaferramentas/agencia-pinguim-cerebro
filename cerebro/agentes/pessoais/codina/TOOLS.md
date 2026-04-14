@@ -1,0 +1,7 @@
+# TOOLS.md — Agente do Codina
+
+## Ferramentas ativas
+[a definir]
+
+## Ferramentas planejadas
+[a definir]

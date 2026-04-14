@@ -1,0 +1,7 @@
+# TOOLS.md — Tráfego
+
+## Ferramentas ativas
+[a definir]
+
+## Ferramentas planejadas
+[a definir]
