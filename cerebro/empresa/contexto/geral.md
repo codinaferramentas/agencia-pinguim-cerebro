@@ -11,7 +11,7 @@ A **Agência Pinguim** é uma EdTech brasileira especializada em cursos e mentor
 | Produto | Tipo | Preço | Como vende |
 |---------|------|-------|------------|
 | Elo | Programa de conteúdo LoFi | R$ 997 | Desafio LoFi (Micha) — 5 dias grupo WA + 2 aulas ao vivo |
-| Proalt | Programa de low ticket | [a definir] | Desafio Low Ticket (Pedro) — 2 aulas ao vivo |
+| Proalt | Programa de Aceleração Low Ticket | R$ 1.497 | Desafio Low Ticket (Pedro, R$69) — desafiodolowticket.com.br |
 | Lira | Mentoria iniciante | [a definir] | Upgrade de alunos, imersões, time comercial |
 | Taurus | Mentoria escala | [a definir] | Upgrade de alunos, imersões, time comercial |
 | Orion | Mastermind | [a definir] | [a definir] |
