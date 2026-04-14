@@ -1,0 +1,9 @@
+# TOOLS.md — Lens Orchestrator
+
+## Ferramentas ativas
+
+[a definir]
+
+## Ferramentas planejadas
+
+[a definir]

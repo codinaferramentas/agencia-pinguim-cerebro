@@ -1,0 +1,9 @@
+# TOOLS.md — Spy
+
+## Ferramentas ativas
+
+[a definir]
+
+## Ferramentas planejadas
+
+[a definir]
