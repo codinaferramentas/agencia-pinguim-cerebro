@@ -551,9 +551,9 @@ footer .brand { color: var(--orange); font-weight: 700; }
     <h1>Painel de <span>Agentes IA</span></h1>
     <p class="hero-sub">Ecossistema de agentes inteligentes da Agencia Pinguim — construcao em andamento</p>
     <div class="hero-stats">
-      <div class="hero-stat"><span class="val">54</span><span class="lbl">Prompts prontos</span></div>
-      <div class="hero-stat"><span class="val">19</span><span class="lbl">Agentes nucleo</span></div>
-      <div class="hero-stat"><span class="val">48</span><span class="lbl">Clones alimentados</span></div>
+      <div class="hero-stat"><span class="val">55</span><span class="lbl">Prompts prontos</span></div>
+      <div class="hero-stat"><span class="val">20</span><span class="lbl">Agentes nucleo</span></div>
+      <div class="hero-stat"><span class="val">54</span><span class="lbl">Clones alimentados</span></div>
       <div class="hero-stat"><span class="val">3</span><span class="lbl">Mini-agencias</span></div>
     </div>
     <p class="hint"><strong>Dica:</strong> clique em qualquer agente pra ver o framework completo dele</p>
@@ -799,6 +799,27 @@ footer .brand { color: var(--orange); font-weight: 700; }
           <div class="agent-chip"><div class="agent-avatar">PL</div><div class="agent-info"><div class="a-name">Patrick Lencioni</div><div class="a-status">Teams</div></div></div>
           <div class="agent-chip"><div class="agent-avatar">DS</div><div class="agent-info"><div class="a-name">Derek Sivers</div><div class="a-status">Contrarian</div></div></div>
           <div class="agent-chip"><div class="agent-avatar">YC</div><div class="agent-info"><div class="a-name">Yvon Chouinard</div><div class="a-status">Mission</div></div></div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="squad-card status-partial">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">📊</div>
+        <div class="squad-info"><div class="squad-name">Squad Data & Analytics</div><div class="squad-desc">6 especialistas em dados + Data Chief orquestrador</div></div>
+        <div class="squad-stats"><div class="squad-stat"><span class="s-val">7</span><span class="s-lbl">Especialistas</span></div><span class="status-badge badge-partial">1 prompt + 6 SOULs</span></div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body"><div class="squad-body-inner">
+        <div class="squad-flow"><strong>Como funciona:</strong> Pergunta de dados chega → <strong>Data Chief</strong> diagnostica em 3 perguntas (dimensao, tipo, abordagem) → seleciona 1-2 especialistas conforme o framework necessario (Avinash pra funnel, Fader pra LTV, Ellis pra growth, Mehta pra churn, Spinks pra comunidade, Kao pra cohort) → entrega analise + recomendacao acionavel.</div>
+        <div class="agents-grid">
+          <div class="agent-chip has-prompt" onclick="openAgent('data-chief')"><div class="agent-avatar">👔</div><div class="agent-info"><div class="a-name">Data Chief</div><div class="a-status">Orquestrador</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">AK</div><div class="agent-info"><div class="a-name">Avinash Kaushik</div><div class="a-status">Web Analytics</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">PF</div><div class="agent-info"><div class="a-name">Peter Fader</div><div class="a-status">CLV / CLM</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">SE</div><div class="agent-info"><div class="a-name">Sean Ellis</div><div class="a-status">Growth</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">NM</div><div class="agent-info"><div class="a-name">Nick Mehta</div><div class="a-status">CS / Churn</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">DS</div><div class="agent-info"><div class="a-name">David Spinks</div><div class="a-status">Community</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">WK</div><div class="agent-info"><div class="a-name">Wes Kao</div><div class="a-status">Cohort</div></div></div>
         </div>
       </div></div>
     </div>
@@ -1058,6 +1079,12 @@ const AGENTS = {
     entregavel: 'Direcao narrativa com storyteller + framework + quality check.',
     base: '13 storytellers: Campbell, Donald Miller, Blake Snyder, Dan Harmon, Nancy Duarte, Shawn Coyne, Oren Klaff, Kindra Hall, Keith Johnstone, Matthew Dicks, Park Howell, Marshall Ganz.',
     aciona: ['Qualquer storyteller'] },
+  'data-chief': { name: 'Data Chief', avatar: '👔', squad: 'Squad Data & Analytics', status: 'done',
+    resumo: 'Diretor de analytics. NAO responde com dados diretos — diagnostica a pergunta em 3 perguntas (dimensao, tipo, abordagem) e seleciona 1-2 especialistas com framework adequado.',
+    faz: ['Diagnostica: aquisicao/ativacao/retencao/monetizacao', 'Seleciona entre Avinash (funnel), Fader (LTV), Ellis (growth), Mehta (churn), Spinks (comunidade), Kao (cohort)', 'Aplica framework do especialista', 'Entrega analise + recomendacao acionavel', 'Nunca inventa numeros — se falta dado, diz o que medir'],
+    entregavel: 'Analise estruturada com diagnostico + especialista + framework + recomendacao acionavel.',
+    base: '6 especialistas: Avinash Kaushik (Web Analytics 2.0), Peter Fader (Customer Centricity / CLV), Sean Ellis (Growth Hacking), Nick Mehta (NRR / Customer Success), David Spinks (Community SPACES), Wes Kao (Cohort Analysis).',
+    aciona: ['Qualquer dos 6 especialistas conforme o framework necessario'] },
   'board-chair': { name: 'Board Chair', avatar: '👔', squad: 'Advisory Board', status: 'done',
     resumo: 'Presidente do board. NAO da conselho direto — diagnostica o dilema dos socios em 4 perguntas e seleciona 1-2 conselheiros ideais (Dalio, Munger, Thiel, Sinek, Brene, etc.) pra responder.',
     faz: ['Diagnostica dilema em 4 perguntas (tipo, escala, natureza, pedido)', 'Seleciona 1-2 conselheiros com justificativa', 'Mantem estilo de cada conselheiro ao responder', 'Entrega deliberacao estruturada com proximo passo concreto', 'Registra deliberacoes no cerebro (auditavel)'],
