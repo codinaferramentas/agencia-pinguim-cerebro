@@ -551,9 +551,9 @@ footer .brand { color: var(--orange); font-weight: 700; }
     <h1>Painel de <span>Agentes IA</span></h1>
     <p class="hero-sub">Ecossistema de agentes inteligentes da Agencia Pinguim — construcao em andamento</p>
     <div class="hero-stats">
-      <div class="hero-stat"><span class="val">59</span><span class="lbl">Prompts prontos</span></div>
-      <div class="hero-stat"><span class="val">24</span><span class="lbl">Agentes nucleo</span></div>
-      <div class="hero-stat"><span class="val">87</span><span class="lbl">Clones alimentados</span></div>
+      <div class="hero-stat"><span class="val">60</span><span class="lbl">Prompts prontos</span></div>
+      <div class="hero-stat"><span class="val">25</span><span class="lbl">Agentes nucleo</span></div>
+      <div class="hero-stat"><span class="val">90</span><span class="lbl">Clones alimentados</span></div>
       <div class="hero-stat"><span class="val">3</span><span class="lbl">Mini-agencias</span></div>
     </div>
     <p class="hint"><strong>Dica:</strong> clique em qualquer agente pra ver o framework completo dele</p>
@@ -799,6 +799,24 @@ footer .brand { color: var(--orange); font-weight: 700; }
           <div class="agent-chip"><div class="agent-avatar">PL</div><div class="agent-info"><div class="a-name">Patrick Lencioni</div><div class="a-status">Teams</div></div></div>
           <div class="agent-chip"><div class="agent-avatar">DS</div><div class="agent-info"><div class="a-name">Derek Sivers</div><div class="a-status">Contrarian</div></div></div>
           <div class="agent-chip"><div class="agent-avatar">YC</div><div class="agent-info"><div class="a-name">Yvon Chouinard</div><div class="a-status">Mission</div></div></div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="squad-card status-partial">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">🇧🇷</div>
+        <div class="squad-info"><div class="squad-name">Squad Creator Pro (BR)</div><div class="squad-desc">3 mestres brasileiros em creator economy + Squad Chief</div></div>
+        <div class="squad-stats"><div class="squad-stat"><span class="s-val">4</span><span class="s-lbl">Especialistas</span></div><span class="status-badge badge-partial">1 prompt + 3 SOULs</span></div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body"><div class="squad-body-inner">
+        <div class="squad-flow"><strong>Por que existe:</strong> Copy Chief traz copywriters globais. Story Chief traz storytellers globais. Esta squad traz a lente BRASILEIRA — creator economy BR 2026, audiencia brasileira, Hotmart, creator como empresa. <strong>Alan Nicolas</strong> (clonagem de voz), <strong>Pedro Valerio</strong> (processo/automacao), <strong>Thiago Finch</strong> (estrategia de negocio). Complementa, nao substitui.</div>
+        <div class="agents-grid">
+          <div class="agent-chip has-prompt" onclick="openAgent('squad-chief')"><div class="agent-avatar">👔</div><div class="agent-info"><div class="a-name">Squad Chief</div><div class="a-status">Orquestrador BR</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">AN</div><div class="agent-info"><div class="a-name">Alan Nicolas</div><div class="a-status">Mind Cloning</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">PV</div><div class="agent-info"><div class="a-name">Pedro Valerio</div><div class="a-status">Process & Automation</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">TF</div><div class="agent-info"><div class="a-name">Thiago Finch</div><div class="a-status">Business Strategy</div></div></div>
         </div>
       </div></div>
     </div>
@@ -1168,6 +1186,12 @@ const AGENTS = {
     entregavel: 'Direcao narrativa com storyteller + framework + quality check.',
     base: '13 storytellers: Campbell, Donald Miller, Blake Snyder, Dan Harmon, Nancy Duarte, Shawn Coyne, Oren Klaff, Kindra Hall, Keith Johnstone, Matthew Dicks, Park Howell, Marshall Ganz.',
     aciona: ['Qualquer storyteller'] },
+  'squad-chief': { name: 'Squad Chief (Creator Pro BR)', avatar: '👔', squad: 'Squad Creator Pro', status: 'done',
+    resumo: 'Orquestra 3 mestres brasileiros em creator economy (Alan Nicolas, Pedro Valerio, Thiago Finch). Complementa Copy Chief e Story Chief trazendo a lente pragmatica BR pra aplicacao real no mercado 2026.',
+    faz: ['Diagnostica em 3 perguntas: tema, sujeito, escopo', 'Seleciona entre Alan (voz/DNA), Pedro Valerio (processo) e Thiago Finch (negocio)', 'Adapta ao contexto de Micha, Pedro Aredes ou Luiz', 'Responde com exemplos do mercado BR atual', 'Termina com proximo passo concreto'],
+    entregavel: 'Consultoria pragmatica BR com diagnostico + especialista + analise + proximo passo.',
+    base: '3 mestres: Alan Nicolas (Mind Cloning), Pedro Valerio (Process & Automation), Thiago Finch (Business Strategy).',
+    aciona: ['Qualquer um dos 3 especialistas ou combinacao pareada'] },
   'traffic-masters-chief': { name: 'Traffic Masters Chief', avatar: '👔', squad: 'Squad Traffic Masters', status: 'done',
     resumo: 'Consultoria estrategica de trafego pago. NAO executa — orquestra 15 especialistas pra decisoes macro: qual canal investir, diagnostico de CPA travado, validar estrategia antes de grande gasto.',
     faz: ['Diagnostica em 4 perguntas: plataforma, fase, escopo, tipo', 'Seleciona entre 7 mestres (Pedro Sobral, Molly Pittman, Kusmich, Mandalia, Kasim, Tom Breeze, Ralph Burns) + 8 operacionais', 'Adapta evidencia global ao contexto BR', 'Delega execucao pras mini-agencias Lancamento/LT'],
