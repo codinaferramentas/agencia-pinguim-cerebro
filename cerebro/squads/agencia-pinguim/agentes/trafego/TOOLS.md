@@ -1,9 +1,10 @@
-# TOOLS.md — Trafego
+# TOOLS.md — Trafego Geral
 
-## Ferramentas ativas
+## Ferramentas essenciais (Fase 4 — MVP)
+### 1. Meta Ads API (leitura)
+Visao cross-produto
+### 2. Acesso ao cerebro
+### 3. OpenAI API
 
-[a definir]
-
-## Ferramentas planejadas
-
-[a definir]
+## Observacoes
+- So monitora — execucao e das squads especializadas (lancamento/LT)

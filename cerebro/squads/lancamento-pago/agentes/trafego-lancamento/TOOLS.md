@@ -1,12 +1,33 @@
 # TOOLS.md — Trafego de Lancamento
 
-## Ferramentas ativas
+## Ferramentas essenciais (Fase 4 — MVP)
 
-[a definir]
+### 1. Meta Ads API (leitura + escrita)
+- **Pra que serve:** Montar campanhas, consultar CPA/ROAS, pausar/escalar publicos
+- **Credenciais:** Long-lived token + Business ID + Ad Account ID
+- **Custo:** Gratis
+- **Permissoes:** ads_management, ads_read
 
-## Ferramentas planejadas
+### 2. Hotmart API (leitura)
+- **Pra que serve:** Cruzar dados de vendas com campanhas pra calcular ROAS real
+- **Custo:** Gratis
 
-- Meta Ads Manager (criacao e gestao de campanhas)
-- Meta Business Suite (publicos e pixel)
-- Google Sheets (relatorio de CPA por lote)
-- UTM builder (rastreamento de campanhas)
+### 3. Acesso ao cerebro
+- **Pra que serve:** Briefing do Estrategista + publicos que funcionaram
+- **Integracao:** Filesystem direto
+
+### 4. OpenAI API
+- **Custo:** Pay-per-use
+
+## Ferramentas ideais (Fase 5+)
+
+### 5. TikTok Ads API
+- **Pra que serve:** Expandir trafego alem de Meta
+### 6. Google Ads API
+- **Pra que serve:** Campanhas de busca
+
+## Observacoes
+
+- **CRITICO:** Pixel Meta configurado ANTES de rodar campanha
+- Acoes de escalar/pausar devem ter LOG e confirmar em valores altos
+- Budget diario acima de limite precisa aprovacao humana

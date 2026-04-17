@@ -1,9 +1,10 @@
 # TOOLS.md — Juridico
 
-## Ferramentas ativas
+## Ferramentas essenciais (Fase 4 — MVP)
+### 1. Acesso ao cerebro
+Termos, politicas, contratos
+### 2. OpenAI API
 
-[a definir]
-
-## Ferramentas planejadas
-
-[a definir]
+## Observacoes
+- SEMPRE recomenda advogado humano em decisoes criticas
+- Agente da orientacao, nao parecer juridico formal
