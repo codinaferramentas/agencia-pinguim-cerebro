@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Squad de Marketing IA — Proposta</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background: #0a0a0a; color: #e0e0e0; line-height: 1.7; }
+
+        .hero { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); padding: 60px 40px; text-align: center; border-bottom: 3px solid #e94560; }
+        .hero h1 { font-size: 2.2em; color: #fff; margin-bottom: 8px; }
+        .hero .subtitle { font-size: 1.1em; color: #8892b0; }
+        .hero .badge { display: inline-block; background: #e94560; color: #fff; padding: 6px 18px; border-radius: 20px; font-size: 0.85em; font-weight: 600; margin-top: 15px; }
+
+        .nav { background: #111; padding: 12px 30px; position: sticky; top: 0; z-index: 100; border-bottom: 1px solid #222; display: flex; gap: 8px; overflow-x: auto; flex-wrap: wrap; }
+        .nav a { color: #8892b0; text-decoration: none; font-size: 0.82em; white-space: nowrap; padding: 5px 12px; border-radius: 15px; border: 1px solid #333; transition: all 0.2s; }
+        .nav a:hover { color: #fff; border-color: #e94560; background: rgba(233,69,96,0.15); }
+
+        .container { max-width: 960px; margin: 0 auto; padding: 40px 30px; }
+        h2 { font-size: 1.8em; color: #fff; margin: 50px 0 20px; padding-bottom: 10px; border-bottom: 2px solid #e94560; }
+        h2 .section-num { color: #e94560; font-size: 0.6em; display: block; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 5px; }
+        h3 { font-size: 1.25em; color: #ccd6f6; margin: 25px 0 12px; }
+        p { margin: 10px 0; color: #a8b2d1; }
+        strong { color: #ccd6f6; }
+
+        .highlight { background: linear-gradient(135deg, #1a1a2e, #16213e); border-left: 4px solid #e94560; padding: 18px 22px; border-radius: 0 8px 8px 0; margin: 18px 0; }
+        .highlight p { color: #ccd6f6; margin: 4px 0; }
+
+        .card { background: #151515; border: 1px solid #222; border-radius: 12px; padding: 22px; margin: 12px 0; transition: border-color 0.2s; }
+        .card:hover { border-color: #e94560; }
+        .card-title { font-size: 1.05em; color: #fff; font-weight: 700; margin-bottom: 8px; }
+
+        .quote { background: #16213e; border-radius: 12px; padding: 20px 25px 20px 50px; margin: 18px 0; position: relative; font-style: italic; color: #ccd6f6; }
+        .quote::before { content: '\201C'; font-size: 3em; color: #e94560; position: absolute; top: 0; left: 15px; line-height: 1; }
+
+        .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }
+        .metric { background: #151515; border: 1px solid #222; border-radius: 10px; padding: 20px; text-align: center; }
+        .metric .value { font-size: 1.7em; font-weight: 700; color: #e94560; }
+        .metric .label { font-size: 0.82em; color: #8892b0; margin-top: 4px; }
+
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 0.93em; }
+        th { background: #1a1a2e; color: #e94560; text-align: left; padding: 10px 14px; font-weight: 600; border-bottom: 2px solid #e94560; }
+        td { padding: 9px 14px; border-bottom: 1px solid #1a1a1a; color: #a8b2d1; }
+        tr:hover td { background: #111; }
+
+        ul, ol { margin: 8px 0 8px 22px; }
+        li { margin: 5px 0; color: #a8b2d1; }
+
+        pre { background: #0d1117; border: 1px solid #222; border-radius: 8px; padding: 18px; overflow-x: auto; margin: 12px 0; font-size: 0.82em; line-height: 1.6; color: #8892b0; }
+
+        .timeline { position: relative; padding-left: 30px; margin: 20px 0; }
+        .timeline::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: #222; }
+        .timeline-item { position: relative; margin: 18px 0; padding: 15px 20px; background: #151515; border-radius: 8px; border: 1px solid #222; }
+        .timeline-item::before { content: ''; position: absolute; left: -26px; top: 20px; width: 12px; height: 12px; border-radius: 50%; background: #e94560; border: 2px solid #0a0a0a; }
+        .timeline-item .time { color: #e94560; font-size: 0.8em; font-weight: 600; }
+
+        .insight-box { background: linear-gradient(135deg, #1a1a2e, #0f3460); border: 1px solid #e94560; border-radius: 12px; padding: 20px; margin: 15px 0; }
+        .insight-box h4 { color: #e94560; margin: 0 0 8px; font-size: 0.95em; text-transform: uppercase; letter-spacing: 1px; }
+        .insight-box p { color: #ccd6f6; margin: 4px 0; }
+
+        .diagram { background: #0d1117; border: 1px solid #e94560; border-radius: 12px; padding: 25px; margin: 20px 0; text-align: center; font-family: 'Cascadia Code', monospace; font-size: 0.82em; line-height: 1.8; color: #8892b0; white-space: pre; overflow-x: auto; }
+
+        .tag { display: inline-block; background: #1a1a2e; color: #e94560; padding: 2px 10px; border-radius: 12px; font-size: 0.78em; font-weight: 600; margin: 2px; }
+
+        .glossary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin: 12px 0; }
+        .glossary-item { background: #151515; padding: 12px 15px; border-radius: 8px; border: 1px solid #222; }
+        .glossary-item strong { color: #e94560; }
+        .glossary-item span { color: #8892b0; font-size: 0.88em; }
+
+        a { color: #e94560; text-decoration: none; }
+        .divider { height: 1px; background: linear-gradient(90deg, transparent, #333, transparent); margin: 40px 0; }
+        .footer { text-align: center; padding: 40px; color: #444; font-size: 0.82em; border-top: 1px solid #222; margin-top: 60px; }
+
+        @media (max-width: 768px) {
+            .hero { padding: 35px 18px; }
+            .hero h1 { font-size: 1.5em; }
+            .container { padding: 20px 15px; }
+            h2 { font-size: 1.35em; }
+            .metric-grid { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="hero">
+    <h1>Seu Squad de Marketing com IA</h1>
+    <p class="subtitle">Um time completo de marketing trabalhando pra você — 24/7</p>
+    <span class="badge">Proposta Comercial — Abril 2026</span>
+</div>
+
+<nav class="nav">
+    <a href="#proposta">A Proposta</a>
+    <a href="#time">Seu Time</a>
+    <a href="#dia-a-dia">Dia a Dia</a>
+    <a href="#exemplos">Exemplos Reais</a>
+    <a href="#aprende">Aprende com Você</a>
+    <a href="#como-funciona">Como Funciona</a>
+    <a href="#entregaveis">Entregáveis</a>
+    <a href="#investimento">Investimento</a>
+</nav>
+
+<div class="container">
+
+    <!-- ===== 1: A PROPOSTA ===== -->
+
+    <h2 id="proposta"><span class="section-num">Parte 1</span>O Que Você Vai Ter</h2>
+
+    <p>Imagina ter um <strong style="color:#fff;">time completo de marketing</strong> trabalhando pra você — criando conteúdo, escrevendo copies, planejando campanhas, analisando resultados — disponível 24 horas, 7 dias por semana, pelo custo de uma fração de um único funcionário.</p>
+
+    <div class="metric-grid">
+        <div class="metric">
+            <div class="value" style="font-size:1.3em;">Time completo</div>
+            <div class="label">Copy, design, tráfego, conteúdo, estratégia</div>
+        </div>
+        <div class="metric">
+            <div class="value" style="font-size:1.3em;">24/7</div>
+            <div class="label">Disponível a qualquer hora</div>
+        </div>
+        <div class="metric">
+            <div class="value" style="font-size:1.3em;">Aprende com você</div>
+            <div class="label">Fica melhor a cada dia de uso</div>
+        </div>
+    </div>
+
+    <div class="highlight">
+        <p><strong>Você fala com 1 pessoa (seu assistente) e ele coordena todo o time por trás.</strong></p>
+        <p>Não precisa saber nada técnico. É como ter uma agência no seu bolso — você pede, eles fazem.</p>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ===== 2: O TIME ===== -->
+
+    <h2 id="time"><span class="section-num">Parte 2</span>Seu Time de Marketing</h2>
+
+    <div class="diagram" style="font-size:0.78em; text-align:left; line-height:2;">
+┌──────────────────────────────────────────────────────────────┐
+│              SEU TIME DE MARKETING COM IA                     │
+│                                                              │
+│    Você fala com:                                            │
+│    ┌────────────────────────────────┐                        │
+│    │  SEU ASSISTENTE PESSOAL        │                        │
+│    │  Entende o que você precisa    │                        │
+│    │  e coordena todo o time        │                        │
+│    └───────────────┬────────────────┘                        │
+│                    │                                         │
+│    Ele aciona quem for necessário:                           │
+│                                                              │
+│    ┌────────────────────────────────┐                        │
+│    │  ESTRATEGISTA                  │                        │
+│    │  O cérebro do time. Monta     │                        │
+│    │  funis, planos, campanhas     │                        │
+│    │  e coordena os especialistas  │                        │
+│    └───────────────┬────────────────┘                        │
+│                    │                                         │
+│    ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐     │
+│    │  Copy    │ │ Conteúdo │ │ Tráfego  │ │ Design   │     │
+│    │ Writer   │ │ Manager  │ │ Manager  │ │ Director │     │
+│    └──────────┘ └──────────┘ └──────────┘ └──────────┘     │
+│    ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐     │
+│    │ Social   │ │ Roteiro  │ │ Oferta   │ │ Analista │     │
+│    │ Media    │ │   Mgr    │ │ Expert   │ │ de Dados │     │
+│    └──────────┘ └──────────┘ └──────────┘ └──────────┘     │
+│    ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐     │
+│    │ Página   │ │ Email    │ │  Funil   │ │Pesquisa- │     │
+│    │ de Venda │ │ Mktg     │ │ Builder  │ │  dor     │     │
+│    └──────────┘ └──────────┘ └──────────┘ └──────────┘     │
+│                                                              │
+│    Você fala com 1. O time inteiro trabalha por trás.        │
+└──────────────────────────────────────────────────────────────┘</div>
+
+    <h3>Os especialistas do seu time</h3>
+
+    <table>
+        <tr><th>Especialista</th><th>O que faz</th></tr>
+        <tr>
+            <td><strong>Assistente Pessoal</strong><br><span class="tag">seu ponto de contato</span></td>
+            <td>Quem você fala no dia a dia. Entende o que precisa, coordena o time, entrega resultados. Conhece seu negócio, tom de voz, preferências. Pode ver sua agenda, mandar resumos, lembrar de prazos.</td>
+        </tr>
+        <tr>
+            <td><strong>Estrategista</strong><br><span class="tag">cérebro do time</span></td>
+            <td>O estrategista por trás de tudo. Monta funis completos, planos de campanha, define a estratégia de cada lançamento. Coordena os especialistas: pede copy pro copywriter, anúncio pro tráfego, página pro page builder. Pensa no todo.</td>
+        </tr>
+        <tr>
+            <td><strong>Copywriter</strong></td>
+            <td>Escreve copies pra posts, anúncios, páginas de venda, emails, scripts de vídeo, mensagens de WhatsApp e grupo. Usa técnicas dos melhores copywriters do mundo.</td>
+        </tr>
+        <tr>
+            <td><strong>Social Media Manager</strong></td>
+            <td>Cria plano de conteúdo (30 dias), define pautas, calendário editorial, hashtags, melhores horários pra postar.</td>
+        </tr>
+        <tr>
+            <td><strong>Gestor de Conteúdo</strong></td>
+            <td>Cria carrosséis, textos de post, legendas, stories. Formata tudo pronto pra publicar ou mandar pro designer/freelancer.</td>
+        </tr>
+        <tr>
+            <td><strong>Roteirista</strong></td>
+            <td>Cria roteiros pra Reels, vídeos, VSL. Gancho, desenvolvimento, CTA — tudo estruturado.</td>
+        </tr>
+        <tr>
+            <td><strong>Gestor de Tráfego</strong></td>
+            <td>Analisa campanhas, sugere otimizações, recomenda público, criativos, budget. Gera relatórios de performance.</td>
+        </tr>
+        <tr>
+            <td><strong>Especialista em Oferta</strong></td>
+            <td>Monta ofertas irresistíveis. Empacotamento, precificação, bônus, garantia, urgência.</td>
+        </tr>
+        <tr>
+            <td><strong>Designer (direção)</strong></td>
+            <td>Dá direções de design: briefing de criativos, layout de carrossel, identidade visual. Gera briefings prontos pro designer/freelancer.</td>
+        </tr>
+        <tr>
+            <td><strong>Página de Venda</strong></td>
+            <td>Cria estrutura completa de landing pages e páginas de venda. Headline, blocos, prova social, CTA.</td>
+        </tr>
+        <tr>
+            <td><strong>Email Marketing</strong></td>
+            <td>Cria sequências de email, automações, campanhas. Boas-vindas, nutrição, venda, abandono.</td>
+        </tr>
+        <tr>
+            <td><strong>Funil Builder</strong></td>
+            <td>Desenha funis completos: anúncio → página → checkout → upsell → email → WhatsApp. Mapeia cada etapa e o que precisa em cada uma.</td>
+        </tr>
+        <tr>
+            <td><strong>Analista de Dados</strong></td>
+            <td>Analisa métricas, identifica padrões, gera insights. Transforma números em decisões.</td>
+        </tr>
+        <tr>
+            <td><strong>Pesquisador</strong></td>
+            <td>Busca tendências, artigos e referências na internet sobre os temas do seu nicho. Passa os achados pro Social Media e Copywriter transformarem em conteúdo pronto.</td>
+        </tr>
+    </table>
+
+    <div class="insight-box">
+        <h4>14 especialistas. Você fala com 1.</h4>
+        <p>O assistente pessoal é quem recebe seu pedido e aciona o especialista certo. Você não precisa saber quem faz o quê — só pedir o que precisa.</p>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ===== 3: DIA A DIA ===== -->
+
+    <h2 id="dia-a-dia"><span class="section-num">Parte 3</span>Como Seria Seu Dia a Dia</h2>
+
+    <div class="timeline">
+        <div class="timeline-item">
+            <span class="time">9:00 — Você pede conteúdo</span>
+            <p><em>"Cria um plano de conteúdo pros próximos 30 dias pro meu Instagram"</em></p>
+            <p>O assistente aciona o Social Media + Copywriter. Em minutos você recebe o plano completo com pautas, copies e sugestão de formato pra cada dia.</p>
+        </div>
+        <div class="timeline-item">
+            <span class="time">10:30 — Você pede um carrossel</span>
+            <p><em>"Faz um carrossel sobre os 5 erros mais comuns do meu público"</em></p>
+            <p>Volta com: texto de cada slide, legenda, hashtags, e briefing de design pro seu freelancer.</p>
+        </div>
+        <div class="timeline-item">
+            <span class="time">14:00 — Precisa de um roteiro</span>
+            <p><em>"Preciso de um roteiro pra um Reels de 60 segundos sobre [tema]"</em></p>
+            <p>Roteirista entrega: gancho (3 primeiros segundos), desenvolvimento, CTA. Pronto pra gravar.</p>
+        </div>
+        <div class="timeline-item">
+            <span class="time">16:00 — Quer montar uma oferta</span>
+            <p><em>"Tive uma ideia de produto, me ajuda a montar a oferta?"</em></p>
+            <p>Especialista em Oferta responde: empacotamento, preço sugerido, bônus, garantia, copy da oferta.</p>
+        </div>
+        <div class="timeline-item">
+            <span class="time">20:00 — Precisa de uma página de vendas</span>
+            <p><em>"Cria a estrutura da minha página de vendas pro curso novo"</em></p>
+            <p>Volta com: headline, blocos, copy de cada seção, CTA. Pronto pra mandar pro dev ou freelancer montar.</p>
+        </div>
+    </div>
+
+    <div class="insight-box">
+        <h4>Funciona a qualquer hora</h4>
+        <p>2h da manhã? Domingo? Feriado? O time está sempre disponível. É como ter uma agência que nunca fecha.</p>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ===== 4: EXEMPLOS ===== -->
+
+    <h2 id="exemplos"><span class="section-num">Parte 4</span>Exemplos do Que Ele Entrega</h2>
+
+    <div class="card">
+        <div class="card-title">Plano de conteúdo de 30 dias — pronto pra executar</div>
+        <pre>Você: "Cria um plano de conteúdo pro meu Instagram, 30 dias"
+
+Assistente:
+"Pronto! Aqui está seu plano de abril:
+
+ Semana 1 — Tema: [tema central]
+ Seg: Carrossel — '5 erros que...' (educativo)
+ Ter: Reels 30s — bastidor do seu dia (conexão)
+ Qua: Post estático — frase de impacto (autoridade)
+ Qui: Carrossel — 'Como fazer...' (tutorial)
+ Sex: Stories — caixinha de perguntas (engajamento)
+
+ Semana 2 — Tema: [tema central]
+ ...
+
+ Copies de cada post escritas e prontas.
+ Quer que eu gere o PDF pra mandar pro seu designer?"</pre>
+        <p><em>Você recebe o plano + copies prontas. Manda o PDF pro freelancer e ele só executa o visual.</em></p>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Carrossel completo — texto de cada slide</div>
+        <pre>Você: "Faz um carrossel sobre por que meu público precisa de [serviço]"
+
+Assistente:
+"Carrossel pronto — 7 slides:
+
+ Slide 1 (capa): 'Você está perdendo dinheiro sem saber'
+ Slide 2: O problema que ninguém fala
+ Slide 3: Por que isso acontece
+ Slide 4: O que a maioria faz (errado)
+ Slide 5: A solução simples
+ Slide 6: Resultado real (prova)
+ Slide 7 (CTA): 'Quer resolver? Link na bio'
+
+ Legenda: [legenda completa com hashtags]
+
+ Briefing pro designer: carrossel 1080x1080, fundo escuro,
+ texto branco, destaque em amarelo nos números."</pre>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Roteiro de Reels — pronto pra gravar</div>
+        <pre>Você: "Preciso de um Reels sobre [tema], 60 segundos"
+
+Assistente:
+"Roteiro pronto:
+
+ [0-3s] GANCHO: 'Se você faz isso, está jogando dinheiro fora'
+ [3-15s] CONTEXTO: Explica o problema (fala olhando pra câmera)
+ [15-40s] CONTEÚDO: 3 dicas rápidas (pode usar cortes)
+   1. [dica 1]
+   2. [dica 2]
+   3. [dica 3]
+ [40-55s] PROVA: 'Eu fiz isso e o resultado foi...'
+ [55-60s] CTA: 'Salva esse vídeo e me segue pra mais'
+
+ Música sugerida: [tendência atual]
+ Formato: vertical, LoFi, sem edição pesada"</pre>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Página de venda — estrutura completa</div>
+        <pre>Você: "Preciso de uma página de venda pro meu [produto]"
+
+Assistente:
+"Estrutura da página pronta:
+
+ BLOCO 1 — Headline: [headline forte]
+ BLOCO 2 — O problema do seu público
+ BLOCO 3 — A solução (seu produto)
+ BLOCO 4 — O que está incluso (bullets)
+ BLOCO 5 — Bônus
+ BLOCO 6 — Prova social / depoimentos
+ BLOCO 7 — Garantia
+ BLOCO 8 — Oferta + preço + CTA
+ BLOCO 9 — FAQ
+
+ Copy de cada bloco escrita e pronta.
+ Quer que eu gere o briefing pro desenvolvedor?"</pre>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="card">
+        <div class="card-title">Funil completo — da campanha ao checkout</div>
+        <pre>Você: "Quero criar um funil pra vender meu curso online"
+
+Estrategista:
+"Montei seu funil em 5 etapas:
+
+ ETAPA 1 — ATRAÇÃO
+ • 3 anúncios (Meta Ads) — copies e briefing de criativo prontos
+ • 5 posts orgânicos de aquecimento — pautas e copies
+
+ ETAPA 2 — CAPTURA
+ • Página de captura (headline + formulário)
+ • Isca digital: mini-aula gratuita ou PDF
+
+ ETAPA 3 — NUTRIÇÃO
+ • Sequência de 5 emails (boas-vindas → valor → caso → oferta → urgência)
+ • 3 mensagens de WhatsApp/grupo
+
+ ETAPA 4 — VENDA
+ • Página de vendas completa (copy de cada bloco)
+ • Oferta empacotada (bônus, garantia, ancoragem de preço)
+
+ ETAPA 5 — PÓS-VENDA
+ • Email de boas-vindas ao comprador
+ • Sequência de onboarding
+
+ Copy de CADA peça escrita e pronta.
+ Quer que eu gere tudo em PDF?"</pre>
+        <p><em>O estrategista pensa no todo. Cada peça do funil sai com copy pronta — anúncio, email, página, mensagem de WhatsApp.</em></p>
+    </div>
+
+    <!-- ===== 5: APRENDE ===== -->
+
+    <h2 id="aprende"><span class="section-num">Parte 5</span>Ele Aprende com Você</h2>
+
+    <p>Seu time de marketing não é genérico. Ele <strong>aprende seu estilo, seu tom de voz, suas preferências</strong> e fica melhor a cada dia.</p>
+
+    <div class="card" style="border-color: #4ade80;">
+        <div class="card-title" style="color:#4ade80;">Semana 1</div>
+        <pre style="background:#0a1a0a; border-color:#333; line-height:2;">
+Você: "Faz uma copy pra minha campanha"
+Assistente: [gera copy formal, 3 parágrafos]
+Você: "Muito formal. Meu público é jovem, usa gírias, direto ao ponto."
+Assistente: "Entendi! Salvei como regra. Próximas copies vão ser
+informais, diretas, com linguagem jovem."</pre>
+    </div>
+
+    <div class="card" style="border-color: #4ade80;">
+        <div class="card-title" style="color:#4ade80;">Semana 2</div>
+        <pre style="background:#0a1a0a; border-color:#333; line-height:2;">
+Você: "Faz uma copy pra nova campanha"
+Assistente: [gera copy informal, direta, com gírias]
+Você: "Perfeito! Esse é o tom."
+Assistente: "Confirmado como padrão."</pre>
+    </div>
+
+    <div class="card" style="border-color: #4ade80;">
+        <div class="card-title" style="color:#4ade80;">Semana 4</div>
+        <pre style="background:#0a1a0a; border-color:#333; line-height:2;">
+Assistente (automático, segunda de manhã):
+"Bom dia! Preparei 3 opções de copy pra sua campanha
+dessa semana — todas no tom que você gosta.
+Escolhe a que preferir ou me fala o que ajustar."</pre>
+        <p style="margin-top:8px;"><strong>Ele não só aprendeu o tom — aprendeu que você precisa disso toda segunda. E agora faz sozinho.</strong></p>
+    </div>
+
+    <h3>O que você pode ensinar ao seu time</h3>
+
+    <table>
+        <tr><th>Você fala</th><th>O que acontece</th></tr>
+        <tr><td><em>"Meu tom de voz é assim..."</em></td><td>Toda comunicação segue seu estilo</td></tr>
+        <tr><td><em>"Meu público é..."</em></td><td>Conteúdo adaptado pro seu público</td></tr>
+        <tr><td><em>"Pra copy, pensa como o [referência]"</em></td><td>O copywriter absorve o estilo</td></tr>
+        <tr><td><em>"Quero relatório toda segunda"</em></td><td>Cria rotina automática</td></tr>
+        <tr><td><em>"Não gostei disso, faz assim"</em></td><td>Aprende e nunca repete o erro</td></tr>
+        <tr><td><em>"Esse formato ficou perfeito"</em></td><td>Registra como padrão</td></tr>
+    </table>
+
+    <div class="divider"></div>
+
+    <!-- ===== 6: COMO FUNCIONA ===== -->
+
+    <h2 id="como-funciona"><span class="section-num">Parte 6</span>Como Funciona na Prática</h2>
+
+    <h3>Onde você fala com o time</h3>
+
+    <table>
+        <tr><th>Canal</th><th>Como funciona</th><th>Custo</th></tr>
+        <tr>
+            <td><strong style="color:#4ade80;">Telegram</strong></td>
+            <td>Você abre o Telegram no celular e fala com seu assistente como se fosse uma pessoa. Ele responde na hora.</td>
+            <td style="color:#4ade80;">Grátis</td>
+        </tr>
+        <tr>
+            <td><strong>WhatsApp</strong></td>
+            <td>Funciona igual o Telegram, mas precisa de um número dedicado pro assistente.</td>
+            <td>~R$15/mês (chip)</td>
+        </tr>
+        <tr>
+            <td><strong>Discord</strong></td>
+            <td>Se você já usa Discord, o assistente pode ficar num canal privado.</td>
+            <td style="color:#4ade80;">Grátis</td>
+        </tr>
+    </table>
+
+    <div class="highlight">
+        <p><strong>Recomendação:</strong> Telegram é o mais prático — grátis, no celular, sem burocracia.</p>
+    </div>
+
+    <h3>O que o time pode entregar pra você</h3>
+
+    <ul>
+        <li>Plano de conteúdo mensal (30 dias) com copies prontas</li>
+        <li>Carrosséis completos (texto de cada slide + legenda + briefing de design)</li>
+        <li>Roteiros de Reels e vídeos</li>
+        <li>Copies de anúncios (Meta Ads, Google Ads)</li>
+        <li>Estrutura de páginas de venda</li>
+        <li>Sequências de email marketing</li>
+        <li>Análise de campanhas de tráfego</li>
+        <li>Montagem de ofertas (empacotamento, preço, bônus)</li>
+        <li>Briefings de design prontos pro freelancer</li>
+        <li>Relatórios de performance</li>
+        <li><strong>PDF formatado</strong> de qualquer entrega — pra mandar pro freelancer ou equipe</li>
+    </ul>
+
+    <div class="card">
+        <div class="card-title">Exemplo: mandando pro freelancer</div>
+        <pre style="line-height:2;">
+Você: "Cria o plano de conteúdo da semana e manda em PDF"
+
+Assistente: "Pronto! PDF gerado com:
+  • 5 posts da semana
+  • Copy de cada um
+  • Briefing de design (cores, formato, referências)
+
+  Arquivo: plano-semana-15-abr.pdf
+
+  É só encaminhar pro seu designer/freelancer."</pre>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ===== 7: ENTREGÁVEIS ===== -->
+
+    <h2 id="entregaveis"><span class="section-num">Parte 7</span>O Que Você Recebe</h2>
+
+    <div class="card" style="border-color: #4ade80;">
+        <div class="card-title" style="color:#4ade80;">Entregáveis do projeto</div>
+        <table>
+            <tr><th>Item</th><th>Descrição</th></tr>
+            <tr><td><strong>Time de 14 especialistas</strong></td><td>Assistente pessoal + estrategista + 11 especialistas de marketing configurados e funcionando</td></tr>
+            <tr><td><strong>Segundo cérebro</strong></td><td>Base de conhecimento do seu negócio — o time conhece sua empresa, seu público, seus produtos</td></tr>
+            <tr><td><strong>Acesso via Telegram</strong></td><td>Fala com o time pelo celular, a qualquer hora</td></tr>
+            <tr><td><strong>Treinamento inicial</strong></td><td>Sentamos juntos pra ensinar ao time quem você é, seu tom de voz, seu público</td></tr>
+            <tr><td><strong>Evolução contínua</strong></td><td>O time aprende com cada interação — fica melhor todo dia</td></tr>
+        </table>
+    </div>
+
+    <h3>Da parte do cliente (o que você precisa providenciar)</h3>
+
+    <table>
+        <tr><th>Item</th><th>O que é</th><th>Custo estimado</th></tr>
+        <tr>
+            <td><strong>Assinatura de IA</strong></td>
+            <td>API do ChatGPT (OpenAI) ou Claude (Anthropic) — o "motor" dos agentes. Você escolhe conforme orçamento.</td>
+            <td>~R$50-300/mês (depende do uso)</td>
+        </tr>
+        <tr>
+            <td><strong>Servidor</strong></td>
+            <td>Servidor na nuvem pra manter o time rodando 24/7 (tipo Hostinger ou Hetzner).</td>
+            <td>~R$20-50/mês</td>
+        </tr>
+        <tr>
+            <td><strong>Chip WhatsApp (opcional)</strong></td>
+            <td>Só se quiser usar WhatsApp em vez de Telegram.</td>
+            <td>~R$15/mês</td>
+        </tr>
+    </table>
+
+    <div class="highlight">
+        <p><strong>Custo mensal de manutenção (seu):</strong> ~R$70-350/mês dependendo do uso e canal escolhido.</p>
+        <p>Comparar com: contratar 1 social media freelancer = R$1.500-3.000/mês. Aqui você tem um time inteiro de 14 especialistas.</p>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ===== 8: INVESTIMENTO ===== -->
+
+    <h2 id="investimento"><span class="section-num">Parte 8</span>Investimento</h2>
+
+    <div class="card" style="border-color: #e94560;">
+        <div class="card-title" style="font-size:1.2em;">O que está incluso na implementação</div>
+        <ul>
+            <li>Diagnóstico do seu negócio e público</li>
+            <li>Criação e configuração dos 14 especialistas</li>
+            <li>Montagem do segundo cérebro com contexto do seu negócio</li>
+            <li>Treinamento inicial do time com seu tom de voz e preferências</li>
+            <li>Conexão com Telegram (ou WhatsApp/Discord)</li>
+            <li>Testes e ajustes até funcionar perfeitamente</li>
+            <li>Documentação de tudo (pra manutenção futura)</li>
+        </ul>
+    </div>
+
+    <div class="insight-box">
+        <h4>Valor a ser discutido na reunião</h4>
+        <p>O investimento depende da complexidade do negócio e das integrações necessárias. Vamos alinhar juntos o escopo ideal pro seu momento.</p>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- GLOSSÁRIO -->
+    <h3>Termos que podem surgir</h3>
+    <div class="glossary-grid">
+        <div class="glossary-item"><strong>Agente</strong><br><span>Especialista de IA que executa tarefas reais (não só responde)</span></div>
+        <div class="glossary-item"><strong>Segundo Cérebro</strong><br><span>Base de conhecimento do seu negócio — o time sabe tudo sobre você</span></div>
+        <div class="glossary-item"><strong>OpenClaw</strong><br><span>Plataforma que conecta os agentes aos canais (Telegram, WhatsApp, etc.)</span></div>
+        <div class="glossary-item"><strong>Skill</strong><br><span>Tarefa que o time sabe fazer (ex: criar carrossel, analisar campanha)</span></div>
+    </div>
+
+</div>
+
+<div class="footer">
+    <p>Squad de Marketing com IA — Proposta Comercial</p>
+    <p style="margin-top:8px;">Dolphin — Agência de Inteligência Artificial — Abril 2026</p>
+</div>
+
+</body>
+</html>

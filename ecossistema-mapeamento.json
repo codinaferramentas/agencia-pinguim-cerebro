@@ -1,0 +1,1089 @@
+[
+  {
+    "domain": "Agencia Pinguim",
+    "squad": "agencia-pinguim",
+    "agents": [
+      {
+        "name": "Chief",
+        "role": "Orquestrador Geral"
+      },
+      {
+        "name": "Comercial",
+        "role": "Vendas, upsell, pipeline"
+      },
+      {
+        "name": "Financeiro",
+        "role": "DRE, fluxo de caixa, margens"
+      },
+      {
+        "name": "Juridico",
+        "role": "Contratos, compliance, LGPD"
+      },
+      {
+        "name": "Tributario",
+        "role": "Impostos, planejamento fiscal"
+      },
+      {
+        "name": "CS",
+        "role": "Customer Success, onboarding"
+      },
+      {
+        "name": "Produtos",
+        "role": "Design de produto, metodologia"
+      },
+      {
+        "name": "Dados",
+        "role": "Dashboards, analytics, ETL"
+      },
+      {
+        "name": "RH",
+        "role": "People analytics, cultura"
+      },
+      {
+        "name": "Estrategista",
+        "role": "Lancamento, funil, campanhas"
+      },
+      {
+        "name": "Copy",
+        "role": "VSL, pages, emails, scripts"
+      },
+      {
+        "name": "Designer",
+        "role": "Pages, criativos, identidade"
+      },
+      {
+        "name": "Social Media",
+        "role": "Calendario, organico, engajamento"
+      },
+      {
+        "name": "Trafego",
+        "role": "Meta Ads, Google, ROAS"
+      },
+      {
+        "name": "Video",
+        "role": "Reels, VSL, ads, aulas"
+      },
+      {
+        "name": "Automacoes",
+        "role": "WhatsApp, Hotmart, Clint, funil"
+      },
+      {
+        "name": "Gestor Projetos",
+        "role": "PMO, cronograma, retrospectiva"
+      },
+      {
+        "name": "YouTube",
+        "role": "SEO, scripts, thumbnails, Shorts"
+      }
+    ]
+  },
+  {
+    "domain": "Content &amp; Marketing",
+    "squad": "copy",
+    "agents": [
+      {
+        "name": "Gary Halbert",
+        "role": "The Prince of Print"
+      },
+      {
+        "name": "Gary Bencivenga",
+        "role": "Greatest Living Copywriter"
+      },
+      {
+        "name": "David Ogilvy",
+        "role": "Father of Advertising"
+      },
+      {
+        "name": "Eugene Schwartz",
+        "role": "Breakthrough Advertising"
+      },
+      {
+        "name": "Claude Hopkins",
+        "role": "Scientific Advertising"
+      },
+      {
+        "name": "Joe Sugarman",
+        "role": "30 Triggers Psicologicos"
+      },
+      {
+        "name": "Robert Collier",
+        "role": "Letter Book Master"
+      },
+      {
+        "name": "Dan Kennedy",
+        "role": "No BS Marketing"
+      },
+      {
+        "name": "John Carlton",
+        "role": "Most Ripped-Off Copywriter"
+      },
+      {
+        "name": "Clayton Makepeace",
+        "role": "Health Copy King"
+      },
+      {
+        "name": "David Deutsch",
+        "role": "Master of Controls"
+      },
+      {
+        "name": "Parris Lampropoulos",
+        "role": "Control Killer"
+      },
+      {
+        "name": "Todd Brown",
+        "role": "Big Idea / Mechanism"
+      },
+      {
+        "name": "Jim Rutz",
+        "role": "Magalog Pioneer"
+      },
+      {
+        "name": "Stefan Georgi",
+        "role": "VSL Master / RMBC"
+      },
+      {
+        "name": "Ry Schwartz",
+        "role": "Automated Intimacy"
+      },
+      {
+        "name": "Andre Chaperon",
+        "role": "Email Storytelling"
+      },
+      {
+        "name": "Ben Settle",
+        "role": "Daily Email King"
+      },
+      {
+        "name": "Jon Benson",
+        "role": "Video Sales Letter Inventor"
+      },
+      {
+        "name": "Alex Hormozi",
+        "role": "$100M Offers"
+      },
+      {
+        "name": "Frank Kern",
+        "role": "Intent-Based Branding"
+      },
+      {
+        "name": "Russell Brunson",
+        "role": "Funnels &amp; ClickFunnels"
+      },
+      {
+        "name": "Jeff Walker",
+        "role": "Product Launch Formula"
+      },
+      {
+        "name": "Dan Koe",
+        "role": "One-Person Business"
+      },
+      {
+        "name": "Copy Chief",
+        "role": "Orquestrador &amp; routing"
+      }
+    ]
+  },
+  {
+    "domain": "Content &amp; Marketing",
+    "squad": "storytelling",
+    "agents": [
+      {
+        "name": "Joseph Campbell",
+        "role": "Hero&rsquo;s Journey"
+      },
+      {
+        "name": "Donald Miller",
+        "role": "StoryBrand Framework"
+      },
+      {
+        "name": "Oren Klaff",
+        "role": "Pitch Anything / STRONG"
+      },
+      {
+        "name": "Kindra Hall",
+        "role": "Stories That Stick"
+      },
+      {
+        "name": "Matthew Dicks",
+        "role": "Storyworthy"
+      },
+      {
+        "name": "Park Howell",
+        "role": "Business of Story"
+      },
+      {
+        "name": "Marshall Ganz",
+        "role": "Public Narrative"
+      },
+      {
+        "name": "Blake Snyder",
+        "role": "Save the Cat! Beats"
+      },
+      {
+        "name": "Nancy Duarte",
+        "role": "Resonate / Presentations"
+      },
+      {
+        "name": "Shawn Coyne",
+        "role": "Story Grid"
+      },
+      {
+        "name": "Dan Harmon",
+        "role": "Story Circle"
+      },
+      {
+        "name": "Keith Johnstone",
+        "role": "Improvisation &amp; Status"
+      },
+      {
+        "name": "Story Chief",
+        "role": "Orquestrador narrativo"
+      }
+    ]
+  },
+  {
+    "domain": "Content &amp; Marketing",
+    "squad": "traffic-masters",
+    "agents": [
+      {
+        "name": "Pedro Sobral",
+        "role": "Trafego BR #1"
+      },
+      {
+        "name": "Molly Pittman",
+        "role": "Facebook Ads Expert"
+      },
+      {
+        "name": "Nicholas Kusmich",
+        "role": "FB Ads Strategist"
+      },
+      {
+        "name": "Depesh Mandalia",
+        "role": "Facebook Ads Scaling"
+      },
+      {
+        "name": "Kasim Aslam",
+        "role": "Google Ads Master"
+      },
+      {
+        "name": "Tom Breeze",
+        "role": "YouTube Ads Expert"
+      },
+      {
+        "name": "Ralph Burns",
+        "role": "Tier 11 / Paid Social"
+      },
+      {
+        "name": "Traffic Masters Chief",
+        "role": "Orquestrador"
+      },
+      {
+        "name": "Ad Midas",
+        "role": "Criacao de anuncios"
+      },
+      {
+        "name": "Media Buyer",
+        "role": "Compra de midia"
+      },
+      {
+        "name": "Performance Analyst",
+        "role": "Analise de performance"
+      },
+      {
+        "name": "Creative Analyst",
+        "role": "Analise de criativos"
+      },
+      {
+        "name": "Scale Optimizer",
+        "role": "Otimizacao de escala"
+      },
+      {
+        "name": "Pixel Specialist",
+        "role": "Tracking &amp; pixels"
+      },
+      {
+        "name": "Ads Analyst",
+        "role": "Analise de anuncios"
+      },
+      {
+        "name": "Fiscal",
+        "role": "Orcamento &amp; fiscal"
+      }
+    ]
+  },
+  {
+    "domain": "Content &amp; Marketing",
+    "squad": "creator-os",
+    "agents": [
+      {
+        "name": "Content Orchestrator",
+        "role": "Orquestrador de conteudo"
+      },
+      {
+        "name": "Funnel Architect",
+        "role": "Arquiteto de funnels"
+      },
+      {
+        "name": "Content PM",
+        "role": "Gestao de conteudo"
+      },
+      {
+        "name": "Course Architect",
+        "role": "Arquiteto de cursos"
+      },
+      {
+        "name": "Blog Writer",
+        "role": "Redacao de blog"
+      }
+    ]
+  },
+  {
+    "domain": "Content &amp; Marketing",
+    "squad": "books",
+    "agents": [
+      {
+        "name": "Book Summary Orchestrator",
+        "role": "Pipeline multi-fase com quality gates"
+      }
+    ]
+  },
+  {
+    "domain": "Content &amp; Marketing",
+    "squad": "hormozi",
+    "agents": [
+      {
+        "name": "Hormozi Chief",
+        "role": "Orquestrador"
+      },
+      {
+        "name": "Hormozi Leads",
+        "role": "$100M Leads framework"
+      }
+    ]
+  },
+  {
+    "domain": "Content &amp; Marketing",
+    "squad": "marketing",
+    "agents": [
+      {
+        "name": "Creative Director",
+        "role": "Direcao criativa de campanhas"
+      }
+    ]
+  },
+  {
+    "domain": "Technical",
+    "squad": "db-sage",
+    "agents": [
+      {
+        "name": "DB Sage",
+        "role": "Database expert principal"
+      },
+      {
+        "name": "Activation Protocol",
+        "role": "Protocolo de ativacao"
+      }
+    ]
+  },
+  {
+    "domain": "Technical",
+    "squad": "cybersecurity",
+    "agents": [
+      {
+        "name": "Peter Kim",
+        "role": "The Hacker Playbook"
+      },
+      {
+        "name": "Georgia Weidman",
+        "role": "Penetration Testing"
+      },
+      {
+        "name": "Jim Manico",
+        "role": "OWASP / Secure Coding"
+      },
+      {
+        "name": "Chris Sanders",
+        "role": "Intrusion Detection"
+      },
+      {
+        "name": "Marcus Carey",
+        "role": "Threat Intelligence"
+      },
+      {
+        "name": "Omar Santos",
+        "role": "Cisco Security"
+      },
+      {
+        "name": "Cyber Chief",
+        "role": "Orquestrador"
+      },
+      {
+        "name": "Fuzzer",
+        "role": "Fuzzing &amp; testing"
+      },
+      {
+        "name": "Rogue",
+        "role": "Offensive ops"
+      },
+      {
+        "name": "Ripper",
+        "role": "Password &amp; hash cracking"
+      },
+      {
+        "name": "Busterer",
+        "role": "Directory busting"
+      },
+      {
+        "name": "Cartographer",
+        "role": "Network mapping"
+      },
+      {
+        "name": "Dirber",
+        "role": "Dir enumeration"
+      },
+      {
+        "name": "Shannon Runner",
+        "role": "Scanner integration"
+      },
+      {
+        "name": "Command Generator",
+        "role": "Geracao de comandos"
+      }
+    ]
+  },
+  {
+    "domain": "Technical",
+    "squad": "ralph",
+    "agents": [
+      {
+        "name": "Ralph",
+        "role": "Dev autonomo + compound learning"
+      }
+    ]
+  },
+  {
+    "domain": "Technical",
+    "squad": "monitor",
+    "agents": [
+      {
+        "name": "Monitor",
+        "role": "Analytics &amp; server management"
+      }
+    ]
+  },
+  {
+    "domain": "Technical",
+    "squad": "etl",
+    "agents": []
+  },
+  {
+    "domain": "Design &amp; UX",
+    "squad": "design",
+    "agents": [
+      {
+        "name": "Chris Do",
+        "role": "The Futur / Business of Design"
+      },
+      {
+        "name": "Marty Neumeier",
+        "role": "Brand Strategy / Zag"
+      },
+      {
+        "name": "Aaron Draplin",
+        "role": "Logo &amp; Visual Identity"
+      },
+      {
+        "name": "Brad Frost",
+        "role": "Atomic Design Systems"
+      },
+      {
+        "name": "Dave Malouf",
+        "role": "DesignOps"
+      },
+      {
+        "name": "Paddy Galloway",
+        "role": "YouTube Thumbnails"
+      },
+      {
+        "name": "Joe McNally",
+        "role": "Photography Master"
+      },
+      {
+        "name": "Peter McKinnon",
+        "role": "Photography &amp; Video"
+      },
+      {
+        "name": "Design Chief",
+        "role": "Orquestrador de design"
+      }
+    ]
+  },
+  {
+    "domain": "People &amp; Psychology",
+    "squad": "mmos",
+    "agents": [
+      {
+        "name": "Mind PM",
+        "role": "Project Manager do pipeline"
+      },
+      {
+        "name": "Barbara",
+        "role": "Cognitive Architect"
+      },
+      {
+        "name": "Victoria",
+        "role": "Viability Specialist"
+      },
+      {
+        "name": "Research Specialist",
+        "role": "Pesquisa de fontes"
+      },
+      {
+        "name": "Daniel",
+        "role": "Behavioral Analyst"
+      },
+      {
+        "name": "Identity Analyst",
+        "role": "Analise de identidade"
+      },
+      {
+        "name": "Constantin",
+        "role": "Implementation Architect"
+      },
+      {
+        "name": "Charlie",
+        "role": "Synthesis Expert"
+      },
+      {
+        "name": "Quinn",
+        "role": "Quality Specialist"
+      }
+    ]
+  },
+  {
+    "domain": "People &amp; Psychology",
+    "squad": "innerlens",
+    "agents": [
+      {
+        "name": "InnerLens Orchestrator",
+        "role": "Orquestrador"
+      },
+      {
+        "name": "Fragment Extractor",
+        "role": "Extracao de fragmentos"
+      },
+      {
+        "name": "Psychologist",
+        "role": "Analise psicologica"
+      },
+      {
+        "name": "Quality Assurance",
+        "role": "Validacao de qualidade"
+      }
+    ]
+  },
+  {
+    "domain": "People &amp; Psychology",
+    "squad": "advisory-board",
+    "agents": [
+      {
+        "name": "Ray Dalio",
+        "role": "Principles / Bridgewater"
+      },
+      {
+        "name": "Charlie Munger",
+        "role": "Mental Models / Berkshire"
+      },
+      {
+        "name": "Naval Ravikant",
+        "role": "Wealth &amp; Leverage"
+      },
+      {
+        "name": "Peter Thiel",
+        "role": "Zero to One"
+      },
+      {
+        "name": "Reid Hoffman",
+        "role": "Blitzscaling / LinkedIn"
+      },
+      {
+        "name": "Simon Sinek",
+        "role": "Start With Why"
+      },
+      {
+        "name": "Brene Brown",
+        "role": "Vulnerability &amp; Leadership"
+      },
+      {
+        "name": "Patrick Lencioni",
+        "role": "5 Dysfunctions of a Team"
+      },
+      {
+        "name": "Derek Sivers",
+        "role": "Anything You Want"
+      },
+      {
+        "name": "Yvon Chouinard",
+        "role": "Patagonia / Let My People Surf"
+      },
+      {
+        "name": "Board Chair",
+        "role": "Presidente do board"
+      }
+    ]
+  },
+  {
+    "domain": "People &amp; Psychology",
+    "squad": "hr",
+    "agents": [
+      {
+        "name": "HR Chief",
+        "role": "Orquestrador de RH"
+      },
+      {
+        "name": "People Ops Chief",
+        "role": "Operacoes de pessoas"
+      },
+      {
+        "name": "Talent Classifier",
+        "role": "Classificacao de talentos"
+      },
+      {
+        "name": "Strengths Identifier",
+        "role": "Identificacao de forcas"
+      },
+      {
+        "name": "Performance Recruiter",
+        "role": "Recrutamento"
+      },
+      {
+        "name": "Analytics Strategist",
+        "role": "Estrategia de analytics"
+      },
+      {
+        "name": "Analytics Operator",
+        "role": "Operacao de analytics"
+      },
+      {
+        "name": "Behavior Detector",
+        "role": "Deteccao comportamental"
+      }
+    ]
+  },
+  {
+    "domain": "Business Operations",
+    "squad": "legal",
+    "agents": [
+      {
+        "name": "Brad Feld",
+        "role": "VC / Startup Deals"
+      },
+      {
+        "name": "Ken Adams",
+        "role": "Contract Drafting Expert"
+      },
+      {
+        "name": "Pierpaolo Bottini",
+        "role": "Criminal / Compliance BR"
+      },
+      {
+        "name": "Legal Chief",
+        "role": "Orquestrador"
+      },
+      {
+        "name": "Compliance Architect",
+        "role": "Arquitetura de compliance"
+      },
+      {
+        "name": "Thesis Researcher",
+        "role": "Pesquisa juridica"
+      },
+      {
+        "name": "Safe Counsel",
+        "role": "SAFE &amp; convertible notes"
+      },
+      {
+        "name": "Societarista",
+        "role": "Direito societario"
+      },
+      {
+        "name": "Startup Counsel BR",
+        "role": "Direito startup Brasil"
+      },
+      {
+        "name": "LGPD Specialist",
+        "role": "Protecao de dados"
+      },
+      {
+        "name": "Contract Drafter",
+        "role": "Redacao de contratos"
+      },
+      {
+        "name": "VC Negotiator",
+        "role": "Negociacao VC"
+      },
+      {
+        "name": "Trabalhista",
+        "role": "Direito trabalhista"
+      },
+      {
+        "name": "Tributarista",
+        "role": "Direito tributario"
+      },
+      {
+        "name": "Tax Strategist BR",
+        "role": "Planejamento tributario"
+      }
+    ]
+  },
+  {
+    "domain": "Business Operations",
+    "squad": "contabilidade",
+    "agents": [
+      {
+        "name": "Contabil Chief",
+        "role": "Orquestrador"
+      },
+      {
+        "name": "MEI Specialist",
+        "role": "Microempreendedor"
+      },
+      {
+        "name": "Simples Specialist",
+        "role": "Simples Nacional"
+      },
+      {
+        "name": "IRPF Assistant",
+        "role": "Imposto de renda PF"
+      },
+      {
+        "name": "Client Onboarder",
+        "role": "Onboarding de clientes"
+      },
+      {
+        "name": "Certidoes Monitor",
+        "role": "Monitoramento de certidoes"
+      },
+      {
+        "name": "Fiscal Executor",
+        "role": "Execucao fiscal"
+      },
+      {
+        "name": "Trabalhista Executor",
+        "role": "Execucao trabalhista"
+      },
+      {
+        "name": "Financial Reporter",
+        "role": "Relatorios financeiros"
+      },
+      {
+        "name": "Abertura Empresa",
+        "role": "Abertura de empresas"
+      },
+      {
+        "name": "Baixa Empresa",
+        "role": "Encerramento"
+      },
+      {
+        "name": "Desenquadramento",
+        "role": "Mudanca de regime"
+      },
+      {
+        "name": "Client Communicator",
+        "role": "Comunicacao com clientes"
+      },
+      {
+        "name": "Alert Manager",
+        "role": "Gestao de alertas"
+      }
+    ]
+  },
+  {
+    "domain": "Business Operations",
+    "squad": "finops",
+    "agents": [
+      {
+        "name": "FinOps Chief",
+        "role": "Orquestrador"
+      },
+      {
+        "name": "JR Storment",
+        "role": "FinOps Foundation co-founder"
+      },
+      {
+        "name": "Corey Quinn",
+        "role": "Last Week in AWS"
+      },
+      {
+        "name": "Eli Mansoor",
+        "role": "Cloud cost optimization"
+      },
+      {
+        "name": "Mike Fuller",
+        "role": "Atlassian FinOps"
+      }
+    ]
+  },
+  {
+    "domain": "Business Operations",
+    "squad": "hybrid-ops-squad",
+    "agents": [
+      {
+        "name": "Process Architect",
+        "role": "Arquitetura de processos"
+      },
+      {
+        "name": "Process Mapper",
+        "role": "Mapeamento BPMN"
+      },
+      {
+        "name": "Workflow Designer",
+        "role": "Design de workflows"
+      },
+      {
+        "name": "Executor Designer",
+        "role": "Design de execucao"
+      },
+      {
+        "name": "ClickUp Engineer",
+        "role": "Implementacao ClickUp"
+      },
+      {
+        "name": "Compliance Validator",
+        "role": "Validacao de compliance"
+      },
+      {
+        "name": "Doc Generator",
+        "role": "Geracao de documentacao"
+      },
+      {
+        "name": "QA Architect",
+        "role": "Arquitetura de QA"
+      },
+      {
+        "name": "Agent Generator",
+        "role": "Geracao de agentes"
+      }
+    ]
+  },
+  {
+    "domain": "Data &amp; Analytics",
+    "squad": "data",
+    "agents": [
+      {
+        "name": "Data Chief",
+        "role": "Orquestrador"
+      },
+      {
+        "name": "Avinash Kaushik",
+        "role": "Web Analytics Guru"
+      },
+      {
+        "name": "Peter Fader",
+        "role": "Customer Centricity / CLV"
+      },
+      {
+        "name": "Sean Ellis",
+        "role": "Growth Hacking"
+      },
+      {
+        "name": "Nick Mehta",
+        "role": "Customer Success / Gainsight"
+      },
+      {
+        "name": "David Spinks",
+        "role": "Community Metrics"
+      },
+      {
+        "name": "Wes Kao",
+        "role": "Maven / Cohort Courses"
+      }
+    ]
+  },
+  {
+    "domain": "Data &amp; Analytics",
+    "squad": "deep-research",
+    "agents": [
+      {
+        "name": "Dr Orchestrator",
+        "role": "Orquestrador"
+      },
+      {
+        "name": "Kahneman",
+        "role": "Behavioral Economics"
+      },
+      {
+        "name": "Gary Klein",
+        "role": "Naturalistic Decision Making"
+      },
+      {
+        "name": "John Ioannidis",
+        "role": "Research Methodology"
+      },
+      {
+        "name": "David Sackett",
+        "role": "Evidence-Based Medicine"
+      },
+      {
+        "name": "Cochrane",
+        "role": "Systematic Reviews"
+      },
+      {
+        "name": "Julian Higgins",
+        "role": "Cochrane Handbook"
+      },
+      {
+        "name": "Andrew Booth",
+        "role": "Information Specialist"
+      },
+      {
+        "name": "John Creswell",
+        "role": "Mixed Methods"
+      },
+      {
+        "name": "Nicole Forsgren",
+        "role": "DORA / DevOps Research"
+      },
+      {
+        "name": "Itamar Gilad",
+        "role": "GIST Framework"
+      }
+    ]
+  },
+  {
+    "domain": "Data &amp; Analytics",
+    "squad": "spy",
+    "agents": [
+      {
+        "name": "Research Head",
+        "role": "Chefe de pesquisa"
+      },
+      {
+        "name": "Spy",
+        "role": "Inteligencia competitiva"
+      }
+    ]
+  },
+  {
+    "domain": "Meta &amp; Frameworks",
+    "squad": "squad-creator-pro",
+    "agents": [
+      {
+        "name": "Squad Chief",
+        "role": "Triage, routing, criacao"
+      },
+      {
+        "name": "Alan Nicolas",
+        "role": "Mind Cloning &amp; DNA Extraction"
+      },
+      {
+        "name": "Pedro Valerio",
+        "role": "Process &amp; Automation"
+      },
+      {
+        "name": "Thiago Finch",
+        "role": "Business Strategy &amp; Marketing"
+      }
+    ]
+  },
+  {
+    "domain": "Meta &amp; Frameworks",
+    "squad": "tools",
+    "agents": [
+      {
+        "name": "Tools Orchestrator",
+        "role": "Orquestrador"
+      },
+      {
+        "name": "Tools Extractor",
+        "role": "Extracao de frameworks"
+      },
+      {
+        "name": "Tools Validator",
+        "role": "Validacao"
+      },
+      {
+        "name": "Tools Creator",
+        "role": "Criacao de ferramentas"
+      },
+      {
+        "name": "Database Manager",
+        "role": "Gestao do banco"
+      },
+      {
+        "name": "Tools Reviewer",
+        "role": "Revisao de qualidade"
+      },
+      {
+        "name": "Mental Model Analyzer",
+        "role": "Analise de modelos mentais"
+      }
+    ]
+  },
+  {
+    "domain": "Meta &amp; Frameworks",
+    "squad": "multi-lens-framework",
+    "agents": [
+      {
+        "name": "Lens Orchestrator",
+        "role": "12 lentes de analise"
+      }
+    ]
+  },
+  {
+    "domain": "Meta &amp; Frameworks",
+    "squad": "compound",
+    "agents": [
+      {
+        "name": "Compound",
+        "role": "Compound learning &amp; CLAUDE.md"
+      }
+    ]
+  },
+  {
+    "domain": "Communication",
+    "squad": "translate",
+    "agents": [
+      {
+        "name": "Hans Vermeer",
+        "role": "Skopos Theory"
+      },
+      {
+        "name": "Christiane Nord",
+        "role": "Functionalist Translation"
+      },
+      {
+        "name": "Eugene Nida",
+        "role": "Dynamic Equivalence"
+      },
+      {
+        "name": "Juliane House",
+        "role": "Translation Quality"
+      },
+      {
+        "name": "Mona Baker",
+        "role": "In Other Words"
+      },
+      {
+        "name": "Anthony Pym",
+        "role": "Translation Solutions"
+      },
+      {
+        "name": "Lawrence Venuti",
+        "role": "Foreignization vs Domestication"
+      },
+      {
+        "name": "Translate Chief",
+        "role": "Orquestrador"
+      },
+      {
+        "name": "Token Optimizer",
+        "role": "Otimizacao de tokens"
+      },
+      {
+        "name": "Cultural Bridge",
+        "role": "Ponte cultural"
+      }
+    ]
+  }
+]

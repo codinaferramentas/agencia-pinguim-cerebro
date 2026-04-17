@@ -4,21 +4,20 @@
 
 ## Descricao
 
-Squad dedicada as mentorias high ticket da Agencia Pinguim: Lira (R$6.750, 6 meses), Taurus (R$36.000, 1 ano), Orion (mastermind, +1M/ano). A venda e por closer, VSL, aplicacao e call de vendas — modelo completamente diferente de lancamento por desafio.
+Squad focada em **apoio interno** as mentorias high ticket da Pinguim: Lira (R$6.750, 6 meses), Taurus (R$36.000, 1 ano), Orion (mastermind, +1M/ano).
 
-**Produtos:**
-- **Lira (R$6.750, 6 meses):** Para quem esta comecando no digital. Nao sabe criar pagina, produto, campanha Meta. Primeiros passos. Acompanhamento sem por a mao na massa. Nao e criador de conteudo.
-- **Taurus (R$36.000, 1 ano):** Para quem ja vende R$10K-1M. Foco em escala. Encontros regulares.
-- **Orion (preco a confirmar):** Mastermind para quem fatura +1M/ano. Grupo seleto.
+**Importante:** High Ticket na Pinguim e venda consultiva via closers humanos. Nao ha trafego pago direto, nao ha geracao de artes/criativos, nao ha social media externa pra essas mentorias. A squad e minima e focada em dois pontos:
 
-## Agentes (4)
+1. **Apoio ao time comercial** (preparar briefings de lead pra call)
+2. **Suporte aos alunos ja comprados** (CS e atendimento de duvidas)
+
+## Agentes (3)
 
 | Nome | Funcao |
 |------|--------|
-| Estrategista High Ticket | Estrategia de vendas: funil de aplicacao, qualificacao de leads, meta de conversao por produto |
-| Copy High Ticket | Copy de VSL, pagina de aplicacao, emails de nurturing, scripts de call de vendas |
-| Closer | Analise de leads qualificados, argumentos, tratamento de objecoes, suporte ao time de vendas |
-| CS Mentorias | Customer Success das mentorias: onboarding, satisfacao, prevencao de churn em tickets altos |
+| Closer | Analisa lead de aplicacao, prepara briefing pre-call pro consultor humano, mantem banco de objecoes |
+| CS Mentorias | Customer Success pos-venda: onboarding, checkpoints, prevencao de churn, cases |
+| Suporte Mentorados | Atende duvidas dos alunos (Lira/Taurus/Orion) em WhatsApp/Telegram/comunidade |
 
 ## Estrutura
 
@@ -26,18 +25,26 @@ Squad dedicada as mentorias high ticket da Agencia Pinguim: Lira (R$6.750, 6 mes
 high-ticket/
 ├── MAPA.md
 ├── agentes/
-│   ├── estrategista-ht/
-│   ├── copy-ht/
 │   ├── closer/
-│   └── cs-mentorias/
+│   ├── cs-mentorias/
+│   └── suporte-mentorados/
 ├── contexto/
 ├── rotinas/
 └── skills/
 ```
 
-## Fluxo de Venda High Ticket
+## Fluxo
 
-1. **Estrategista** define funil: VSL, pagina de aplicacao, criterios de qualificacao, meta de conversao por produto (Lira/Taurus/Orion)
-2. **Copy** escreve VSL, pagina de aplicacao, emails de nurturing, scripts de call de vendas com tom premium
-3. **Closer** analisa leads qualificados, prepara argumentos por perfil, trata objecoes, suporta time de vendas humano
-4. **CS Mentorias** faz onboarding do mentorado, acompanha satisfacao, previne churn, garante experiencia premium
+```
+Lead preenche aplicacao
+    ↓
+Closer analisa perfil, separa por produto (Lira/Taurus/Orion)
+    ↓
+Closer entrega briefing pronto pro consultor humano
+    ↓
+Consultor humano faz a call e fecha
+    ↓
+CS Mentorias assume: onboarding, checkpoints, retencao
+    ↓
+Suporte Mentorados atende duvidas diarias durante a mentoria
+```

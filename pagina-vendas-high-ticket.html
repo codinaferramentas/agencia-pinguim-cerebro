@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Implementação Completa de Agentes IA — 1 Ano | André Codina</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#0a0a0a;color:#e0e0e0;line-height:1.7;}
+.hero{background:linear-gradient(135deg,#1a1a2e 0%,#0f3460 50%,#1a1a2e 100%);padding:80px 40px 60px;text-align:center;border-bottom:3px solid #e94560;}
+.hero h1{font-size:clamp(1.8em,4vw,2.8em);color:#fff;margin-bottom:12px;max-width:800px;margin-left:auto;margin-right:auto;}
+.hero h1 span{color:#e94560;}
+.hero p{font-size:1.1em;color:#8892b0;max-width:650px;margin:0 auto 25px;}
+.cta-btn{display:inline-block;background:#e94560;color:#fff;padding:16px 40px;border-radius:10px;font-size:1.1em;font-weight:700;text-decoration:none;transition:all .2s;}
+.cta-btn:hover{background:#d63851;transform:translateY(-2px);box-shadow:0 8px 25px rgba(233,69,96,.3);}
+.cta-sub{font-size:.8em;color:#666;margin-top:10px;}
+.container{max-width:900px;margin:0 auto;padding:50px 30px;}
+h2{font-size:1.8em;color:#fff;margin:0 0 20px;text-align:center;}
+h2 span{color:#e94560;}
+h3{font-size:1.2em;color:#ccd6f6;margin:25px 0 12px;}
+p{margin:10px 0;color:#a8b2d1;}
+strong{color:#ccd6f6;}
+.section{padding:50px 0;border-bottom:1px solid #1a1a1a;}
+.card{background:#151515;border:1px solid #222;border-radius:12px;padding:22px;margin:12px 0;transition:border-color .2s;}
+.card:hover{border-color:#e94560;}
+.card-title{font-size:1.05em;color:#fff;font-weight:700;margin-bottom:8px;}
+.highlight{background:linear-gradient(135deg,#1a1a2e,#16213e);border-left:4px solid #e94560;padding:18px 22px;border-radius:0 8px 8px 0;margin:18px 0;}
+.highlight p{color:#ccd6f6;margin:4px 0;}
+.insight{background:linear-gradient(135deg,#1a1a2e,#0f3460);border:1px solid #e94560;border-radius:12px;padding:20px;margin:15px 0;}
+.insight h4{color:#e94560;margin:0 0 8px;font-size:.9em;text-transform:uppercase;letter-spacing:1px;}
+.insight p{color:#ccd6f6;margin:4px 0;}
+.timeline{position:relative;padding-left:30px;margin:20px 0;}
+.timeline::before{content:'';position:absolute;left:8px;top:0;bottom:0;width:2px;background:#222;}
+.timeline-item{position:relative;margin:20px 0;padding:18px 22px;background:#151515;border-radius:10px;border:1px solid #222;}
+.timeline-item::before{content:'';position:absolute;left:-26px;top:22px;width:12px;height:12px;border-radius:50%;background:#e94560;border:2px solid #0a0a0a;}
+.timeline-item .time{color:#e94560;font-size:.82em;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
+.timeline-item h4{color:#fff;margin:5px 0 8px;font-size:1.05em;}
+table{width:100%;border-collapse:collapse;margin:15px 0;font-size:.93em;}
+th{background:#1a1a2e;color:#e94560;text-align:left;padding:10px 14px;font-weight:600;border-bottom:2px solid #e94560;}
+td{padding:9px 14px;border-bottom:1px solid #1a1a1a;color:#a8b2d1;}
+ul{margin:8px 0 8px 22px;}
+li{margin:5px 0;color:#a8b2d1;}
+.price-box{background:#151515;border:2px solid #e94560;border-radius:16px;padding:35px;text-align:center;margin:25px 0;}
+.price-new{font-size:2.5em;font-weight:900;color:#e94560;margin:10px 0;}
+.price-label{font-size:.85em;color:#8892b0;}
+.price-alt{font-size:1.1em;color:#ccd6f6;margin-top:10px;}
+.tag{display:inline-block;background:#1a1a2e;color:#e94560;padding:3px 12px;border-radius:12px;font-size:.78em;font-weight:600;}
+.areas-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin:15px 0;}
+.area-item{background:#151515;border:1px solid #222;border-radius:10px;padding:15px;text-align:center;transition:border-color .2s;}
+.area-item:hover{border-color:#e94560;}
+.area-icon{font-size:1.3em;margin-bottom:5px;}
+.area-name{font-size:.9em;font-weight:700;color:#ccd6f6;}
+.area-desc{font-size:.75em;color:#8892b0;margin-top:3px;}
+.faq-item{background:#151515;border:1px solid #222;border-radius:10px;margin:8px 0;}
+.faq-q{padding:15px 20px;cursor:pointer;font-weight:600;color:#ccd6f6;display:flex;justify-content:space-between;}
+.faq-q:hover{background:#1a1a1a;}
+.faq-a{padding:0 20px 15px;color:#8892b0;font-size:.92em;display:none;}
+.faq-item.open .faq-a{display:block;}
+.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:20px 0;}
+.metric{background:#151515;border:1px solid #222;border-radius:10px;padding:18px;text-align:center;}
+.metric .val{font-size:1.5em;font-weight:700;color:#e94560;}
+.metric .lbl{font-size:.78em;color:#8892b0;margin-top:4px;}
+.footer{text-align:center;padding:40px;color:#444;font-size:.82em;border-top:1px solid #222;margin-top:40px;}
+@media(max-width:768px){.hero{padding:50px 20px 40px;}.container{padding:30px 18px;}.areas-grid{grid-template-columns:1fr 1fr;}}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+<p style="color:#e94560;font-weight:700;font-size:.85em;text-transform:uppercase;letter-spacing:3px;margin-bottom:10px;">Programa Premium — 12 Meses</p>
+<h1>Sua Empresa com <span>IA de Ponta a Ponta</span></h1>
+<p>Implementação completa de agentes de IA em todas as áreas da sua empresa. Um ano de acompanhamento semanal, quatro mãos, até tudo estar rodando.</p>
+<a href="#preco" class="cta-btn">QUERO SABER MAIS</a>
+</div>
+
+<!-- VISÃO -->
+<div class="container section">
+<h2>Imagina sua empresa daqui a <span>12 meses</span></h2>
+
+<div class="timeline">
+<div class="timeline-item">
+<div class="time">Dia 1</div>
+<h4>Diagnóstico e planejamento</h4>
+<p>Entendemos sua empresa, mapeamos processos, definimos prioridades juntos. Você sai com um plano claro do que vai ser implementado e em que ordem.</p>
+</div>
+<div class="timeline-item">
+<div class="time">Mês 1</div>
+<h4>Primeiros agentes no ar</h4>
+<p>Seu assistente pessoal funcionando. Primeiras rotinas automatizadas. A equipe começa a sentir a diferença no dia a dia.</p>
+</div>
+<div class="timeline-item">
+<div class="time">Mês 3</div>
+<h4>Squads por área</h4>
+<p>Marketing, comercial, suporte — cada área com seu time de agentes. Relatórios automáticos, follow-ups, atendimento 24/7.</p>
+</div>
+<div class="timeline-item">
+<div class="time">Mês 6</div>
+<h4>Operação otimizada</h4>
+<p>Agentes integrados com suas ferramentas. Funis automatizados. Equipe humana focada no estratégico. Custos operacionais em queda.</p>
+</div>
+<div class="timeline-item">
+<div class="time">Mês 12</div>
+<h4>Empresa inteligente</h4>
+<p>Todos os agentes maduros, aprenderam 12 meses de contexto da empresa. Cada decisão passada alimenta decisões futuras. A operação funciona de forma inteligente, escalável e documentada.</p>
+</div>
+</div>
+</div>
+
+<!-- O QUE INCLUI -->
+<div class="container section">
+<h2>O que está <span>incluso</span></h2>
+
+<h3>Áreas que cobrimos</h3>
+<div class="areas-grid">
+<div class="area-item"><div class="area-name">Marketing</div><div class="area-desc">Copy, tráfego, conteúdo, social media</div></div>
+<div class="area-item"><div class="area-name">Comercial</div><div class="area-desc">Pipeline, follow-up, propostas</div></div>
+<div class="area-item"><div class="area-name">Suporte</div><div class="area-desc">Atendimento 24/7, FAQ, escalação</div></div>
+<div class="area-item"><div class="area-name">Financeiro</div><div class="area-desc">DRE, fluxo de caixa, relatórios</div></div>
+<div class="area-item"><div class="area-name">RH</div><div class="area-desc">Pessoas, clima, contratação</div></div>
+<div class="area-item"><div class="area-name">Jurídico</div><div class="area-desc">Contratos, compliance</div></div>
+<div class="area-item"><div class="area-name">Tributário</div><div class="area-desc">Impostos, planejamento fiscal</div></div>
+<div class="area-item"><div class="area-name">Operações</div><div class="area-desc">Processos, automações, integrações</div></div>
+</div>
+
+<h3>O que você recebe</h3>
+<div class="card">
+<div class="card-title">Encontro semanal de 1h a 1h30</div>
+<p>Toda semana, ao vivo, quatro mãos. Eu oriento, a gente faz junto. Se enroscar, eu faço pra você.</p>
+</div>
+<div class="card">
+<div class="card-title">Canal direto no WhatsApp</div>
+<p>Acesso direto comigo entre os encontros. Dúvida rápida? Manda mensagem.</p>
+</div>
+<div class="card">
+<div class="card-title">Agentes pessoais pra cada líder</div>
+<p>Cada sócio/gerente recebe seu próprio assistente que aprende seu estilo e preferências.</p>
+</div>
+<div class="card">
+<div class="card-title">Squads completos por área</div>
+<p>Times de agentes especializados: copy, tráfego, design, roteiro, oferta, funil, email, análise de dados.</p>
+</div>
+<div class="card">
+<div class="card-title">Estrategistas por produto</div>
+<p>Cada produto da empresa ganha um estrategista que conhece o funil, a campanha e o público.</p>
+</div>
+<div class="card">
+<div class="card-title">Automações e integrações</div>
+<p>Conectamos os agentes com suas ferramentas: Hotmart, CRM, email, WhatsApp, planilhas, banco de dados.</p>
+</div>
+<div class="card">
+<div class="card-title">Documentação completa</div>
+<p>Tudo documentado — qualquer pessoa do time consegue entender o que foi feito e como funciona.</p>
+</div>
+</div>
+
+<!-- COMO FUNCIONA -->
+<div class="container section">
+<h2>Como <span>funciona</span> na prática</h2>
+
+<div class="highlight">
+<p><strong>1. Você define as prioridades.</strong> Decidimos juntos o que implementar primeiro — o que dá mais resultado imediato.</p>
+<p><strong>2. A gente faz junto.</strong> Nos encontros semanais, construímos os agentes quatro mãos. Você aprende enquanto faz.</p>
+<p><strong>3. Se enroscar, eu resolvo.</strong> Se algo travar, eu faço pra você. O objetivo é avançar, não travar.</p>
+<p><strong>4. Os agentes aprendem sozinhos.</strong> Depois de no ar, cada agente evolui com o uso. Quanto mais a equipe usa, mais inteligentes ficam.</p>
+</div>
+
+<div class="metric-grid">
+<div class="metric"><div class="val">52</div><div class="lbl">Encontros ao vivo no ano</div></div>
+<div class="metric"><div class="val">78h+</div><div class="lbl">De acompanhamento direto</div></div>
+<div class="metric"><div class="val">WhatsApp</div><div class="lbl">Canal direto entre encontros</div></div>
+<div class="metric"><div class="val">Tudo</div><div class="lbl">Documentado e replicável</div></div>
+</div>
+</div>
+
+<!-- PRA QUEM -->
+<div class="container section">
+<h2>Pra quem é e pra quem <span>não é</span></h2>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;">
+<div class="card" style="border-color:#4ade80;">
+<div class="card-title" style="color:#4ade80;">Pra você se:</div>
+<ul>
+<li>Sua empresa fatura R$100K+ por mês</li>
+<li>Quer escalar sem contratar proporcionalmente</li>
+<li>Trabalha com infoprodutos, agência, consultoria ou SaaS</li>
+<li>Quer operação organizada e automatizada</li>
+<li>Tem disponibilidade de 1h30 por semana</li>
+</ul>
+</div>
+<div class="card" style="border-color:#ff6b6b;">
+<div class="card-title" style="color:#ff6b6b;">Não é pra você se:</div>
+<ul>
+<li>Ainda não tem negócio estabelecido</li>
+<li>Não tem disponibilidade semanal</li>
+<li>Espera que IA faça tudo sem nenhum envolvimento</li>
+<li>Busca solução rápida de 1 semana</li>
+</ul>
+</div>
+</div>
+</div>
+
+<!-- PREÇO -->
+<div class="container section" id="preco">
+<h2>Investimento</h2>
+
+<div class="insight">
+<h4>O que custa NÃO ter isso</h4>
+<p>Contratar 3-5 funcionários pra cobrir as mesmas áreas: <strong>R$15.000-30.000/mês</strong>. Em 12 meses: <strong>R$180.000-360.000</strong>.</p>
+<p>O custo mensal de manutenção dos agentes após implementação: <strong>R$300-1.500/mês</strong> (API + servidor).</p>
+</div>
+
+<div class="price-box">
+<div class="price-label">Implementação Completa — 12 Meses</div>
+<div class="price-new">R$ 45.000</div>
+<div class="price-label">à vista</div>
+<div class="price-alt">ou R$ 50.000 em 5x R$ 10.000</div>
+<a href="#" class="cta-btn" style="margin-top:25px;">QUERO CONVERSAR</a>
+</div>
+</div>
+
+<!-- FAQ -->
+<div class="container section">
+<h2>Perguntas <span>frequentes</span></h2>
+
+<div class="faq-item" onclick="this.classList.toggle('open')">
+<div class="faq-q">Preciso saber programar? <span>+</span></div>
+<div class="faq-a">Não. A gente faz junto nos encontros e eu cuido da parte técnica. Você foca na estratégia e no contexto do negócio.</div>
+</div>
+<div class="faq-item" onclick="this.classList.toggle('open')">
+<div class="faq-q">Em quanto tempo vejo resultado? <span>+</span></div>
+<div class="faq-a">Os primeiros agentes ficam prontos no mês 1. A partir daí, cada semana a empresa fica mais inteligente. Resultado financeiro visível a partir do mês 2-3.</div>
+</div>
+<div class="faq-item" onclick="this.classList.toggle('open')">
+<div class="faq-q">O que acontece depois dos 12 meses? <span>+</span></div>
+<div class="faq-a">Tudo fica com você. Os agentes continuam rodando, a documentação é sua. Se quiser renovar o acompanhamento, negociamos um valor de manutenção.</div>
+</div>
+<div class="faq-item" onclick="this.classList.toggle('open')">
+<div class="faq-q">Quantas pessoas da minha equipe podem participar? <span>+</span></div>
+<div class="faq-a">Os encontros semanais são comigo e com os decisores (sócios/líderes). Mas os agentes servem a equipe inteira — todo mundo usa.</div>
+</div>
+<div class="faq-item" onclick="this.classList.toggle('open')">
+<div class="faq-q">E se eu não gostar no primeiro mês? <span>+</span></div>
+<div class="faq-a">A gente faz um diagnóstico antes de fechar. Se ficar claro que não faz sentido pro seu momento, eu mesmo vou te dizer. Não vendo o que não vai funcionar.</div>
+</div>
+<div class="faq-item" onclick="this.classList.toggle('open')">
+<div class="faq-q">Qual a diferença pra Imersão de 8 semanas? <span>+</span></div>
+<div class="faq-a">Na Imersão, você aprende e faz. No programa de 12 meses, eu faço junto com você — implementação completa em todas as áreas da empresa, com acompanhamento semanal.</div>
+</div>
+</div>
+
+<!-- CTA FINAL -->
+<div class="container" style="text-align:center;padding:60px 30px;">
+<h2>Sua empresa <span>merece</span> funcionar com inteligência</h2>
+<p style="max-width:600px;margin:0 auto 25px;">Daqui 12 meses, sua empresa pode estar rodando com agentes em cada área — mais eficiente, mais organizada, mais lucrativa. Ou pode continuar como está.</p>
+<a href="#" class="cta-btn">QUERO CONVERSAR</a>
+<p class="cta-sub">Vagas limitadas — agenda pessoal</p>
+</div>
+
+<!-- MENTOR -->
+<div class="container section" style="text-align:center;">
+<h3 style="color:#8892b0;font-size:.85em;text-transform:uppercase;letter-spacing:2px;">Seu parceiro de implementação</h3>
+<h2 style="margin-top:5px;">André Codina</h2>
+<p style="max-width:600px;margin:0 auto;">Especialista em implementação de IA para negócios digitais. Já implementou squads completos de agentes pra empresas que faturam de R$100K a R$10M por mês. Usa os mesmos agentes no próprio negócio todos os dias.</p>
+</div>
+
+<div class="footer">
+<p>Implementação Completa de Agentes IA — 12 Meses | André Codina</p>
+<p style="margin-top:5px;">Dolphin — Inteligência Artificial para Negócios</p>
+</div>
+
+</body>
+</html>

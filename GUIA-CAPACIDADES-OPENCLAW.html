@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Guia de Capacidades — OpenClaw</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#0a0a0a;color:#e0e0e0;line-height:1.7;}
+.hero{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);padding:60px 40px;text-align:center;border-bottom:3px solid #e94560;}
+.hero h1{font-size:2.2em;color:#fff;margin-bottom:8px;}
+.hero h1 span{color:#e94560;}
+.hero p{font-size:1.05em;color:#8892b0;max-width:600px;margin:0 auto;}
+.nav{background:#111;padding:12px 30px;position:sticky;top:0;z-index:100;border-bottom:1px solid #222;display:flex;gap:8px;overflow-x:auto;flex-wrap:wrap;}
+.nav a{color:#8892b0;text-decoration:none;font-size:.82em;white-space:nowrap;padding:5px 12px;border-radius:15px;border:1px solid #333;transition:all .2s;}
+.nav a:hover{color:#fff;border-color:#e94560;background:rgba(233,69,96,.15);}
+.container{max-width:960px;margin:0 auto;padding:40px 30px;}
+h2{font-size:1.6em;color:#fff;margin:40px 0 15px;padding-bottom:8px;border-bottom:2px solid #e94560;}
+h3{font-size:1.15em;color:#ccd6f6;margin:25px 0 10px;}
+p{margin:8px 0;color:#a8b2d1;}
+strong{color:#ccd6f6;}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:.9em;}
+th{background:#1a1a2e;color:#e94560;text-align:left;padding:9px 12px;font-weight:600;border-bottom:2px solid #e94560;}
+td{padding:8px 12px;border-bottom:1px solid #1a1a1a;color:#a8b2d1;}
+tr:hover td{background:#111;}
+.yes{color:#4ade80;font-weight:600;}
+.no{color:#ff6b6b;font-weight:600;}
+.card{background:#151515;border:1px solid #222;border-radius:12px;padding:20px;margin:12px 0;}
+.card:hover{border-color:#e94560;}
+.card-title{font-size:1em;color:#fff;font-weight:700;margin-bottom:6px;}
+.highlight{background:linear-gradient(135deg,#1a1a2e,#16213e);border-left:4px solid #e94560;padding:15px 20px;border-radius:0 8px 8px 0;margin:15px 0;}
+.highlight p{color:#ccd6f6;margin:3px 0;}
+.insight{background:linear-gradient(135deg,#1a1a2e,#0f3460);border:1px solid #e94560;border-radius:12px;padding:18px;margin:15px 0;}
+.insight h4{color:#e94560;margin:0 0 6px;font-size:.85em;text-transform:uppercase;letter-spacing:1px;}
+.insight p{color:#ccd6f6;margin:3px 0;}
+.divider{height:1px;background:linear-gradient(90deg,transparent,#333,transparent);margin:35px 0;}
+.footer{text-align:center;padding:30px;color:#444;font-size:.8em;border-top:1px solid #222;margin-top:40px;}
+@media(max-width:768px){.hero{padding:40px 20px;}.container{padding:25px 15px;}}
+</style>
+</head>
+<body>
+
+<div class="hero">
+<h1>Guia de <span>Capacidades</span> do OpenClaw</h1>
+<p>Referência rápida pra pitches e propostas — o que pode e o que não pode fazer</p>
+</div>
+
+<nav class="nav">
+<a href="#canais">Canais</a>
+<a href="#comunicacao">Comunicacao</a>
+<a href="#pesquisa">Pesquisa</a>
+<a href="#google">Google</a>
+<a href="#conteudo">Conteudo</a>
+<a href="#automacao">Automacao</a>
+<a href="#integracoes">Integracoes</a>
+<a href="#multiagente">Multi-agente</a>
+<a href="#nao-pode">Nao pode</a>
+<a href="#pitch">Pitch</a>
+</nav>
+
+<div class="container">
+
+<h2 id="canais">Onde o Agente Pode Escutar</h2>
+<table>
+<tr><th>Canal</th><th>Funciona?</th><th>Como</th><th>Custo</th></tr>
+<tr><td><strong>Telegram</strong></td><td class="yes">SIM</td><td>Cria bot via @BotFather</td><td>Gratis</td></tr>
+<tr><td><strong>WhatsApp</strong></td><td class="yes">SIM</td><td>QR Code (chip dedicado)</td><td>~R$15/mes</td></tr>
+<tr><td><strong>Discord</strong></td><td class="yes">SIM</td><td>Bot no Developer Portal</td><td>Gratis</td></tr>
+<tr><td><strong>Slack</strong></td><td class="yes">SIM</td><td>App integration</td><td>Gratis</td></tr>
+<tr><td><strong>Signal</strong></td><td class="yes">SIM</td><td>Integracao nativa</td><td>Gratis</td></tr>
+<tr><td><strong>iMessage</strong></td><td class="yes">SIM</td><td>So no Mac</td><td>Gratis</td></tr>
+<tr><td><strong>Google Chat</strong></td><td class="yes">SIM</td><td>Integration</td><td>Gratis</td></tr>
+<tr><td><strong>Microsoft Teams</strong></td><td class="yes">SIM</td><td>Integration</td><td>Gratis</td></tr>
+<tr><td><strong>Email (Gmail)</strong></td><td class="yes">SIM</td><td>Ler, responder, enviar</td><td>Gratis</td></tr>
+<tr><td><strong>Grupo de WhatsApp</strong></td><td class="yes">SIM</td><td>Escuta e responde no grupo</td><td>Mesmo chip</td></tr>
+<tr><td><strong>Notion</strong></td><td class="no">NAO nativo</td><td>Workaround via API custom</td><td>—</td></tr>
+<tr><td><strong>Instagram DM</strong></td><td class="no">NAO</td><td>Instagram bloqueia bots</td><td>—</td></tr>
+<tr><td><strong>Instagram posts</strong></td><td class="no">NAO</td><td>Nao publica nem agenda</td><td>—</td></tr>
+</table>
+
+<h3>Vantagens por canal</h3>
+<div class="card"><div class="card-title">Telegram</div><p>Mais flexivel, gratis, bots nativos. Melhor pra uso profissional com agentes.</p></div>
+<div class="card"><div class="card-title">WhatsApp</div><p>Mais familiar pro cliente brasileiro. Precisa de chip dedicado.</p></div>
+<div class="card"><div class="card-title">Discord</div><p>Ideal pra equipes. Canais separados por assunto. Gratis.</p></div>
+<div class="card"><div class="card-title">Email (Gmail)</div><p>Pode monitorar inbox, classificar, responder automaticamente.</p></div>
+
+<div class="divider"></div>
+
+<h2 id="comunicacao">Comunicacao e Mensagens</h2>
+<table>
+<tr><th>Skill</th><th>O que faz</th></tr>
+<tr><td><strong>Responder mensagens</strong></td><td>Em qualquer canal conectado</td></tr>
+<tr><td><strong>Mensagens proativas</strong></td><td>Crons que mandam mensagens em horarios programados</td></tr>
+<tr><td><strong>Ler e responder emails</strong></td><td>Gmail completo — ler, responder, enviar, classificar</td></tr>
+<tr><td><strong>Escutar em grupos</strong></td><td>WhatsApp e Telegram — responde quando mencionado</td></tr>
+</table>
+
+<div class="divider"></div>
+
+<h2 id="pesquisa">Pesquisa e Web</h2>
+<table>
+<tr><th>Skill</th><th>O que faz</th></tr>
+<tr><td><strong>Buscar na internet</strong></td><td>Pesquisa Google, encontra artigos, tendencias, referencias</td></tr>
+<tr><td><strong>Navegar sites</strong></td><td>Abre paginas, le conteudo, extrai dados, preenche formularios</td></tr>
+<tr><td><strong>Tirar screenshots</strong></td><td>Captura tela de qualquer site</td></tr>
+<tr><td><strong>Monitorar temas</strong></td><td>Busca recorrente sobre um tema (tipo Google Alerts inteligente)</td></tr>
+</table>
+
+<div class="divider"></div>
+
+<h2 id="google">Google Workspace (skill GOG)</h2>
+<table>
+<tr><th>Servico</th><th>O que faz</th></tr>
+<tr><td><strong>Google Calendar</strong></td><td>Ler agenda, criar eventos, verificar conflitos</td></tr>
+<tr><td><strong>Google Drive</strong></td><td>Acessar, criar, editar arquivos</td></tr>
+<tr><td><strong>Google Docs</strong></td><td>Criar e editar documentos</td></tr>
+<tr><td><strong>Google Sheets</strong></td><td>Ler e escrever em planilhas</td></tr>
+<tr><td><strong>Google Tasks</strong></td><td>Criar e gerenciar tarefas</td></tr>
+<tr><td><strong>Gmail</strong></td><td>Ler, enviar, responder emails</td></tr>
+</table>
+
+<div class="divider"></div>
+
+<h2 id="conteudo">Criacao de Conteudo</h2>
+<div class="highlight">
+<p><strong>Importante:</strong> O agente CRIA o conteudo mas NAO publica. A publicacao no Instagram e manual ou via ferramenta externa (mLabs, Hootsuite).</p>
+</div>
+<table>
+<tr><th>Skill</th><th>O que faz</th></tr>
+<tr><td><strong>Escrever textos</strong></td><td>Copy, posts, carrosseis, roteiros, emails, paginas de venda, scripts</td></tr>
+<tr><td><strong>Gerar PDFs</strong></td><td>Formata conteudo e exporta como arquivo pro freelancer</td></tr>
+<tr><td><strong>Criar briefings</strong></td><td>Briefing de design, briefing pro freelancer, briefing pro dev</td></tr>
+<tr><td><strong>Planejar conteudo</strong></td><td>Calendario editorial de 30 dias, pautas, formatos</td></tr>
+<tr><td><strong>Roteiros</strong></td><td>Reels, videos, VSL — gancho, desenvolvimento, CTA</td></tr>
+</table>
+
+<div class="divider"></div>
+
+<h2 id="automacao">Codigo e Automacao</h2>
+<table>
+<tr><th>Skill</th><th>O que faz</th></tr>
+<tr><td><strong>Executar codigo</strong></td><td>Python, JavaScript, bash — roda scripts</td></tr>
+<tr><td><strong>Acessar APIs</strong></td><td>Conecta com qualquer servico que tenha API</td></tr>
+<tr><td><strong>Banco de dados</strong></td><td>PostgreSQL, Supabase, MySQL via scripts</td></tr>
+<tr><td><strong>Crons (rotinas)</strong></td><td>Qualquer tarefa no horario programado</td></tr>
+<tr><td><strong>Backups</strong></td><td>Backup programado com versionamento</td></tr>
+</table>
+
+<div class="insight">
+<h4>OpenClaw vs N8N</h4>
+<p><strong>OpenClaw:</strong> melhor pra automacoes inteligentes (raciocinio, analise, decisao).</p>
+<p><strong>N8N:</strong> melhor pra automacoes mecanicas (se X acontece, faz Y).</p>
+<p><strong>Juntos:</strong> OpenClaw pensa, N8N executa. Podem trabalhar em conjunto.</p>
+</div>
+
+<div class="divider"></div>
+
+<h2 id="integracoes">Integracoes Confirmadas</h2>
+<table>
+<tr><th>Servico</th><th>O que faz</th></tr>
+<tr><td><strong>GitHub</strong></td><td>Repositorios, commits, PRs</td></tr>
+<tr><td><strong>Hotmart</strong></td><td>Vendas, alunos, produtos (via API)</td></tr>
+<tr><td><strong>Stripe</strong></td><td>Pagamentos, assinaturas</td></tr>
+<tr><td><strong>Spotify</strong></td><td>Controle de musica</td></tr>
+<tr><td><strong>ElevenLabs</strong></td><td>Gerar audio/voz</td></tr>
+<tr><td><strong>Whisper</strong></td><td>Transcrever audio em texto</td></tr>
+</table>
+<p style="font-size:.85em;color:#666;">+ 13.700 skills da comunidade no ClawHub</p>
+
+<div class="divider"></div>
+
+<h2 id="multiagente">Multi-agente</h2>
+<table>
+<tr><th>Capacidade</th><th>O que faz</th></tr>
+<tr><td><strong>Orquestracao</strong></td><td>Um agente coordena outros (engine Lobster)</td></tr>
+<tr><td><strong>Delegacao</strong></td><td>Agente aciona outro pra tarefa especifica</td></tr>
+<tr><td><strong>Memoria compartilhada</strong></td><td>Todos acessam o mesmo cerebro</td></tr>
+<tr><td><strong>Permissionamento</strong></td><td>Cada agente acessa so o que precisa</td></tr>
+<tr><td><strong>Multiplos canais</strong></td><td>Mesmo agente escuta em Discord + Telegram + WhatsApp (mesma memoria)</td></tr>
+</table>
+
+<div class="divider"></div>
+
+<h2 id="nao-pode">O que NAO Pode Fazer</h2>
+<table>
+<tr><th>Limitacao</th><th>Detalhe</th></tr>
+<tr><td class="no">Publicar no Instagram</td><td>Cria conteudo, mas publicar e manual ou via ferramenta externa</td></tr>
+<tr><td class="no">Instagram DM</td><td>Instagram bloqueia bots</td></tr>
+<tr><td class="no">Ligacoes telefonicas</td><td>Nao faz chamadas de voz</td></tr>
+<tr><td class="no">Notion nativo</td><td>Workaround via API possivel mas complexo</td></tr>
+<tr><td class="no">Editar video</td><td>Cria roteiros e briefings, edicao e humana</td></tr>
+<tr><td class="no">Criar imagens</td><td>Pode integrar com DALL-E (limitado). Cria briefings pro designer</td></tr>
+</table>
+
+<div class="divider"></div>
+
+<h2 id="pitch">Como Usar no Pitch</h2>
+
+<div class="card"><div class="card-title">"Ele cria conteudo?"</div><p>"Sim — textos, copies, roteiros, carrosseis, emails, paginas. Tudo pronto. A publicacao no Instagram e a parte manual ou via ferramenta de agendamento."</p></div>
+
+<div class="card"><div class="card-title">"Ele acessa minhas ferramentas?"</div><p>"Se tem API, ele conecta. Gmail, Calendar, Drive, Hotmart, banco de dados — mais de 50 canais e milhares de servicos."</p></div>
+
+<div class="card"><div class="card-title">"Ele pesquisa na internet?"</div><p>"Sim — busca tendencias, le artigos, acompanha temas do seu nicho e transforma em conteudo pronto."</p></div>
+
+<div class="card"><div class="card-title">"Ele faz automacao?"</div><p>"Rotinas automaticas — relatorios, lembretes, backups, alertas. Configura uma vez, roda pra sempre."</p></div>
+
+<div class="card"><div class="card-title">"Ele aprende comigo?"</div><p>"Aprende com cada conversa. Corrigiu uma vez? Nunca mais erra. Gostou do formato? Vira padrao. Memoria perfeita."</p></div>
+
+<div class="card"><div class="card-title">"Ele publica no meu Instagram?"</div><p>"Cria tudo — copy, carrossel, roteiro, calendario. A publicacao precisa de ferramenta de agendamento ou voce publica manualmente. Ele entrega tudo pronto."</p></div>
+
+</div>
+
+<div class="footer">
+<p>Guia de Capacidades — OpenClaw | Referencia interna Dolphin</p>
+<p style="margin-top:5px;">53 skills oficiais | 13.700+ comunidade | 50+ canais</p>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Comparativo de Soluções — Agentes IA | Dolphin</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#0a0a0a;color:#e0e0e0;line-height:1.7;}
+.hero{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);padding:60px 40px;text-align:center;border-bottom:3px solid #e94560;}
+.hero h1{font-size:2.2em;color:#fff;margin-bottom:8px;}
+.hero h1 span{color:#e94560;}
+.hero p{font-size:1.05em;color:#8892b0;max-width:600px;margin:0 auto;}
+.container{max-width:1100px;margin:0 auto;padding:50px 30px;}
+h2{font-size:1.6em;color:#fff;margin:0 0 20px;text-align:center;}
+h2 span{color:#e94560;}
+p{margin:10px 0;color:#a8b2d1;}
+strong{color:#ccd6f6;}
+
+.products{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin:30px 0;}
+.product{background:#151515;border:1px solid #222;border-radius:16px;padding:30px 25px;position:relative;overflow:hidden;transition:all .2s;}
+.product:hover{border-color:#e94560;transform:translateY(-3px);}
+.product::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:#e94560;}
+.product.featured{border-color:#e94560;}
+.product.featured::before{background:linear-gradient(90deg,#e94560,#8b5cf6);}
+.product-label{font-size:.7em;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#e94560;margin-bottom:8px;}
+.product-name{font-size:1.3em;font-weight:800;color:#fff;margin-bottom:5px;}
+.product-tagline{font-size:.88em;color:#8892b0;margin-bottom:20px;}
+.product-price{font-size:2em;font-weight:900;color:#e94560;margin:15px 0 5px;}
+.product-price-detail{font-size:.8em;color:#666;margin-bottom:20px;}
+.product-divider{height:1px;background:#222;margin:15px 0;}
+
+.feature-list{list-style:none;padding:0;margin:15px 0;}
+.feature-list li{padding:6px 0 6px 22px;position:relative;font-size:.88em;color:#a8b2d1;}
+.feature-list li::before{content:'✓';position:absolute;left:0;color:#4ade80;font-weight:700;}
+.feature-list li.no::before{content:'—';color:#666;}
+.feature-list li.no{color:#555;}
+
+.cta-btn{display:inline-block;background:#e94560;color:#fff;padding:14px 30px;border-radius:10px;font-size:.95em;font-weight:700;text-decoration:none;transition:all .2s;width:100%;text-align:center;margin-top:15px;}
+.cta-btn:hover{background:#d63851;}
+.cta-btn.outline{background:transparent;border:2px solid #e94560;color:#e94560;}
+.cta-btn.outline:hover{background:#e94560;color:#fff;}
+
+.comparison-table{width:100%;border-collapse:collapse;margin:30px 0;font-size:.9em;}
+.comparison-table th{background:#1a1a2e;color:#e94560;text-align:left;padding:12px 15px;font-weight:600;border-bottom:2px solid #e94560;}
+.comparison-table td{padding:10px 15px;border-bottom:1px solid #1a1a1a;color:#a8b2d1;}
+.comparison-table tr:hover td{background:#111;}
+.comparison-table .check{color:#4ade80;font-weight:700;text-align:center;}
+.comparison-table .no{color:#444;text-align:center;}
+.comparison-table .highlight-row{background:#1a1a2e;}
+
+.insight{background:linear-gradient(135deg,#1a1a2e,#0f3460);border:1px solid #e94560;border-radius:12px;padding:20px;margin:25px 0;}
+.insight h4{color:#e94560;margin:0 0 8px;font-size:.9em;text-transform:uppercase;letter-spacing:1px;}
+.insight p{color:#ccd6f6;margin:4px 0;}
+
+.divider{height:1px;background:linear-gradient(90deg,transparent,#333,transparent);margin:40px 0;}
+.footer{text-align:center;padding:40px;color:#444;font-size:.82em;border-top:1px solid #222;margin-top:40px;}
+
+@media(max-width:900px){.products{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<div class="hero">
+<h1>Qual solução <span>faz sentido</span> pra você?</h1>
+<p>Três formas de implementar agentes de IA no seu negócio. Escolha a que combina com seu momento.</p>
+</div>
+
+<div class="container">
+
+<!-- 3 CARDS -->
+<div class="products">
+
+<!-- IMERSÃO -->
+<div class="product">
+<div class="product-label">Aprender a fazer</div>
+<div class="product-name">Imersão 8 Semanas</div>
+<div class="product-tagline">Você aprende a construir seus próprios agentes. Sai sabendo fazer sozinho.</div>
+<div class="product-price">R$ 5.000</div>
+<div class="product-price-detail">à vista | Alunos: R$ 3.000</div>
+<div class="product-divider"></div>
+<ul class="feature-list">
+<li>8 semanas de aulas ao vivo</li>
+<li>2 encontros por semana com André</li>
+<li>1 agente construído por semana</li>
+<li>8 agentes no total (seu time básico)</li>
+<li>Playbooks, templates e prompts</li>
+<li>Grupo WhatsApp exclusivo</li>
+<li>Gravações por 6 meses</li>
+<li>Garantia de 7 dias</li>
+<li class="no">Não inclui implementação pra você</li>
+<li class="no">Não inclui acompanhamento pós-imersão</li>
+</ul>
+<div class="product-divider"></div>
+<p style="font-size:.82em;color:#8892b0;text-align:center;"><strong style="color:#4ade80;">Transformação:</strong> Você sai sabendo criar e gerenciar agentes de IA sozinho.</p>
+<a href="#" class="cta-btn outline">QUERO APRENDER</a>
+</div>
+
+<!-- SQUAD SOB DEMANDA -->
+<div class="product">
+<div class="product-label">A gente faz pra você</div>
+<div class="product-name">Squad sob Demanda</div>
+<div class="product-tagline">Escolha 1 squad (ex: marketing, conteúdo, suporte) e a gente entrega pronto pra usar.</div>
+<div class="product-price">R$ 20.000</div>
+<div class="product-price-detail">à vista ou 3x R$ 7.500 | Entrega em até 15 dias úteis</div>
+<div class="product-divider"></div>
+<ul class="feature-list">
+<li>Diagnóstico da sua necessidade</li>
+<li>1 squad completo (10-13 agentes)</li>
+<li>Estrategista + especialistas da área</li>
+<li>Segundo cérebro configurado</li>
+<li>Conectado no Telegram ou Discord</li>
+<li>Treinamento inicial do time com seu contexto</li>
+<li>Documentação completa</li>
+<li>Suporte por 30 dias pós-entrega</li>
+<li class="no">Escopo: 1 área (marketing OU conteúdo OU suporte)</li>
+<li class="no">Áreas adicionais = novo squad</li>
+</ul>
+<div class="product-divider"></div>
+<p style="font-size:.82em;color:#8892b0;text-align:center;"><strong style="color:#4ade80;">Transformação:</strong> Você recebe um time pronto pra resolver 1 dor específica. Quer mais? Contrata outro squad.</p>
+<a href="#" class="cta-btn outline">QUERO UM SQUAD</a>
+</div>
+
+<!-- HIGH TICKET -->
+<div class="product featured">
+<div class="product-label" style="color:#8b5cf6;">Empresa completa com IA</div>
+<div class="product-name">Implementação Total — 1 Ano</div>
+<div class="product-tagline">Todas as áreas da empresa com agentes. Encontros semanais, quatro mãos, durante 12 meses.</div>
+<div class="product-price">R$ 45.000</div>
+<div class="product-price-detail">à vista ou 5x R$ 10.000 (R$ 50.000)</div>
+<div class="product-divider"></div>
+<ul class="feature-list">
+<li>12 meses de acompanhamento semanal</li>
+<li>52 encontros ao vivo (1h-1h30 cada)</li>
+<li>Canal direto no WhatsApp com André</li>
+<li>TODAS as áreas: marketing, comercial, suporte, RH, financeiro, jurídico, operações</li>
+<li>Agentes pessoais pra cada líder/sócio</li>
+<li>Estrategistas por produto</li>
+<li>Automações e integrações completas</li>
+<li>Documentação completa e replicável</li>
+<li>Se enroscar, André faz pra você</li>
+<li>Você aprende enquanto faz (sai sabendo tudo)</li>
+</ul>
+<div class="product-divider"></div>
+<p style="font-size:.82em;color:#8892b0;text-align:center;"><strong style="color:#4ade80;">Transformação:</strong> Empresa inteira rodando com IA. Operação otimizada, custos reduzidos, tudo documentado.</p>
+<a href="#" class="cta-btn">QUERO TRANSFORMAR MINHA EMPRESA</a>
+</div>
+
+</div>
+
+<!-- TABELA COMPARATIVA DETALHADA -->
+<div class="divider"></div>
+
+<h2>Comparativo <span>detalhado</span></h2>
+
+<table class="comparison-table">
+<thead>
+<tr>
+<th>Característica</th>
+<th>Imersão (R$5K)</th>
+<th>Squad sob Demanda (R$20K)</th>
+<th>High Ticket (R$45-50K)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="highlight-row">
+<td><strong>Quem faz</strong></td>
+<td>Você aprende e faz</td>
+<td>A gente faz e entrega</td>
+<td>Fazemos juntos, quatro mãos</td>
+</tr>
+<tr>
+<td><strong>Duração</strong></td>
+<td>8 semanas</td>
+<td>Até 15 dias úteis</td>
+<td>12 meses</td>
+</tr>
+<tr>
+<td><strong>Escopo</strong></td>
+<td>8 agentes básicos</td>
+<td>1 squad completo (10-13 agentes)</td>
+<td>Empresa inteira (todas as áreas)</td>
+</tr>
+<tr>
+<td><strong>Encontros ao vivo</strong></td>
+<td>16 (2x/semana por 8 sem.)</td>
+<td>Reunião de briefing + entrega</td>
+<td>52 (1x/semana por 12 meses)</td>
+</tr>
+<tr>
+<td><strong>Canal direto com André</strong></td>
+<td>Grupo WhatsApp da turma</td>
+<td>Suporte 30 dias pós-entrega</td>
+<td class="check">WhatsApp direto por 12 meses</td>
+</tr>
+<tr class="highlight-row">
+<td><strong>Marketing</strong></td>
+<td>Você cria os agentes</td>
+<td class="check">Entregue pronto (se for o squad escolhido)</td>
+<td class="check">Implementado completo</td>
+</tr>
+<tr>
+<td><strong>Comercial</strong></td>
+<td>Você cria os agentes</td>
+<td class="no">Só se for o squad escolhido</td>
+<td class="check">Implementado</td>
+</tr>
+<tr>
+<td><strong>Suporte ao cliente</strong></td>
+<td>Você cria os agentes</td>
+<td class="no">Só se for o squad escolhido</td>
+<td class="check">Implementado</td>
+</tr>
+<tr>
+<td><strong>RH, Financeiro, Jurídico</strong></td>
+<td class="no">Não incluso</td>
+<td class="no">Não incluso</td>
+<td class="check">Implementado</td>
+</tr>
+<tr>
+<td><strong>Agentes pessoais (sócios)</strong></td>
+<td class="no">Não incluso</td>
+<td class="no">Não incluso</td>
+<td class="check">1 por líder/sócio</td>
+</tr>
+<tr>
+<td><strong>Estrategistas por produto</strong></td>
+<td class="no">Não incluso</td>
+<td class="no">Não incluso</td>
+<td class="check">1 por produto</td>
+</tr>
+<tr class="highlight-row">
+<td><strong>Você sai sabendo fazer</strong></td>
+<td class="check">Sim — esse é o objetivo</td>
+<td class="no">Recebe pronto, não aprende</td>
+<td class="check">Sim — aprende fazendo junto</td>
+</tr>
+<tr>
+<td><strong>Documentação completa</strong></td>
+<td>Templates e playbooks</td>
+<td class="check">Da área entregue</td>
+<td class="check">Empresa inteira documentada</td>
+</tr>
+<tr>
+<td><strong>Garantia</strong></td>
+<td>7 dias</td>
+<td>Contratual</td>
+<td>Contratual</td>
+</tr>
+</tbody>
+</table>
+
+<!-- QUAL ESCOLHER -->
+<div class="divider"></div>
+
+<h2>Qual escolher?</h2>
+
+<div class="insight">
+<h4>Escolha a Imersão se:</h4>
+<p>Você quer <strong>aprender a fazer sozinho</strong>. Quer entender como funciona, construir com as próprias mãos, e depois ser independente. Investimento menor, autonomia total.</p>
+</div>
+
+<div class="insight">
+<h4>Escolha o Squad sob Demanda se:</h4>
+<p>Você tem <strong>1 dor específica</strong> (ex: marketing, conteúdo, suporte) e quer resolver rápido. Não quer aprender — quer receber pronto e usar. Precisa de mais? Contrata outro squad.</p>
+</div>
+
+<div class="insight">
+<h4>Escolha o High Ticket se:</h4>
+<p>Você quer <strong>transformar a empresa inteira</strong>. Todas as áreas com IA, acompanhamento semanal, quatro mãos. É o investimento mais alto, mas o resultado é uma empresa completamente diferente em 12 meses.</p>
+</div>
+
+</div>
+
+<div class="footer">
+<p>Agentes IA para Negócios — André Codina</p>
+<p style="margin-top:5px;">Dolphin — Inteligência Artificial para Negócios</p>
+</div>
+
+</body>
+</html>

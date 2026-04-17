@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Imersão Agentes IA — 8 Semanas | André Codina</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#0a0a0a;color:#e0e0e0;line-height:1.7;}
+.hero{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);padding:80px 40px 60px;text-align:center;border-bottom:3px solid #e94560;}
+.hero h1{font-size:clamp(1.8em,4vw,2.8em);color:#fff;margin-bottom:12px;max-width:800px;margin-left:auto;margin-right:auto;}
+.hero h1 span{color:#e94560;}
+.hero p{font-size:1.1em;color:#8892b0;max-width:650px;margin:0 auto 25px;}
+.cta-btn{display:inline-block;background:#e94560;color:#fff;padding:16px 40px;border-radius:10px;font-size:1.1em;font-weight:700;text-decoration:none;transition:all .2s;border:none;cursor:pointer;}
+.cta-btn:hover{background:#d63851;transform:translateY(-2px);box-shadow:0 8px 25px rgba(233,69,96,.3);}
+.cta-sub{font-size:.8em;color:#666;margin-top:10px;}
+.container{max-width:900px;margin:0 auto;padding:50px 30px;}
+h2{font-size:1.8em;color:#fff;margin:0 0 20px;text-align:center;}
+h2 span{color:#e94560;}
+h3{font-size:1.2em;color:#ccd6f6;margin:25px 0 12px;}
+p{margin:10px 0;color:#a8b2d1;}
+strong{color:#ccd6f6;}
+.section{padding:50px 0;border-bottom:1px solid #1a1a1a;}
+.card{background:#151515;border:1px solid #222;border-radius:12px;padding:22px;margin:12px 0;transition:border-color .2s;}
+.card:hover{border-color:#e94560;}
+.card-title{font-size:1.05em;color:#fff;font-weight:700;margin-bottom:8px;}
+.highlight{background:linear-gradient(135deg,#1a1a2e,#16213e);border-left:4px solid #e94560;padding:18px 22px;border-radius:0 8px 8px 0;margin:18px 0;}
+.highlight p{color:#ccd6f6;margin:4px 0;}
+.insight{background:linear-gradient(135deg,#1a1a2e,#0f3460);border:1px solid #e94560;border-radius:12px;padding:20px;margin:15px 0;}
+.insight h4{color:#e94560;margin:0 0 8px;font-size:.9em;text-transform:uppercase;letter-spacing:1px;}
+.insight p{color:#ccd6f6;margin:4px 0;}
+.modules-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:15px;margin:20px 0;}
+.module{background:#151515;border:1px solid #222;border-radius:12px;padding:20px;transition:all .2s;position:relative;overflow:hidden;}
+.module:hover{border-color:#e94560;transform:translateY(-3px);}
+.module::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:#e94560;}
+.module-num{color:#e94560;font-size:.75em;font-weight:700;text-transform:uppercase;letter-spacing:2px;}
+.module-name{font-size:1.1em;color:#fff;font-weight:700;margin:5px 0;}
+.module-desc{font-size:.88em;color:#8892b0;}
+.module-delivery{font-size:.82em;color:#4ade80;font-weight:600;margin-top:8px;}
+table{width:100%;border-collapse:collapse;margin:15px 0;font-size:.93em;}
+th{background:#1a1a2e;color:#e94560;text-align:left;padding:10px 14px;font-weight:600;border-bottom:2px solid #e94560;}
+td{padding:9px 14px;border-bottom:1px solid #1a1a1a;color:#a8b2d1;}
+ul{margin:8px 0 8px 22px;}
+li{margin:5px 0;color:#a8b2d1;}
+.price-box{background:#151515;border:2px solid #e94560;border-radius:16px;padding:30px;text-align:center;margin:25px 0;}
+.price-old{font-size:1.2em;color:#666;text-decoration:line-through;}
+.price-new{font-size:2.5em;font-weight:900;color:#e94560;margin:10px 0;}
+.price-label{font-size:.85em;color:#8892b0;}
+.price-alt{background:#1a1a2e;border:1px solid #333;border-radius:12px;padding:20px;text-align:center;margin:15px 0;}
+.tag{display:inline-block;background:#1a1a2e;color:#e94560;padding:3px 12px;border-radius:12px;font-size:.78em;font-weight:600;}
+.faq-item{background:#151515;border:1px solid #222;border-radius:10px;margin:8px 0;overflow:hidden;}
+.faq-q{padding:15px 20px;cursor:pointer;font-weight:600;color:#ccd6f6;display:flex;justify-content:space-between;align-items:center;}
+.faq-q:hover{background:#1a1a1a;}
+.faq-a{padding:0 20px 15px;color:#8892b0;font-size:.92em;display:none;}
+.faq-item.open .faq-a{display:block;}
+.guarantee{background:linear-gradient(135deg,#1a2e1a,#163e16);border:1px solid #4ade80;border-radius:12px;padding:25px;text-align:center;margin:25px 0;}
+.guarantee h3{color:#4ade80;margin-bottom:10px;}
+.divider{height:1px;background:linear-gradient(90deg,transparent,#333,transparent);margin:40px 0;}
+.footer{text-align:center;padding:40px;color:#444;font-size:.82em;border-top:1px solid #222;margin-top:40px;}
+.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:20px 0;}
+.metric{background:#151515;border:1px solid #222;border-radius:10px;padding:18px;text-align:center;}
+.metric .val{font-size:1.5em;font-weight:700;color:#e94560;}
+.metric .lbl{font-size:.78em;color:#8892b0;margin-top:4px;}
+@media(max-width:768px){.hero{padding:50px 20px 40px;}.modules-grid{grid-template-columns:1fr;}.container{padding:30px 18px;}}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+<h1>Monte Seu <span>Time de IA</span> em 8 Semanas</h1>
+<p>Um agente novo por semana. No final, você tem um time completo trabalhando 24/7 pelo custo de uma fração de um funcionário.</p>
+<a href="#preco" class="cta-btn">QUERO MINHA VAGA</a>
+<p class="cta-sub">15 vagas por turma</p>
+</div>
+
+<!-- PROBLEMA -->
+<div class="container section">
+<h2>Você já tentou <span>delegar</span> e sabe como é</h2>
+<div class="card">
+<p>Contratar é caro. Treinar demora. Freelancer some. E no final, você continua fazendo tudo sozinho — ou pagando caro pra alguém fazer de forma mediana.</p>
+<p style="margin-top:15px;">E se existisse um time que <strong>nunca falta</strong>, <strong>nunca pede aumento</strong>, <strong>trabalha 24/7</strong>, <strong>aprende com você</strong> e custa menos que um estagiário?</p>
+</div>
+</div>
+
+<!-- SOLUÇÃO -->
+<div class="container section">
+<h2>O que é a <span>Imersão Agentes IA</span></h2>
+<p style="text-align:center;max-width:700px;margin:0 auto 25px;">Em 8 semanas, você vai construir — com as próprias mãos — um time completo de agentes de IA que trabalham pra você. Um agente novo por semana, cada um com uma função específica.</p>
+
+<div class="metric-grid">
+<div class="metric"><div class="val">8</div><div class="lbl">Semanas</div></div>
+<div class="metric"><div class="val">8</div><div class="lbl">Agentes construídos</div></div>
+<div class="metric"><div class="val">16</div><div class="lbl">Encontros ao vivo</div></div>
+<div class="metric"><div class="val">24/7</div><div class="lbl">Seu time no final</div></div>
+</div>
+
+<div class="highlight">
+<p><strong>Você não precisa saber programar.</strong> A metodologia é prática — você constrói junto comigo nos encontros ao vivo e sai com tudo funcionando.</p>
+</div>
+</div>
+
+<!-- MÓDULOS -->
+<div class="container section">
+<h2>O que você vai <span>construir</span></h2>
+
+<div class="modules-grid">
+<div class="module">
+<div class="module-num">Semana 1</div>
+<div class="module-name">Agente Criador de Conteúdo</div>
+<div class="module-desc">Cria planos de conteúdo, carrosséis, legendas, calendário editorial. Conhece seu tom de voz e seu público.</div>
+<div class="module-delivery">Entrega: 30 dias de conteúdo prontos</div>
+</div>
+
+<div class="module">
+<div class="module-num">Semana 2</div>
+<div class="module-name">Agente Copywriter</div>
+<div class="module-desc">Escreve copies pra anúncios, páginas, emails, scripts. Usa técnicas dos melhores copywriters do mundo.</div>
+<div class="module-delivery">Entrega: página de vendas pronta</div>
+</div>
+
+<div class="module">
+<div class="module-num">Semana 3</div>
+<div class="module-name">Agente Construtor de Funil</div>
+<div class="module-desc">Monta funis completos: anúncio, página, checkout, email, WhatsApp. Pensa na estratégia do todo.</div>
+<div class="module-delivery">Entrega: funil completo montado</div>
+</div>
+
+<div class="module">
+<div class="module-num">Semana 4</div>
+<div class="module-name">Agente Gestor de Tráfego</div>
+<div class="module-desc">Cria variações de anúncio, analisa métricas, sugere otimizações. Entende de Meta Ads e Google Ads.</div>
+<div class="module-delivery">Entrega: 10+ variações de anúncio</div>
+</div>
+
+<div class="module">
+<div class="module-num">Semana 5</div>
+<div class="module-name">Agente Designer de Produto</div>
+<div class="module-desc">Estrutura produtos, empacota ofertas, define bônus, garantia, precificação. Pensa como estrategista.</div>
+<div class="module-delivery">Entrega: estrutura de produto completa</div>
+</div>
+
+<div class="module">
+<div class="module-num">Semana 6</div>
+<div class="module-name">Agente Analista de Dados</div>
+<div class="module-desc">Analisa métricas, gera relatórios, identifica padrões. Transforma dados em decisões.</div>
+<div class="module-delivery">Entrega: relatório automatizado</div>
+</div>
+
+<div class="module">
+<div class="module-num">Semana 7</div>
+<div class="module-name">Agente de Automação</div>
+<div class="module-desc">Conecta ferramentas, cria fluxos automáticos, configura rotinas. Seu negócio roda no piloto automático.</div>
+<div class="module-delivery">Entrega: fluxos de automação rodando</div>
+</div>
+
+<div class="module">
+<div class="module-num">Semana 8</div>
+<div class="module-name">Integração Total</div>
+<div class="module-desc">Conecta todos os agentes, configura o orquestrador, monta o plano de evolução pros próximos 90 dias.</div>
+<div class="module-delivery">Entrega: time completo + plano 90 dias</div>
+</div>
+</div>
+</div>
+
+<!-- FORMATO -->
+<div class="container section">
+<h2>Como <span>funciona</span></h2>
+
+<div class="card">
+<div class="card-title">2 encontros ao vivo por semana com André Codina</div>
+<p>Sessões práticas onde você constrói junto comigo. Mão na massa, não teoria.</p>
+</div>
+<div class="card">
+<div class="card-title">1 tira-dúvidas semanal com equipe</div>
+<p>Sessão extra pra resolver qualquer bloqueio técnico ou estratégico.</p>
+</div>
+<div class="card">
+<div class="card-title">Grupo WhatsApp exclusivo</div>
+<p>Acesso direto à comunidade de alunos e suporte rápido entre os encontros.</p>
+</div>
+<div class="card">
+<div class="card-title">Playbooks, templates e prompts testados</div>
+<p>Tudo que uso no meu próprio negócio — pronto pra você aplicar.</p>
+</div>
+<div class="card">
+<div class="card-title">Gravações por 6 meses</div>
+<p>Perdeu um encontro? Assiste depois. Quer revisar? Tá tudo gravado.</p>
+</div>
+</div>
+
+<!-- PRA QUEM -->
+<div class="container section">
+<h2>Pra quem é e pra quem <span>não é</span></h2>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;">
+<div class="card" style="border-color:#4ade80;">
+<div class="card-title" style="color:#4ade80;">Pra você se:</div>
+<ul>
+<li>Já tem um negócio digital e quer escalar</li>
+<li>Trabalha com perpétuo, lançamento ou low ticket</li>
+<li>Está cansado de depender de freelancers caros</li>
+<li>Quer reduzir custos sem perder qualidade</li>
+<li>Tem disponibilidade pra 2 encontros por semana</li>
+</ul>
+</div>
+<div class="card" style="border-color:#ff6b6b;">
+<div class="card-title" style="color:#ff6b6b;">Não é pra você se:</div>
+<ul>
+<li>Ainda não tem negócio digital</li>
+<li>Busca fórmula mágica</li>
+<li>Não tem 5-6 horas por semana pra dedicar</li>
+<li>Espera que IA faça tudo sem seu envolvimento</li>
+</ul>
+</div>
+</div>
+</div>
+
+<!-- PREÇO -->
+<div class="container section" id="preco">
+<h2>Quanto <span>custa</span></h2>
+
+<p style="text-align:center;margin-bottom:5px;">Se você fosse contratar cada especialista individualmente:</p>
+
+<table>
+<tr><th>Especialista</th><th>Custo mensal</th></tr>
+<tr><td>Social Media</td><td>R$ 1.500 - 3.000</td></tr>
+<tr><td>Copywriter</td><td>R$ 2.000 - 5.000</td></tr>
+<tr><td>Gestor de Tráfego</td><td>R$ 2.000 - 4.000</td></tr>
+<tr><td>Designer</td><td>R$ 1.500 - 3.000</td></tr>
+<tr><td>Analista</td><td>R$ 2.000 - 4.000</td></tr>
+<tr style="font-weight:700;border-top:2px solid #e94560;"><td>Total mensal</td><td>R$ 9.000 - 19.000</td></tr>
+</table>
+
+<p style="text-align:center;margin:15px 0 5px;color:#8892b0;">Valor real das entregas da imersão: <strong style="color:#fff;">R$ 14.000+</strong></p>
+
+<div class="price-box">
+<div class="price-label">Investimento</div>
+<div class="price-new">R$ 5.000</div>
+<div class="price-label">à vista</div>
+<p style="margin-top:10px;font-size:.9em;color:#8892b0;">Parcelamento disponível via Hotmart (com juros da plataforma)</p>
+<a href="#" class="cta-btn" style="margin-top:20px;">QUERO MINHA VAGA</a>
+</div>
+
+<div class="price-alt">
+<div style="color:#4ade80;font-weight:700;font-size:1.1em;">Aluno Proalt ou Elo?</div>
+<div style="font-size:1.8em;font-weight:900;color:#4ade80;margin:8px 0;">R$ 3.000</div>
+<div style="color:#8892b0;font-size:.9em;">por cadeira — condição exclusiva</div>
+</div>
+
+<p class="cta-sub" style="text-align:center;">15 vagas por turma</p>
+</div>
+
+<!-- GARANTIA -->
+<div class="container section">
+<div class="guarantee">
+<h3>Garantia de 7 dias</h3>
+<p style="color:#ccd6f6;">Participe da primeira semana e construa seu primeiro agente. Se não fizer sentido pra você, devolvemos 100% do valor. Sem perguntas.</p>
+</div>
+</div>
+
+<!-- FAQ -->
+<div class="container section">
+<h2>Perguntas <span>frequentes</span></h2>
+
+<div class="faq-item" onclick="this.classList.toggle('open')">
+<div class="faq-q">Preciso saber programar? <span>+</span></div>
+<div class="faq-a">Não. A metodologia é prática e não exige conhecimento técnico. Você vai construir junto comigo nos encontros ao vivo.</div>
+</div>
+<div class="faq-item" onclick="this.classList.toggle('open')">
+<div class="faq-q">Funciona pra lançamento ou só perpétuo? <span>+</span></div>
+<div class="faq-a">Funciona pra ambos. Os agentes que você cria servem pra qualquer modelo de negócio digital.</div>
+</div>
+<div class="faq-item" onclick="this.classList.toggle('open')">
+<div class="faq-q">E se eu não puder assistir ao vivo? <span>+</span></div>
+<div class="faq-a">Todas as sessões são gravadas e ficam disponíveis por 6 meses. Mas recomendo participar ao vivo pra tirar dúvidas em tempo real.</div>
+</div>
+<div class="faq-item" onclick="this.classList.toggle('open')">
+<div class="faq-q">Quanto tempo por semana preciso dedicar? <span>+</span></div>
+<div class="faq-a">Cerca de 5-6 horas por semana: 2 encontros ao vivo + implementação prática.</div>
+</div>
+<div class="faq-item" onclick="this.classList.toggle('open')">
+<div class="faq-q">Isso não vai ficar obsoleto rápido? <span>+</span></div>
+<div class="faq-a">A metodologia ensina fundamentos, não ferramentas específicas. Ferramentas mudam, fundamentos não. O que você aprende aqui serve por anos.</div>
+</div>
+<div class="faq-item" onclick="this.classList.toggle('open')">
+<div class="faq-q">Quanto custa manter os agentes depois? <span>+</span></div>
+<div class="faq-a">O custo mensal de manutenção é de R$70-350/mês (API de IA + servidor). Muito menos que qualquer funcionário ou freelancer.</div>
+</div>
+</div>
+
+<!-- CTA FINAL -->
+<div class="container" style="text-align:center;padding:60px 30px;">
+<h2>Seu time de IA está a <span>8 semanas</span> de distância</h2>
+<p style="max-width:600px;margin:0 auto 25px;">Daqui 8 semanas, você pode continuar fazendo tudo sozinho — ou ter um time inteiro trabalhando pra você 24/7.</p>
+<a href="#" class="cta-btn">QUERO MINHA VAGA</a>
+<p class="cta-sub">15 vagas | Garantia de 7 dias</p>
+</div>
+
+<!-- MENTOR -->
+<div class="container section" style="text-align:center;">
+<h3 style="color:#8892b0;font-size:.85em;text-transform:uppercase;letter-spacing:2px;">Seu mentor</h3>
+<h2 style="margin-top:5px;">André Codina</h2>
+<p style="max-width:600px;margin:0 auto;">Especialista em implementação de IA para negócios digitais. Usa agentes de IA todos os dias no próprio negócio e já ajudou empresas a montar squads completos de agentes que trabalham 24/7.</p>
+</div>
+
+<div class="footer">
+<p>Imersão Agentes IA — 8 Semanas | André Codina</p>
+<p style="margin-top:5px;">Dolphin — Inteligência Artificial para Negócios</p>
+</div>
+
+</body>
+</html>
