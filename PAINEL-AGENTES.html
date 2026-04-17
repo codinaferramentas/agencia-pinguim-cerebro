@@ -551,9 +551,9 @@ footer .brand { color: var(--orange); font-weight: 700; }
     <h1>Painel de <span>Agentes IA</span></h1>
     <p class="hero-sub">Ecossistema de agentes inteligentes da Agencia Pinguim — construcao em andamento</p>
     <div class="hero-stats">
-      <div class="hero-stat"><span class="val">55</span><span class="lbl">Prompts prontos</span></div>
-      <div class="hero-stat"><span class="val">20</span><span class="lbl">Agentes nucleo</span></div>
-      <div class="hero-stat"><span class="val">54</span><span class="lbl">Clones alimentados</span></div>
+      <div class="hero-stat"><span class="val">56</span><span class="lbl">Prompts prontos</span></div>
+      <div class="hero-stat"><span class="val">21</span><span class="lbl">Agentes nucleo</span></div>
+      <div class="hero-stat"><span class="val">64</span><span class="lbl">Clones alimentados</span></div>
       <div class="hero-stat"><span class="val">3</span><span class="lbl">Mini-agencias</span></div>
     </div>
     <p class="hint"><strong>Dica:</strong> clique em qualquer agente pra ver o framework completo dele</p>
@@ -799,6 +799,31 @@ footer .brand { color: var(--orange); font-weight: 700; }
           <div class="agent-chip"><div class="agent-avatar">PL</div><div class="agent-info"><div class="a-name">Patrick Lencioni</div><div class="a-status">Teams</div></div></div>
           <div class="agent-chip"><div class="agent-avatar">DS</div><div class="agent-info"><div class="a-name">Derek Sivers</div><div class="a-status">Contrarian</div></div></div>
           <div class="agent-chip"><div class="agent-avatar">YC</div><div class="agent-info"><div class="a-name">Yvon Chouinard</div><div class="a-status">Mission</div></div></div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="squad-card status-partial">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">🔬</div>
+        <div class="squad-info"><div class="squad-name">Squad Deep Research</div><div class="squad-desc">10 especialistas em pesquisa rigorosa + Dr Orchestrator</div></div>
+        <div class="squad-stats"><div class="squad-stat"><span class="s-val">11</span><span class="s-lbl">Especialistas</span></div><span class="status-badge badge-partial">1 prompt + 10 SOULs</span></div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body"><div class="squad-body-inner">
+        <div class="squad-flow"><strong>Como funciona:</strong> Pergunta que exige rigor cientifico chega ("estamos enviesados?", "esse dado e confiavel?", "o que a ciencia diz sobre X?") → <strong>Dr Orchestrator</strong> diagnostica em 3 perguntas → seleciona entre Kahneman (vieses), Klein (intuicao expert), Ioannidis (por que estudos falham), Sackett (evidencia medica), Cochrane, Higgins, Booth, Creswell, Forsgren (DORA) ou Gilad (GIST). Complementa Board Chair (negocio) e Data Chief (dados).</div>
+        <div class="agents-grid">
+          <div class="agent-chip has-prompt" onclick="openAgent('dr-orchestrator')"><div class="agent-avatar">👔</div><div class="agent-info"><div class="a-name">Dr Orchestrator</div><div class="a-status">Chief</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">DK</div><div class="agent-info"><div class="a-name">Kahneman</div><div class="a-status">Vieses</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">GK</div><div class="agent-info"><div class="a-name">Gary Klein</div><div class="a-status">Intuicao Expert</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">JI</div><div class="agent-info"><div class="a-name">Ioannidis</div><div class="a-status">Research Methods</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">DS</div><div class="agent-info"><div class="a-name">David Sackett</div><div class="a-status">Evidence-Based</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">CO</div><div class="agent-info"><div class="a-name">Cochrane</div><div class="a-status">Systematic Rev</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">JH</div><div class="agent-info"><div class="a-name">Julian Higgins</div><div class="a-status">Handbook</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">AB</div><div class="agent-info"><div class="a-name">Andrew Booth</div><div class="a-status">Info Specialist</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">JC</div><div class="agent-info"><div class="a-name">John Creswell</div><div class="a-status">Mixed Methods</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">NF</div><div class="agent-info"><div class="a-name">Nicole Forsgren</div><div class="a-status">DORA</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">IG</div><div class="agent-info"><div class="a-name">Itamar Gilad</div><div class="a-status">GIST</div></div></div>
         </div>
       </div></div>
     </div>
@@ -1079,6 +1104,12 @@ const AGENTS = {
     entregavel: 'Direcao narrativa com storyteller + framework + quality check.',
     base: '13 storytellers: Campbell, Donald Miller, Blake Snyder, Dan Harmon, Nancy Duarte, Shawn Coyne, Oren Klaff, Kindra Hall, Keith Johnstone, Matthew Dicks, Park Howell, Marshall Ganz.',
     aciona: ['Qualquer storyteller'] },
+  'dr-orchestrator': { name: 'Dr Orchestrator (Deep Research Chief)', avatar: '👔', squad: 'Squad Deep Research', status: 'done',
+    resumo: 'Chief da squad de pesquisa rigorosa. Traz rigor cientifico pra decisoes da Pinguim. Complementa Board Chair (negocio) e Data Chief (dados) respondendo "o que a CIENCIA diz sobre isso?".',
+    faz: ['Diagnostica em 3 perguntas: natureza, prazo, objetivo', 'Seleciona entre 10 especialistas em metodologia', 'Mostra "sabemos vs nao sabemos" pra cada questao', 'Propoe como testar incertezas', 'Inclui nivel de confianca (alta/media/baixa) em cada recomendacao'],
+    entregavel: 'Analise cientifica estruturada com diagnostico + evidencia + lacunas + recomendacao com confianca.',
+    base: '10 especialistas: Kahneman (vieses), Klein (intuicao expert), Ioannidis (research methods), Sackett (evidence-based), Cochrane + Higgins (systematic reviews), Booth (search), Creswell (mixed methods), Forsgren (DORA), Gilad (GIST).',
+    aciona: ['Qualquer um dos 10 especialistas', 'Pode combinar 2 quando dilema exige (ex: Kahneman+Klein pra vies vs intuicao)'] },
   'data-chief': { name: 'Data Chief', avatar: '👔', squad: 'Squad Data & Analytics', status: 'done',
     resumo: 'Diretor de analytics. NAO responde com dados diretos — diagnostica a pergunta em 3 perguntas (dimensao, tipo, abordagem) e seleciona 1-2 especialistas com framework adequado.',
     faz: ['Diagnostica: aquisicao/ativacao/retencao/monetizacao', 'Seleciona entre Avinash (funnel), Fader (LTV), Ellis (growth), Mehta (churn), Spinks (comunidade), Kao (cohort)', 'Aplica framework do especialista', 'Entrega analise + recomendacao acionavel', 'Nunca inventa numeros — se falta dado, diz o que medir'],
