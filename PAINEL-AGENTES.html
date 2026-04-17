@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Painel de Agentes IA — Agencia Pinguim</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+:root {
+  --bg: #0a0a0a;
+  --bg2: #141414;
+  --card: #1a1a1a;
+  --orange: #ff6b2b;
+  --orange-soft: rgba(255, 107, 43, 0.12);
+  --orange-border: rgba(255, 107, 43, 0.3);
+  --green: #10b981;
+  --red: #ef4444;
+  --yellow: #f59e0b;
+  --text: #ffffff;
+  --text2: #a0a0a0;
+  --text3: #606060;
+  --border: #2a2a2a;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+::selection { background: var(--orange-soft); }
+
+/* HERO */
+.hero {
+  text-align: center;
+  padding: 4rem 2rem 2rem;
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(255, 107, 43, 0.15) 0%, transparent 50%);
+}
+.hero-content { position: relative; z-index: 1; }
+.hero-icon { font-size: 3rem; margin-bottom: 1rem; }
+.hero h1 {
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 900;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.02em;
+}
+.hero h1 span { color: var(--orange); }
+.hero-sub {
+  color: var(--text2);
+  font-size: 1.05rem;
+  max-width: 700px;
+  margin: 0 auto 2rem;
+}
+.hero-stats {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  flex-wrap: wrap;
+  margin-top: 2rem;
+}
+.hero-stat {
+  text-align: center;
+  padding: 1rem 1.5rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-width: 130px;
+}
+.hero-stat .val {
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--orange);
+  display: block;
+}
+.hero-stat .lbl {
+  font-size: 0.7rem;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 0.25rem;
+}
+
+/* PROGRESS BAR */
+.progress-container {
+  max-width: 800px;
+  margin: 2rem auto 0;
+  padding: 0 2rem;
+}
+.progress-bar {
+  background: var(--bg2);
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.progress-fill {
+  background: linear-gradient(90deg, var(--orange), #ff8c5a);
+  height: 100%;
+  transition: width 0.8s ease;
+}
+.progress-label {
+  text-align: center;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text2);
+}
+
+/* NAV */
+.nav {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  flex-wrap: wrap;
+  backdrop-filter: blur(12px);
+  background: rgba(10, 10, 10, 0.85);
+}
+.nav a {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text2);
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+.nav a:hover { background: var(--orange-soft); color: var(--orange); }
+.nav a.active { background: var(--orange-soft); color: var(--orange); }
+
+/* SECTIONS */
+.section {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 3rem 2rem;
+}
+.section-header {
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.section-label {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--orange);
+  margin-bottom: 0.5rem;
+}
+.section-title {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 900;
+  margin-bottom: 0.5rem;
+}
+.section-sub {
+  color: var(--text2);
+  font-size: 0.95rem;
+  max-width: 700px;
+}
+
+/* PHASE TRACKER */
+.phases {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 3rem;
+}
+.phase {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  position: relative;
+  overflow: hidden;
+}
+.phase::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--border);
+}
+.phase.done::before { background: var(--green); }
+.phase.progress::before { background: var(--orange); }
+.phase.blocked::before { background: var(--red); }
+.phase.pending::before { background: var(--text3); }
+.phase-num {
+  font-size: 0.7rem;
+  color: var(--text3);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.25rem;
+}
+.phase-name {
+  font-weight: 800;
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+.phase-status {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-weight: 700;
+  display: inline-block;
+  margin-top: 0.5rem;
+}
+.phase.done .phase-status { background: rgba(16, 185, 129, 0.15); color: var(--green); }
+.phase.progress .phase-status { background: var(--orange-soft); color: var(--orange); }
+.phase.blocked .phase-status { background: rgba(239, 68, 68, 0.15); color: var(--red); }
+.phase.pending .phase-status { background: rgba(255, 255, 255, 0.05); color: var(--text3); }
+.phase-desc {
+  font-size: 0.78rem;
+  color: var(--text2);
+  margin-top: 0.5rem;
+  line-height: 1.5;
+}
+
+/* SQUAD CARDS */
+.squads-grid { display: grid; gap: 1rem; }
+.squad-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: all 0.3s;
+}
+.squad-card:hover { border-color: var(--orange-border); }
+.squad-header {
+  padding: 1.25rem 1.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  position: relative;
+}
+.squad-header::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--orange);
+}
+.squad-card.status-done .squad-header::before { background: var(--green); }
+.squad-card.status-partial .squad-header::before { background: var(--orange); }
+.squad-card.status-pending .squad-header::before { background: var(--text3); }
+.squad-icon { font-size: 1.5rem; width: 40px; text-align: center; }
+.squad-info { flex: 1; }
+.squad-name {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin-bottom: 0.15rem;
+}
+.squad-desc {
+  font-size: 0.8rem;
+  color: var(--text2);
+}
+.squad-stats {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+}
+.squad-stat {
+  text-align: center;
+  min-width: 50px;
+}
+.squad-stat .s-val {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--orange);
+  display: block;
+}
+.squad-stat .s-lbl {
+  font-size: 0.6rem;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.status-badge {
+  font-size: 0.68rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  font-weight: 700;
+}
+.badge-done { background: rgba(16, 185, 129, 0.15); color: var(--green); }
+.badge-partial { background: var(--orange-soft); color: var(--orange); }
+.badge-pending { background: rgba(255, 255, 255, 0.05); color: var(--text3); }
+.squad-toggle {
+  font-size: 1rem;
+  color: var(--text3);
+  transition: transform 0.3s;
+  padding: 0.5rem;
+}
+.squad-card.open .squad-toggle { transform: rotate(180deg); }
+
+/* SQUAD BODY */
+.squad-body {
+  display: none;
+  padding: 0 1.5rem 1.5rem;
+  border-top: 1px solid var(--border);
+}
+.squad-card.open .squad-body { display: block; }
+.squad-body-inner {
+  padding-top: 1.5rem;
+}
+
+/* AGENT GRID */
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.agent-chip {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  transition: all 0.2s;
+  position: relative;
+}
+.agent-chip:hover {
+  border-color: var(--orange-border);
+  transform: translateY(-1px);
+}
+.agent-chip.has-prompt {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+.agent-chip.has-prompt::after {
+  content: '✓';
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--green);
+  font-weight: 900;
+  font-size: 0.9rem;
+}
+.agent-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--orange-soft);
+  color: var(--orange);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.agent-chip.has-prompt .agent-avatar {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--green);
+}
+.agent-info { flex: 1; min-width: 0; }
+.a-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.a-status {
+  font-size: 0.68rem;
+  color: var(--text3);
+}
+.has-prompt .a-status { color: var(--green); }
+
+/* LEGEND */
+.legend {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+  padding: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text2);
+}
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.legend-done { background: var(--green); }
+.legend-partial { background: var(--orange); }
+.legend-pending { background: var(--text3); }
+
+/* FOOTER */
+footer {
+  text-align: center;
+  padding: 3rem 2rem;
+  border-top: 1px solid var(--border);
+  margin-top: 3rem;
+}
+footer p {
+  font-size: 0.82rem;
+  color: var(--text3);
+  margin: 0.25rem 0;
+}
+footer .brand { color: var(--orange); font-weight: 700; }
+
+/* RESPONSIVE */
+@media(max-width: 768px) {
+  .agents-grid { grid-template-columns: 1fr 1fr; }
+  .squad-stats { gap: 0.75rem; }
+  .squad-stat { min-width: 40px; }
+}
+@media(max-width: 480px) {
+  .agents-grid { grid-template-columns: 1fr; }
+  .hero-stats { gap: 0.75rem; }
+  .hero-stat { min-width: 100px; padding: 0.75rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-icon">🐧</div>
+    <h1>Painel de <span>Agentes IA</span></h1>
+    <p class="hero-sub">Ecossistema completo de agentes inteligentes da Agencia Pinguim — construcao em andamento</p>
+
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <span class="val">281</span>
+        <span class="lbl">Agentes</span>
+      </div>
+      <div class="hero-stat">
+        <span class="val">35</span>
+        <span class="lbl">Squads</span>
+      </div>
+      <div class="hero-stat">
+        <span class="val">44</span>
+        <span class="lbl">Prompts prontos</span>
+      </div>
+      <div class="hero-stat">
+        <span class="val">38</span>
+        <span class="lbl">Clones alimentados</span>
+      </div>
+    </div>
+
+    <div class="progress-container">
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: 15.7%"></div>
+      </div>
+      <div class="progress-label">Fase 3 (System Prompts) — 44 de 281 agentes (15.7%)</div>
+    </div>
+  </div>
+</section>
+
+<!-- NAV -->
+<nav class="nav">
+  <a href="#fases">Fases</a>
+  <a href="#negocio">Nucleo Negocio</a>
+  <a href="#operacional">Operacional</a>
+  <a href="#clones">Clones Especialistas</a>
+  <a href="#auxiliares">Squads Auxiliares</a>
+</nav>
+
+<!-- FASES -->
+<section class="section" id="fases">
+  <div class="section-header">
+    <span class="section-label">Roadmap</span>
+    <h2 class="section-title">Fases do Projeto</h2>
+    <p class="section-sub">Implementacao sequencial do ecossistema. Cada fase depende da anterior.</p>
+  </div>
+
+  <div class="phases">
+    <div class="phase done">
+      <div class="phase-num">FASE 1</div>
+      <div class="phase-name">Estrutura</div>
+      <div class="phase-desc">Repositorio, cerebro, 281 agentes, 35 squads, SOULs basicos.</div>
+      <span class="phase-status">✓ Completo</span>
+    </div>
+    <div class="phase progress">
+      <div class="phase-num">FASE 2</div>
+      <div class="phase-name">Alimentar</div>
+      <div class="phase-desc">38 clones alimentados, Elo/ProAlt documentados. Falta Lira/Taurus.</div>
+      <span class="phase-status">⚡ 70%</span>
+    </div>
+    <div class="phase progress">
+      <div class="phase-num">FASE 3</div>
+      <div class="phase-name">System Prompts</div>
+      <div class="phase-desc">Prompts OpenAI prontos pra cada agente. 44 de 281 feitos.</div>
+      <span class="phase-status">⚡ 15.7%</span>
+    </div>
+    <div class="phase blocked">
+      <div class="phase-num">FASE 4</div>
+      <div class="phase-name">Infraestrutura</div>
+      <div class="phase-desc">Servidor + OpenClaw + API keys + canais. Aguardando Pedro.</div>
+      <span class="phase-status">⛔ Bloqueado</span>
+    </div>
+    <div class="phase pending">
+      <div class="phase-num">FASE 5</div>
+      <div class="phase-name">Deploy</div>
+      <div class="phase-desc">Ativar agentes nos canais (Discord, Telegram, WhatsApp).</div>
+      <span class="phase-status">⏳ Aguardando</span>
+    </div>
+    <div class="phase pending">
+      <div class="phase-num">FASE 6</div>
+      <div class="phase-name">Evolucao</div>
+      <div class="phase-desc">Feedback loop, aprendizado, melhoria continua.</div>
+      <span class="phase-status">⏳ Futuro</span>
+    </div>
+  </div>
+</section>
+
+<!-- NUCLEO DO NEGOCIO -->
+<section class="section" id="negocio">
+  <div class="section-header">
+    <span class="section-label">Prioridade maxima</span>
+    <h2 class="section-title">Nucleo do Negocio</h2>
+    <p class="section-sub">Squads que geram receita direta: lancamentos, low ticket, high ticket e suporte aos alunos.</p>
+  </div>
+
+  <div class="squads-grid">
+
+    <!-- Squad Lancamento Pago -->
+    <div class="squad-card status-done" data-squad="lancamento-pago">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">🚀</div>
+        <div class="squad-info">
+          <div class="squad-name">Squad Lancamento Pago</div>
+          <div class="squad-desc">Mini-agencia de desafios: LoFi, Low Ticket, Masterclasses</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">5</span><span class="s-lbl">Agentes</span></div>
+          <div class="squad-stat"><span class="s-val">5</span><span class="s-lbl">Prontos</span></div>
+          <span class="status-badge badge-done">100%</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body">
+        <div class="squad-body-inner">
+          <p class="squad-desc" style="margin-bottom:1rem">Desafios ao vivo com lotes de preco, order bumps e upsell pros programas principais (Elo, ProAlt).</p>
+          <div class="agents-grid">
+            <div class="agent-chip has-prompt"><div class="agent-avatar">E</div><div class="agent-info"><div class="a-name">Estrategista</div><div class="a-status">Prompt pronto</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">C</div><div class="agent-info"><div class="a-name">Copy</div><div class="a-status">Prompt pronto</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">T</div><div class="agent-info"><div class="a-name">Trafego</div><div class="a-status">Prompt pronto</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">G</div><div class="agent-info"><div class="a-name">Gestor</div><div class="a-status">Prompt pronto</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">A</div><div class="agent-info"><div class="a-name">Analista</div><div class="a-status">Prompt pronto</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Squad Low Ticket -->
+    <div class="squad-card status-done">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">💰</div>
+        <div class="squad-info">
+          <div class="squad-name">Squad Low Ticket (Perpetuo)</div>
+          <div class="squad-desc">Produto de R$27-97 rodando 24/7 com trafego pago continuo</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">5</span><span class="s-lbl">Agentes</span></div>
+          <div class="squad-stat"><span class="s-val">5</span><span class="s-lbl">Prontos</span></div>
+          <span class="status-badge badge-done">100%</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body">
+        <div class="squad-body-inner">
+          <p class="squad-desc" style="margin-bottom:1rem">Metodologia validada do ProAlt: produto, pagina 12 dobras, Sistema LT 100K, trafego do zero a escala.</p>
+          <div class="agents-grid">
+            <div class="agent-chip has-prompt"><div class="agent-avatar">E</div><div class="agent-info"><div class="a-name">Estrategista LT</div><div class="a-status">Prompt pronto</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">C</div><div class="agent-info"><div class="a-name">Copy LT</div><div class="a-status">Prompt pronto</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">P</div><div class="agent-info"><div class="a-name">Pagina LT</div><div class="a-status">Prompt pronto</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">T</div><div class="agent-info"><div class="a-name">Trafego LT</div><div class="a-status">Prompt pronto</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">A</div><div class="agent-info"><div class="a-name">Analista LT</div><div class="a-status">Prompt pronto</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Squad High Ticket -->
+    <div class="squad-card status-done">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">💎</div>
+        <div class="squad-info">
+          <div class="squad-name">Squad High Ticket</div>
+          <div class="squad-desc">Mentorias premium: Lira (R$6.750), Taurus (R$36.000), Orion</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">4</span><span class="s-lbl">Agentes</span></div>
+          <div class="squad-stat"><span class="s-val">4</span><span class="s-lbl">Prontos</span></div>
+          <span class="status-badge badge-done">100%</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body">
+        <div class="squad-body-inner">
+          <p class="squad-desc" style="margin-bottom:1rem">Venda consultiva: funil de aplicacao, VSL, qualificacao de lead, call de vendas com closer humano.</p>
+          <div class="agents-grid">
+            <div class="agent-chip has-prompt"><div class="agent-avatar">E</div><div class="agent-info"><div class="a-name">Estrategista HT</div><div class="a-status">Prompt pronto</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">C</div><div class="agent-info"><div class="a-name">Copy HT</div><div class="a-status">Prompt pronto</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">X</div><div class="agent-info"><div class="a-name">Closer</div><div class="a-status">Prompt pronto</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">S</div><div class="agent-info"><div class="a-name">CS Mentorias</div><div class="a-status">Prompt pronto</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Suporte -->
+    <div class="squad-card status-partial">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">🎯</div>
+        <div class="squad-info">
+          <div class="squad-name">Suporte aos Alunos</div>
+          <div class="squad-desc">Atendimento no WhatsApp/Telegram por programa</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">5</span><span class="s-lbl">Agentes</span></div>
+          <div class="squad-stat"><span class="s-val">3</span><span class="s-lbl">Prontos</span></div>
+          <span class="status-badge badge-partial">60%</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body">
+        <div class="squad-body-inner">
+          <p class="squad-desc" style="margin-bottom:1rem">Roteador identifica o aluno e direciona pro suporte do programa correto.</p>
+          <div class="agents-grid">
+            <div class="agent-chip has-prompt"><div class="agent-avatar">R</div><div class="agent-info"><div class="a-name">Roteador</div><div class="a-status">Prompt pronto</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">E</div><div class="agent-info"><div class="a-name">Suporte Elo</div><div class="a-status">Prompt pronto</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">P</div><div class="agent-info"><div class="a-name">Suporte ProAlt</div><div class="a-status">Prompt pronto</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">L</div><div class="agent-info"><div class="a-name">Suporte Lira</div><div class="a-status">Precisa material</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">T</div><div class="agent-info"><div class="a-name">Suporte Taurus</div><div class="a-status">Precisa material</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Estrategistas -->
+    <div class="squad-card status-done">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">🧠</div>
+        <div class="squad-info">
+          <div class="squad-name">Estrategistas de Produto</div>
+          <div class="squad-desc">Analise de funil e otimizacao por produto</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">2</span><span class="s-lbl">Agentes</span></div>
+          <div class="squad-stat"><span class="s-val">2</span><span class="s-lbl">Prontos</span></div>
+          <span class="status-badge badge-done">100%</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body">
+        <div class="squad-body-inner">
+          <div class="agents-grid">
+            <div class="agent-chip has-prompt"><div class="agent-avatar">E</div><div class="agent-info"><div class="a-name">Estrategista Elo</div><div class="a-status">Prompt pronto</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">P</div><div class="agent-info"><div class="a-name">Estrategista ProAlt</div><div class="a-status">Prompt pronto</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pessoais + Pinguim -->
+    <div class="squad-card status-done">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">👥</div>
+        <div class="squad-info">
+          <div class="squad-name">Agentes Pessoais + Orquestrador</div>
+          <div class="squad-desc">Brace direito de cada socio + Pinguim no Discord</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">5</span><span class="s-lbl">Agentes</span></div>
+          <div class="squad-stat"><span class="s-val">5</span><span class="s-lbl">Prontos</span></div>
+          <span class="status-badge badge-done">100%</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body">
+        <div class="squad-body-inner">
+          <div class="agents-grid">
+            <div class="agent-chip has-prompt"><div class="agent-avatar">P</div><div class="agent-info"><div class="a-name">Agente Pedro</div><div class="a-status">ProAlt + LT</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">M</div><div class="agent-info"><div class="a-name">Agente Micha</div><div class="a-status">Elo + LoFi</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">L</div><div class="agent-info"><div class="a-name">Agente Luiz</div><div class="a-status">Acesso total</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">C</div><div class="agent-info"><div class="a-name">Agente Codina</div><div class="a-status">Dev partner</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">🐧</div><div class="agent-info"><div class="a-name">Pinguim</div><div class="a-status">Orquestrador Discord</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- OPERACIONAL -->
+<section class="section" id="operacional">
+  <div class="section-header">
+    <span class="section-label">Operacao diaria</span>
+    <h2 class="section-title">Squad Agencia Pinguim</h2>
+    <p class="section-sub">18 agentes operacionais que cuidam do dia a dia do negocio.</p>
+  </div>
+
+  <div class="squads-grid">
+    <div class="squad-card status-done">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">🏢</div>
+        <div class="squad-info">
+          <div class="squad-name">Operacao Completa</div>
+          <div class="squad-desc">Chief, Comercial, CS, Financeiro, Dados, Produtos, RH, Marketing, Juridico e mais</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">18</span><span class="s-lbl">Agentes</span></div>
+          <div class="squad-stat"><span class="s-val">18</span><span class="s-lbl">Prontos</span></div>
+          <span class="status-badge badge-done">100%</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body">
+        <div class="squad-body-inner">
+          <div class="agents-grid">
+            <div class="agent-chip has-prompt"><div class="agent-avatar">🎩</div><div class="agent-info"><div class="a-name">Chief</div><div class="a-status">Orquestrador geral</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">💼</div><div class="agent-info"><div class="a-name">Comercial</div><div class="a-status">Pipeline e vendas</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">🤝</div><div class="agent-info"><div class="a-name">CS</div><div class="a-status">Customer Success</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">💰</div><div class="agent-info"><div class="a-name">Financeiro</div><div class="a-status">DRE, margens</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">📊</div><div class="agent-info"><div class="a-name">Dados</div><div class="a-status">Dashboards</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">📦</div><div class="agent-info"><div class="a-name">Produtos</div><div class="a-status">Catalogo</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">👤</div><div class="agent-info"><div class="a-name">RH</div><div class="a-status">Equipe</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">📋</div><div class="agent-info"><div class="a-name">Gestor Projetos</div><div class="a-status">Prazos</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">📝</div><div class="agent-info"><div class="a-name">Copy</div><div class="a-status">Operacional</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">🎯</div><div class="agent-info"><div class="a-name">Trafego</div><div class="a-status">Geral</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">📱</div><div class="agent-info"><div class="a-name">Social Media</div><div class="a-status">Redes</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">🎬</div><div class="agent-info"><div class="a-name">Video</div><div class="a-status">Roteiros</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">🎨</div><div class="agent-info"><div class="a-name">Designer</div><div class="a-status">Visual</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">⚙️</div><div class="agent-info"><div class="a-name">Automacoes</div><div class="a-status">Workflows</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">📺</div><div class="agent-info"><div class="a-name">YouTube</div><div class="a-status">Canal</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">⚖️</div><div class="agent-info"><div class="a-name">Juridico</div><div class="a-status">Compliance</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">📑</div><div class="agent-info"><div class="a-name">Tributario</div><div class="a-status">Impostos</div></div></div>
+            <div class="agent-chip has-prompt"><div class="agent-avatar">🧩</div><div class="agent-info"><div class="a-name">Estrategista</div><div class="a-status">Geral</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CLONES ESPECIALISTAS -->
+<section class="section" id="clones">
+  <div class="section-header">
+    <span class="section-label">Banco de talentos</span>
+    <h2 class="section-title">Clones Especialistas</h2>
+    <p class="section-sub">38 clones de copywriters e storytellers alimentados com metodologias completas. Orquestrados por Copy Chief e Story Chief.</p>
+  </div>
+
+  <div class="squads-grid">
+
+    <!-- Copy Squad -->
+    <div class="squad-card status-partial">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">✍️</div>
+        <div class="squad-info">
+          <div class="squad-name">Squad Copy</div>
+          <div class="squad-desc">25 copywriters lendarios + Copy Chief orquestrador</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">25</span><span class="s-lbl">Agentes</span></div>
+          <div class="squad-stat"><span class="s-val">1</span><span class="s-lbl">Prontos</span></div>
+          <span class="status-badge badge-partial">SOULs ricos</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body">
+        <div class="squad-body-inner">
+          <p class="squad-desc" style="margin-bottom:1rem">Todos os 25 tem SOULs completos (80-140 linhas cada) com metodologia, frameworks e exemplos. Copy Chief tem prompt pronto pra orquestrar.</p>
+          <div class="agents-grid">
+            <div class="agent-chip has-prompt"><div class="agent-avatar">👔</div><div class="agent-info"><div class="a-name">Copy Chief</div><div class="a-status">Orquestrador</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">GH</div><div class="agent-info"><div class="a-name">Gary Halbert</div><div class="a-status">Starving crowd</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">DO</div><div class="agent-info"><div class="a-name">David Ogilvy</div><div class="a-status">Brand+response</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">ES</div><div class="agent-info"><div class="a-name">Eugene Schwartz</div><div class="a-status">Consciencia</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">CH</div><div class="agent-info"><div class="a-name">Claude Hopkins</div><div class="a-status">Scientific</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">JS</div><div class="agent-info"><div class="a-name">Joe Sugarman</div><div class="a-status">Slippery slide</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">RC</div><div class="agent-info"><div class="a-name">Robert Collier</div><div class="a-status">Mind joining</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">DK</div><div class="agent-info"><div class="a-name">Dan Kennedy</div><div class="a-status">No BS</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">GB</div><div class="agent-info"><div class="a-name">Gary Bencivenga</div><div class="a-status">Crencas</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">JC</div><div class="agent-info"><div class="a-name">John Carlton</div><div class="a-status">Humor</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">CM</div><div class="agent-info"><div class="a-name">Clayton Makepeace</div><div class="a-status">Headlines</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">JR</div><div class="agent-info"><div class="a-name">Jim Rutz</div><div class="a-status">Proof stacking</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">PL</div><div class="agent-info"><div class="a-name">Parris Lampropoulos</div><div class="a-status">Saude</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">AH</div><div class="agent-info"><div class="a-name">Alex Hormozi</div><div class="a-status">Value equation</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">RB</div><div class="agent-info"><div class="a-name">Russell Brunson</div><div class="a-status">Funnels</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">SG</div><div class="agent-info"><div class="a-name">Stefan Georgi</div><div class="a-status">VSL longa</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">TB</div><div class="agent-info"><div class="a-name">Todd Brown</div><div class="a-status">E5 method</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">JW</div><div class="agent-info"><div class="a-name">Jeff Walker</div><div class="a-status">PLF</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">AC</div><div class="agent-info"><div class="a-name">Andre Chaperon</div><div class="a-status">Email story</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">BS</div><div class="agent-info"><div class="a-name">Ben Settle</div><div class="a-status">Email diario</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">DK</div><div class="agent-info"><div class="a-name">Dan Koe</div><div class="a-status">Reframes</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">JB</div><div class="agent-info"><div class="a-name">Jon Benson</div><div class="a-status">Micro-VSL</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">RS</div><div class="agent-info"><div class="a-name">Ry Schwartz</div><div class="a-status">Belief shift</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">FK</div><div class="agent-info"><div class="a-name">Frank Kern</div><div class="a-status">Casual authority</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">DD</div><div class="agent-info"><div class="a-name">David Deutsch</div><div class="a-status">Long-form</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Storytelling Squad -->
+    <div class="squad-card status-partial">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">📖</div>
+        <div class="squad-info">
+          <div class="squad-name">Squad Storytelling</div>
+          <div class="squad-desc">13 storytellers lendarios + Story Chief orquestrador</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">13</span><span class="s-lbl">Agentes</span></div>
+          <div class="squad-stat"><span class="s-val">1</span><span class="s-lbl">Prontos</span></div>
+          <span class="status-badge badge-partial">SOULs ricos</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body">
+        <div class="squad-body-inner">
+          <p class="squad-desc" style="margin-bottom:1rem">Frameworks narrativos classicos: Jornada do Heroi, StoryBrand, Story Circle, Save the Cat e mais.</p>
+          <div class="agents-grid">
+            <div class="agent-chip has-prompt"><div class="agent-avatar">👔</div><div class="agent-info"><div class="a-name">Story Chief</div><div class="a-status">Orquestrador</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">JC</div><div class="agent-info"><div class="a-name">Joseph Campbell</div><div class="a-status">Hero's Journey</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">DM</div><div class="agent-info"><div class="a-name">Donald Miller</div><div class="a-status">StoryBrand</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">BS</div><div class="agent-info"><div class="a-name">Blake Snyder</div><div class="a-status">Save the Cat</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">DH</div><div class="agent-info"><div class="a-name">Dan Harmon</div><div class="a-status">Story Circle</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">ND</div><div class="agent-info"><div class="a-name">Nancy Duarte</div><div class="a-status">Sparkline</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">SC</div><div class="agent-info"><div class="a-name">Shawn Coyne</div><div class="a-status">Story Grid</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">OK</div><div class="agent-info"><div class="a-name">Oren Klaff</div><div class="a-status">Pitch</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">KH</div><div class="agent-info"><div class="a-name">Kindra Hall</div><div class="a-status">Customer story</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">KJ</div><div class="agent-info"><div class="a-name">Keith Johnstone</div><div class="a-status">Improv</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">MD</div><div class="agent-info"><div class="a-name">Matthew Dicks</div><div class="a-status">Storyworthy</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">PH</div><div class="agent-info"><div class="a-name">Park Howell</div><div class="a-status">ABT framework</div></div></div>
+            <div class="agent-chip"><div class="agent-avatar">MG</div><div class="agent-info"><div class="a-name">Marshall Ganz</div><div class="a-status">Public narrative</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- AUXILIARES -->
+<section class="section" id="auxiliares">
+  <div class="section-header">
+    <span class="section-label">Futuro</span>
+    <h2 class="section-title">Squads Auxiliares</h2>
+    <p class="section-sub">28 squads especializadas com SOULs basicos. Prompts serao criados sob demanda conforme forem necessarios.</p>
+  </div>
+
+  <div class="squads-grid">
+
+    <div class="squad-card status-pending">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">🎯</div>
+        <div class="squad-info">
+          <div class="squad-name">Traffic Masters</div>
+          <div class="squad-desc">16 especialistas em trafego pago</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">16</span><span class="s-lbl">Agentes</span></div>
+          <span class="status-badge badge-pending">Aguardando</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body"><div class="squad-body-inner"><p class="squad-desc">Squad com SOULs basicos. System prompts serao criados sob demanda.</p></div></div>
+    </div>
+
+    <div class="squad-card status-pending">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">🔒</div>
+        <div class="squad-info">
+          <div class="squad-name">Cybersecurity</div>
+          <div class="squad-desc">15 especialistas em seguranca</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">15</span><span class="s-lbl">Agentes</span></div>
+          <span class="status-badge badge-pending">Aguardando</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body"><div class="squad-body-inner"><p class="squad-desc">Squad com SOULs basicos. System prompts serao criados sob demanda.</p></div></div>
+    </div>
+
+    <div class="squad-card status-pending">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">⚖️</div>
+        <div class="squad-info">
+          <div class="squad-name">Legal</div>
+          <div class="squad-desc">15 especialistas juridicos</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">15</span><span class="s-lbl">Agentes</span></div>
+          <span class="status-badge badge-pending">Aguardando</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body"><div class="squad-body-inner"><p class="squad-desc">Squad com SOULs basicos. System prompts serao criados sob demanda.</p></div></div>
+    </div>
+
+    <div class="squad-card status-pending">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">📊</div>
+        <div class="squad-info">
+          <div class="squad-name">Contabilidade</div>
+          <div class="squad-desc">14 especialistas contabeis</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">14</span><span class="s-lbl">Agentes</span></div>
+          <span class="status-badge badge-pending">Aguardando</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body"><div class="squad-body-inner"><p class="squad-desc">Squad com SOULs basicos. System prompts serao criados sob demanda.</p></div></div>
+    </div>
+
+    <div class="squad-card status-pending">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">🔬</div>
+        <div class="squad-info">
+          <div class="squad-name">Deep Research</div>
+          <div class="squad-desc">11 especialistas em pesquisa profunda</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">11</span><span class="s-lbl">Agentes</span></div>
+          <span class="status-badge badge-pending">Aguardando</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body"><div class="squad-body-inner"><p class="squad-desc">Squad com SOULs basicos. System prompts serao criados sob demanda.</p></div></div>
+    </div>
+
+    <div class="squad-card status-pending">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">👔</div>
+        <div class="squad-info">
+          <div class="squad-name">Advisory Board</div>
+          <div class="squad-desc">11 conselheiros especializados</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">11</span><span class="s-lbl">Agentes</span></div>
+          <span class="status-badge badge-pending">Aguardando</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body"><div class="squad-body-inner"><p class="squad-desc">Squad com SOULs basicos. System prompts serao criados sob demanda.</p></div></div>
+    </div>
+
+    <div class="squad-card status-pending">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">🌐</div>
+        <div class="squad-info">
+          <div class="squad-name">Translate</div>
+          <div class="squad-desc">10 tradutores especializados</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">10</span><span class="s-lbl">Agentes</span></div>
+          <span class="status-badge badge-pending">Aguardando</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body"><div class="squad-body-inner"><p class="squad-desc">Squad com SOULs basicos. System prompts serao criados sob demanda.</p></div></div>
+    </div>
+
+    <div class="squad-card status-pending">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">🎨</div>
+        <div class="squad-info">
+          <div class="squad-name">Design</div>
+          <div class="squad-desc">9 especialistas em design</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">9</span><span class="s-lbl">Agentes</span></div>
+          <span class="status-badge badge-pending">Aguardando</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body"><div class="squad-body-inner"><p class="squad-desc">Squad com SOULs basicos. System prompts serao criados sob demanda.</p></div></div>
+    </div>
+
+    <div class="squad-card status-pending">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">⚡</div>
+        <div class="squad-info">
+          <div class="squad-name">Outras 20 squads</div>
+          <div class="squad-desc">MMOs, Hybrid Ops, HR, Tools, Data, FinOps, Creator-OS e mais</div>
+        </div>
+        <div class="squad-stats">
+          <div class="squad-stat"><span class="s-val">100+</span><span class="s-lbl">Agentes</span></div>
+          <span class="status-badge badge-pending">Aguardando</span>
+        </div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body"><div class="squad-body-inner"><p class="squad-desc">Squads especializadas com SOULs basicos. Prompts serao criados sob demanda conforme forem acionados.</p></div></div>
+    </div>
+
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot legend-done"></div>Prompt pronto</div>
+    <div class="legend-item"><div class="legend-dot legend-partial"></div>Parcial / SOUL rico</div>
+    <div class="legend-item"><div class="legend-dot legend-pending"></div>Aguardando</div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <p><span class="brand">🐧 Agencia Pinguim</span> — Ecossistema de Agentes IA</p>
+  <p>Construido em parceria com <strong style="color:#fff">Dolphin</strong> (Andre Codina)</p>
+  <p style="margin-top:1rem">Atualizado em abril de 2026</p>
+</footer>
+
+<script>
+function toggleSquad(header) {
+  const card = header.closest('.squad-card');
+  card.classList.toggle('open');
+}
+
+// Smooth scroll + active nav
+document.querySelectorAll('.nav a').forEach(link => {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    const target = document.querySelector(link.getAttribute('href'));
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
+
+// Active section on scroll
+const sections = document.querySelectorAll('.section');
+const navLinks = document.querySelectorAll('.nav a');
+window.addEventListener('scroll', () => {
+  let current = '';
+  sections.forEach(section => {
+    const top = section.offsetTop - 100;
+    if (pageYOffset >= top) current = section.id;
+  });
+  navLinks.forEach(link => {
+    link.classList.remove('active');
+    if (link.getAttribute('href') === '#' + current) link.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>
