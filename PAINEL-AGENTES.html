@@ -551,9 +551,9 @@ footer .brand { color: var(--orange); font-weight: 700; }
     <h1>Painel de <span>Agentes IA</span></h1>
     <p class="hero-sub">Ecossistema de agentes inteligentes da Agencia Pinguim — construcao em andamento</p>
     <div class="hero-stats">
-      <div class="hero-stat"><span class="val">56</span><span class="lbl">Prompts prontos</span></div>
-      <div class="hero-stat"><span class="val">21</span><span class="lbl">Agentes nucleo</span></div>
-      <div class="hero-stat"><span class="val">64</span><span class="lbl">Clones alimentados</span></div>
+      <div class="hero-stat"><span class="val">59</span><span class="lbl">Prompts prontos</span></div>
+      <div class="hero-stat"><span class="val">24</span><span class="lbl">Agentes nucleo</span></div>
+      <div class="hero-stat"><span class="val">87</span><span class="lbl">Clones alimentados</span></div>
       <div class="hero-stat"><span class="val">3</span><span class="lbl">Mini-agencias</span></div>
     </div>
     <p class="hint"><strong>Dica:</strong> clique em qualquer agente pra ver o framework completo dele</p>
@@ -799,6 +799,70 @@ footer .brand { color: var(--orange); font-weight: 700; }
           <div class="agent-chip"><div class="agent-avatar">PL</div><div class="agent-info"><div class="a-name">Patrick Lencioni</div><div class="a-status">Teams</div></div></div>
           <div class="agent-chip"><div class="agent-avatar">DS</div><div class="agent-info"><div class="a-name">Derek Sivers</div><div class="a-status">Contrarian</div></div></div>
           <div class="agent-chip"><div class="agent-avatar">YC</div><div class="agent-info"><div class="a-name">Yvon Chouinard</div><div class="a-status">Mission</div></div></div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="squad-card status-partial">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">🎯</div>
+        <div class="squad-info"><div class="squad-name">Squad Traffic Masters</div><div class="squad-desc">15 especialistas em trafego pago + Traffic Masters Chief</div></div>
+        <div class="squad-stats"><div class="squad-stat"><span class="s-val">16</span><span class="s-lbl">Especialistas</span></div><span class="status-badge badge-partial">1 prompt + 15 SOULs</span></div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body"><div class="squad-body-inner">
+        <div class="squad-flow"><strong>Como funciona:</strong> Consultoria estrategica de trafego pago (nao execucao — mini-agencias fazem). Decidir qual canal investir? CPA estagnado? Grande gasto que pede segunda opiniao? Chief analisa em 4 perguntas e aciona o mestre certo: <strong>Pedro Sobral</strong> (BR), <strong>Molly Pittman</strong> (FB), <strong>Kusmich</strong> (criativos), <strong>Mandalia</strong> (escala), <strong>Kasim</strong> (Google), <strong>Tom Breeze</strong> (YouTube), <strong>Ralph Burns</strong> (multi) + 8 operacionais.</div>
+        <div class="agents-grid">
+          <div class="agent-chip has-prompt" onclick="openAgent('traffic-masters-chief')"><div class="agent-avatar">👔</div><div class="agent-info"><div class="a-name">Traffic Masters Chief</div><div class="a-status">Consultoria</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">PS</div><div class="agent-info"><div class="a-name">Pedro Sobral</div><div class="a-status">Trafego BR #1</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">MP</div><div class="agent-info"><div class="a-name">Molly Pittman</div><div class="a-status">FB Ads</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">NK</div><div class="agent-info"><div class="a-name">Nicholas Kusmich</div><div class="a-status">FB Criativos</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">DM</div><div class="agent-info"><div class="a-name">Depesh Mandalia</div><div class="a-status">FB Escala</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">KA</div><div class="agent-info"><div class="a-name">Kasim Aslam</div><div class="a-status">Google Ads</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">TB</div><div class="agent-info"><div class="a-name">Tom Breeze</div><div class="a-status">YouTube Ads</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">RB</div><div class="agent-info"><div class="a-name">Ralph Burns</div><div class="a-status">Multi-canal</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">+8</div><div class="agent-info"><div class="a-name">E mais 8 operacionais</div><div class="a-status">Ad Midas, Pixel, etc.</div></div></div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="squad-card status-partial">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">👤</div>
+        <div class="squad-info"><div class="squad-name">Squad HR (Pessoas)</div><div class="squad-desc">7 especialistas em gestao de pessoas + HR Chief</div></div>
+        <div class="squad-stats"><div class="squad-stat"><span class="s-val">8</span><span class="s-lbl">Especialistas</span></div><span class="status-badge badge-partial">1 prompt + 7 SOULs</span></div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body"><div class="squad-body-inner">
+        <div class="squad-flow"><strong>Como funciona:</strong> Consulta estrategica de people (operacao e com RH da agencia-pinguim). Contratacao de chave, diagnostico de cultura, sinais de burnout. HR Chief aciona: People Ops, Talent Classifier, Strengths Identifier, Performance Recruiter, Analytics Strategist/Operator, Behavior Detector. Decisao contratar/demitir sempre com socios.</div>
+        <div class="agents-grid">
+          <div class="agent-chip has-prompt" onclick="openAgent('hr-chief')"><div class="agent-avatar">👔</div><div class="agent-info"><div class="a-name">HR Chief</div><div class="a-status">Consultoria</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">PO</div><div class="agent-info"><div class="a-name">People Ops Chief</div><div class="a-status">Operacoes</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">TC</div><div class="agent-info"><div class="a-name">Talent Classifier</div><div class="a-status">Perfis</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">SI</div><div class="agent-info"><div class="a-name">Strengths Identifier</div><div class="a-status">Forcas</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">PR</div><div class="agent-info"><div class="a-name">Performance Recruiter</div><div class="a-status">Recrutamento</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">AS</div><div class="agent-info"><div class="a-name">Analytics Strategist</div><div class="a-status">People Analytics</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">AO</div><div class="agent-info"><div class="a-name">Analytics Operator</div><div class="a-status">Reports RH</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">BD</div><div class="agent-info"><div class="a-name">Behavior Detector</div><div class="a-status">Sinais</div></div></div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="squad-card status-partial">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">💸</div>
+        <div class="squad-info"><div class="squad-name">Squad FinOps (Cloud + IA)</div><div class="squad-desc">4 referencias de cloud cost + FinOps Chief</div></div>
+        <div class="squad-stats"><div class="squad-stat"><span class="s-val">5</span><span class="s-lbl">Especialistas</span></div><span class="status-badge badge-partial">1 prompt + 4 SOULs</span></div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body"><div class="squad-body-inner">
+        <div class="squad-flow"><strong>Como funciona:</strong> Conforme agentes IA escalam, custo OpenAI API vira linha relevante no DRE. FinOps Chief monitora, projeta e otimiza. NAO substitui Financeiro (DRE geral). Referencias: JR Storment (FinOps Foundation), Corey Quinn (AWS), Eli Mansoor, Mike Fuller. Alerta automatico se custo diario sobe +50% da media.</div>
+        <div class="agents-grid">
+          <div class="agent-chip has-prompt" onclick="openAgent('finops-chief')"><div class="agent-avatar">👔</div><div class="agent-info"><div class="a-name">FinOps Chief</div><div class="a-status">Cloud + IA costs</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">JS</div><div class="agent-info"><div class="a-name">JR Storment</div><div class="a-status">FinOps Foundation</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">CQ</div><div class="agent-info"><div class="a-name">Corey Quinn</div><div class="a-status">AWS costs</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">EM</div><div class="agent-info"><div class="a-name">Eli Mansoor</div><div class="a-status">Cloud opt</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">MF</div><div class="agent-info"><div class="a-name">Mike Fuller</div><div class="a-status">Atlassian FinOps</div></div></div>
         </div>
       </div></div>
     </div>
@@ -1104,6 +1168,24 @@ const AGENTS = {
     entregavel: 'Direcao narrativa com storyteller + framework + quality check.',
     base: '13 storytellers: Campbell, Donald Miller, Blake Snyder, Dan Harmon, Nancy Duarte, Shawn Coyne, Oren Klaff, Kindra Hall, Keith Johnstone, Matthew Dicks, Park Howell, Marshall Ganz.',
     aciona: ['Qualquer storyteller'] },
+  'traffic-masters-chief': { name: 'Traffic Masters Chief', avatar: '👔', squad: 'Squad Traffic Masters', status: 'done',
+    resumo: 'Consultoria estrategica de trafego pago. NAO executa — orquestra 15 especialistas pra decisoes macro: qual canal investir, diagnostico de CPA travado, validar estrategia antes de grande gasto.',
+    faz: ['Diagnostica em 4 perguntas: plataforma, fase, escopo, tipo', 'Seleciona entre 7 mestres (Pedro Sobral, Molly Pittman, Kusmich, Mandalia, Kasim, Tom Breeze, Ralph Burns) + 8 operacionais', 'Adapta evidencia global ao contexto BR', 'Delega execucao pras mini-agencias Lancamento/LT'],
+    entregavel: 'Consulta estrategica com diagnostico + mestre + recomendacao + proximo passo pras mini-agencias.',
+    base: '15 especialistas: 7 mestres estrategicos + 8 operacionais.',
+    aciona: ['Qualquer mestre ou operacional', 'Mini-agencias Lancamento/LT executam'] },
+  'hr-chief': { name: 'HR Chief', avatar: '👔', squad: 'Squad HR', status: 'done',
+    resumo: 'Consulta estrategica de pessoas. NAO e operacional (RH da agencia-pinguim). Pra contratacao de chave, diagnostico de cultura, sinais de desligamento, 360.',
+    faz: ['Diagnostica em 3 perguntas: natureza, urgencia, escopo', 'Seleciona entre 7 especialistas', 'Protege LGPD', 'Explicita que contratar/demitir exige socios', 'Considera tamanho enxuto da Pinguim'],
+    entregavel: 'Consulta de people com diagnostico + especialista + recomendacao.',
+    base: '7 especialistas: People Ops, Talent Classifier, Strengths, Recruiter, Analytics x2, Behavior Detector.',
+    aciona: ['Especialistas HR conforme pergunta', 'Sempre socios pra contratacao/demissao'] },
+  'finops-chief': { name: 'FinOps Chief', avatar: '👔', squad: 'Squad FinOps', status: 'done',
+    resumo: 'Guardiao de custos de infra tecnologica (cloud, APIs, IA). NAO e financeiro geral. Monitora OpenAI API, servidor, integracoes conforme agentes escalam.',
+    faz: ['Monitora consumo OpenAI API por agente/periodo', 'Alerta spikes (+50% da media)', 'Projeta custo 12 meses com N agentes', 'Recomenda quando usar modelo full vs mini', 'Mostra custo unitario (por aluno, por msg)'],
+    entregavel: 'Analise FinOps: situacao + diagnostico + acao + projecao.',
+    base: '4 referencias: JR Storment, Corey Quinn, Eli Mansoor, Mike Fuller.',
+    aciona: ['Financeiro (quando custo afeta DRE)', 'Socios (decisao de budget)'] },
   'dr-orchestrator': { name: 'Dr Orchestrator (Deep Research Chief)', avatar: '👔', squad: 'Squad Deep Research', status: 'done',
     resumo: 'Chief da squad de pesquisa rigorosa. Traz rigor cientifico pra decisoes da Pinguim. Complementa Board Chair (negocio) e Data Chief (dados) respondendo "o que a CIENCIA diz sobre isso?".',
     faz: ['Diagnostica em 3 perguntas: natureza, prazo, objetivo', 'Seleciona entre 10 especialistas em metodologia', 'Mostra "sabemos vs nao sabemos" pra cada questao', 'Propoe como testar incertezas', 'Inclui nivel de confianca (alta/media/baixa) em cada recomendacao'],
