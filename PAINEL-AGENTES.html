@@ -551,9 +551,9 @@ footer .brand { color: var(--orange); font-weight: 700; }
     <h1>Painel de <span>Agentes IA</span></h1>
     <p class="hero-sub">Ecossistema de agentes inteligentes da Agencia Pinguim — construcao em andamento</p>
     <div class="hero-stats">
-      <div class="hero-stat"><span class="val">51</span><span class="lbl">Prompts prontos</span></div>
-      <div class="hero-stat"><span class="val">17</span><span class="lbl">Agentes nucleo</span></div>
-      <div class="hero-stat"><span class="val">38</span><span class="lbl">Clones alimentados</span></div>
+      <div class="hero-stat"><span class="val">54</span><span class="lbl">Prompts prontos</span></div>
+      <div class="hero-stat"><span class="val">19</span><span class="lbl">Agentes nucleo</span></div>
+      <div class="hero-stat"><span class="val">48</span><span class="lbl">Clones alimentados</span></div>
       <div class="hero-stat"><span class="val">3</span><span class="lbl">Mini-agencias</span></div>
     </div>
     <p class="hint"><strong>Dica:</strong> clique em qualquer agente pra ver o framework completo dele</p>
@@ -651,11 +651,11 @@ footer .brand { color: var(--orange); font-weight: 700; }
       </div></div>
     </div>
 
-    <div class="squad-card status-partial">
+    <div class="squad-card status-done">
       <div class="squad-header" onclick="toggleSquad(this)">
         <div class="squad-icon">🎯</div>
         <div class="squad-info"><div class="squad-name">Suporte aos Alunos</div><div class="squad-desc">Atendimento no WhatsApp/Telegram por programa</div></div>
-        <div class="squad-stats"><div class="squad-stat"><span class="s-val">5</span><span class="s-lbl">Agentes</span></div><span class="status-badge badge-partial">3/5</span></div>
+        <div class="squad-stats"><div class="squad-stat"><span class="s-val">5</span><span class="s-lbl">Agentes</span></div><span class="status-badge badge-done">5/5</span></div>
         <div class="squad-toggle">▼</div>
       </div>
       <div class="squad-body"><div class="squad-body-inner">
@@ -664,8 +664,8 @@ footer .brand { color: var(--orange); font-weight: 700; }
           <div class="agent-chip has-prompt" onclick="openAgent('sup-roteador')"><div class="agent-avatar">R</div><div class="agent-info"><div class="a-name">Roteador</div><div class="a-status">Ver detalhes</div></div></div>
           <div class="agent-chip has-prompt" onclick="openAgent('sup-elo')"><div class="agent-avatar">E</div><div class="agent-info"><div class="a-name">Suporte Elo</div><div class="a-status">Ver detalhes</div></div></div>
           <div class="agent-chip has-prompt" onclick="openAgent('sup-proalt')"><div class="agent-avatar">P</div><div class="agent-info"><div class="a-name">Suporte ProAlt</div><div class="a-status">Ver detalhes</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">L</div><div class="agent-info"><div class="a-name">Suporte Lira</div><div class="a-status">Aguarda material</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">T</div><div class="agent-info"><div class="a-name">Suporte Taurus</div><div class="a-status">Aguarda material</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('sup-lira')"><div class="agent-avatar">L</div><div class="agent-info"><div class="a-name">Suporte Lira</div><div class="a-status">Ver detalhes</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('sup-taurus')"><div class="agent-avatar">T</div><div class="agent-info"><div class="a-name">Suporte Taurus</div><div class="a-status">Ver detalhes</div></div></div>
         </div>
       </div></div>
     </div>
@@ -774,6 +774,31 @@ footer .brand { color: var(--orange); font-weight: 700; }
           <div class="agent-chip"><div class="agent-avatar">SG</div><div class="agent-info"><div class="a-name">Stefan Georgi</div><div class="a-status">VSL longa</div></div></div>
           <div class="agent-chip"><div class="agent-avatar">JW</div><div class="agent-info"><div class="a-name">Jeff Walker</div><div class="a-status">PLF</div></div></div>
           <div class="agent-chip"><div class="agent-avatar">+16</div><div class="agent-info"><div class="a-name">E mais 16 clones</div><div class="a-status">SOULs ricos</div></div></div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="squad-card status-partial">
+      <div class="squad-header" onclick="toggleSquad(this)">
+        <div class="squad-icon">🎯</div>
+        <div class="squad-info"><div class="squad-name">Advisory Board</div><div class="squad-desc">10 conselheiros estrategicos + Board Chair presidente</div></div>
+        <div class="squad-stats"><div class="squad-stat"><span class="s-val">11</span><span class="s-lbl">Conselheiros</span></div><span class="status-badge badge-partial">1 prompt + 10 SOULs</span></div>
+        <div class="squad-toggle">▼</div>
+      </div>
+      <div class="squad-body"><div class="squad-body-inner">
+        <div class="squad-flow"><strong>Como funciona:</strong> Quando os socios tem um dilema estrategico critico (apostas grandes, cultura, proposito, decisao entre socios), acionam o <strong>Board Chair</strong>. Ele faz diagnostico em 4 perguntas e seleciona 1-2 conselheiros ideais (Dalio pra risco, Thiel pra monopolio, Brene pra cultura, etc.). Entrega deliberacao estruturada com proximo passo concreto.</div>
+        <div class="agents-grid">
+          <div class="agent-chip has-prompt" onclick="openAgent('board-chair')"><div class="agent-avatar">👔</div><div class="agent-info"><div class="a-name">Board Chair</div><div class="a-status">Presidente</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">RD</div><div class="agent-info"><div class="a-name">Ray Dalio</div><div class="a-status">Principles</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">CM</div><div class="agent-info"><div class="a-name">Charlie Munger</div><div class="a-status">Mental Models</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">NR</div><div class="agent-info"><div class="a-name">Naval Ravikant</div><div class="a-status">Leverage</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">PT</div><div class="agent-info"><div class="a-name">Peter Thiel</div><div class="a-status">Zero to One</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">RH</div><div class="agent-info"><div class="a-name">Reid Hoffman</div><div class="a-status">Blitzscaling</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">SS</div><div class="agent-info"><div class="a-name">Simon Sinek</div><div class="a-status">Start With Why</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">BB</div><div class="agent-info"><div class="a-name">Brene Brown</div><div class="a-status">Vulnerability</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">PL</div><div class="agent-info"><div class="a-name">Patrick Lencioni</div><div class="a-status">Teams</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">DS</div><div class="agent-info"><div class="a-name">Derek Sivers</div><div class="a-status">Contrarian</div></div></div>
+          <div class="agent-chip"><div class="agent-avatar">YC</div><div class="agent-info"><div class="a-name">Yvon Chouinard</div><div class="a-status">Mission</div></div></div>
         </div>
       </div></div>
     </div>
@@ -964,6 +989,18 @@ const AGENTS = {
     entregavel: 'Resposta pratica + proximo passo + protocolo.',
     base: 'Pitch deck + 4 modulos + 5 protocolos + APP.',
     aciona: ['Pedro', 'Estrategistas'] },
+  'sup-lira': { name: 'Suporte Lira', avatar: 'L', squad: 'Suporte aos Alunos', status: 'done',
+    resumo: 'Atende alunos da mentoria Lira (iniciantes no digital). Tom didatico, paciente, passo-a-passo. Estrutura pronta aguardando alimentacao completa do material.',
+    faz: ['Explica como se fosse a primeira vez que o aluno ouve', 'Usa exemplos praticos', 'Confirma entendimento', 'Escala pro mentor em decisoes de negocio', 'Nao assume conhecimento previo'],
+    entregavel: 'Resposta didatica passo-a-passo + proximo passo.',
+    base: 'Material Lira (a ser completado pelo Pedro/equipe) + principios gerais de iniciante digital.',
+    aciona: ['Mentor humano (decisoes estrategicas)', 'CS Mentorias (jornada longa)'] },
+  'sup-taurus': { name: 'Suporte Taurus', avatar: 'T', squad: 'Suporte aos Alunos', status: 'done',
+    resumo: 'Atende alunos da mentoria Taurus (ja faturam R$10K-1M). Tom avancado, direto, focado em escala e metricas. Estrutura pronta aguardando material completo.',
+    faz: ['Vai direto ao ponto (aluno ja e experiente)', 'Referencia metricas e frameworks', 'Sugere acoes mensuraveis', 'Escala decisoes estrategicas do negocio', 'Usa jargoes sem explicar'],
+    entregavel: 'Resposta direta com metricas e frameworks + acao mensuravel.',
+    base: 'Material Taurus (a ser completado) + principios de escala e metricas avancadas.',
+    aciona: ['Mentor humano', 'CS Mentorias'] },
 
   'estr-elo': { name: 'Estrategista Elo', avatar: 'E', squad: 'Estrategistas de Produto', status: 'done',
     resumo: 'Analisa funil completo do Elo (Desafio LoFi → Elo) e identifica gargalos. Nao executa — aciona especialistas.',
@@ -1021,6 +1058,12 @@ const AGENTS = {
     entregavel: 'Direcao narrativa com storyteller + framework + quality check.',
     base: '13 storytellers: Campbell, Donald Miller, Blake Snyder, Dan Harmon, Nancy Duarte, Shawn Coyne, Oren Klaff, Kindra Hall, Keith Johnstone, Matthew Dicks, Park Howell, Marshall Ganz.',
     aciona: ['Qualquer storyteller'] },
+  'board-chair': { name: 'Board Chair', avatar: '👔', squad: 'Advisory Board', status: 'done',
+    resumo: 'Presidente do board. NAO da conselho direto — diagnostica o dilema dos socios em 4 perguntas e seleciona 1-2 conselheiros ideais (Dalio, Munger, Thiel, Sinek, Brene, etc.) pra responder.',
+    faz: ['Diagnostica dilema em 4 perguntas (tipo, escala, natureza, pedido)', 'Seleciona 1-2 conselheiros com justificativa', 'Mantem estilo de cada conselheiro ao responder', 'Entrega deliberacao estruturada com proximo passo concreto', 'Registra deliberacoes no cerebro (auditavel)'],
+    entregavel: 'Deliberacao estruturada: dilema + diagnostico + conselheiros + perspectivas + proximo passo.',
+    base: '10 conselheiros: Ray Dalio, Charlie Munger, Naval Ravikant, Peter Thiel, Reid Hoffman, Simon Sinek, Brene Brown, Patrick Lencioni, Derek Sivers, Yvon Chouinard.',
+    aciona: ['Qualquer conselheiro do board conforme dilema'] },
 
   'op-chief': { name: 'Chief (Orquestrador Geral)', avatar: '🎩', squad: 'Agencia Pinguim', status: 'done',
     resumo: 'Orquestrador da operacao do negocio. Visao de tudo, coordena areas, alerta socios sobre riscos.',
