@@ -551,9 +551,9 @@ footer .brand { color: var(--orange); font-weight: 700; }
     <h1>Painel de <span>Agentes IA</span></h1>
     <p class="hero-sub">Ecossistema de agentes inteligentes da Agencia Pinguim — construcao em andamento</p>
     <div class="hero-stats">
-      <div class="hero-stat"><span class="val">60</span><span class="lbl">Prompts prontos</span></div>
+      <div class="hero-stat"><span class="val">98</span><span class="lbl">Agentes ativos</span></div>
       <div class="hero-stat"><span class="val">25</span><span class="lbl">Agentes nucleo</span></div>
-      <div class="hero-stat"><span class="val">90</span><span class="lbl">Clones alimentados</span></div>
+      <div class="hero-stat"><span class="val">38</span><span class="lbl">Clones com framework</span></div>
       <div class="hero-stat"><span class="val">3</span><span class="lbl">Mini-agencias</span></div>
     </div>
     <p class="hint"><strong>Dica:</strong> clique em qualquer agente pra ver o framework completo dele</p>
@@ -754,26 +754,41 @@ footer .brand { color: var(--orange); font-weight: 700; }
   </div>
   <div class="squads-grid">
 
-    <div class="squad-card status-partial">
+    <div class="squad-card status-done">
       <div class="squad-header" onclick="toggleSquad(this)">
         <div class="squad-icon">✍️</div>
         <div class="squad-info"><div class="squad-name">Squad Copy</div><div class="squad-desc">25 copywriters lendarios + Copy Chief orquestrador</div></div>
-        <div class="squad-stats"><div class="squad-stat"><span class="s-val">25</span><span class="s-lbl">Clones</span></div><span class="status-badge badge-partial">1 prompt + 25 SOULs</span></div>
+        <div class="squad-stats"><div class="squad-stat"><span class="s-val">26</span><span class="s-lbl">Prontos</span></div><span class="status-badge badge-done">26/26</span></div>
         <div class="squad-toggle">▼</div>
       </div>
       <div class="squad-body"><div class="squad-body-inner">
-        <div class="squad-flow"><strong>Como funciona:</strong> Os 25 copywriters (Halbert, Ogilvy, Schwartz, Hormozi, Brunson, etc.) estao <strong>alimentados</strong> com metodologia completa em SOULs ricos. O <strong>Copy Chief</strong> tem system prompt pronto e orquestra: analisa briefing, seleciona 1-2 copywriters ideais por matriz (objetivo, publico, nivel de consciencia), e direciona a copy certa pro trabalho.</div>
+        <div class="squad-flow"><strong>Como funciona:</strong> Os 25 copywriters (Halbert, Ogilvy, Schwartz, Hormozi, Brunson, etc.) estao <strong>alimentados</strong> com metodologia completa em SOULs ricos (80-110 linhas cada). O <strong>Copy Chief</strong> orquestra: analisa briefing, seleciona 1-2 copywriters ideais por matriz (objetivo, publico, nivel de consciencia), e direciona a copy certa pro trabalho. Clique em qualquer um pra ver metodologia e frameworks.</div>
         <div class="agents-grid">
           <div class="agent-chip has-prompt" onclick="openAgent('copy-chief')"><div class="agent-avatar">👔</div><div class="agent-info"><div class="a-name">Copy Chief</div><div class="a-status">Orquestrador</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">GH</div><div class="agent-info"><div class="a-name">Gary Halbert</div><div class="a-status">Starving crowd</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">DO</div><div class="agent-info"><div class="a-name">David Ogilvy</div><div class="a-status">Brand+response</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">ES</div><div class="agent-info"><div class="a-name">Eugene Schwartz</div><div class="a-status">Consciencia</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">AH</div><div class="agent-info"><div class="a-name">Alex Hormozi</div><div class="a-status">Value equation</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">RB</div><div class="agent-info"><div class="a-name">Russell Brunson</div><div class="a-status">Funnels</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">DK</div><div class="agent-info"><div class="a-name">Dan Kennedy</div><div class="a-status">No BS</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">SG</div><div class="agent-info"><div class="a-name">Stefan Georgi</div><div class="a-status">VSL longa</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">JW</div><div class="agent-info"><div class="a-name">Jeff Walker</div><div class="a-status">PLF</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">+16</div><div class="agent-info"><div class="a-name">E mais 16 clones</div><div class="a-status">SOULs ricos</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('gary-halbert')"><div class="agent-avatar">GH</div><div class="agent-info"><div class="a-name">Gary Halbert</div><div class="a-status">Starving crowd</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('david-ogilvy')"><div class="agent-avatar">DO</div><div class="agent-info"><div class="a-name">David Ogilvy</div><div class="a-status">Brand+response</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('eugene-schwartz')"><div class="agent-avatar">ES</div><div class="agent-info"><div class="a-name">Eugene Schwartz</div><div class="a-status">Consciencia</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('claude-hopkins')"><div class="agent-avatar">CH</div><div class="agent-info"><div class="a-name">Claude Hopkins</div><div class="a-status">Scientific ads</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('gary-bencivenga')"><div class="agent-avatar">GB</div><div class="agent-info"><div class="a-name">Gary Bencivenga</div><div class="a-status">Provas dramaticas</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('joe-sugarman')"><div class="agent-avatar">JS</div><div class="agent-info"><div class="a-name">Joe Sugarman</div><div class="a-status">Slippery slide</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('robert-collier')"><div class="agent-avatar">RC</div><div class="agent-info"><div class="a-name">Robert Collier</div><div class="a-status">Mind joining</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('dan-kennedy')"><div class="agent-avatar">DK</div><div class="agent-info"><div class="a-name">Dan Kennedy</div><div class="a-status">No BS</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('john-carlton')"><div class="agent-avatar">JC</div><div class="agent-info"><div class="a-name">John Carlton</div><div class="a-status">Simple But Smart</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('clayton-makepeace')"><div class="agent-avatar">CM</div><div class="agent-info"><div class="a-name">Clayton Makepeace</div><div class="a-status">Emocoes viscerais</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('jim-rutz')"><div class="agent-avatar">JR</div><div class="agent-info"><div class="a-name">Jim Rutz</div><div class="a-status">Proof stacking</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('parris-lampropoulos')"><div class="agent-avatar">PL</div><div class="agent-info"><div class="a-name">Parris Lampropoulos</div><div class="a-status">Saude / emocao</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('alex-hormozi')"><div class="agent-avatar">AH</div><div class="agent-info"><div class="a-name">Alex Hormozi</div><div class="a-status">Value equation</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('russell-brunson')"><div class="agent-avatar">RB</div><div class="agent-info"><div class="a-name">Russell Brunson</div><div class="a-status">Hook-Story-Offer</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('stefan-georgi')"><div class="agent-avatar">SG</div><div class="agent-info"><div class="a-name">Stefan Georgi</div><div class="a-status">RMBC Method</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('todd-brown')"><div class="agent-avatar">TB</div><div class="agent-info"><div class="a-name">Todd Brown</div><div class="a-status">E5 Method + Big Idea</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('jeff-walker')"><div class="agent-avatar">JW</div><div class="agent-info"><div class="a-name">Jeff Walker</div><div class="a-status">PLF</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('andre-chaperon')"><div class="agent-avatar">AC</div><div class="agent-info"><div class="a-name">Andre Chaperon</div><div class="a-status">Email storytelling</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('ben-settle')"><div class="agent-avatar">BS</div><div class="agent-info"><div class="a-name">Ben Settle</div><div class="a-status">Infotainment</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('dan-koe')"><div class="agent-avatar">DKO</div><div class="agent-info"><div class="a-name">Dan Koe</div><div class="a-status">Idea stacking</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('jon-benson')"><div class="agent-avatar">JB</div><div class="agent-info"><div class="a-name">Jon Benson</div><div class="a-status">Micro-VSL</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('ry-schwartz')"><div class="agent-avatar">RS</div><div class="agent-info"><div class="a-name">Ry Schwartz</div><div class="a-status">Belief shifting</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('frank-kern')"><div class="agent-avatar">FK</div><div class="agent-info"><div class="a-name">Frank Kern</div><div class="a-status">Results in Advance</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('david-deutsch')"><div class="agent-avatar">DD</div><div class="agent-info"><div class="a-name">David Deutsch</div><div class="a-status">Fascinations</div></div></div>
         </div>
       </div></div>
     </div>
@@ -931,24 +946,29 @@ footer .brand { color: var(--orange); font-weight: 700; }
       </div></div>
     </div>
 
-    <div class="squad-card status-partial">
+    <div class="squad-card status-done">
       <div class="squad-header" onclick="toggleSquad(this)">
         <div class="squad-icon">📖</div>
         <div class="squad-info"><div class="squad-name">Squad Storytelling</div><div class="squad-desc">13 storytellers lendarios + Story Chief orquestrador</div></div>
-        <div class="squad-stats"><div class="squad-stat"><span class="s-val">13</span><span class="s-lbl">Clones</span></div><span class="status-badge badge-partial">1 prompt + 13 SOULs</span></div>
+        <div class="squad-stats"><div class="squad-stat"><span class="s-val">14</span><span class="s-lbl">Prontos</span></div><span class="status-badge badge-done">14/14</span></div>
         <div class="squad-toggle">▼</div>
       </div>
       <div class="squad-body"><div class="squad-body-inner">
-        <div class="squad-flow"><strong>Como funciona:</strong> 13 storytellers (Joseph Campbell, Donald Miller, Dan Harmon, Nancy Duarte, etc.) com frameworks narrativos classicos. O <strong>Story Chief</strong> analisa briefing em 5 perguntas (acao, emocao, heroi, formato, genero) e direciona pro framework certo.</div>
+        <div class="squad-flow"><strong>Como funciona:</strong> 13 storytellers (Joseph Campbell, Donald Miller, Dan Harmon, Nancy Duarte, etc.) com frameworks narrativos classicos — TODOS com SOULs alimentados (70-107 linhas cada). O <strong>Story Chief</strong> analisa briefing em 5 perguntas (acao, emocao, heroi, formato, genero) e direciona pro framework certo. Clique em qualquer um pra ver o framework completo.</div>
         <div class="agents-grid">
           <div class="agent-chip has-prompt" onclick="openAgent('story-chief')"><div class="agent-avatar">👔</div><div class="agent-info"><div class="a-name">Story Chief</div><div class="a-status">Orquestrador</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">JC</div><div class="agent-info"><div class="a-name">Joseph Campbell</div><div class="a-status">Hero's Journey</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">DM</div><div class="agent-info"><div class="a-name">Donald Miller</div><div class="a-status">StoryBrand</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">DH</div><div class="agent-info"><div class="a-name">Dan Harmon</div><div class="a-status">Story Circle</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">BS</div><div class="agent-info"><div class="a-name">Blake Snyder</div><div class="a-status">Save the Cat</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">ND</div><div class="agent-info"><div class="a-name">Nancy Duarte</div><div class="a-status">Sparkline</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">OK</div><div class="agent-info"><div class="a-name">Oren Klaff</div><div class="a-status">Pitch</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">+7</div><div class="agent-info"><div class="a-name">E mais 7 clones</div><div class="a-status">SOULs ricos</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('joseph-campbell')"><div class="agent-avatar">JC</div><div class="agent-info"><div class="a-name">Joseph Campbell</div><div class="a-status">Hero's Journey</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('donald-miller')"><div class="agent-avatar">DM</div><div class="agent-info"><div class="a-name">Donald Miller</div><div class="a-status">StoryBrand SB7</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('dan-harmon')"><div class="agent-avatar">DH</div><div class="agent-info"><div class="a-name">Dan Harmon</div><div class="a-status">Story Circle</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('blake-snyder')"><div class="agent-avatar">BSN</div><div class="agent-info"><div class="a-name">Blake Snyder</div><div class="a-status">Save the Cat</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('nancy-duarte')"><div class="agent-avatar">ND</div><div class="agent-info"><div class="a-name">Nancy Duarte</div><div class="a-status">Sparkline</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('shawn-coyne')"><div class="agent-avatar">SC</div><div class="agent-info"><div class="a-name">Shawn Coyne</div><div class="a-status">Story Grid</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('oren-klaff')"><div class="agent-avatar">OK</div><div class="agent-info"><div class="a-name">Oren Klaff</div><div class="a-status">Pitch / Frame</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('kindra-hall')"><div class="agent-avatar">KH</div><div class="agent-info"><div class="a-name">Kindra Hall</div><div class="a-status">Stories That Stick</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('keith-johnstone')"><div class="agent-avatar">KJ</div><div class="agent-info"><div class="a-name">Keith Johnstone</div><div class="a-status">Status Games / Impro</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('matthew-dicks')"><div class="agent-avatar">MD</div><div class="agent-info"><div class="a-name">Matthew Dicks</div><div class="a-status">5-Second Moment</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('park-howell')"><div class="agent-avatar">PH</div><div class="agent-info"><div class="a-name">Park Howell</div><div class="a-status">ABT Framework</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('marshall-ganz')"><div class="agent-avatar">MG</div><div class="agent-info"><div class="a-name">Marshall Ganz</div><div class="a-status">Public Narrative</div></div></div>
         </div>
       </div></div>
     </div>
@@ -1180,12 +1200,268 @@ const AGENTS = {
     entregavel: 'Direcao criativa com copywriter + justificativa + instrucoes.',
     base: '25 copywriters: Halbert, Ogilvy, Schwartz, Hormozi, Brunson, Hopkins, Sugarman, Collier, Kennedy, Bencivenga, Carlton, Makepeace, Rutz, Lampropoulos, Georgi, Brown, Walker, Chaperon, Settle, Koe, Benson, Ry Schwartz, Kern, Deutsch.',
     aciona: ['Qualquer copywriter do squad'] },
+
+  // 25 COPYWRITERS CLONADOS
+  'gary-halbert': { name: 'Gary Halbert', avatar: 'GH', squad: 'Squad Copy', status: 'done',
+    resumo: 'O "Prince of Print" — maior copywriter de direct response da historia. Criou a carta de vendas mais lucrativa de todos os tempos (Coat of Arms, +US$600M). Obcecado por headlines, listas de mailing e primeira frase.',
+    faz: ['A/B/C Pile Test: video precisa ser Pile A em 1.5s', 'Halbert Headline Formula: resultado especifico + prazo curto + sem objecao obvia', 'Starving Crowd Test antes de criar (publico desesperado?)', 'Grab → Hold → Close: agarra atencao, mantem com curiosidade/prova, fecha com CTA', 'Especificidade numerica: R$2.347 em 11 dias'],
+    entregavel: 'Copy com headline matadora + urgencia real + starving crowd identificado.',
+    base: 'Boron Letters + Coat of Arms campaign + 50 anos de direct response. Filosofia: nada de firulas, so resultado direto.',
+    aciona: ['Copy Chief pra orquestrar quando combina com outros'] },
+
+  'david-ogilvy': { name: 'David Ogilvy', avatar: 'DO', squad: 'Squad Copy', status: 'done',
+    resumo: 'Pai da publicidade moderna. Fundou Ogilvy & Mather. Criou campanhas icônicas (Rolls-Royce, Hathaway, Dove). Obcecado por pesquisa. "O consumidor nao e idiota — e sua esposa."',
+    faz: ['Big Idea: toda peca nasce de UMA ideia central forte', 'Headline Research Method: escreve 16 ganchos antes de escolher', 'Story of the Product: fatos fascinantes via pesquisa profunda', 'Brand Image + Direct Response simultaneamente', 'Respeita inteligencia do publico — fatos > adjetivos'],
+    entregavel: 'Copy com Big Idea + pesquisa substantiva + fatos fascinantes.',
+    base: '"Ogilvy on Advertising", "Confessions of an Advertising Man". Campanhas Rolls-Royce ("At 60 mph the loudest noise..."), Dove, Hathaway.',
+    aciona: ['Copy Chief pra projetos premium / high ticket'] },
+
+  'eugene-schwartz': { name: 'Eugene Schwartz', avatar: 'ES', squad: 'Squad Copy', status: 'done',
+    resumo: 'Copywriter mais intelectual da historia. "Breakthrough Advertising" (1966) e a biblia do copywriting. Criou os 5 niveis de consciencia e o conceito de mass desire — voce nao cria desejo, canaliza o que ja existe.',
+    faz: ['5 Niveis de Consciencia: Unaware, Problem Aware, Solution Aware, Product Aware, Most Aware', 'Canalizar mass desire (nao criar)', 'Adequar angulo ao nivel do publico', 'Timer de 33 minutos por sessao (metodo real)', 'Mecanismo unico: o porque que ninguem mais tem'],
+    entregavel: 'Copy calibrada ao nivel de consciencia exato do publico.',
+    base: '"Breakthrough Advertising" (copias originais valem +US$3K). Especialista em saude, finanças e editoriais.',
+    aciona: ['Copy Chief — especialmente pra decidir nivel de consciencia do briefing'] },
+
+  'claude-hopkins': { name: 'Claude Hopkins', avatar: 'CH', squad: 'Squad Copy', status: 'done',
+    resumo: 'Pai da publicidade cientifica. "Scientific Advertising" (1923) — Ogilvy chamou de livro mais importante ja escrito sobre publicidade. Inventou cupom como tracking, amostras gratis em escala. Se nao pode medir, nao pode melhorar.',
+    faz: ['Test Everything: A/B em cada elemento', 'Reason Why Advertising: toda afirmacao tem um porque', 'Specific Claim > General Claim ("filtrada 7 vezes" > "pura como a neve")', 'Preemptive Claim: ser o primeiro a descrever o obvio', 'Salesmanship in print (adaptado: em video)'],
+    entregavel: 'Copy com reason-why + claims especificos + elementos testaveis.',
+    base: '"Scientific Advertising" (70 paginas canonicas). Campanhas Pepsodent, Schlitz, Palmolive.',
+    aciona: ['Copy Chief pra campanhas que vao rodar A/B test'] },
+
+  'gary-bencivenga': { name: 'Gary Bencivenga', avatar: 'GB', squad: 'Squad Copy', status: 'done',
+    resumo: 'Considerado o maior copywriter vivo. Venceu mais A/B tests head-to-head que qualquer outro na historia do direct response. Seu unico seminario (2005) custou US$5K/cabeca. Persuasao real nao parece persuasao — e verdade bem contada.',
+    faz: ['Persuasion Equation: Desejo + Credibilidade + Exclusividade = Acao', 'Dramatic Proof que salta da pagina/para o scroll', 'Emotional Core + Rational Shell (emocao dentro, logica fora)', 'Bencivenga Hierarchy of Proof: Demonstracao > Testemunho especifico > Dado > Logica > Promessa', 'Promessa crivel + prova dramatica = irresistivel'],
+    entregavel: 'Copy com promessa credivel sustentada por prova dramatica memoravel.',
+    base: '40 anos de A/B tests vencedores. "Bencivenga Bullets" (newsletter estudada como referencia).',
+    aciona: ['Copy Chief pra campanhas que precisam de credibilidade maxima'] },
+
+  'joe-sugarman': { name: 'Joe Sugarman', avatar: 'JS', squad: 'Squad Copy', status: 'done',
+    resumo: 'Fundador da JS&A Group. Revolucionou copywriting com anuncios de pagina inteira no WSJ. Vendeu milhoes em oculos BluBlocker. Criou os 30 gatilhos psicologicos. Conceito central: "Slippery Slide" — cada linha leva a proxima.',
+    faz: ['Slippery Slide: cada segundo cria razao pra assistir o proximo', '30 gatilhos psicologicos (curiosidade, storytelling, urgencia, escassez...)', 'Primeira frase so serve pra fazer ler a segunda', 'Zero atrito, maximo momentum', 'Textos longos hipnoticos adaptados pra video curto'],
+    entregavel: 'Copy que prende ate o fim via slippery slide + gatilhos psicologicos.',
+    base: '"The Adweek Copywriting Handbook" — leitura obrigatoria. Campanhas BluBlocker e dezenas de produtos eletronicos.',
+    aciona: ['Copy Chief pra copy longa que precisa prender atencao'] },
+
+  'robert-collier': { name: 'Robert Collier', avatar: 'RC', squad: 'Squad Copy', status: 'done',
+    resumo: 'Pai do copywriting moderno. "The Robert Collier Letter Book" (1931) atravessa seculos. Criou o conceito: entre na conversa que ja acontece na mente do leitor. Nao inventa desejo — conecta com o que ja existe.',
+    faz: ['Mind Join: gancho espelha o pensamento atual do leitor', '6 Motivadores Universais: amor, ganancia, dever, orgulho, autopreservacao, autogratificacao', 'Desire → Belief → Action (nessa ordem)', 'The Approach: 7 aberturas classicas (oferta, promessa, problema, elogio, historia, noticia, pergunta)', 'Empatia antes de persuasao'],
+    entregavel: 'Copy que comeca pela conversa interna do publico — gerando conexao imediata.',
+    base: '"The Robert Collier Letter Book" (1931). Base de toda a escola moderna de copywriting emocional.',
+    aciona: ['Copy Chief pra publico frio ou inconsciente'] },
+
+  'dan-kennedy': { name: 'Dan Kennedy', avatar: 'DK', squad: 'Squad Copy', status: 'done',
+    resumo: 'O "No B.S." master. Cobra US$19K/hora e se recusa a usar email ou celular. Filosofia: se nao vende, nao presta. Brutalmente pragmatico. Especialista em urgencia real, escassez verdadeira e ofertas irrecusaveis pra PMEs.',
+    faz: ['Magnetic Marketing Triangle: Mensagem + Mercado + Midia', 'Irresistible Offer Stack: empilha valor ate parecer absurdo favoravel', 'Urgency + Scarcity REAIS (nunca fake)', 'No B.S. Filter: se nao vende, nao prova, nao ativa emocao → deleta', 'Marketing sem oferta e branding — e branding e desistencia'],
+    entregavel: 'Copy sem enchimento de linguica + oferta irrecusavel + urgencia real.',
+    base: 'Dezenas de livros "No B.S.". Imperio construido ensinando PMEs a venderem com marketing direto.',
+    aciona: ['Copy Chief pra pequenos/medios empresarios, tom direto'] },
+
+  'john-carlton': { name: 'John Carlton', avatar: 'JC', squad: 'Squad Copy', status: 'done',
+    resumo: 'O "most ripped-off copywriter alive". Protegido de Halbert. Famoso pelo anuncio "one-legged golfer". Simple But Smart: texto parece simples, e estrategicamente brilhante. Linguagem de bar + estrutura Hollywood.',
+    faz: ['SBS Framework: historia interessante + conta como no bar + estrutura cirurgica', 'One-Legged Golfer Method: angulo inesperado e especifico ("com UMA PERNA" > "pra todos")', 'Salesmanship DNA: o que e? o que faz por mim? por que acreditar? o que fazer agora?', 'WIIFM Radar: todo frase responde "o que eu ganho?"', 'Fale humano, pense estrategista'],
+    entregavel: 'Copy que parece simples mas tem estrutura de persuasao profissional.',
+    base: '"The Rant" blog (referencia em copy direto). Treinado por Halbert. Copies plagiadas centenas de vezes.',
+    aciona: ['Copy Chief pra tom coloquial com poder de conversao'] },
+
+  'clayton-makepeace': { name: 'Clayton Makepeace', avatar: 'CM', squad: 'Squad Copy', status: 'done',
+    resumo: '"The Wealth Maker". Especialista em financial e health copy. Gerou bilhoes em vendas ativando emocoes viscerais. Transforma temas aridos em copy emocionalmente carregada que leva a acao.',
+    faz: ['Trigger Primario (0-3s): medo de perda, raiva, desejo de status, vergonha do status quo', 'Amplificacao: especificidade que aprofunda a emocao', 'Canalizacao: transforma emocao em compreensao da causa-raiz', 'Resolucao: oferta como saida — emocao vira esperanca', 'Pessoas compram por emocao, justificam com logica'],
+    entregavel: 'Copy emocionalmente carregada que ativa → amplifica → canaliza → resolve.',
+    base: 'Money Map Press, Weiss Research. Billions em vendas em financeiro/saude.',
+    aciona: ['Copy Chief pra nichos de saude e financeiro'] },
+
+  'jim-rutz': { name: 'Jim Rutz', avatar: 'JR', squad: 'Squad Copy', status: 'done',
+    resumo: 'Escreveu as cartas de vendas mais lucrativas da historia do direct response. Especialidade: empilhar provas ate a descrenca desmoronar. Transforma produtos comuns em narrativas irresistiveis com sensacao de "descobrindo segredo".',
+    faz: ['Proof stacking: 3, 4, 5 provas em sequencia pra peso cumulativo', 'Fascinations em cascata: cada frase abre micro-curiosidade', 'Lead de ruptura: primeiros 3s violam expectativa', 'Big Promise: uma promessa tao grande que parece impossivel — entao voce prova', 'Specificity sells: "R$2.347 em 14 dias" > "muito dinheiro"'],
+    entregavel: 'Copy com proof stacking massivo + big promise especifica + fascinations em cascata.',
+    base: '"The Great American Sales Letter". Campanhas com bilhoes em receita.',
+    aciona: ['Copy Chief pra mercados ceticos que precisam de peso de prova'] },
+
+  'parris-lampropoulos': { name: 'Parris Lampropoulos', avatar: 'PL', squad: 'Squad Copy', status: 'done',
+    resumo: 'Um dos maiores copywriters vivos em saude e suplementos. Controles duraram anos em mercados ultra-competitivos. Traduz estudos cientificos em narrativas emocionais. Prova = emocao embrulhada em evidencia.',
+    faz: ['Emotional Proof Stacking: toda prova cientifica vira impacto emocional', 'Mechanism: razao biologica/cientifica oculta do problema e da solucao', 'Future Pacing: visualizar vida DEPOIS da transformacao', 'Enemy Identification: problema tem um inimigo (toxina, industria)', 'Credibility Cascade: universidades > medicos > estudos > numeros > depoimentos'],
+    entregavel: 'Copy de saude com rigor cientifico traduzido em emocao viva.',
+    base: 'Decadas de controles vencedores em saude/suplementos. Referencia absoluta no nicho.',
+    aciona: ['Copy Chief pra qualquer coisa em saude/bem-estar'] },
+
+  'alex-hormozi': { name: 'Alex Hormozi', avatar: 'AH', squad: 'Squad Copy', status: 'done',
+    resumo: 'Autor de $100M Offers e $100M Leads. Dono da Acquisition.com. Abordagem brutalmente direta: crie ofertas tao boas que dizer nao pareca burrice. Value Equation e sua ferramenta central.',
+    faz: ['Value Equation: (Resultado Sonhado × Probabilidade Percebida) / (Tempo × Esforco)', 'Grand Slam Offer: empilha valor ate ser matematicamente absurdo', 'Contraste + numeros simples pra traduzir conceitos', 'Sem floreio, sem metafora — logica, numero e verdade', 'Traduz conceitos complexos pra linguagem de adolescente'],
+    entregavel: 'Oferta irrecusavel construida via Value Equation.',
+    base: '$100M Offers, $100M Leads, podcast Acquisition.com. Escala brutal de negocios.',
+    aciona: ['Copy Chief pra estruturar oferta em qualquer vertical'] },
+
+  'russell-brunson': { name: 'Russell Brunson', avatar: 'RB', squad: 'Squad Copy', status: 'done',
+    resumo: 'Co-fundador ClickFunnels. Trilogia DotCom/Expert/Traffic Secrets definiu marketing digital moderno. Framework central: Hook-Story-Offer. Transforma qualquer pessoa em "expert" via narrativa estrategica.',
+    faz: ['Hook (0-3s): parar o scroll', 'Story (3-45s): conexao + quebra de crenca falsa', 'Offer (45-60s): proximo passo do funil', 'Epiphany Bridge: mudar crenca via sua propria historia de mudanca', 'Cada peca de conteudo e etapa de funil maior'],
+    entregavel: 'Conteudo estruturado como micro-funil completo em 60s.',
+    base: 'DotCom Secrets, Expert Secrets, Traffic Secrets. ClickFunnels unicorn.',
+    aciona: ['Copy Chief pra qualquer conteudo que leva a proximo passo de funil'] },
+
+  'stefan-georgi': { name: 'Stefan Georgi', avatar: 'SG', squad: 'Squad Copy', status: 'done',
+    resumo: 'Copywriter mais bem pago da geracao atual. Copies que geraram centenas de milhoes. Criador do RMBC Method (Research, Mechanism, Brief, Copy). Transforma copy em sistema replicavel.',
+    faz: ['Research: dor #1 do avatar, linguagem que ELE usa, solucoes que ja falharam', 'Mechanism: razao especifica/crivel de por que SUA solucao funciona', 'Brief: [avatar] consegue [resultado] por [mecanismo] sem [objecao]', 'Copy: cada frase avanca argumento, zero filler', 'Mecanismo > Promessa > Prova > Urgencia'],
+    entregavel: 'Copy cientificamente construida via RMBC Method.',
+    base: 'RMBC Method. Billions em vendas diretas. Template replicavel documentado.',
+    aciona: ['Copy Chief pra VSLs longas e campanhas high-stakes'] },
+
+  'todd-brown': { name: 'Todd Brown', avatar: 'TB', squad: 'Squad Copy', status: 'done',
+    resumo: 'Estrategista por tras do E5 Method e do conceito de Big Idea em marketing direto. Toda campanha precisa de UMA grande ideia que carregue a mensagem inteira. Move lead da curiosidade a acao sem parecer vendedor.',
+    faz: ['Big Idea: uma ideia central que sustenta toda a campanha', 'E5 Method: Educate, Entertain, Engage, Excite, Execute', 'Em video curto, E5 comprimido em 60s', 'Big Idea nos primeiros 3 segundos', 'Micro-funil completo em cada Reel'],
+    entregavel: 'Big Idea clara + estrutura E5 em micro-formato.',
+    base: 'E5 Method, Marketing Funnel Automation. Referencia em direct response moderno.',
+    aciona: ['Copy Chief pra definir Big Idea antes de qualquer campanha'] },
+
+  'jeff-walker': { name: 'Jeff Walker', avatar: 'JW', squad: 'Squad Copy', status: 'done',
+    resumo: 'Criador do Product Launch Formula (PLF). Gerou +US$1B pros alunos. Sideways Sales Letter: em vez de carta longa, sequencia de conteudo que entrega valor enquanto constroi desejo.',
+    faz: ['PLC (Pre-Launch Content): 3 fases — Oportunidade, Transformacao, Experiencia de Dono', 'Seed/Internal/JV Launch', 'Mental triggers sequenciados: reciprocidade → autoridade → prova social → escassez → comunidade', 'Shot Across the Bow: primeiro video sinaliza algo grande vindo', 'Open-Close Cart mentality ate em organico'],
+    entregavel: 'Sequencia de conteudo estruturada como lancamento (mesmo em organico).',
+    base: 'Product Launch Formula. Alunos geraram +US$1B em vendas.',
+    aciona: ['Copy Chief pra lancamentos + sequencias'] },
+
+  'andre-chaperon': { name: 'Andre Chaperon', avatar: 'AC', squad: 'Squad Copy', status: 'done',
+    resumo: 'Mestre do email storytelling. Criador do Autoresponder Madness e Soap Opera Sequences. Enquanto outros gritam, ele sussurra — e as pessoas se inclinam pra ouvir.',
+    faz: ['Soap Opera Sequence: serie viciante com loops abertos/fechados', 'Episodio 1: mundo + personagem + problema + loop massivo', 'Open loops que geram dependencia narrativa', 'Atencao sustentada > atencao pontual', 'Cada conteudo e episodio de uma serie'],
+    entregavel: 'Sequencia narrativa que vicia (open loops + fechamentos estrategicos).',
+    base: 'Autoresponder Madness. Referencia em email storytelling.',
+    aciona: ['Copy Chief pra sequencias de email e conteudos seriados'] },
+
+  'ben-settle': { name: 'Ben Settle', avatar: 'BS', squad: 'Squad Copy', status: 'done',
+    resumo: 'Criador do "Email Players". Anti-guru auto-declarado. Filosofia: ser polarizante atrai compradores leais e repele curiosos. Infotainment — informacao + entretenimento. Emails diarios com personagens e viloes.',
+    faz: ['Infotainment: informacao + entretenimento SEMPRE juntos', 'Villainizacao: todo roteiro precisa de vilao claro', 'Anti-pitch: nunca pareca que esta vendendo', 'Personagem consistente: voce tem opiniao forte, manias, bordoes', 'Polarizacao intencional: 50% odeia, 50% ama — morno nao vende'],
+    entregavel: 'Copy com personagem forte + vilao + infotainment puro.',
+    base: 'Email Players (newsletter paga). Anti-mainstream copy.',
+    aciona: ['Copy Chief pra marcas com opiniao forte + personagem'] },
+
+  'dan-koe': { name: 'Dan Koe', avatar: 'DKO', squad: 'Squad Copy', status: 'done',
+    resumo: 'Autor de "The Art of Focus". Referencia na creator economy moderna. Combina filosofia + desenvolvimento pessoal + copywriting. Voz unica mistura profundidade com pragmatismo.',
+    faz: ['Write to your past self: escreva pra quem voce era 2-3 anos atras', 'One Person Business: voce resolvendo problema que ja teve', 'Idea stacking: 2-3 ideias de areas diferentes = perspectiva unica', 'Perspectiva > informacao: forma nova de ver o que todos conhecem', 'Conteudo gratuito cria consciencia, produto entrega solucao'],
+    entregavel: 'Conteudo reflexivo com reframe que gera novo ponto de vista.',
+    base: '"The Art of Focus". Milhoes de seguidores como solo creator.',
+    aciona: ['Copy Chief pra conteudo de autoridade solo/creator economy'] },
+
+  'jon-benson': { name: 'Jon Benson', avatar: 'JB', squad: 'Squad Copy', status: 'done',
+    resumo: 'Criador do formato VSL (Video Sales Letter) moderno. Bilhoes em receita via seu software Sellerator. Pessoas preferem assistir a ler, mas copy escrita supera improviso. Solucao: texto persuasivo em formato visual com ritmo controlado.',
+    faz: ['Micro-VSL: cada segundo otimizado pra retencao e conversao', 'Control the pace, control the sale', 'Viewer nunca pode "pular" mentalmente', 'Principios de VSL longa comprimidos em video curto', 'Ritmo como ferramenta de persuasao'],
+    entregavel: 'VSL curto/longo com ritmo controlado pra maximizar conversao.',
+    base: 'Sellerator software. Inventor do VSL moderno.',
+    aciona: ['Copy Chief pra VSLs de qualquer duracao'] },
+
+  'ry-schwartz': { name: 'Ry Schwartz', avatar: 'RS', squad: 'Squad Copy', status: 'done',
+    resumo: 'Especialista em belief-shifting copy — copy que muda crencas, nao so apresenta argumentos. Trabalhou com Todd Herman, Amy Porterfield, Digital Marketer. Cada peca e intervencao psicologica.',
+    faz: ['Belief Shifting: desmonta crenca limitante + instala capacitadora', 'Epiphany Bridge: historia pessoal de "eureka" como ponte', '3 False Beliefs: sobre veiculo, sobre capacidade interna, sobre forcas externas', 'One Belief Away: publico esta a UMA crenca da acao', 'Nao venda produto — venda a crenca que torna produto obvio'],
+    entregavel: 'Copy que muda perspectiva ANTES de oferecer solucao.',
+    base: 'Trabalhou com top players do digital. Especialista em story-driven funnels.',
+    aciona: ['Copy Chief pra audiencia com crencas limitantes fortes'] },
+
+  'frank-kern': { name: 'Frank Kern', avatar: 'FK', squad: 'Squad Copy', status: 'done',
+    resumo: 'O cara que tornou direct response "cool". Criador do Intent Based Branding e Results In Advance. Vende sem parecer vendedor. Estilo radicalmente casual — como na praia com uma cerveja.',
+    faz: ['Results In Advance: de resultado antes de pedir qualquer coisa', 'Identifique a intencao atual do viewer (o que ele QUER agora)', 'Entregue valor consumivel em 5 minutos', 'Posicione sem vender — autoridade pelo valor entregue', 'CTA casual — parece favor, nao ordem'],
+    entregavel: 'Copy casual com autoridade via valor + divida emocional.',
+    base: '4-Day Cash Machine. Intent Based Branding. Tom unico no mercado.',
+    aciona: ['Copy Chief pra tom casual + audiencia warm'] },
+
+  'david-deutsch': { name: 'David Deutsch', avatar: 'DD', squad: 'Squad Copy', status: 'done',
+    resumo: 'Lenda do direct response. Decadas na Boardroom Inc./Bottom Line Publications. Pecas geraram centenas de milhoes em assinaturas. Superpoder: criar "fascinations" — bullets que o leitor NAO CONSEGUE ignorar.',
+    faz: ['Gap Opening (0-3s): curiosidade tao especifica que ignorar doi', 'Specificity Layer: detalhes que aumentam crenca sem fechar gap', 'Tension Building: micro-revelacoes que abrem NOVOS gaps', 'Payoff: feche gap principal de forma surpreendente', 'New Gap + CTA: novo loop que leva a acao'],
+    entregavel: 'Copy construida como fascination expandida — impossivel parar de ler.',
+    base: 'Decadas na Boardroom Inc. Mestre das curiosity gaps.',
+    aciona: ['Copy Chief pra bullets/headlines/leads magneticos'] },
+
   'story-chief': { name: 'Story Chief', avatar: '👔', squad: 'Squad Storytelling', status: 'done',
     resumo: 'Diretor narrativo — NAO escreve roteiros. Analisa em 5 perguntas e decide qual storyteller (ou combinacao).',
     faz: ['5 perguntas: acao, emocao, heroi, formato, genero', 'Seleciona via matriz por objetivo', 'Define framework (Story Circle, StoryBrand, etc.)', 'Quality check pos-roteiro'],
     entregavel: 'Direcao narrativa com storyteller + framework + quality check.',
     base: '13 storytellers: Campbell, Donald Miller, Blake Snyder, Dan Harmon, Nancy Duarte, Shawn Coyne, Oren Klaff, Kindra Hall, Keith Johnstone, Matthew Dicks, Park Howell, Marshall Ganz.',
     aciona: ['Qualquer storyteller'] },
+
+  // 13 STORYTELLERS CLONADOS
+  'joseph-campbell': { name: 'Joseph Campbell', avatar: 'JC', squad: 'Squad Storytelling', status: 'done',
+    resumo: 'Mitologo que mapeou a estrutura narrativa universal em "O Heroi de Mil Faces". O Monomito (Jornada do Heroi) — estrutura que funciona de Star Wars a Harry Potter, e em Reels de 30 segundos.',
+    faz: ['Jornada do Heroi condensada em 5 estagios pra video curto', 'Ativacao de arquetipos emocionais universais', 'Chamado a aventura > travessia do limiar > provacoes > recompensa > retorno transformado', 'Padroes narrativos do inconsciente coletivo', 'Reconhecimento instantaneo pelo espectador'],
+    entregavel: 'Roteiro com estrutura mitologica classica adaptada ao formato curto.',
+    base: '"O Heroi de Mil Faces". Referencia fundadora do storytelling ocidental.',
+    aciona: ['Story Chief pra narrativas de transformacao epica'] },
+
+  'donald-miller': { name: 'Donald Miller', avatar: 'DM', squad: 'Squad Storytelling', status: 'done',
+    resumo: 'Criador do StoryBrand SB7. Premissa: marcas falham quando se colocam como heroi. O cliente e o heroi — tem problema, encontra guia (a marca), recebe plano, e chamado a acao.',
+    faz: ['SB7: Character + Problem + Guide + Plan + Call to Action + Success + Avoiding Failure', 'Cliente = heroi, marca = guia (nunca competir com protagonismo do cliente)', 'Se voce confunde, voce perde — clareza vence criatividade', 'Mensagem de marca em 30 segundos', 'Toda marca pode ser estruturada em StoryBrand'],
+    entregavel: 'Copy/roteiro de marca estruturado em SB7 com clareza cristalina.',
+    base: '"Building a StoryBrand". Framework aplicado por milhares de empresas.',
+    aciona: ['Story Chief pra mensagens institucionais/marca'] },
+
+  'dan-harmon': { name: 'Dan Harmon', avatar: 'DH', squad: 'Squad Storytelling', status: 'done',
+    resumo: 'Showrunner de Community e Rick and Morty. Criador do Story Circle — simplificacao da Jornada do Heroi em 8 passos circulares. Toda narrativa: descida ao desconhecido + retorno transformado.',
+    faz: ['Story Circle 8 passos: YOU > NEED > GO > SEARCH > FIND > TAKE > RETURN > CHANGE', 'Protagonista cruza limiar, paga preco, volta diferente', 'Circularidade = satisfacao narrativa', 'Jornada completa em 30-90s sem perder sensacao de historia acabada', 'Simplicidade + universalidade'],
+    entregavel: 'Roteiro com arco completo de descida e retorno em tempo curto.',
+    base: 'Community, Rick and Morty. Story Circle documentado e replicavel.',
+    aciona: ['Story Chief pra historia pessoal / jornada do criador'] },
+
+  'blake-snyder': { name: 'Blake Snyder', avatar: 'BSN', squad: 'Squad Storytelling', status: 'done',
+    resumo: 'Roteirista de Hollywood. "Save the Cat!" — manual mais influente de roteiro. Beat Sheet de 15 beats mapeia momentos-chave. Categorizou todas as historias em 10 generos universais.',
+    faz: ['Beat Sheet condensado em 6 beats pra video curto', 'Cada segundo tem funcao narrativa especifica', '10 generos universais (Monster in the House, Golden Fleece, etc.)', 'Estrutura nao e prisao — e liberdade dentro do esqueleto', 'Originalidade na execucao, nao na estrutura'],
+    entregavel: 'Roteiro com beats estrategicos e zero desperdicio de tempo.',
+    base: '"Save the Cat!" — biblia de roteiristas de Hollywood.',
+    aciona: ['Story Chief pra roteiros de video com estrutura precisa'] },
+
+  'nancy-duarte': { name: 'Nancy Duarte', avatar: 'ND', squad: 'Squad Storytelling', status: 'done',
+    resumo: 'CEO Duarte Inc. Mente por tras de apresentacoes iconicas (Al Gore em "Uma Verdade Inconveniente"). Framework Sparkline: oscilacao entre "o que e" (realidade) e "o que poderia ser" (futuro desejado).',
+    faz: ['Sparkline: contraste entre realidade atual e possibilidade futura', 'Oscilacao cria montanha-russa emocional', 'Nao engaja com informacao — engaja com contraste', 'Tensao entre dois mundos como motor narrativo', 'Aplicavel a apresentacao, video, copy'],
+    entregavel: 'Narrativa que oscila entre status quo doloroso e futuro desejado.',
+    base: '"Resonate", "Slide:ology". Analisou grandes apresentacoes da historia.',
+    aciona: ['Story Chief pra conteudo educativo com tensao emocional'] },
+
+  'shawn-coyne': { name: 'Shawn Coyne', avatar: 'SC', squad: 'Squad Storytelling', status: 'done',
+    resumo: '25+ anos como editor em NY. Criador do Story Grid — sistema analitico pra diagnosticar e construir narrativas. Storytelling tratado como engenharia: genero define expectativa, 5 mandamentos garantem funcao de cada cena.',
+    faz: ['5 Mandamentos por cena: Inciting Incident > Progressive Complications > Crisis > Climax > Resolution', 'Genero define convencoes (Thriller, Love, Action, etc.)', 'Cada cena precisa ter funcao estrutural', 'Engenharia narrativa > inspiracao', 'Diagnostico: qual cena nao funciona e por que'],
+    entregavel: 'Roteiro analisado por grid (genero + 5 mandamentos) antes de entregar.',
+    base: '"The Story Grid" — sistema documentado de engenharia narrativa.',
+    aciona: ['Story Chief pra roteiros onde precisao estrutural importa'] },
+
+  'oren-klaff': { name: 'Oren Klaff', avatar: 'OK', squad: 'Squad Storytelling', status: 'done',
+    resumo: 'Levantou +US$400M em investimentos com "Pitch Anything". Toda interacao e batalha de frames — quem controla o frame, controla a decisao. Mapeou o crocodile brain que filtra 90% das mensagens.',
+    faz: ['STRONG Method: Set Frame, Tell Story, Reveal Intrigue, Offer Prize, Nail Hookpoint, Get Decision', 'Frame Control: status alto, novidade, tensao', 'Atravessar filtro do cerebro reptiliano nos primeiros 2s', 'Seja novo, seja perigoso ou seja de alto status', 'Neuroeconomia aplicada a narrativa'],
+    entregavel: 'Pitch/narrativa que controla o frame e prende decisao.',
+    base: '"Pitch Anything", "Flip the Script". US$400M+ levantados usando o metodo.',
+    aciona: ['Story Chief pra apresentacoes de venda / conteudo premium'] },
+
+  'kindra-hall': { name: 'Kindra Hall', avatar: 'KH', squad: 'Squad Storytelling', status: 'done',
+    resumo: 'Chief Storytelling Officer. Autora de "Stories That Stick". Referencia em storytelling pra negocios. Classifica historias em 4 tipos estrategicos: Value, Founder, Purpose, Customer.',
+    faz: ['Value Story: produto/servico resolvendo problema real', 'Founder Story: origem e proposito do criador', 'Purpose Story: por que a marca existe', 'Customer Story: transformacao do cliente', 'Gap = distancia entre publico e onde voce quer que chegue — historia e a ponte'],
+    entregavel: 'Historia classificada + executada conforme o gap a preencher.',
+    base: '"Stories That Stick". Aplicacao em escala corporativa.',
+    aciona: ['Story Chief pra marca pessoal / cases de cliente'] },
+
+  'keith-johnstone': { name: 'Keith Johnstone', avatar: 'KJ', squad: 'Squad Storytelling', status: 'done',
+    resumo: 'Pai do teatro de improvisacao moderno. Autor de "Impro". Narrativas naturais emergem da espontaneidade. Status games (alto/baixo entre personagens), "Yes, and..." e remocao da censura interna.',
+    faz: ['Status Games: toda interacao humana e jogo de poder', 'Status baixo subindo (inspiracao) / Status alto caindo (comedia)', 'Yes, and: aceitar e expandir vs aceitar e bloquear', 'Remover censura interna = narrativa autentica', 'Publico sente quando algo e calculado demais'],
+    entregavel: 'Roteiro/interacao com energia de improviso + status games claros.',
+    base: '"Impro", "Impro for Storytellers". Base de toda improvisacao moderna.',
+    aciona: ['Story Chief pra humor / conteudo espontaneo'] },
+
+  'matthew-dicks': { name: 'Matthew Dicks', avatar: 'MD', squad: 'Squad Storytelling', status: 'done',
+    resumo: '59 vezes campeao do Moth StorySLAM. Autor de "Storyworthy". Conceito central: 5-Second Moment — toda grande historia converge pra instante de transformacao de ate 5 segundos.',
+    faz: ['5-Second Moment: identificar o instante exato de virada', 'Todo roteiro existe pra dar peso a esse momento', 'Em Reel de 30s, momento cai entre segundo 20-25', 'Homework for Life: encontrar historias em momentos banais do dia', 'Transformar o ordinario em magnetico'],
+    entregavel: 'Historia com momento pivotal de 5s perfeitamente construido.',
+    base: '"Storyworthy". Moth StorySLAM champion (mais premiado da historia).',
+    aciona: ['Story Chief pra storytime pessoal / transformacao individual'] },
+
+  'park-howell': { name: 'Park Howell', avatar: 'PH', squad: 'Squad Storytelling', status: 'done',
+    resumo: 'Criador do ABT Framework (And, But, Therefore). Estrutura narrativa mais simples e eficaz pra comunicacao de negocios. Maioria das marcas comunica em AAA (listas entediantes) em vez de ABT.',
+    faz: ['ABT: "fazia X AND tudo normal BUT um dia percebi Y THEREFORE fiz Z"', 'Setup + conflito + resolucao em 3 movimentos', '"But" e o motor da historia — sem conflito, sem atencao', 'Estrutura narrativa instantanea em 30s', 'Contra AAA (And, And, And): listas sem tensao'],
+    entregavel: 'Mensagem de negocio estruturada em ABT — clara, com conflito, resoluta.',
+    base: '"Brand Bewitchery". Decadas em publicidade.',
+    aciona: ['Story Chief pra mensagens corporativas / pitches rapidos'] },
+
+  'marshall-ganz': { name: 'Marshall Ganz', avatar: 'MG', squad: 'Squad Storytelling', status: 'done',
+    resumo: 'Professor de Harvard. Arquiteto do Public Narrative usado por Obama e movimentos sociais globais. 3 camadas: Story of Self + Story of Us + Story of Now.',
+    faz: ['Story of Self: momento de escolha pessoal que revela seus valores', 'Story of Us: por que NOS nos importamos (conexao com o coletivo)', 'Story of Now: por que agir AGORA (urgencia)', 'Mobilizacao humana via emocao, nao informacao', 'Pessoas nao agem porque entendem — agem porque sentem'],
+    entregavel: 'Narrativa publica que ativa valores + pertencimento + urgencia.',
+    base: 'Usado por Obama 2008. Ensino em Harvard Kennedy School.',
+    aciona: ['Story Chief pra conteudo de causa / mobilizacao / manifesto'] },
+
   'squad-chief': { name: 'Squad Chief (Creator Pro BR)', avatar: '👔', squad: 'Squad Creator Pro', status: 'done',
     resumo: 'Orquestra 3 mestres brasileiros em creator economy (Alan Nicolas, Pedro Valerio, Thiago Finch). Complementa Copy Chief e Story Chief trazendo a lente pragmatica BR pra aplicacao real no mercado 2026.',
     faz: ['Diagnostica em 3 perguntas: tema, sujeito, escopo', 'Seleciona entre Alan (voz/DNA), Pedro Valerio (processo) e Thiago Finch (negocio)', 'Adapta ao contexto de Micha, Pedro Aredes ou Luiz', 'Responde com exemplos do mercado BR atual', 'Termina com proximo passo concreto'],
