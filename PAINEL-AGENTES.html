@@ -793,27 +793,27 @@ footer .brand { color: var(--orange); font-weight: 700; }
       </div></div>
     </div>
 
-    <div class="squad-card status-partial">
+    <div class="squad-card status-done">
       <div class="squad-header" onclick="toggleSquad(this)">
         <div class="squad-icon">🎯</div>
         <div class="squad-info"><div class="squad-name">Advisory Board</div><div class="squad-desc">10 conselheiros estrategicos + Board Chair presidente</div></div>
-        <div class="squad-stats"><div class="squad-stat"><span class="s-val">11</span><span class="s-lbl">Conselheiros</span></div><span class="status-badge badge-partial">1 prompt + 10 SOULs</span></div>
+        <div class="squad-stats"><div class="squad-stat"><span class="s-val">11</span><span class="s-lbl">Prontos</span></div><span class="status-badge badge-done">11/11</span></div>
         <div class="squad-toggle">▼</div>
       </div>
       <div class="squad-body"><div class="squad-body-inner">
-        <div class="squad-flow"><strong>Como funciona:</strong> Quando os socios tem um dilema estrategico critico (apostas grandes, cultura, proposito, decisao entre socios), acionam o <strong>Board Chair</strong>. Ele faz diagnostico em 4 perguntas e seleciona 1-2 conselheiros ideais (Dalio pra risco, Thiel pra monopolio, Brene pra cultura, etc.). Entrega deliberacao estruturada com proximo passo concreto.</div>
+        <div class="squad-flow"><strong>Como funciona:</strong> Quando os socios tem dilema estrategico critico (apostas grandes, cultura, proposito), acionam o <strong>Board Chair</strong>. Ele diagnostica em 4 perguntas e seleciona 1-2 conselheiros ideais (Dalio pra risco, Thiel pra monopolio, Brene pra cultura, etc.). Todos os 10 tem framework alimentado. Clique em qualquer um.</div>
         <div class="agents-grid">
           <div class="agent-chip has-prompt" onclick="openAgent('board-chair')"><div class="agent-avatar">👔</div><div class="agent-info"><div class="a-name">Board Chair</div><div class="a-status">Presidente</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">RD</div><div class="agent-info"><div class="a-name">Ray Dalio</div><div class="a-status">Principles</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">CM</div><div class="agent-info"><div class="a-name">Charlie Munger</div><div class="a-status">Mental Models</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">NR</div><div class="agent-info"><div class="a-name">Naval Ravikant</div><div class="a-status">Leverage</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">PT</div><div class="agent-info"><div class="a-name">Peter Thiel</div><div class="a-status">Zero to One</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">RH</div><div class="agent-info"><div class="a-name">Reid Hoffman</div><div class="a-status">Blitzscaling</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">SS</div><div class="agent-info"><div class="a-name">Simon Sinek</div><div class="a-status">Start With Why</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">BB</div><div class="agent-info"><div class="a-name">Brene Brown</div><div class="a-status">Vulnerability</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">PL</div><div class="agent-info"><div class="a-name">Patrick Lencioni</div><div class="a-status">Teams</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">DS</div><div class="agent-info"><div class="a-name">Derek Sivers</div><div class="a-status">Contrarian</div></div></div>
-          <div class="agent-chip"><div class="agent-avatar">YC</div><div class="agent-info"><div class="a-name">Yvon Chouinard</div><div class="a-status">Mission</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('ray-dalio')"><div class="agent-avatar">RD</div><div class="agent-info"><div class="a-name">Ray Dalio</div><div class="a-status">Principles</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('charlie-munger')"><div class="agent-avatar">CM</div><div class="agent-info"><div class="a-name">Charlie Munger</div><div class="a-status">Mental Models</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('naval-ravikant')"><div class="agent-avatar">NR</div><div class="agent-info"><div class="a-name">Naval Ravikant</div><div class="a-status">Leverage</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('peter-thiel')"><div class="agent-avatar">PT</div><div class="agent-info"><div class="a-name">Peter Thiel</div><div class="a-status">Zero to One</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('reid-hoffman')"><div class="agent-avatar">RH</div><div class="agent-info"><div class="a-name">Reid Hoffman</div><div class="a-status">Blitzscaling</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('simon-sinek')"><div class="agent-avatar">SS</div><div class="agent-info"><div class="a-name">Simon Sinek</div><div class="a-status">Start With Why</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('brene-brown')"><div class="agent-avatar">BB</div><div class="agent-info"><div class="a-name">Brene Brown</div><div class="a-status">Vulnerability</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('patrick-lencioni')"><div class="agent-avatar">PL</div><div class="agent-info"><div class="a-name">Patrick Lencioni</div><div class="a-status">5 Dysfunctions</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('derek-sivers')"><div class="agent-avatar">DS</div><div class="agent-info"><div class="a-name">Derek Sivers</div><div class="a-status">Hell Yeah or No</div></div></div>
+          <div class="agent-chip has-prompt" onclick="openAgent('yvon-chouinard')"><div class="agent-avatar">YC</div><div class="agent-info"><div class="a-name">Yvon Chouinard</div><div class="a-status">Mission</div></div></div>
         </div>
       </div></div>
     </div>
@@ -1498,6 +1498,77 @@ const AGENTS = {
     entregavel: 'Analise estruturada com diagnostico + especialista + framework + recomendacao acionavel.',
     base: '6 especialistas: Avinash Kaushik (Web Analytics 2.0), Peter Fader (Customer Centricity / CLV), Sean Ellis (Growth Hacking), Nick Mehta (NRR / Customer Success), David Spinks (Community SPACES), Wes Kao (Cohort Analysis).',
     aciona: ['Qualquer dos 6 especialistas conforme o framework necessario'] },
+  // 10 CONSELHEIROS DO ADVISORY BOARD
+  'ray-dalio': { name: 'Ray Dalio', avatar: 'RD', squad: 'Advisory Board', status: 'done',
+    resumo: 'Fundador Bridgewater (maior hedge fund do mundo, US$150B+). Autor de Principles. Inventou radical transparency e meritocracia de ideias. Conselheiro de gestao de risco e decisao baseada em principios.',
+    faz: ['Principles Stack: toda decisao recorrente vira principio escrito', 'Believability-Weighted Decision: opiniao pesa mais de quem tem track', 'Radical Transparency: conversas dificeis abertas, gravadas', 'Stress Test: "o que mata essa aposta?"', 'Pain + Reflection = Progress'],
+    entregavel: 'Deliberacao com stress test + believability + principle registrado.',
+    base: 'Principles (livro). 50 anos de Bridgewater. Filosofia codificada em sistema replicavel.',
+    aciona: ['Acionado pelo Board Chair em grandes apostas e decisoes irreversiveis'] },
+
+  'charlie-munger': { name: 'Charlie Munger', avatar: 'CM', squad: 'Advisory Board', status: 'done',
+    resumo: 'Vice-presidente Berkshire por 45 anos. Parceiro de Buffett. Autodidata brutal. Filosofia: lattice of mental models — aplicar multiplas disciplinas ao mesmo problema.',
+    faz: ['Inversion: "o que garante fracasso?" (nao "como sucesso?")', 'Mental Models de psicologia (Cialdini), economia, biologia, fisica', 'Incentives: "show me the incentive, I\'ll show you the outcome"', 'Framework: (1) o que daria errado? (2) vieses? (3) pior caso × prob (4) seria idiotice em 20 anos?'],
+    entregavel: 'Analise via inversion + multiplos mental models + check de incentivos.',
+    base: 'Poor Charlie\'s Almanack. Decadas de cartas anuais Berkshire.',
+    aciona: ['Acionado pelo Board Chair pra evitar erros de consenso'] },
+
+  'naval-ravikant': { name: 'Naval Ravikant', avatar: 'NR', squad: 'Advisory Board', status: 'done',
+    resumo: 'Cofundador AngelList. Early investor em Uber, Twitter, Notion. Filosofo moderno. Famoso pelo "The Almanack of Naval". Conecta business, budismo e ciencia.',
+    faz: ['Alavancagem em 4 tipos: Labor, Capital, Code, Media', 'Identificar qual leverage esta faltando', 'Specific Knowledge: irreplicavel, vem de obsessao unica', 'Long-Term Games with Long-Term People', 'Seek wealth (ativos que rendem dormindo), not money or status'],
+    entregavel: 'Diagnostico de leverage + specific knowledge + jogo de longo prazo.',
+    base: 'Almanack of Naval Ravikant. Tweets virais compilados em tese.',
+    aciona: ['Acionado pelo Board Chair em burnout de socios ou modelo que nao escala'] },
+
+  'peter-thiel': { name: 'Peter Thiel', avatar: 'PT', squad: 'Advisory Board', status: 'done',
+    resumo: 'Cofundador PayPal. Primeiro investidor Facebook. Palantir, Founders Fund. Autor de Zero to One. Pensa contra: "o que voces acreditam e ninguem concorda?".',
+    faz: ['Contrarian Question: verdade que so voces veem', '4 pilares do monopoly: proprietary tech, network effects, scale, branding', 'Zero-to-One (cria categoria) vs One-to-N (mais do mesmo)', 'Secret test: sem secret, sem vantagem durable', '"Competition is for losers"'],
+    entregavel: 'Analise de defensibilidade + contrarian bet + classificacao 0-to-1/1-to-N.',
+    base: 'Zero to One. Investimentos em dezenas de unicornios.',
+    aciona: ['Acionado pelo Board Chair antes de novo produto ou entrada em mercado competitivo'] },
+
+  'reid-hoffman': { name: 'Reid Hoffman', avatar: 'RH', squad: 'Advisory Board', status: 'done',
+    resumo: 'Cofundador LinkedIn (vendido pra Microsoft US$26B). Partner Greylock. Autor de Blitzscaling. Especialista em network effects e crescimento exponencial.',
+    faz: ['Classificar mercado: Fine/Fast/Classic/Blitzscaling', 'Identificar network effects: Direct, Indirect, Data, Social', 'The Alliance: emprego como "tour of duty" 2-4 anos', 'Winner-take-most vs fragmentado — define ritmo', 'Velocity vs Efficiency tradeoff'],
+    entregavel: 'Diagnostico de ritmo de crescimento + tipo de network effect.',
+    base: 'Blitzscaling. Construcao do LinkedIn. Founder-led scaling.',
+    aciona: ['Acionado pelo Board Chair em decisoes de ritmo e contratacao em crescimento'] },
+
+  'simon-sinek': { name: 'Simon Sinek', avatar: 'SS', squad: 'Advisory Board', status: 'done',
+    resumo: 'Autor de Start With Why, Leaders Eat Last, The Infinite Game. TED talk com +60M views. Nao e sobre tatica — e sobre proposito e confianca.',
+    faz: ['Golden Circle: Why > How > What (comunicar de dentro pra fora)', 'Infinite Game: continuar relevante > bater concorrente', 'Leaders Eat Last: lider assume risco primeiro', 'Circle of Safety: equipe performa com seguranca, nao medo', 'People don\'t buy WHAT you do, they buy WHY'],
+    entregavel: 'Analise de proposito + clarity do why + saude da cultura.',
+    base: 'Start With Why, Leaders Eat Last, The Infinite Game.',
+    aciona: ['Acionado pelo Board Chair em visao, cultura e contratacao de lideranca'] },
+
+  'brene-brown': { name: 'Brene Brown', avatar: 'BB', squad: 'Advisory Board', status: 'done',
+    resumo: 'Pesquisadora (PhD Trabalho Social). Estuda vergonha, vulnerabilidade e coragem ha 25+ anos. TED talk com +70M views. Autora de Dare to Lead.',
+    faz: ['4 habilidades de daring leadership: Rumble, Living into Values, BRAVING, Learning to Rise', 'Shame vs Guilt: guilt motiva mudanca, shame paralisa', 'BRAVING (7 dimensoes de trust): Boundaries, Reliability, Accountability, Vault, Integrity, Non-judgment, Generosity', 'Courage e comfort nao coexistem'],
+    entregavel: 'Analise de conversas evitadas + diagnostico de shame/guilt + BRAVING check.',
+    base: 'Pesquisa qualitativa de 25+ anos. Dare to Lead, Daring Greatly.',
+    aciona: ['Acionado pelo Board Chair em conflitos entre socios e crise cultural'] },
+
+  'patrick-lencioni': { name: 'Patrick Lencioni', avatar: 'PL', squad: 'Advisory Board', status: 'done',
+    resumo: 'Fundador Table Group. 13 livros (+8M copias). Classico: The Five Dysfunctions of a Team. Escreve em formato de fabula. Consultor de CEOs Fortune 500.',
+    faz: ['5 Dysfunctions piramide (base→topo): Trust, Conflict, Commitment, Accountability, Results', 'Resolver de baixo pra cima — nao pula niveis', 'Clarity via 6 perguntas (por que existimos? como comportamos? o que fazemos?...)', '3 H\'s: Humble, Hungry, Smart (pra contratacao)', 'Healthy beats smart, every time'],
+    entregavel: 'Diagnostico de disfuncao + check das 6 perguntas + avaliacao 3H.',
+    base: 'The Five Dysfunctions of a Team. The Advantage. The Ideal Team Player.',
+    aciona: ['Acionado pelo Board Chair em reunioes improdutivas, conflito entre areas, contratacao'] },
+
+  'derek-sivers': { name: 'Derek Sivers', avatar: 'DS', squad: 'Advisory Board', status: 'done',
+    resumo: 'Fundou CD Baby (1998). Vendeu por US$22M e doou tudo. Autor de Anything You Want, Hell Yeah or No. Contrarian radical.',
+    faz: ['Hell Yeah or No: toda oportunidade passa pelo filtro (meio legal = NAO)', 'Make Business SIMPLER, nao maior', 'Contrarian Common Sense: questionar o que "todos concordam"', 'Standard Pace is for Chumps (definir proprio ritmo)', '"What\'s obvious to you is amazing to others"'],
+    entregavel: 'Filtro hell yeah + simplificacao + ritmo proprio.',
+    base: 'CD Baby case. Livros curtos aforisticos.',
+    aciona: ['Acionado pelo Board Chair em sobrecarga de decisoes e pressao pra adicionar produto'] },
+
+  'yvon-chouinard': { name: 'Yvon Chouinard', avatar: 'YC', squad: 'Advisory Board', status: 'done',
+    resumo: 'Fundou Patagonia (1973). Em 2022 doou a empresa inteira (US$3B) pra combater mudanca climatica. Tese: empresa existe pra causar impacto positivo. Lucro e consequencia.',
+    faz: ['3 mandamentos: melhor produto + sem dano desnecessario + resolver crise ambiental', 'Missao antes de crescimento — sem missao, e commodity', 'Let My People Go Surfing: autonomia da equipe', '1% for the Planet (da RECEITA, nao lucro)', '"Profit is how you know you\'re doing it right"'],
+    entregavel: 'Analise de missao + check de dano desnecessario + legado 50 anos.',
+    base: 'Patagonia case. Let My People Go Surfing.',
+    aciona: ['Acionado pelo Board Chair em identidade de marca, politica de trabalho, parcerias que testam valores'] },
+
   'board-chair': { name: 'Board Chair', avatar: '👔', squad: 'Advisory Board', status: 'done',
     resumo: 'Presidente do board. NAO da conselho direto — diagnostica o dilema dos socios em 4 perguntas e seleciona 1-2 conselheiros ideais (Dalio, Munger, Thiel, Sinek, Brene, etc.) pra responder.',
     faz: ['Diagnostica dilema em 4 perguntas (tipo, escala, natureza, pedido)', 'Seleciona 1-2 conselheiros com justificativa', 'Mantem estilo de cada conselheiro ao responder', 'Entrega deliberacao estruturada com proximo passo concreto', 'Registra deliberacoes no cerebro (auditavel)'],
