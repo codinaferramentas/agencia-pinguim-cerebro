@@ -294,9 +294,8 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   padding-bottom: 26px;
 }
 
-.app.with-subnav {
-  grid-template-columns: 240px 260px 1fr;
-}
+/* Subnav MODO SUBSTITUIÇÃO — esconde a nav principal e o subnav ocupa o slot */
+.app.with-subnav .nav { display: none; }
 
 /* =====================================================================
    NAV LATERAL
@@ -380,8 +379,8 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
 
 .nav-item:hover { background: var(--surface-3); color: var(--fg); }
 .nav-item.active {
-  background: rgba(232, 92, 0, 0.12);
-  color: var(--pc);
+  background: var(--surface-3);
+  color: var(--fg-title);
   font-weight: 600;
 }
 .nav-item.active .nav-icon { color: var(--pc); }
@@ -455,31 +454,41 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   top: 0;
   height: 100vh;
   overflow-y: auto;
+  width: 240px;
+  grid-column: 1;
+  grid-row: 1;
+  padding: 1rem 0.625rem 1.25rem;
 }
 .app.with-subnav .subnav { display: flex; }
 
-.subnav-header {
+.subnav-back-row {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  padding: 1rem 0.875rem 0.875rem;
-  border-bottom: 1px solid var(--border-subtle);
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  border-radius: var(--r-md);
+  transition: background .15s;
+  margin: 0 0 0.5rem;
+  color: var(--fg-muted);
+  min-height: 32px;
 }
+.subnav-back-row:hover { background: var(--surface-3); color: var(--fg); }
+.subnav-back-row:hover .subnav-back-label { color: var(--fg-title); }
 
-.subnav-back {
-  width: 26px;
-  height: 26px;
+.subnav-back-icon {
+  width: 22px;
+  height: 22px;
   display: grid;
   place-items: center;
-  border-radius: var(--r-md);
-  color: var(--fg-muted);
   font-size: 1.125rem;
   line-height: 1;
-  transition: background .15s, color .15s;
+  color: var(--fg-dim);
 }
-.subnav-back:hover { background: var(--surface-3); color: var(--fg); }
 
-.subnav-title {
+.subnav-back-label {
   font-family: var(--font-heading);
   font-weight: 600;
   font-size: 0.8125rem;
@@ -488,7 +497,6 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
 }
 
 .subnav-body {
-  padding: 0.625rem 0.5rem 1rem;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -517,9 +525,9 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
 }
 .subnav-item:hover { background: var(--surface-3); color: var(--fg); }
 .subnav-item.active {
-  background: rgba(232, 92, 0, 0.12);
-  color: var(--pc);
-  font-weight: 500;
+  background: var(--surface-3);
+  color: var(--fg-title);
+  font-weight: 600;
 }
 
 .subnav-item .subnav-dot {

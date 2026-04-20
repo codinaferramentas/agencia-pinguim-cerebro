@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mission Control — Pinguim</title>
-<link rel="stylesheet" href="css/style.css?v=20260420e">
+<link rel="stylesheet" href="css/style.css?v=20260420f">
 </head>
 <body>
 <div class="app">
@@ -90,12 +90,19 @@
     </div>
   </nav>
 
-  <!-- Sub-sidebar contextual (só aparece em itens com has-sub) -->
+  <!-- Sub-sidebar contextual — SUBSTITUI a nav principal (não empilha) -->
   <aside class="subnav" id="subnav" aria-hidden="true">
-    <div class="subnav-header">
-      <button class="subnav-back" id="subnav-back" aria-label="Voltar">‹</button>
-      <div class="subnav-title" id="subnav-title">—</div>
+    <div class="nav-brand">
+      <div class="nav-brand-icon">P</div>
+      <div>
+        <div class="nav-brand-title">Pinguim</div>
+        <div class="nav-brand-subtitle">Mission Control</div>
+      </div>
     </div>
+    <button class="subnav-back-row" id="subnav-back" aria-label="Voltar">
+      <span class="subnav-back-icon">‹</span>
+      <span class="subnav-back-label" id="subnav-title">—</span>
+    </button>
     <div class="subnav-body" id="subnav-body"></div>
   </aside>
 
@@ -144,7 +151,7 @@
 
 <!-- Scripts (carregados em ordem de dependência) -->
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script type="module" src="js/sb-client.js?v=20260420e"></script>
-<script type="module" src="js/app.js?v=20260420e"></script>
+<script type="module" src="js/sb-client.js?v=20260420f"></script>
+<script type="module" src="js/app.js?v=20260420f"></script>
 </body>
 </html>
