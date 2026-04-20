@@ -2,18 +2,24 @@
    Não é D3 completo, mas entrega o visual: nó central (produto) + nós por tipo + linhas conectando.
 */
 
+// Cores lidas dos tokens CSS — fonte única de verdade no :root
+// Brad: "Purga todo rgba(232,92,0,...) hardcoded. Tenant muda --pc e tudo segue."
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#71717A';
+}
+
 const CORES_TIPO = {
-  aula:          '#E85C00',
-  pagina_venda:  '#4f8cff',
-  persona:       '#EAB308',
-  objecao:       '#8b5cf6',
-  depoimento:    '#22c55e',
-  sacada:        '#FB923C',
-  externo:       '#71717A',
-  csv:           '#06b6d4',
-  pitch:         '#ec4899',
-  faq:           '#A1A1AA',
-  outro:         '#52525B'
+  aula:          cssVar('--peca-aula'),
+  pagina_venda:  cssVar('--peca-pagina-venda'),
+  persona:       cssVar('--peca-persona'),
+  objecao:       cssVar('--peca-objecao'),
+  depoimento:    cssVar('--peca-depoimento'),
+  sacada:        cssVar('--peca-sacada'),
+  externo:       cssVar('--peca-externo'),
+  csv:           cssVar('--peca-csv'),
+  pitch:         cssVar('--peca-pitch'),
+  faq:           cssVar('--peca-faq'),
+  outro:         cssVar('--peca-outro')
 };
 
 const LABEL_TIPO = {
@@ -82,7 +88,7 @@ export function renderGrafo(container, { produto, pecas }, onNodeClick) {
     l.setAttribute('y1', CENTER.y);
     l.setAttribute('x2', n.x);
     l.setAttribute('y2', n.y);
-    l.setAttribute('stroke', '#2A2A2A');
+    l.setAttribute('stroke', cssVar('--edge-default'));
     l.setAttribute('stroke-width', '1');
     l.setAttribute('opacity', '0.55');
     gEdges.appendChild(l);
@@ -103,7 +109,7 @@ export function renderGrafo(container, { produto, pecas }, onNodeClick) {
         l.setAttribute('y1', a.y);
         l.setAttribute('x2', b.x);
         l.setAttribute('y2', b.y);
-        l.setAttribute('stroke', '#E85C00');
+        l.setAttribute('stroke', cssVar('--edge-animated'));
         l.setAttribute('stroke-width', '1');
         l.setAttribute('opacity', '0.22');
         l.setAttribute('stroke-dasharray', '3 3');
@@ -119,8 +125,8 @@ export function renderGrafo(container, { produto, pecas }, onNodeClick) {
   centerCircle.setAttribute('cx', CENTER.x);
   centerCircle.setAttribute('cy', CENTER.y);
   centerCircle.setAttribute('r', 38);
-  centerCircle.setAttribute('fill', '#E85C00');
-  centerCircle.setAttribute('stroke', '#FAFAFA');
+  centerCircle.setAttribute('fill', cssVar('--pc'));
+  centerCircle.setAttribute('stroke', cssVar('--surface-2'));
   centerCircle.setAttribute('stroke-width', '2');
   centerCircle.setAttribute('filter', 'url(#glow)');
   centerG.appendChild(centerCircle);
@@ -136,7 +142,7 @@ export function renderGrafo(container, { produto, pecas }, onNodeClick) {
   centerLabel.setAttribute('y', CENTER.y + 58);
   centerLabel.setAttribute('text-anchor', 'middle');
   centerLabel.setAttribute('font-size', '12');
-  centerLabel.setAttribute('fill', '#FAFAFA');
+  centerLabel.setAttribute('fill', cssVar('--pc-on'));
   centerLabel.setAttribute('font-family', 'Plus Jakarta Sans, sans-serif');
   centerLabel.setAttribute('font-weight', '800');
   centerLabel.textContent = produto.nome || '—';
@@ -158,7 +164,7 @@ export function renderGrafo(container, { produto, pecas }, onNodeClick) {
     const c = document.createElementNS(svgNS, 'circle');
     c.setAttribute('r', n.size);
     c.setAttribute('fill', CORES_TIPO[n.peca.tipo] || '#71717A');
-    c.setAttribute('stroke', '#1A1A1A');
+    c.setAttribute('stroke', cssVar('--surface-2'));
     c.setAttribute('stroke-width', '1.5');
     g.appendChild(c);
 
@@ -169,11 +175,11 @@ export function renderGrafo(container, { produto, pecas }, onNodeClick) {
 
     g.addEventListener('click', () => onNodeClick?.(n.peca));
     g.addEventListener('mouseenter', () => {
-      c.setAttribute('stroke', '#FAFAFA');
+      c.setAttribute('stroke', cssVar('--fg-title'));
       halo.setAttribute('opacity', '0.5');
     });
     g.addEventListener('mouseleave', () => {
-      c.setAttribute('stroke', '#1A1A1A');
+      c.setAttribute('stroke', cssVar('--surface-2'));
       halo.setAttribute('opacity', '0.2');
     });
 

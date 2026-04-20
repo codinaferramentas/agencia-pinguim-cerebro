@@ -104,8 +104,6 @@ async function atualizarStatusbar() {
     $('#sb-tasks').textContent = '?';
   }
 
-  $('#sb-uptime').textContent = 'V0';
-
   function updateHora() {
     $('#sb-hora').textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
