@@ -9,7 +9,7 @@
 <body>
 <div class="app">
 
-  <!-- Sidebar de navegação -->
+  <!-- Sidebar de navegação (18 itens agrupados) -->
   <nav class="nav">
     <div class="nav-brand">
       <div class="nav-brand-icon">P</div>
@@ -20,53 +20,120 @@
     </div>
 
     <div class="nav-section">Visão</div>
-    <div class="nav-item active" data-page="operacao">
-      <span class="nav-icon">◉</span>
-      <span>Operação</span>
+    <div class="nav-item active" data-page="home">
+      <span class="nav-icon">⌂</span><span>Home</span>
     </div>
-    <div class="nav-item" data-page="mapa">
-      <span class="nav-icon">▤</span>
-      <span>Mapa</span>
+    <div class="nav-item" data-page="cerebros">
+      <span class="nav-icon">⚛</span><span>Cérebros</span>
+    </div>
+    <div class="nav-item" data-page="agentes">
+      <span class="nav-icon">◉</span><span>Agentes</span>
     </div>
     <div class="nav-item" data-page="squads">
-      <span class="nav-icon">▦</span>
-      <span>Squads</span>
+      <span class="nav-icon">▦</span><span>Squads</span>
+    </div>
+    <div class="nav-item" data-page="operacao">
+      <span class="nav-icon">⚡</span><span>Operação</span>
     </div>
 
-    <div class="nav-section">Planejamento</div>
-    <div class="nav-item" data-page="roadmap">
-      <span class="nav-icon">▸</span>
-      <span>Roadmap</span>
+    <div class="nav-section">Produção</div>
+    <div class="nav-item stub" data-page="conteudo">
+      <span class="nav-icon">✎</span><span>Conteúdo</span>
     </div>
-    <div class="nav-item" data-page="evolucao">
-      <span class="nav-icon">↗</span>
-      <span>Evolução</span>
+    <div class="nav-item stub" data-page="funis">
+      <span class="nav-icon">⇝</span><span>Funis</span>
+    </div>
+    <div class="nav-item v2 stub" data-page="trafego">
+      <span class="nav-icon">↗</span><span>Tráfego</span>
+    </div>
+    <div class="nav-item v2 stub" data-page="vendas">
+      <span class="nav-icon">$</span><span>Vendas / CRM</span>
+    </div>
+    <div class="nav-item stub" data-page="suporte">
+      <span class="nav-icon">♥</span><span>Suporte</span>
     </div>
 
-    <div class="nav-section">Saúde</div>
+    <div class="nav-section">Sistema</div>
+    <div class="nav-item" data-page="crons">
+      <span class="nav-icon">◴</span><span>Crons</span>
+    </div>
+    <div class="nav-item" data-page="skills">
+      <span class="nav-icon">✦</span><span>Skills</span>
+    </div>
+    <div class="nav-item stub" data-page="biblioteca">
+      <span class="nav-icon">▤</span><span>Biblioteca</span>
+    </div>
     <div class="nav-item" data-page="qualidade">
-      <span class="nav-icon">♥</span>
-      <span>Qualidade</span>
+      <span class="nav-icon">♥</span><span>Qualidade</span>
+    </div>
+    <div class="nav-item stub" data-page="seguranca">
+      <span class="nav-icon">⛊</span><span>Segurança</span>
+    </div>
+    <div class="nav-item stub" data-page="debug">
+      <span class="nav-icon">✕</span><span>Debug</span>
+    </div>
+
+    <div class="nav-section">Estratégia</div>
+    <div class="nav-item" data-page="mapa">
+      <span class="nav-icon">▥</span><span>Mapa</span>
+    </div>
+    <div class="nav-item" data-page="roadmap">
+      <span class="nav-icon">▸</span><span>Roadmap</span>
     </div>
 
     <div class="nav-footer">
-      <div>V0 · Mockup</div>
-      <div>Dados fake · Sem Supabase</div>
+      <div id="nav-env-badge">V0 · Carregando…</div>
+      <div id="nav-env-hint">mission-control.local</div>
     </div>
   </nav>
 
   <!-- Conteúdo -->
   <main class="main">
-    <section class="page active" id="page-operacao"></section>
-    <section class="page" id="page-mapa"></section>
+    <section class="page active" id="page-home"></section>
+    <section class="page" id="page-cerebros"></section>
+    <section class="page" id="page-agentes"></section>
     <section class="page" id="page-squads"></section>
-    <section class="page" id="page-roadmap"></section>
-    <section class="page" id="page-evolucao"></section>
+    <section class="page" id="page-operacao"></section>
+    <section class="page" id="page-conteudo"></section>
+    <section class="page" id="page-funis"></section>
+    <section class="page" id="page-trafego"></section>
+    <section class="page" id="page-vendas"></section>
+    <section class="page" id="page-suporte"></section>
+    <section class="page" id="page-crons"></section>
+    <section class="page" id="page-skills"></section>
+    <section class="page" id="page-biblioteca"></section>
     <section class="page" id="page-qualidade"></section>
+    <section class="page" id="page-seguranca"></section>
+    <section class="page" id="page-debug"></section>
+    <section class="page" id="page-mapa"></section>
+    <section class="page" id="page-roadmap"></section>
   </main>
 
+  <!-- Drawer global (usado por Cérebros pra detalhe de peça) -->
+  <aside class="drawer" id="drawer">
+    <div class="drawer-header">
+      <strong id="drawer-title" style="font-family:var(--font-heading);font-size:.9375rem">—</strong>
+      <button class="drawer-close" id="drawer-close" aria-label="Fechar">×</button>
+    </div>
+    <div class="drawer-body" id="drawer-body"></div>
+  </aside>
 </div>
 
-<script src="js/app.js"></script>
+<!-- Barra de status inferior -->
+<div class="statusbar">
+  <div class="sb-item"><b>MODO</b><span id="sb-modo">—</span></div>
+  <div class="sb-item"><b>DB</b><span id="sb-db">—</span></div>
+  <div class="sb-item"><b>CÉREBROS</b><span id="sb-cerebros">—</span></div>
+  <div class="sb-item"><b>AGENTES</b><span id="sb-agentes">—</span></div>
+  <div class="sb-item"><b>TASKS ATIVAS</b><span id="sb-tasks">—</span></div>
+  <div class="sb-spacer"></div>
+  <div class="sb-item"><b>UPTIME</b><span id="sb-uptime">—</span></div>
+  <div class="sb-item"><span id="sb-hora">—</span></div>
+</div>
+
+<!-- Scripts (carregados em ordem de dependência) -->
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script type="module" src="js/sb-client.js"></script>
+<script type="module" src="js/app.js"></script>
 </body>
 </html>

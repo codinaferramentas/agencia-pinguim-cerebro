@@ -1083,3 +1083,629 @@ input::placeholder, textarea::placeholder { color: var(--fg-muted); opacity: 1; 
   .agents-sidebar, .feed { max-height: 320px; }
   .pipeline, .quali-grid { grid-template-columns: 1fr; }
 }
+
+/* =====================================================================
+   V2 — NAV agrupado + barra de status inferior + novas telas
+   (adicionado em 2026-04-20, preserva o V0 acima)
+   ===================================================================== */
+
+/* Barra de status inferior (estilo Dona System) */
+.statusbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: 26px;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0 1rem;
+  font-size: 0.6875rem;
+  color: var(--fg-dim);
+  font-family: ui-monospace, 'SF Mono', monospace;
+  z-index: 50;
+}
+.statusbar .sb-item { display: flex; align-items: center; gap: 0.375rem; }
+.statusbar .sb-item b { color: var(--fg-muted); font-weight: 600; }
+.statusbar .sb-spacer { flex: 1; }
+.app { padding-bottom: 26px; }
+
+.nav .nav-item.stub { opacity: 0.45; cursor: not-allowed; }
+.nav .nav-item.stub:hover { background: transparent; color: var(--fg-muted); }
+.nav .nav-item.stub::after {
+  content: 'v1';
+  font-size: 0.5625rem;
+  margin-left: auto;
+  padding: 0 0.375rem;
+  background: var(--border-strong);
+  color: var(--fg-dim);
+  border-radius: var(--r-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.nav .nav-item.v2.stub::after { content: 'v2'; }
+
+/* =====================================================================
+   TELA HOME
+   ===================================================================== */
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.home-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 1.25rem;
+  position: relative;
+}
+.home-card h3 {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-muted);
+  margin-bottom: 0.75rem;
+}
+.home-card .big {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.home-card .lbl {
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+  margin-top: 0.375rem;
+}
+.home-card-link {
+  margin-top: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--brand);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* =====================================================================
+   TELA CEREBROS - catalogo de cards
+   ===================================================================== */
+.cerebros-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.cerebros-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+}
+.cerebro-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: border-color .15s, transform .08s;
+  position: relative;
+  overflow: hidden;
+}
+.cerebro-card:hover { border-color: var(--brand); }
+.cerebro-card:active { transform: translateY(1px); }
+.cerebro-card.featured {
+  border-color: var(--brand);
+  background: linear-gradient(135deg, rgba(232,92,0,0.08), var(--bg-elevated));
+}
+.cerebro-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  margin-bottom: 1rem;
+}
+.cerebro-emoji {
+  font-size: 2rem;
+  line-height: 1;
+}
+.cerebro-nome {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 1.125rem;
+  letter-spacing: -0.01em;
+}
+.cerebro-desc {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  margin-top: 2px;
+}
+
+.preenchimento-wrap { margin-bottom: 1rem; }
+.preenchimento-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.6875rem;
+  color: var(--fg-dim);
+  margin-bottom: 0.375rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+.preenchimento-label strong { color: var(--brand); font-size: 0.8125rem; }
+.preenchimento-bar {
+  height: 8px;
+  background: var(--bg);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.preenchimento-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--brand), var(--brand-300));
+  border-radius: 999px;
+  transition: width .3s;
+}
+
+.tipos-mini {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.375rem;
+  margin-bottom: 1rem;
+}
+.tipo-item {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 0.5rem 0.25rem;
+  text-align: center;
+}
+.tipo-num {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 0.9375rem;
+  color: var(--fg);
+  line-height: 1;
+}
+.tipo-icon {
+  font-size: 0.875rem;
+  margin-bottom: 2px;
+  opacity: .7;
+}
+.tipo-label {
+  font-size: 0.5625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-dim);
+  margin-top: 2px;
+}
+
+.cerebro-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.cerebro-card-badges {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+.badge-fonte {
+  font-size: 0.5625rem;
+  padding: 0.125rem 0.4375rem;
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+.cerebro-atualizacao {
+  font-size: 0.6875rem;
+  color: var(--fg-dim);
+}
+.cerebro-atualizacao.recente { color: var(--status-em-producao); }
+.cerebro-growth {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.6875rem;
+  color: var(--status-em-producao);
+  font-weight: 600;
+}
+
+.btn-add-produto {
+  background: var(--bg-elevated);
+  border: 2px dashed var(--border-strong);
+  color: var(--fg-muted);
+  padding: 1.25rem;
+  border-radius: var(--r-xl);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 200px;
+  transition: all .15s;
+}
+.btn-add-produto:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: var(--bg-hover);
+}
+
+/* =====================================================================
+   TELA CEREBRO DETALHADO
+   ===================================================================== */
+.cerebro-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.cerebro-detail-header {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.cerebro-detail-header .cerebro-emoji { font-size: 3rem; }
+.cerebro-detail-header .cerebro-nome { font-size: 1.5rem; }
+.cerebro-detail-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.view-toggle {
+  display: flex;
+  gap: 0.25rem;
+  background: var(--bg);
+  padding: 0.25rem;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  margin-bottom: 1rem;
+  width: fit-content;
+}
+.view-toggle button {
+  padding: 0.4375rem 0.875rem;
+  border-radius: var(--r-md);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--fg-muted);
+  transition: all .15s;
+}
+.view-toggle button.active {
+  background: var(--brand);
+  color: #fff;
+}
+.view-toggle button:not(.active):hover { background: var(--bg-hover); color: var(--fg); }
+
+.grafo-container {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  height: 560px;
+  position: relative;
+  overflow: hidden;
+}
+.grafo-svg { width: 100%; height: 100%; display: block; cursor: grab; }
+.grafo-svg:active { cursor: grabbing; }
+.grafo-legend {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  background: rgba(26,26,26,0.92);
+  backdrop-filter: blur(4px);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 0.625rem 0.875rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  font-size: 0.6875rem;
+}
+.grafo-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--fg-muted);
+}
+.grafo-legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+.drawer {
+  position: fixed;
+  right: 0; top: 0; bottom: 26px;
+  width: min(440px, 92vw);
+  background: var(--bg-elevated);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 24px rgba(0,0,0,.4);
+  transform: translateX(100%);
+  transition: transform .22s cubic-bezier(.2,.7,.1,1);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+}
+.drawer.open { transform: translateX(0); }
+.drawer-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.drawer-close {
+  width: 30px; height: 30px;
+  border-radius: var(--r-md);
+  background: var(--bg-hover);
+  color: var(--fg-muted);
+  font-size: 1.125rem;
+  display: grid;
+  place-items: center;
+}
+.drawer-close:hover { background: var(--border-strong); color: var(--fg); }
+.drawer-body { padding: 1.25rem; overflow-y: auto; flex: 1; font-size: 0.875rem; line-height: 1.65; }
+.drawer-body pre { background: var(--bg); padding: 0.75rem; border-radius: var(--r-md); font-size: 0.75rem; white-space: pre-wrap; border: 1px solid var(--border); max-height: 300px; overflow: auto; }
+.drawer-meta {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+}
+.drawer-meta b { color: var(--fg-muted); font-weight: 600; }
+
+.pecas-tabela {
+  width: 100%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  border-collapse: collapse;
+  overflow: hidden;
+}
+.pecas-tabela th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  font-weight: 700;
+}
+.pecas-tabela td {
+  padding: 0.75rem 1rem;
+  font-size: 0.8125rem;
+  border-bottom: 1px solid var(--border);
+}
+.pecas-tabela tr:hover td { background: var(--bg-hover); cursor: pointer; }
+.pecas-tabela tr:last-child td { border-bottom: 0; }
+
+.timeline {
+  position: relative;
+  padding-left: 1.75rem;
+  margin-top: 0.5rem;
+}
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 10px; top: 0; bottom: 0;
+  width: 1px;
+  background: var(--border);
+}
+.timeline-item {
+  position: relative;
+  padding-bottom: 1rem;
+}
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -1.75rem; top: 6px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--brand);
+  border: 2px solid var(--bg);
+}
+.timeline-item h4 { font-size: 0.875rem; font-weight: 600; margin-bottom: 2px; }
+.timeline-item .meta { font-size: 0.6875rem; color: var(--fg-dim); }
+
+/* =====================================================================
+   TELA CRONS
+   ===================================================================== */
+.crons-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.cron-summary-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 1rem 1.25rem;
+}
+.cron-summary-val {
+  font-family: var(--font-heading);
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1;
+  margin-top: 0.5rem;
+}
+.cron-summary-lbl {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+  font-weight: 600;
+}
+
+.crons-lista {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 1rem;
+}
+.cron-row {
+  display: grid;
+  grid-template-columns: auto 2fr 1fr auto auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.75rem;
+  border-radius: var(--r-md);
+  transition: background .15s;
+}
+.cron-row + .cron-row { border-top: 1px solid var(--border); }
+.cron-row:hover { background: var(--bg-hover); }
+.cron-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--fg-dim);
+}
+.cron-row.ativo .cron-dot { background: var(--status-em-producao); }
+.cron-row.pausado .cron-dot { background: var(--status-pausado); }
+.cron-row.erro .cron-dot { background: var(--status-alerta); }
+.cron-info h4 { font-size: 0.875rem; font-weight: 600; }
+.cron-info p { font-size: 0.75rem; color: var(--fg-muted); margin-top: 1px; }
+.cron-sched {
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  background: var(--bg);
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+}
+
+/* =====================================================================
+   TELA SKILLS
+   ===================================================================== */
+.skills-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+.skill-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 1rem 1.125rem;
+  transition: border-color .15s;
+}
+.skill-card:hover { border-color: var(--brand); }
+.skill-card-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.625rem;
+}
+.skill-card h4 {
+  font-family: var(--font-heading);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  flex: 1;
+}
+.skill-versao {
+  font-size: 0.625rem;
+  color: var(--fg-dim);
+  background: var(--bg);
+  padding: 0.125rem 0.4375rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  font-weight: 600;
+  font-family: ui-monospace, monospace;
+}
+.skill-universal-tag {
+  font-size: 0.5625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--brand);
+  background: rgba(232,92,0,0.12);
+  padding: 0.125rem 0.4375rem;
+  border-radius: var(--r-sm);
+  font-weight: 700;
+}
+.skill-desc {
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+  line-height: 1.5;
+  margin-bottom: 0.625rem;
+}
+.skill-cat {
+  font-size: 0.625rem;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+/* =====================================================================
+   STUB - telas em breve (V1/V2)
+   ===================================================================== */
+.stub-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  background: var(--bg-elevated);
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--r-xl);
+  text-align: center;
+  padding: 3rem 2rem;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.stub-screen h2 {
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  color: var(--fg-muted);
+}
+.stub-screen p {
+  font-size: 0.9375rem;
+  color: var(--fg-dim);
+  max-width: 480px;
+  line-height: 1.6;
+}
+.stub-screen .stub-badge {
+  font-size: 0.625rem;
+  color: var(--brand);
+  background: rgba(232,92,0,0.12);
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--r-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  border: 1px solid rgba(232,92,0,0.3);
+}
+
+/* =====================================================================
+   Responsivo
+   ===================================================================== */
+@media (max-width: 1280px) {
+  .crons-grid { grid-template-columns: repeat(2, 1fr); }
+  .tipos-mini { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 768px) {
+  .crons-grid { grid-template-columns: 1fr; }
+  .cron-row { grid-template-columns: auto 1fr; }
+  .cron-row > :nth-child(n+3) { display: none; }
+  .drawer { width: 100%; }
+  .cerebro-detail-header { flex-direction: column; align-items: flex-start; }
+  .cerebro-detail-actions { margin-left: 0; }
+}

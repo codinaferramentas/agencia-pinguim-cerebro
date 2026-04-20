@@ -1,93 +1,195 @@
 # Mission Control — Pinguim
 
-Painel central de gerência do squad de agentes de IA da Agência Pinguim.
+Painel central de gerência da Pinguim: **Cérebros por produto** (Elo, ProAlt, Taurus, Lira, Orion + empresa) + agentes + squads + crons + skills.
 
-Abre em `index.html`. Navega pelas 6 telas. Apresenta pros sócios.
+Inspirado no Dona System (Isis Moreira) e no Second Brain (Bruno Okamoto). Evolução: **1 Cérebro por produto**, não um só.
 
 ---
 
 ## O que é
 
-Painel web que responde em 10 segundos:
+- **Cérebros** — corpo vivo de conhecimento por produto (contexto + skills + rotinas). Os agentes consultam antes de agir.
+- **Operação** — Kanban ao vivo das tasks com sidebar de agentes e live feed.
+- **Squads** — mini-agências por caso de uso (Suporte Operacional, Low Ticket, High Ticket).
+- **Crons** — jobs agendados no Supabase (`pg_cron`). Rotinas contínuas: varrer Discord/WhatsApp, consolidar memória noturna.
+- **Skills** — receitas em Markdown (GSD Mode, Super Powers, criar-desafio-com-referência, etc). Portáveis entre LLMs.
 
-1. **Mapa** — o que existe no universo da Pinguim e o que já está pintado
-2. **Operação** — o que tá acontecendo agora (kanban + live feed)
-3. **Squads** — mini-squads ativos com seus agentes e cards de contrato
-4. **Roadmap** — o que entra agora, depois, e depois de depois
-5. **Evolução** — pipeline de ciclo de vida de agentes
-6. **Qualidade** — latência, acerto, gargalos, alertas
+Menu completo: 18 itens em 4 grupos (Visão, Produção, Sistema, Estratégia). V0 entrega 10 telas funcionais; V1 e V2 aparecem como stubs "em breve".
 
 ---
 
-## Como rodar
+## Stack
 
-O painel usa `fetch()` pra ler JSON local, então precisa de um servidor HTTP (não funciona abrindo `index.html` direto como `file://`).
+- **Backend:** Supabase (PostgreSQL + pg_cron). Schema em `supabase/schema.sql`, seed em `supabase/seed.sql`.
+- **Frontend:** HTML + Vanilla JS (sem framework pra manter simplicidade). Cliente Supabase carregado via CDN.
+- **Deploy:** Vercel (configuração em `vercel.json`).
+- **Scripts:** Node ESM (`.mjs`) pra imports de dados.
+
+---
+
+## Como rodar localmente
+
+### Opção A — offline (fallback, sem Supabase)
 
 ```bash
 cd mission-control
-python -m http.server 7788
-# abre http://localhost:7788
+python -m http.server 7799
+# abrir http://localhost:7799
 ```
 
-Qualquer servidor estático serve (Live Server do VS Code, `npx serve`, etc.).
+Sem variáveis de ambiente definidas, o painel lê os JSONs em `data/` e mostra Cérebros mockados. Útil pra desenvolver UI.
+
+### Opção B — conectado ao Supabase
+
+1. Copie `.env.example` pra `.env` e preencha `SUPABASE_URL` e `SUPABASE_ANON_KEY`.
+2. No Supabase (SQL Editor), rode `supabase/schema.sql` e depois `supabase/seed.sql`.
+3. Injete as env vars no HTML. Em dev local, edite `index.html` adicionando antes dos scripts:
+   ```html
+   <script>
+     window.__ENV__ = {
+       SUPABASE_URL: 'https://seu-projeto.supabase.co',
+       SUPABASE_ANON_KEY: 'eyJ...'
+     };
+   </script>
+   ```
+4. Sirva com qualquer HTTP server e abra.
 
 ---
 
-## Estrutura
+## Como fazer deploy no Vercel
+
+```bash
+cd mission-control
+# pela primeira vez:
+npx vercel
+
+# commits futuros fazem deploy automático se o repo estiver conectado
+```
+
+Defina as mesmas 2 variáveis (`SUPABASE_URL`, `SUPABASE_ANON_KEY`) no dashboard Vercel em Environment Variables. Em produção, injete-as via middleware ou edge function que gera `<script>window.__ENV__=...</script>` dinamicamente.
+
+**Simplificação V0:** commite um arquivo `config.js` local (não-versionado) que define `window.__ENV__`. Menos seguro, mas prático pra demo interna.
+
+---
+
+## Importar dados reais
+
+Após aplicar schema + seed:
+
+### Transcrições do Elo (21 aulas já no repo)
+
+```bash
+cd mission-control
+npm init -y
+npm i @supabase/supabase-js
+node --env-file=.env scripts/import-transcricoes-elo.mjs
+```
+
+### Material do drive do Luiz (Elo + ProAlt)
+
+1. Coloque os arquivos em `mission-control/imports/elo/` e `mission-control/imports/proalt/` (aceita `.md`, `.txt`).
+2. Rode: `node --env-file=.env scripts/import-drive-luiz.mjs`
+
+Os PDFs precisam ser convertidos pra texto antes (usar `pdf-parse` ou manualmente). V1 suporta PDF direto.
+
+---
+
+## Estrutura do repositório
 
 ```
 mission-control/
-├── index.html              # Shell + nav das 6 telas
+├── index.html                     # Shell com menu de 18 itens
+├── README.md                      # este arquivo
+├── AGENT-CARD-TEMPLATE.md         # Padrão de 7 campos por agente
+├── CEREBRO-TEMPLATE.md            # Como montar Cérebro novo
+├── brief-original.md              # Histórico (brief que originou a direção)
+├── .env.example                   # Variáveis de ambiente (template)
+├── .gitignore
+├── vercel.json                    # Config de deploy
 ├── css/
-│   └── style.css           # Tokens do DESIGN_SYSTEM.md (dark + laranja + Jakarta/Inter)
+│   └── style.css                  # Design System aplicado (1700 linhas)
 ├── js/
-│   └── app.js              # Vanilla JS; lê JSON e renderiza as 6 telas
-├── data/                   # V0: JSON fake. V1: substituído por queries Supabase.
-│   ├── agentes.json        # Agentes com card de 7 campos
-│   ├── tasks.json          # Tasks do kanban + live feed
-│   ├── squads.json         # Mini-squads com metas e métricas
-│   └── roadmap.json        # Fases + pipeline de evolução + qualidade
-├── AGENT-CARD-TEMPLATE.md  # Template dos 7 campos que cada agente preenche
-└── README.md
+│   ├── app.js                     # Bootstrap + nav + orquestração
+│   ├── sb-client.js               # Cliente Supabase com fallback JSON
+│   ├── home.js                    # Tela Home (overview)
+│   ├── cerebros.js                # Tela Cérebros (catálogo + detalhe)
+│   ├── grafo.js                   # Grafo SVG dos Cérebros
+│   ├── crons.js                   # Tela Crons
+│   ├── skills.js                  # Tela Skills
+│   └── stubs.js                   # Telas "em breve" (V1/V2)
+├── supabase/
+│   ├── schema.sql                 # DDL — 12 tabelas + triggers + view
+│   └── seed.sql                   # 6 produtos + squads + agentes + skills + crons
+├── scripts/
+│   ├── import-transcricoes-elo.mjs
+│   └── import-drive-luiz.mjs
+├── data/                          # JSONs fake (fallback offline)
+│   ├── agentes.json
+│   ├── tasks.json
+│   ├── squads.json
+│   └── roadmap.json
+├── cerebros/                      # Conteúdo real por produto
+│   ├── pinguim/MAPA.md
+│   ├── elo/MAPA.md + contexto/... (estrutura pronta pra preencher)
+│   ├── proalt/MAPA.md + contexto/...
+│   ├── taurus/MAPA.md
+│   ├── lira/MAPA.md
+│   └── orion/MAPA.md
+├── skills-universais/
+│   ├── gsd-mode.md                # Get Shit Done
+│   ├── super-powers.md            # Plano + validação + proatividade
+│   └── README.md
+└── referencias/
+    └── RESUMOS-VIDEOS.md          # Análise dos 3 vídeos de referência
 ```
 
 ---
 
-## V0 → V1: como a troca pra Supabase funciona
+## Telas (18 itens no menu)
 
-O `app.js` carrega os 4 JSONs via `fetch()`. Pra virar V1:
+### Visão (V0)
+1. **Home** — overview: quantos Cérebros, peças, agentes, tasks, crons.
+2. **Cérebros** — catálogo dos 6 Cérebros com % de preenchimento e mini-gráfico por tipo. Clicar entra na vista detalhada com toggle Grafo / Lista / Timeline.
+3. **Agentes** — catálogo com cards de 7 campos (missão → métrica).
+4. **Squads** — mini-agências + seus agentes.
+5. **Operação** — Kanban ao vivo.
 
-1. Sobe schema equivalente no Supabase (tabelas: `agentes`, `tasks`, `squads`, `roadmap_itens`, `logs_qualidade`)
-2. Troca as 4 chamadas `loadJSON('data/…')` por `supabase.from('…').select()`
-3. UI e layout não mudam
+### Produção (V1/V2 — stubs)
+6. Conteúdo · 7. Funis · 8. Tráfego · 9. Vendas/CRM · 10. Suporte
 
-As chaves dos JSONs foram desenhadas pra mapear 1-pra-1 nas colunas da tabela Supabase — ver `AGENT-CARD-TEMPLATE.md` pra referência dos campos.
+### Sistema
+11. **Crons** (V0) · 12. **Skills** (V0) · 13. Biblioteca (V1) · 14. **Qualidade** (V0) · 15. Segurança (V1) · 16. Debug (V1)
 
----
-
-## Padrão visual
-
-- Dark mode `#121212` / cards `#1A1A1A`
-- Laranja `#E85C00` como identidade (status ativo, focus, logo)
-- **Plus Jakarta Sans** nos títulos e nomes de agente
-- **Inter** no corpo
-- Cards: `rounded-xl` com borda sutil (ring-1 foreground/10)
-- Botões: `rounded-lg` com feedback tátil (`active:translate-y-px`)
-
-Fonte dos tokens: `DESIGN_SYSTEM.md` na raiz do projeto.
-
-Inspiração de layout da tela Operação: print do Mission Control do OpenClaw (Teja) — sidebar de agentes + kanban + live feed.
+### Estratégia (V0)
+17. **Mapa** · 18. **Roadmap**
 
 ---
 
-## Canais de acionamento
+## Decisões de arquitetura
 
-Os agentes são acionados por **Discord, Telegram e WhatsApp** (via OpenClaw). O painel **não é chat** — é gerência.
-
-No V2 o painel ganha ações: editar SOUL de agente, clonar mente, pausar agente. Botões já aparecem nos cards da tela Squads, mas sem lógica implementada no V0.
+- **Crons no Supabase, não no OpenClaw.** Se amanhã trocarmos de ferramenta, rotinas continuam rodando.
+- **Skills em Markdown no git.** Portáveis entre LLMs.
+- **1 Cérebro por produto** (evolução do modelo Second Brain).
+- **Canais multicanal etiquetados por origem.** Discord / WhatsApp / Telegram / upload / expert / externo / CSV.
+- **Curador-agente** classifica entradas automáticas antes de arquivar no Cérebro.
+- **Menu de 18 itens** inspirado no Dona System (Isis Moreira).
+- **Visual:** dark `#121212` + laranja `#E85C00` + Plus Jakarta Sans (títulos) + Inter (corpo).
 
 ---
 
-## Lógica de crescimento
+## Status atual
 
-Resolve dor latente (primeiro: Suporte Operacional Pinguim) → produção → pinta o pedaço do Mapa → próximo squad (Low Ticket) → pinta mais → até cobrir todo o mapa de 30 squads / 211 agentes.
+- ✅ Backend: schema + seed completos
+- ✅ Frontend: 10 telas V0 funcionais
+- ✅ Grafo visual por Cérebro (SVG nativo)
+- ✅ Fallback offline (sem Supabase) pra demo local
+- ✅ Scripts de import (Elo + drive Luiz)
+- ✅ Deploy Vercel configurado
+
+## Próximos passos
+
+1. Aplicar schema/seed no Supabase do André
+2. Importar transcrições e material do drive
+3. Conectar URL Vercel
+4. Demonstrar pros sócios
+5. V1: ativar crons reais quando Pedro liberar OpenClaw
