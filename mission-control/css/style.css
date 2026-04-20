@@ -1,10 +1,10 @@
 /* ==========================================================================
    MISSION CONTROL — PINGUIM
-   Light · Laranja #E85C00 · Plus Jakarta + Inter
+   Dark Vercel-inspired · Laranja #E85C00 · Geist + Geist Mono
    Sistema consolidado após review Rauno + Karri + Brad (2026-04-20)
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap');
 
 /* =====================================================================
    TOKENS — Brad: sistema sólido antes de UI nova
@@ -13,11 +13,11 @@
 :root {
   /* --- Brand (multi-tenant ready: tenant sobrescreve só --pc) --- */
   --pc:              #E85C00;
-  --pc-hover:        #CC4F00;
-  --pc-active:       #A63F00;
-  --pc-subtle:       #FFF7ED;
-  --pc-soft:         #FED7AA;
-  --pc-strong:       #7C2D00;
+  --pc-hover:        #FB923C;
+  --pc-active:       #CC4F00;
+  --pc-subtle:       rgba(232, 92, 0, 0.12);
+  --pc-soft:         rgba(232, 92, 0, 0.20);
+  --pc-strong:       #FB923C;
   --pc-on:           #FFFFFF;
 
   --pc-50:  #FFF7ED;
@@ -42,55 +42,56 @@
   --brand-700:      var(--pc-700);
   --brand-950:      var(--pc-50);
 
-  /* --- Surfaces --- */
-  --surface-1:       #FAFAFA;
-  --surface-2:       #FFFFFF;
-  --surface-3:       #F4F4F5;
-  --surface-sunken:  #F4F4F5;
-  --surface-overlay: rgba(255,255,255,0.96);
+  /* --- Surfaces (Vercel-inspired dark) --- */
+  --surface-1:       #000000;   /* página */
+  --surface-2:       #0A0A0A;   /* cards base */
+  --surface-3:       #111111;   /* cards elevados / hover */
+  --surface-4:       #171717;   /* overlays / menus */
+  --surface-sunken:  #0A0A0A;
+  --surface-overlay: rgba(10,10,10,0.92);
 
   --bg:            var(--surface-1);
   --bg-elevated:   var(--surface-2);
   --bg-hover:      var(--surface-3);
 
-  /* --- Foreground (4 níveis) --- */
-  --fg-title:      #18181B;
-  --fg:            #121212;
-  --fg-muted:      #52525B;
-  --fg-dim:        #71717A;
+  /* --- Foreground (4 níveis Vercel) --- */
+  --fg-title:      #EDEDED;
+  --fg:            #EDEDED;
+  --fg-muted:      #A1A1A1;
+  --fg-dim:        #666666;
   --fg-on-brand:   #FFFFFF;
 
-  /* --- Borders --- */
-  --border:          #E4E4E7;
-  --border-subtle:   #F4F4F5;
-  --border-strong:   #D4D4D8;
+  /* --- Borders (Vercel) --- */
+  --border:          #1F1F1F;   /* gray-alpha-400 */
+  --border-subtle:   #141414;
+  --border-strong:   #2E2E2E;
 
   /* --- Status --- */
-  --success:       #16A34A;
-  --success-bg:    #DCFCE7;
-  --warning:       #D97706;
-  --warning-bg:    #FEF3C7;
-  --danger:        #DC2626;
-  --danger-bg:     #FEE2E2;
-  --info:          #2563EB;
-  --info-bg:       #DBEAFE;
+  --success:       #22C55E;
+  --success-bg:    rgba(34,197,94,0.12);
+  --warning:       #F5A524;
+  --warning-bg:    rgba(245,165,36,0.12);
+  --danger:        #EF4444;
+  --danger-bg:     rgba(239,68,68,0.14);
+  --info:          #3B82F6;
+  --info-bg:       rgba(59,130,246,0.12);
 
-  --status-planejado:    #71717A;
-  --status-em-criacao:   #D97706;
+  --status-planejado:    #A1A1A1;
+  --status-em-criacao:   #F5A524;
   --status-em-teste:     var(--pc);
-  --status-em-producao:  #16A34A;
-  --status-pausado:      #CA8A04;
-  --status-alerta:       #DC2626;
+  --status-em-producao:  #22C55E;
+  --status-pausado:      #EAB308;
+  --status-alerta:       #EF4444;
 
-  --prio-alta:     #DC2626;
-  --prio-normal:   #52525B;
-  --prio-baixa:    #A1A1AA;
+  --prio-alta:     #EF4444;
+  --prio-normal:   #A1A1A1;
+  --prio-baixa:    #666666;
 
-  /* --- Elevation --- */
-  --elev-1: 0 1px 2px rgba(16, 24, 40, 0.04);
-  --elev-2: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
-  --elev-3: 0 4px 12px rgba(16, 24, 40, 0.08), 0 2px 4px rgba(16, 24, 40, 0.04);
-  --elev-drawer: -8px 0 24px rgba(16, 24, 40, 0.08);
+  /* --- Elevation (sombras funcionam menos em dark — uso borders) --- */
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --elev-2: 0 2px 6px rgba(0, 0, 0, 0.4);
+  --elev-3: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --elev-drawer: -8px 0 32px rgba(0, 0, 0, 0.6);
 
   --shadow-sm: var(--elev-1);
   --shadow-md: var(--elev-2);
@@ -105,38 +106,39 @@
   --r-xl:  14px;
   --r-2xl: 18px;
 
-  /* --- Fontes --- */
-  --font-body:    'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-heading: 'Plus Jakarta Sans', var(--font-body);
+  /* --- Fontes (Geist da Vercel) --- */
+  --font-body:    'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-heading: 'Geist', var(--font-body);
+  --font-mono:    'Geist Mono', ui-monospace, Menlo, monospace;
 
-  /* --- Cores por tipo de peça do Cérebro --- */
-  --peca-aula:              var(--pc);
-  --peca-aula-bg:           var(--pc-50);
-  --peca-pagina-venda:      #2563EB;
-  --peca-pagina-venda-bg:   #DBEAFE;
-  --peca-persona:           #CA8A04;
-  --peca-persona-bg:        #FEF9C3;
-  --peca-objecao:           #7C3AED;
-  --peca-objecao-bg:        #EDE9FE;
-  --peca-depoimento:        #16A34A;
-  --peca-depoimento-bg:     #DCFCE7;
-  --peca-sacada:            #EA580C;
-  --peca-sacada-bg:         #FFEDD5;
-  --peca-externo:           #64748B;
-  --peca-externo-bg:        #F1F5F9;
-  --peca-csv:               #0891B2;
-  --peca-csv-bg:            #CFFAFE;
-  --peca-pitch:             #DB2777;
-  --peca-pitch-bg:          #FCE7F3;
-  --peca-faq:               #78716C;
-  --peca-faq-bg:            #F5F5F4;
-  --peca-outro:             #71717A;
-  --peca-outro-bg:          #F4F4F5;
+  /* --- Cores por tipo de FONTE do Cérebro (dark-friendly) --- */
+  --peca-aula:              #F5A524;
+  --peca-aula-bg:           rgba(245, 165, 36, 0.12);
+  --peca-pagina-venda:      #3B82F6;
+  --peca-pagina-venda-bg:   rgba(59, 130, 246, 0.12);
+  --peca-persona:           #EAB308;
+  --peca-persona-bg:        rgba(234, 179, 8, 0.12);
+  --peca-objecao:           #A855F7;
+  --peca-objecao-bg:        rgba(168, 85, 247, 0.12);
+  --peca-depoimento:        #22C55E;
+  --peca-depoimento-bg:     rgba(34, 197, 94, 0.12);
+  --peca-sacada:            var(--pc);
+  --peca-sacada-bg:         rgba(232, 92, 0, 0.15);
+  --peca-externo:           #94A3B8;
+  --peca-externo-bg:        rgba(148, 163, 184, 0.12);
+  --peca-csv:               #06B6D4;
+  --peca-csv-bg:            rgba(6, 182, 212, 0.12);
+  --peca-pitch:             #EC4899;
+  --peca-pitch-bg:          rgba(236, 72, 153, 0.12);
+  --peca-faq:               #A8A29E;
+  --peca-faq-bg:            rgba(168, 162, 158, 0.12);
+  --peca-outro:             #737373;
+  --peca-outro-bg:          rgba(115, 115, 115, 0.12);
 
   /* Grafo edges */
-  --edge-default:    #D4D4D8;
+  --edge-default:    #2E2E2E;
   --edge-animated:   var(--pc);
-  --edge-subtle:     rgba(0,0,0,0.06);
+  --edge-subtle:     rgba(255,255,255,0.06);
 }
 
 /* =====================================================================
@@ -188,8 +190,8 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #D4D4D8; border-radius: var(--r-md); }
-::-webkit-scrollbar-thumb:hover { background: #A1A1AA; }
+::-webkit-scrollbar-thumb { background: #2E2E2E; border-radius: var(--r-md); }
+::-webkit-scrollbar-thumb:hover { background: #444444; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -374,8 +376,8 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
 
 .nav-item:hover { background: var(--surface-3); color: var(--fg); }
 .nav-item.active {
-  background: var(--pc-subtle);
-  color: var(--pc-strong);
+  background: rgba(232, 92, 0, 0.12);
+  color: var(--pc);
   font-weight: 600;
 }
 .nav-item.active .nav-icon { color: var(--pc); }
@@ -481,15 +483,15 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   background: currentColor;
 }
 
-.badge-planejado   { color: #52525B;          background: #F4F4F5; }
-.badge-em_criacao  { color: #9A3412;          background: #FFEDD5; }
-.badge-em_teste    { color: var(--pc-strong); background: var(--pc-subtle); }
-.badge-em_producao { color: #166534;          background: #DCFCE7; }
-.badge-pausado     { color: #854D0E;          background: #FEF3C7; }
-.badge-alerta      { color: #991B1B;          background: #FEE2E2; }
+.badge-planejado   { color: #A1A1A1;     background: rgba(161,161,161,0.12); }
+.badge-em_criacao  { color: #F5A524;     background: rgba(245,165,36,0.12); }
+.badge-em_teste    { color: #FB923C;     background: rgba(232,92,0,0.15); }
+.badge-em_producao { color: #22C55E;     background: rgba(34,197,94,0.12); }
+.badge-pausado     { color: #EAB308;     background: rgba(234,179,8,0.12); }
+.badge-alerta      { color: #EF4444;     background: rgba(239,68,68,0.14); }
 
-.badge-alta   { color: #991B1B; background: #FEE2E2; }
-.badge-normal { color: #52525B; background: #F4F4F5; }
+.badge-alta   { color: #EF4444; background: rgba(239,68,68,0.14); }
+.badge-normal { color: #A1A1A1; background: rgba(161,161,161,0.12); }
 
 /* =====================================================================
    BOTÕES
@@ -697,7 +699,7 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
 }
 .task-card:active { transform: translateY(1px); }
 
-.task-card.alerta { border-color: #FCA5A5; background: #FEF2F2; }
+.task-card.alerta { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.08); }
 .task-card.aguardando_aprovacao {
   border-color: var(--pc-300);
   background: var(--pc-subtle);
