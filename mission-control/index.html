@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mission Control — Pinguim</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- Sidebar de navegação -->
+  <nav class="nav">
+    <div class="nav-brand">
+      <div class="nav-brand-icon">P</div>
+      <div>
+        <div class="nav-brand-title">Pinguim</div>
+        <div class="nav-brand-subtitle">Mission Control</div>
+      </div>
+    </div>
+
+    <div class="nav-section">Visão</div>
+    <div class="nav-item active" data-page="operacao">
+      <span class="nav-icon">◉</span>
+      <span>Operação</span>
+    </div>
+    <div class="nav-item" data-page="mapa">
+      <span class="nav-icon">▤</span>
+      <span>Mapa</span>
+    </div>
+    <div class="nav-item" data-page="squads">
+      <span class="nav-icon">▦</span>
+      <span>Squads</span>
+    </div>
+
+    <div class="nav-section">Planejamento</div>
+    <div class="nav-item" data-page="roadmap">
+      <span class="nav-icon">▸</span>
+      <span>Roadmap</span>
+    </div>
+    <div class="nav-item" data-page="evolucao">
+      <span class="nav-icon">↗</span>
+      <span>Evolução</span>
+    </div>
+
+    <div class="nav-section">Saúde</div>
+    <div class="nav-item" data-page="qualidade">
+      <span class="nav-icon">♥</span>
+      <span>Qualidade</span>
+    </div>
+
+    <div class="nav-footer">
+      <div>V0 · Mockup</div>
+      <div>Dados fake · Sem Supabase</div>
+    </div>
+  </nav>
+
+  <!-- Conteúdo -->
+  <main class="main">
+    <section class="page active" id="page-operacao"></section>
+    <section class="page" id="page-mapa"></section>
+    <section class="page" id="page-squads"></section>
+    <section class="page" id="page-roadmap"></section>
+    <section class="page" id="page-evolucao"></section>
+    <section class="page" id="page-qualidade"></section>
+  </main>
+
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

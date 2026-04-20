@@ -1,0 +1,62 @@
+{
+  "squads": [
+    {
+      "id": "suporte-operacional",
+      "nome": "Suporte Operacional Pinguim",
+      "emoji": "🛟",
+      "caso_de_uso": "Backoffice da equipe Pinguim — checar acesso, validar compra, cadastrar liberação, escalar quando ambíguo.",
+      "status": "em_teste",
+      "prioridade": 1,
+      "agentes_ids": ["roteador", "consultor-hotmart", "consultor-supabase", "propositor"],
+      "dependencias": ["Hotmart API (Pedro)", "Supabase Pinguim (Pedro)", "Canal Discord/Telegram/WhatsApp"],
+      "objetivo": "Reduzir em 80% o tempo que a equipe gasta resolvendo pedidos repetitivos de acesso/pagamento.",
+      "metricas": {
+        "tasks_resolvidas_7d": 47,
+        "sla_medio_minutos": 12,
+        "taxa_aprovacao_humana": 0.93,
+        "custo_medio_task_usd": 0.008
+      }
+    },
+    {
+      "id": "low-ticket",
+      "nome": "Low Ticket Perpétuo",
+      "emoji": "🎯",
+      "caso_de_uso": "Rodar campanhas perpétuas de produtos low ticket — da estratégia à análise pós-campanha.",
+      "status": "planejado",
+      "prioridade": 2,
+      "agentes_ids": ["estrategista-lt", "copy-lt"],
+      "dependencias": ["Meta Ads API (Pedro)", "Squad Suporte Operacional provando modelo"],
+      "objetivo": "Manter funil low ticket rodando 24/7 sem intervenção humana diária.",
+      "metricas": {
+        "tasks_resolvidas_7d": 0,
+        "sla_medio_minutos": null,
+        "taxa_aprovacao_humana": null,
+        "custo_medio_task_usd": null
+      }
+    },
+    {
+      "id": "high-ticket",
+      "nome": "High Ticket",
+      "emoji": "💎",
+      "caso_de_uso": "Funil de aplicação, qualificação, VSL e CS para Lira/Taurus/Orion.",
+      "status": "planejado",
+      "prioridade": 3,
+      "agentes_ids": [],
+      "dependencias": ["Low Ticket em produção"],
+      "objetivo": "Operar funil high ticket end-to-end com IA + humano no closing.",
+      "metricas": {}
+    },
+    {
+      "id": "lancamento-pago",
+      "nome": "Lançamento Pago (Desafio)",
+      "emoji": "🚀",
+      "caso_de_uso": "Mini-agência completa pra rodar qualquer desafio — copy, tráfego, gestão, análise.",
+      "status": "planejado",
+      "prioridade": 4,
+      "agentes_ids": [],
+      "dependencias": ["High Ticket em produção"],
+      "objetivo": "Rodar desafio inteiro (37 dias) com squad autônomo.",
+      "metricas": {}
+    }
+  ]
+}

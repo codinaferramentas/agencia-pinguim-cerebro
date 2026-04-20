@@ -1,0 +1,73 @@
+{
+  "fases": [
+    {
+      "id": "v1",
+      "nome": "V1 — Agora",
+      "descricao": "Mínimo viável em produção: resolve primeira dor e prova o modelo.",
+      "itens": [
+        { "id": "r-001", "capacidade": "Squad Suporte Operacional Pinguim", "status": "em_execucao", "squad_alvo": "suporte-operacional", "previsao": "2 semanas após liberação do Pedro" },
+        { "id": "r-002", "capacidade": "Painel Mission Control — mockup validado", "status": "em_execucao", "squad_alvo": null, "previsao": "esta semana" },
+        { "id": "r-003", "capacidade": "Integração Hotmart API (read)", "status": "bloqueado", "squad_alvo": "suporte-operacional", "previsao": "Depende Pedro" },
+        { "id": "r-004", "capacidade": "Supabase Pinguim schema aplicado", "status": "bloqueado", "squad_alvo": null, "previsao": "Depende Pedro" }
+      ]
+    },
+    {
+      "id": "v2",
+      "nome": "V2 — Próxima onda",
+      "descricao": "Depois do Suporte provar métrica, entram os squads de marketing.",
+      "itens": [
+        { "id": "r-005", "capacidade": "Squad Low Ticket Perpétuo", "status": "priorizado", "squad_alvo": "low-ticket", "previsao": "Após v1 rodar 30 dias" },
+        { "id": "r-006", "capacidade": "Squad High Ticket", "status": "priorizado", "squad_alvo": "high-ticket", "previsao": "Depois de low-ticket" },
+        { "id": "r-007", "capacidade": "Edição/clonagem de agente no painel", "status": "priorizado", "squad_alvo": null, "previsao": "V2" }
+      ]
+    },
+    {
+      "id": "v3",
+      "nome": "V3 — Expansão",
+      "descricao": "Squads auxiliares e departamentos internos.",
+      "itens": [
+        { "id": "r-008", "capacidade": "Squad Lançamento Pago (Desafio)", "status": "backlog", "squad_alvo": "lancamento-pago" },
+        { "id": "r-009", "capacidade": "Squad Financeiro (RH/FinOps/Jurídico)", "status": "backlog", "squad_alvo": null },
+        { "id": "r-010", "capacidade": "Advisory Board com 10 conselheiros", "status": "backlog", "squad_alvo": null }
+      ]
+    },
+    {
+      "id": "visao",
+      "nome": "Visão futura",
+      "descricao": "Capacidades do mapa estratégico que ainda não têm prazo.",
+      "itens": [
+        { "id": "r-011", "capacidade": "Template replicável pros mentorados Dolphin", "status": "backlog" },
+        { "id": "r-012", "capacidade": "Skills cron (relatório diário, heartbeat)", "status": "backlog" },
+        { "id": "r-013", "capacidade": "211 agentes do mapa cobertos 100%", "status": "backlog" }
+      ]
+    }
+  ],
+  "pipeline_evolucao": {
+    "planejado": [
+      { "agente": "Consultor Supabase Pinguim", "squad": "suporte-operacional" },
+      { "agente": "Propositor", "squad": "suporte-operacional" },
+      { "agente": "Estrategista LT", "squad": "low-ticket" },
+      { "agente": "Copy LT", "squad": "low-ticket" }
+    ],
+    "em_criacao": [
+      { "agente": "Consultor Hotmart", "squad": "suporte-operacional" }
+    ],
+    "em_teste": [
+      { "agente": "Roteador", "squad": "suporte-operacional" }
+    ],
+    "em_producao": []
+  },
+  "qualidade": {
+    "top_performers": [
+      { "agente": "Roteador", "taxa_acerto": 0.96, "latencia_p50_ms": 1850 },
+      { "agente": "Consultor Hotmart", "taxa_acerto": 0.91, "latencia_p50_ms": 3200 },
+      { "agente": "Consultor Supabase Pinguim", "taxa_acerto": 0.89, "latencia_p50_ms": 1420 }
+    ],
+    "gargalos": [
+      { "agente": "Consultor Hotmart", "tipo": "latencia", "descricao": "p95 em 8s — Hotmart API lenta em horário de pico" },
+      { "agente": "Propositor", "tipo": "aprovacao", "descricao": "Taxa aprovação humana em 93%, meta é 95% antes de virar autônomo" }
+    ],
+    "retrabalho_semana": 3,
+    "alertas_ativos": 1
+  }
+}
