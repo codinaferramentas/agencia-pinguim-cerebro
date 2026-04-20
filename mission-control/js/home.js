@@ -1,6 +1,6 @@
 /* Tela Home — overview da operação Pinguim */
 
-import { fetchCerebrosCatalogo, fetchOperacaoData, fetchCrons } from './sb-client.js';
+import { fetchCerebrosCatalogo, fetchOperacaoData, fetchCrons } from './sb-client.js?v=20260420c';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);

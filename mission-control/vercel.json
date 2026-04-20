@@ -11,9 +11,15 @@
       ]
     },
     {
-      "source": "/:path*.(js|css|woff|woff2)",
+      "source": "/:path*.(js|css)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=3600, must-revalidate" }
+        { "key": "Cache-Control", "value": "public, max-age=60, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/:path*.(woff|woff2)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=604800, immutable" }
       ]
     }
   ]
