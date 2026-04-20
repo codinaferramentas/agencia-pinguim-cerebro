@@ -2,12 +2,12 @@
    Orquestra o lazy-load das telas.
 */
 
-import { dataMode, fetchOperacaoData, fetchRoadmapData, fetchCerebrosCatalogo } from './sb-client.js?v=20260420c';
-import { renderHome } from './home.js?v=20260420c';
-import { renderCerebros, initDrawer } from './cerebros.js?v=20260420c';
-import { renderCrons } from './crons.js?v=20260420c';
-import { renderSkills } from './skills.js?v=20260420c';
-import { renderStub } from './stubs.js?v=20260420c';
+import { dataMode, fetchOperacaoData, fetchRoadmapData, fetchCerebrosCatalogo } from './sb-client.js?v=20260420d';
+import { renderHome } from './home.js?v=20260420d';
+import { renderCerebros, initDrawer } from './cerebros.js?v=20260420d';
+import { renderCrons } from './crons.js?v=20260420d';
+import { renderSkills } from './skills.js?v=20260420d';
+import { renderStub } from './stubs.js?v=20260420d';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
@@ -79,13 +79,100 @@ async function navegar(pageSlug) {
 function setupNav() {
   $$('.nav-item').forEach(item => {
     item.addEventListener('click', () => {
-      if (item.classList.contains('stub')) {
-        // Stubs ainda navegam, só mostram a tela "em breve"
-      }
       const pageSlug = item.dataset.page;
+      if (item.classList.contains('has-sub')) {
+        abrirSubnav(pageSlug);
+      } else {
+        fecharSubnav();
+      }
       navegar(pageSlug);
     });
   });
+
+  $('#subnav-back')?.addEventListener('click', fecharSubnav);
+}
+
+/* -------- Sub-sidebar contextual (drill-down estilo Vercel) -------- */
+const SUBNAV_CONFIG = {
+  cerebros: {
+    title: 'Cérebros',
+    loader: async () => {
+      const cerebros = await fetchCerebrosCatalogo();
+      return cerebros.map(c => ({
+        id: c.slug || c.id,
+        label: c.nome,
+        meta: (c.preenchimento_pct ?? 0) + '%',
+        emoji: c.emoji || '⚛',
+      }));
+    },
+    onSelect: (id) => {
+      window.dispatchEvent(new CustomEvent('cerebro:select', { detail: { slug: id } }));
+    }
+  },
+  squads: {
+    title: 'Squads',
+    loader: async () => {
+      const op = await fetchOperacaoData();
+      const squads = op.squads || [];
+      return squads.map(s => ({
+        id: s.slug || s.id,
+        label: s.nome,
+        meta: (s.agentes?.length || s.count || 0) + '',
+        emoji: s.emoji || '▦',
+      }));
+    },
+    onSelect: (id) => {
+      window.dispatchEvent(new CustomEvent('squad:select', { detail: { slug: id } }));
+    }
+  },
+};
+
+async function abrirSubnav(pageSlug) {
+  const cfg = SUBNAV_CONFIG[pageSlug];
+  if (!cfg) { fecharSubnav(); return; }
+
+  document.querySelector('.app').classList.add('with-subnav');
+  $('#subnav').setAttribute('aria-hidden', 'false');
+  $('#subnav-title').textContent = cfg.title;
+
+  $$('.nav-item.has-sub').forEach(i => {
+    i.classList.toggle('open', i.dataset.page === pageSlug);
+  });
+
+  const body = $('#subnav-body');
+  body.innerHTML = '<div class="subnav-section">Carregando…</div>';
+
+  try {
+    const items = await cfg.loader();
+    body.innerHTML = '';
+
+    if (items.length === 0) {
+      body.innerHTML = '<div class="subnav-section">Nenhum item</div>';
+      return;
+    }
+
+    items.forEach(it => {
+      const row = el('div', { class: 'subnav-item', data: { id: it.id } }, [
+        el('span', { class: 'nav-icon', style: 'font-size:0.9rem' }, it.emoji || '•'),
+        el('span', { class: 'subnav-label' }, it.label),
+        it.meta ? el('span', { class: 'subnav-meta' }, it.meta) : null,
+      ]);
+      row.addEventListener('click', () => {
+        $$('.subnav-item').forEach(s => s.classList.remove('active'));
+        row.classList.add('active');
+        cfg.onSelect?.(it.id);
+      });
+      body.appendChild(row);
+    });
+  } catch (err) {
+    body.innerHTML = `<div class="subnav-section" style="color:var(--danger)">Erro: ${err.message}</div>`;
+  }
+}
+
+function fecharSubnav() {
+  document.querySelector('.app').classList.remove('with-subnav');
+  $('#subnav').setAttribute('aria-hidden', 'true');
+  $$('.nav-item.has-sub').forEach(i => i.classList.remove('open'));
 }
 
 /* -------- Barra de status -------- */

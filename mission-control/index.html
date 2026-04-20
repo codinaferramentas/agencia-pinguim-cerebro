@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mission Control — Pinguim</title>
-<link rel="stylesheet" href="css/style.css?v=20260420c">
+<link rel="stylesheet" href="css/style.css?v=20260420d">
 </head>
 <body>
 <div class="app">
 
-  <!-- Sidebar de navegação (18 itens agrupados) -->
+  <!-- Sidebar de navegação (flat, estilo Vercel) -->
   <nav class="nav">
     <div class="nav-brand">
       <div class="nav-brand-icon">P</div>
@@ -19,66 +19,69 @@
       </div>
     </div>
 
-    <div class="nav-section">Visão</div>
-    <div class="nav-item active" data-page="home">
-      <span class="nav-icon">⌂</span><span>Home</span>
-    </div>
-    <div class="nav-item" data-page="cerebros">
-      <span class="nav-icon">⚛</span><span>Cérebros</span>
-    </div>
-    <div class="nav-item" data-page="agentes">
-      <span class="nav-icon">◉</span><span>Agentes</span>
-    </div>
-    <div class="nav-item" data-page="squads">
-      <span class="nav-icon">▦</span><span>Squads</span>
-    </div>
-    <div class="nav-item" data-page="operacao">
-      <span class="nav-icon">⚡</span><span>Operação</span>
-    </div>
+    <div class="nav-list">
+      <div class="nav-item active" data-page="home">
+        <span class="nav-icon">⌂</span><span>Home</span>
+      </div>
+      <div class="nav-item has-sub" data-page="cerebros">
+        <span class="nav-icon">⚛</span><span>Cérebros</span>
+        <span class="nav-caret">›</span>
+      </div>
+      <div class="nav-item" data-page="agentes">
+        <span class="nav-icon">◉</span><span>Agentes</span>
+      </div>
+      <div class="nav-item has-sub" data-page="squads">
+        <span class="nav-icon">▦</span><span>Squads</span>
+        <span class="nav-caret">›</span>
+      </div>
+      <div class="nav-item" data-page="operacao">
+        <span class="nav-icon">⚡</span><span>Operação</span>
+      </div>
 
-    <div class="nav-section">Produção</div>
-    <div class="nav-item stub" data-page="conteudo">
-      <span class="nav-icon">✎</span><span>Conteúdo</span>
-    </div>
-    <div class="nav-item stub" data-page="funis">
-      <span class="nav-icon">⇝</span><span>Funis</span>
-    </div>
-    <div class="nav-item v2 stub" data-page="trafego">
-      <span class="nav-icon">↗</span><span>Tráfego</span>
-    </div>
-    <div class="nav-item v2 stub" data-page="vendas">
-      <span class="nav-icon">$</span><span>Vendas / CRM</span>
-    </div>
-    <div class="nav-item stub" data-page="suporte">
-      <span class="nav-icon">♥</span><span>Suporte</span>
-    </div>
+      <div class="nav-divider"></div>
 
-    <div class="nav-section">Sistema</div>
-    <div class="nav-item" data-page="crons">
-      <span class="nav-icon">◴</span><span>Crons</span>
-    </div>
-    <div class="nav-item" data-page="skills">
-      <span class="nav-icon">✦</span><span>Skills</span>
-    </div>
-    <div class="nav-item stub" data-page="biblioteca">
-      <span class="nav-icon">▤</span><span>Biblioteca</span>
-    </div>
-    <div class="nav-item" data-page="qualidade">
-      <span class="nav-icon">♥</span><span>Qualidade</span>
-    </div>
-    <div class="nav-item stub" data-page="seguranca">
-      <span class="nav-icon">⛊</span><span>Segurança</span>
-    </div>
-    <div class="nav-item stub" data-page="debug">
-      <span class="nav-icon">✕</span><span>Debug</span>
-    </div>
+      <div class="nav-item stub" data-page="conteudo">
+        <span class="nav-icon">✎</span><span>Conteúdo</span>
+      </div>
+      <div class="nav-item stub" data-page="funis">
+        <span class="nav-icon">⇝</span><span>Funis</span>
+      </div>
+      <div class="nav-item v2 stub" data-page="trafego">
+        <span class="nav-icon">↗</span><span>Tráfego</span>
+      </div>
+      <div class="nav-item v2 stub" data-page="vendas">
+        <span class="nav-icon">$</span><span>Vendas</span>
+      </div>
+      <div class="nav-item stub" data-page="suporte">
+        <span class="nav-icon">♥</span><span>Suporte</span>
+      </div>
 
-    <div class="nav-section">Estratégia</div>
-    <div class="nav-item" data-page="mapa">
-      <span class="nav-icon">▥</span><span>Mapa</span>
-    </div>
-    <div class="nav-item" data-page="roadmap">
-      <span class="nav-icon">▸</span><span>Roadmap</span>
+      <div class="nav-divider"></div>
+
+      <div class="nav-item" data-page="crons">
+        <span class="nav-icon">◴</span><span>Crons</span>
+      </div>
+      <div class="nav-item" data-page="skills">
+        <span class="nav-icon">✦</span><span>Skills</span>
+      </div>
+      <div class="nav-item stub" data-page="biblioteca">
+        <span class="nav-icon">▤</span><span>Biblioteca</span>
+      </div>
+      <div class="nav-item" data-page="qualidade">
+        <span class="nav-icon">♥</span><span>Qualidade</span>
+      </div>
+      <div class="nav-item stub" data-page="seguranca">
+        <span class="nav-icon">⛊</span><span>Segurança</span>
+      </div>
+
+      <div class="nav-divider"></div>
+
+      <div class="nav-item" data-page="mapa">
+        <span class="nav-icon">▥</span><span>Mapa</span>
+      </div>
+      <div class="nav-item" data-page="roadmap">
+        <span class="nav-icon">▸</span><span>Roadmap</span>
+      </div>
     </div>
 
     <div class="nav-footer">
@@ -86,6 +89,15 @@
       <div id="nav-env-hint">mission-control.local</div>
     </div>
   </nav>
+
+  <!-- Sub-sidebar contextual (só aparece em itens com has-sub) -->
+  <aside class="subnav" id="subnav" aria-hidden="true">
+    <div class="subnav-header">
+      <button class="subnav-back" id="subnav-back" aria-label="Voltar">‹</button>
+      <div class="subnav-title" id="subnav-title">—</div>
+    </div>
+    <div class="subnav-body" id="subnav-body"></div>
+  </aside>
 
   <!-- Conteúdo -->
   <main class="main">
@@ -132,7 +144,7 @@
 
 <!-- Scripts (carregados em ordem de dependência) -->
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script type="module" src="js/sb-client.js?v=20260420c"></script>
-<script type="module" src="js/app.js?v=20260420c"></script>
+<script type="module" src="js/sb-client.js?v=20260420d"></script>
+<script type="module" src="js/app.js?v=20260420d"></script>
 </body>
 </html>
