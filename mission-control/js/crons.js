@@ -1,6 +1,6 @@
 /* Tela Crons — lista jobs agendados + canais integrados */
 
-import { fetchCrons } from './sb-client.js?v=20260420d';
+import { fetchCrons } from './sb-client.js?v=20260420e';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);

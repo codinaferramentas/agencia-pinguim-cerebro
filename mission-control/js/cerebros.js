@@ -1,7 +1,7 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas } from './sb-client.js?v=20260420d';
-import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260420d';
+import { fetchCerebrosCatalogo, fetchCerebroPecas } from './sb-client.js?v=20260420e';
+import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260420e';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -146,7 +146,7 @@ function abrirModalNovoProduto() {
 /* ----- Tela detalhada de 1 cérebro ----- */
 let pecasCache = [];
 let cerebroAtual = null;
-let viewModoAtual = 'fontes';
+let viewModoAtual = 'kanban';
 
 async function abrirCerebroDetalhe(slug) {
   cerebroAtual = cerebrosCache.find(c => c.slug === slug);
@@ -181,7 +181,7 @@ async function abrirCerebroDetalhe(slug) {
   ]);
 
   const toggle = el('div', { class: 'view-toggle' }, [
-    el('button', { class: viewModoAtual === 'fontes' ? 'active' : '', onclick: () => { viewModoAtual = 'fontes'; renderView(); } }, '▦ Fontes'),
+    el('button', { class: viewModoAtual === 'kanban' ? 'active' : '', onclick: () => { viewModoAtual = 'kanban'; renderView(); } }, '▦ Kanban'),
     el('button', { class: viewModoAtual === 'lista' ? 'active' : '', onclick: () => { viewModoAtual = 'lista'; renderView(); } }, '☰ Lista'),
     el('button', { class: viewModoAtual === 'timeline' ? 'active' : '', onclick: () => { viewModoAtual = 'timeline'; renderView(); } }, '⌚ Timeline'),
   ]);
@@ -198,10 +198,10 @@ function renderView() {
   if (!area) return;
   area.innerHTML = '';
   document.querySelectorAll('.view-toggle button').forEach((b, i) => {
-    b.classList.toggle('active', ['fontes','lista','timeline'][i] === viewModoAtual);
+    b.classList.toggle('active', ['kanban','lista','timeline'][i] === viewModoAtual);
   });
 
-  if (viewModoAtual === 'fontes') {
+  if (viewModoAtual === 'kanban') {
     const fontes = pecasCache.length > 0 ? pecasCache : gerarFontesMockadas(cerebroAtual);
     renderKanbanFontes(area, fontes);
   } else if (viewModoAtual === 'lista') {
