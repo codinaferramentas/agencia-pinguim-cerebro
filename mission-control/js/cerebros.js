@@ -1190,12 +1190,22 @@ function renderStepPacote() {
         const { data: loteFinal } = await sb.from('ingest_lotes')
           .select('log_md, erro_detalhes, status')
           .eq('id', lote.id).single();
-        if (loteFinal?.log_md) {
-          areaProgresso.append(el('pre', { class: 'progresso-relatorio' }, loteFinal.log_md));
-        }
-        areaProgresso.append(el('div', { class: 'progresso-footer' }, [
+
+        const relatorioEl = loteFinal?.log_md
+          ? el('pre', { class: 'progresso-relatorio' }, loteFinal.log_md)
+          : null;
+        if (relatorioEl) areaProgresso.append(relatorioEl);
+
+        const footerEl = el('div', { class: 'progresso-footer' }, [
           el('button', { class: 'btn btn-primary', onclick: () => { fecharModal(); abrirCerebroDetalhe(cerebroSlug); } }, 'Fechar e ver fontes'),
-        ]));
+        ]);
+        areaProgresso.append(footerEl);
+
+        // Auto-scroll pro relatório (sem precisar rolar a mão)
+        requestAnimationFrame(() => {
+          const alvo = relatorioEl || footerEl;
+          alvo.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
 
       } catch (e) {
         if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
