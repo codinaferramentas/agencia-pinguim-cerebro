@@ -1,7 +1,7 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421h';
-import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421h';
+import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421i';
+import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421i';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -156,6 +156,21 @@ async function abrirCerebroDetalhe(slug) {
   page.innerHTML = '';
   const acoes = el('div', { class: 'cerebro-detail-actions' }, [
     el('button', { class: 'btn btn-primary', onclick: () => abrirModalAlimentar() }, '+ Alimentar'),
+    pecasCache.length > 0
+      ? el('button', {
+          class: 'btn',
+          onclick: () => abrirHistoricoLotes(),
+          title: 'Ver e gerenciar cargas anteriores',
+        }, '📜 Histórico')
+      : null,
+    pecasCache.length > 0
+      ? el('button', {
+          class: 'btn btn-ghost',
+          style: 'color:var(--danger)',
+          onclick: () => zerarCerebro(),
+          title: 'Apaga TODAS as fontes deste Cérebro',
+        }, '🗑 Zerar')
+      : null,
     el('button', { class: 'btn btn-ghost', onclick: () => renderCerebros() }, '← Voltar'),
   ]);
 
@@ -183,6 +198,277 @@ async function abrirCerebroDetalhe(slug) {
   page.append(el('div', { class: 'cerebro-detail' }, [header, toggle, viewArea]));
 
   renderView();
+}
+
+/* ================================================================
+   AÇÕES: zerar cérebro, excluir fonte, reclassificar
+   ================================================================ */
+
+async function zerarCerebro() {
+  if (!cerebroAtual) return;
+  const sb = getSupabase();
+  if (!sb) { await alertarDark({ titulo: 'Sem conexão', mensagem: 'Supabase não conectado.', tipo: 'erro' }); return; }
+
+  // Confirmação dupla
+  const confirma1 = await confirmarDark({
+    titulo: `Zerar Cérebro ${cerebroAtual.nome}?`,
+    mensagem: `Esta ação vai apagar TODAS as ${pecasCache.length} fontes, chunks e histórico de uploads deste Cérebro.\n\nAção irreversível. Certeza?`,
+    confirmar: 'Sim, zerar',
+  });
+  if (!confirma1) return;
+
+  const confirma2 = await confirmarDark({
+    titulo: 'Última confirmação',
+    mensagem: `Vou apagar ${pecasCache.length} fontes + todos os vetores do Cérebro ${cerebroAtual.nome}.\n\nIsso NÃO pode ser desfeito.`,
+    confirmar: 'Confirmar exclusão',
+    perigoso: true,
+  });
+  if (!confirma2) return;
+
+  // Busca cerebro_id
+  const { data: prod } = await sb.from('produtos').select('id').eq('slug', cerebroAtual.slug).single();
+  if (!prod) return;
+  const { data: cer } = await sb.from('cerebros').select('id').eq('produto_id', prod.id).single();
+  if (!cer) return;
+
+  // DELETE em cascata (order importa por conta de FK)
+  await sb.from('cerebro_fontes_chunks').delete().eq('cerebro_id', cer.id);
+  await sb.from('cerebro_fontes').delete().eq('cerebro_id', cer.id);
+  await sb.from('ingest_arquivos').delete().eq('cerebro_id', cer.id);
+  await sb.from('ingest_lotes').delete().eq('cerebro_id', cer.id);
+  await sb.from('cerebros').update({ ultima_alimentacao: null }).eq('id', cer.id);
+
+  await alertarDark({ titulo: 'Cérebro zerado', mensagem: `${cerebroAtual.nome} voltou ao estado inicial. Pronto pra nova carga.`, tipo: 'info' });
+
+  // Recarrega catálogo + tela
+  cerebrosCache = await fetchCerebrosCatalogo();
+  abrirCerebroDetalhe(cerebroAtual.slug);
+}
+
+async function abrirHistoricoLotes() {
+  const sb = getSupabase();
+  if (!sb || !cerebroAtual) return;
+
+  // Busca cerebro_id
+  const { data: prod } = await sb.from('produtos').select('id').eq('slug', cerebroAtual.slug).single();
+  if (!prod) return;
+  const { data: cer } = await sb.from('cerebros').select('id').eq('produto_id', prod.id).single();
+  if (!cer) return;
+
+  const { data: lotes } = await sb.from('ingest_lotes')
+    .select('id, nome_arquivo, tamanho_bytes, disparado_por, status, arquivos_totais, fontes_criadas, chunks_criados, em_quarentena, custo_usd, duracao_ms, criado_em, finalizado_em')
+    .eq('cerebro_id', cer.id)
+    .order('criado_em', { ascending: false });
+
+  const back = el('div', {
+    class: 'modal-backdrop',
+    style: 'z-index:10000',
+    onclick: (e) => { if (e.target === back) fechar(); }
+  });
+  const card = el('div', { class: 'modal-card', style: 'max-width:820px;max-height:85vh;overflow-y:auto' });
+  function fechar() { back.classList.remove('open'); setTimeout(() => back.remove(), 180); }
+
+  const statusLabel = {
+    recebido: '⏳ Recebido', extraindo: '📂 Extraindo', classificando: '🧠 Classificando',
+    vetorizando: '🔢 Vetorizando', concluido: '✓ Concluído', falhou: '✗ Falhou',
+  };
+
+  const corpo = (lotes && lotes.length > 0)
+    ? el('div', { class: 'lotes-lista' }, lotes.map(lote => {
+        const dt = new Date(lote.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+        const mb = lote.tamanho_bytes ? (lote.tamanho_bytes / 1024 / 1024).toFixed(1) + ' MB' : '';
+        return el('div', { class: 'lote-row' }, [
+          el('div', { class: 'lote-row-main' }, [
+            el('div', { class: 'lote-nome' }, lote.nome_arquivo || '(sem nome)'),
+            el('div', { class: 'lote-meta' }, [
+              el('span', {}, statusLabel[lote.status] || lote.status),
+              el('span', {}, `${lote.fontes_criadas || 0} fontes`),
+              el('span', {}, `${lote.chunks_criados || 0} chunks`),
+              lote.em_quarentena > 0 ? el('span', { style: 'color:var(--warning)' }, `${lote.em_quarentena} em quarentena`) : null,
+              mb ? el('span', {}, mb) : null,
+              el('span', { style: 'color:var(--fg-dim)' }, dt),
+              el('span', { style: 'color:var(--fg-dim)' }, `por ${lote.disparado_por || '—'}`),
+            ]),
+          ]),
+          el('button', {
+            class: 'btn btn-ghost',
+            style: 'color:var(--danger)',
+            onclick: async () => {
+              fechar();
+              await reverterLote(lote);
+            },
+            title: 'Apaga TODAS as fontes que vieram neste upload',
+          }, '🗑 Reverter'),
+        ]);
+      }))
+    : el('div', { style: 'padding:2rem;text-align:center;color:var(--fg-muted)' }, 'Sem cargas registradas ainda.');
+
+  card.append(
+    el('div', { class: 'modal-head' }, [
+      el('h2', {}, `Histórico de cargas — ${cerebroAtual.nome}`),
+      el('div', { class: 'modal-sub' }, `Cada upload em pacote vira um lote. Você pode reverter lote inteiro.`),
+      el('button', { class: 'modal-close', onclick: fechar }, '×'),
+    ]),
+    el('div', { class: 'modal-body' }, [ corpo ]),
+  );
+
+  back.append(card);
+  document.body.append(back);
+  requestAnimationFrame(() => back.classList.add('open'));
+}
+
+async function reverterLote(lote) {
+  const sb = getSupabase();
+  if (!sb) return;
+
+  const confirma = await confirmarDark({
+    titulo: `Reverter lote "${lote.nome_arquivo}"?`,
+    mensagem: `Vou apagar TODAS as ${lote.fontes_criadas || 0} fontes e ${lote.chunks_criados || 0} chunks que vieram neste upload.\n\nOutros lotes do Cérebro permanecem intactos.\n\nAção irreversível.`,
+    confirmar: 'Reverter lote',
+    perigoso: true,
+  });
+  if (!confirma) return;
+
+  // Pega todas as fontes desse lote
+  const { data: fontes } = await sb.from('cerebro_fontes')
+    .select('id')
+    .eq('ingest_lote_id', lote.id);
+
+  const fonteIds = (fontes || []).map(f => f.id);
+  if (fonteIds.length > 0) {
+    await sb.from('cerebro_fontes_chunks').delete().in('fonte_id', fonteIds);
+    await sb.from('cerebro_fontes').delete().in('id', fonteIds);
+  }
+
+  // Apaga também o log do lote
+  await sb.from('ingest_arquivos').delete().eq('lote_id', lote.id);
+  await sb.from('ingest_lotes').delete().eq('id', lote.id);
+
+  await alertarDark({
+    titulo: 'Lote revertido',
+    mensagem: `${fonteIds.length} fontes apagadas. Outros lotes continuam intactos.`,
+    tipo: 'info',
+  });
+
+  // Recarrega
+  cerebrosCache = await fetchCerebrosCatalogo();
+  abrirCerebroDetalhe(cerebroAtual.slug);
+}
+
+async function excluirFonte(fonteId) {
+  const sb = getSupabase();
+  if (!sb) return;
+  const confirma = await confirmarDark({
+    titulo: 'Excluir esta fonte?',
+    mensagem: 'A fonte e todos os chunks vetorizados dela serão apagados. Ação irreversível.',
+    confirmar: 'Excluir',
+    perigoso: true,
+  });
+  if (!confirma) return;
+
+  // Chunks vêm com on delete cascade, mas vou explicitar
+  await sb.from('cerebro_fontes_chunks').delete().eq('fonte_id', fonteId);
+  await sb.from('cerebro_fontes').delete().eq('id', fonteId);
+
+  abrirCerebroDetalhe(cerebroAtual.slug);
+}
+
+async function reclassificarFonte(fonte) {
+  const sb = getSupabase();
+  if (!sb) return;
+
+  const TIPOS = [
+    { k: 'aula', l: '📚 Aula' },
+    { k: 'pagina_venda', l: '📄 Página de venda' },
+    { k: 'objecao', l: '❓ Objeção' },
+    { k: 'depoimento', l: '⭐ Depoimento' },
+    { k: 'sacada', l: '💡 Sacada' },
+    { k: 'pitch', l: '🎯 Pitch' },
+    { k: 'faq', l: '📖 FAQ' },
+    { k: 'externo', l: '🔗 Externo' },
+    { k: 'csv', l: '📊 CSV / planilha' },
+    { k: 'pesquisa', l: '📋 Pesquisa' },
+    { k: 'chat_export', l: '💬 Chat export' },
+    { k: 'outro', l: '📦 Outro' },
+  ];
+
+  const novoTipo = await escolherDark({
+    titulo: 'Reclassificar fonte',
+    mensagem: `"${fonte.titulo}"\n\nClassificação atual: ${fonte.tipo}`,
+    opcoes: TIPOS,
+  });
+  if (!novoTipo || novoTipo === fonte.tipo) return;
+
+  await sb.from('cerebro_fontes').update({
+    tipo: novoTipo,
+    metadata: { ...(fonte.metadata || {}), reclassificado_manualmente: new Date().toISOString(), tipo_anterior: fonte.tipo },
+  }).eq('id', fonte.id);
+
+  abrirCerebroDetalhe(cerebroAtual.slug);
+}
+
+function confirmarDark({ titulo, mensagem, confirmar = 'Confirmar', perigoso = false }) {
+  return new Promise((resolve) => {
+    const back = el('div', {
+      class: 'modal-backdrop modal-confirm',
+      style: 'z-index:10001',
+      onclick: (e) => { if (e.target === back) fechar(false); }
+    });
+    const card = el('div', { class: 'modal-card', style: 'max-width:460px' });
+    function fechar(v) { back.classList.remove('open'); setTimeout(() => back.remove(), 180); resolve(v); }
+    card.append(
+      el('div', { class: 'modal-head' }, [ el('h2', {}, titulo) ]),
+      el('div', { class: 'modal-body' }, [
+        el('p', { style: 'font-size:0.875rem;color:var(--fg-muted);line-height:1.6;white-space:pre-wrap' }, mensagem),
+      ]),
+      el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn btn-ghost', onclick: () => fechar(false) }, 'Cancelar'),
+        el('button', {
+          class: 'btn btn-primary',
+          style: perigoso ? 'background:var(--danger);border-color:var(--danger)' : '',
+          onclick: () => fechar(true),
+        }, confirmar),
+      ]),
+    );
+    back.append(card);
+    document.body.append(back);
+    requestAnimationFrame(() => back.classList.add('open'));
+  });
+}
+
+function escolherDark({ titulo, mensagem, opcoes }) {
+  return new Promise((resolve) => {
+    const back = el('div', {
+      class: 'modal-backdrop modal-confirm',
+      style: 'z-index:10001',
+      onclick: (e) => { if (e.target === back) fechar(null); }
+    });
+    const card = el('div', { class: 'modal-card', style: 'max-width:480px' });
+    function fechar(v) { back.classList.remove('open'); setTimeout(() => back.remove(), 180); resolve(v); }
+
+    const chips = el('div', { class: 'chips', style: 'display:flex;flex-wrap:wrap;gap:0.375rem' });
+    opcoes.forEach(op => {
+      const b = el('button', {
+        class: 'chip',
+        onclick: () => fechar(op.k),
+      }, op.l);
+      chips.append(b);
+    });
+
+    card.append(
+      el('div', { class: 'modal-head' }, [ el('h2', {}, titulo) ]),
+      el('div', { class: 'modal-body' }, [
+        el('p', { style: 'font-size:0.8125rem;color:var(--fg-muted);line-height:1.5;white-space:pre-wrap;margin-bottom:1rem' }, mensagem),
+        chips,
+      ]),
+      el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn btn-ghost', onclick: () => fechar(null) }, 'Cancelar'),
+      ]),
+    );
+    back.append(card);
+    document.body.append(back);
+    requestAnimationFrame(() => back.classList.add('open'));
+  });
 }
 
 function renderView() {
@@ -341,7 +627,20 @@ function renderKanbanFontes(area, fontes) {
     return;
   }
 
-  area.append(kanban);
+  const wrap = el('div', { class: 'fontes-kanban-wrap' }, [kanban]);
+  area.append(wrap);
+
+  // detecta overflow pra mostrar indicador de scroll
+  requestAnimationFrame(() => {
+    const check = () => {
+      const hasOverflow = kanban.scrollWidth > kanban.clientWidth + 4
+                          && kanban.scrollLeft + kanban.clientWidth < kanban.scrollWidth - 4;
+      wrap.classList.toggle('has-overflow', hasOverflow);
+    };
+    check();
+    kanban.addEventListener('scroll', check);
+    window.addEventListener('resize', check);
+  });
 }
 
 function renderFonteCard(fonte, tipo) {
@@ -349,8 +648,21 @@ function renderFonteCard(fonte, tipo) {
   const origemCfg = ORIGEM_META[origem] || ORIGEM_META.upload;
   const data = fonte.criado_em ? new Date(fonte.criado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '—';
 
+  // Menu ⋮
+  const btnMenu = el('button', {
+    class: 'fonte-card-menu-btn',
+    onclick: (ev) => {
+      ev.stopPropagation();
+      abrirMenuFonte(fonte, btnMenu);
+    },
+    title: 'Ações',
+  }, '⋮');
+
   const card = el('div', { class: 'fonte-card', onclick: () => abrirDrawer(fonte) }, [
-    el('div', { class: 'fonte-card-title' }, fonte.titulo),
+    el('div', { class: 'fonte-card-head' }, [
+      el('div', { class: 'fonte-card-title' }, fonte.titulo),
+      btnMenu,
+    ]),
     el('div', { class: 'fonte-card-meta' }, [
       el('span', {
         class: 'fonte-origem-badge',
@@ -362,6 +674,44 @@ function renderFonteCard(fonte, tipo) {
   ]);
 
   return card;
+}
+
+function abrirMenuFonte(fonte, anchor) {
+  // Fecha qualquer menu aberto
+  document.querySelectorAll('.fonte-card-menu').forEach(m => m.remove());
+
+  const rect = anchor.getBoundingClientRect();
+  const menu = el('div', { class: 'fonte-card-menu' }, [
+    el('button', {
+      onclick: (e) => { e.stopPropagation(); menu.remove(); abrirDrawer(fonte); },
+    }, '👁  Ver conteúdo'),
+    el('button', {
+      onclick: (e) => { e.stopPropagation(); menu.remove(); reclassificarFonte(fonte); },
+    }, '🏷  Reclassificar tipo'),
+    el('button', {
+      class: 'danger',
+      onclick: (e) => { e.stopPropagation(); menu.remove(); excluirFonte(fonte.id); },
+    }, '🗑  Excluir fonte'),
+  ]);
+
+  // Posiciona na direção certa
+  menu.style.position = 'fixed';
+  menu.style.top = (rect.bottom + 4) + 'px';
+  menu.style.left = Math.max(8, rect.right - 180) + 'px';
+  menu.style.zIndex = '100';
+
+  document.body.append(menu);
+
+  // Fecha ao clicar fora
+  setTimeout(() => {
+    const closer = (e) => {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('click', closer);
+      }
+    };
+    document.addEventListener('click', closer);
+  }, 0);
 }
 
 /* Gera fontes fake pra estressar o layout de Kanban (10+ tipos, origens variadas) */
