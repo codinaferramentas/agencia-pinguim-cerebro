@@ -1,7 +1,7 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421m';
-import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421m';
+import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421n';
+import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421n';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -38,8 +38,11 @@ export async function renderCerebros() {
     return;
   }
 
-  // Esconde Pinguim Empresa temporariamente (foco em cérebros de produto)
-  const cerebrosVisiveis = cerebrosCache.filter(c => c.slug !== 'pinguim');
+  // "Cérebro é o pai de tudo" — só aparece cérebro com fonte
+  // Cérebros cadastrados mas sem fonte ficam acessíveis via modal "+ Novo Cérebro"
+  const cerebrosVisiveis = cerebrosCache.filter(c =>
+    c.slug !== 'pinguim' && (c.total_fontes || 0) > 0
+  );
 
   page.innerHTML = '';
   page.append(
@@ -51,15 +54,26 @@ export async function renderCerebros() {
       el('button', {
         class: 'btn btn-primary',
         onclick: () => abrirModalNovoProduto()
-      }, '+ Novo Produto'),
+      }, '+ Novo Cérebro'),
     ]),
-    el('div', { class: 'cerebros-grid' }, [
-      ...cerebrosVisiveis.map(renderCerebroCard),
-      el('button', {
-        class: 'btn-add-produto',
-        onclick: () => abrirModalNovoProduto()
-      }, '+ Cadastrar novo produto'),
-    ]),
+    cerebrosVisiveis.length === 0
+      ? el('div', { class: 'stub-screen' }, [
+          el('div', { class: 'stub-badge' }, 'vazio'),
+          el('h2', {}, 'Nenhum Cérebro alimentado ainda'),
+          el('p', {}, 'Cérebros aparecem aqui assim que recebem a primeira fonte. Clique em "+ Novo Cérebro" pra criar ou continuar alimentando um existente.'),
+          el('button', {
+            class: 'btn btn-primary',
+            style: 'margin-top:1rem',
+            onclick: () => abrirModalNovoProduto(),
+          }, '+ Novo Cérebro'),
+        ])
+      : el('div', { class: 'cerebros-grid' }, [
+          ...cerebrosVisiveis.map(renderCerebroCard),
+          el('button', {
+            class: 'btn-add-produto',
+            onclick: () => abrirModalNovoProduto()
+          }, '+ Novo Cérebro'),
+        ]),
   );
 }
 
