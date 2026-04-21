@@ -1,7 +1,7 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421k';
-import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421k';
+import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421l';
+import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421l';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -127,12 +127,100 @@ function formatarAtualizacao(iso) {
   return { texto: `há ${Math.floor(dias / 30)} meses`, recente: false };
 }
 
-function abrirModalNovoProduto() {
-  // V0: prompt simples. Em V1 vira modal real com form.
-  const nome = prompt('Nome do produto (ex: "Novo Desafio"):');
-  if (!nome) return;
-  const emoji = prompt('Emoji (1 só):', '📦') || '📦';
-  alert(`Produto "${nome}" ${emoji} seria criado.\n\nEm V1 isto gera registro no Supabase + pasta cerebros/<slug>/ + MAPA.md inicial.`);
+async function abrirModalNovoProduto() {
+  const sb = getSupabase();
+  if (!sb) { await alertarDark({ titulo: 'Sem conexão', mensagem: 'Supabase não conectado.', tipo: 'erro' }); return; }
+
+  // Busca produtos cadastrados que ainda não têm fonte
+  const [{ data: prods }, { data: cats }] = await Promise.all([
+    sb.from('produtos').select('id, slug, nome, emoji, descricao').order('nome'),
+    sb.from('vw_cerebros_catalogo').select('slug, total_fontes'),
+  ]);
+  const semFonte = new Set((cats || []).filter(c => (c.total_fontes || 0) === 0).map(c => c.slug));
+  const pendentes = (prods || []).filter(p => semFonte.has(p.slug));
+
+  const back = el('div', {
+    class: 'modal-backdrop',
+    onclick: (e) => { if (e.target === back) fechar(); }
+  });
+  const card = el('div', { class: 'modal-card', style: 'max-width:600px' });
+  function fechar() { back.classList.remove('open'); setTimeout(() => back.remove(), 180); }
+
+  card.append(
+    el('div', { class: 'modal-head' }, [
+      el('h2', {}, 'Novo Cérebro'),
+      el('div', { class: 'modal-sub' }, 'Como você quer criar este Cérebro?'),
+      el('button', { class: 'modal-close', onclick: fechar }, '×'),
+    ]),
+    el('div', { class: 'modal-body' }, [
+      // Caminho A — produto já cadastrado
+      pendentes.length > 0
+        ? el('div', { class: 'novo-cerebro-secao' }, [
+            el('div', { class: 'novo-cerebro-label' }, '📦 Produto já cadastrado'),
+            el('div', { class: 'novo-cerebro-help' }, 'Estes produtos já existem no sistema. Clique pra começar a alimentar.'),
+            el('div', { class: 'novo-cerebro-lista' }, pendentes.map(p => el('button', {
+              class: 'novo-cerebro-item',
+              onclick: async () => { fechar(); await cerebrosCache; cerebrosCache = await fetchCerebrosCatalogo(); abrirCerebroDetalhe(p.slug); },
+            }, [
+              el('span', { class: 'novo-cerebro-emoji' }, p.emoji || '📦'),
+              el('div', { style: 'flex:1;text-align:left' }, [
+                el('div', { style: 'font-weight:600' }, p.nome),
+                el('div', { style: 'font-size:.75rem;color:var(--fg-muted)' }, p.descricao || '—'),
+              ]),
+              el('span', { style: 'font-size:.75rem;color:var(--accent)' }, 'Alimentar →'),
+            ]))),
+          ])
+        : null,
+
+      // Caminho B — produto novo
+      el('div', { class: 'novo-cerebro-secao' }, [
+        el('div', { class: 'novo-cerebro-label' }, '➕ Produto novo'),
+        el('div', { class: 'novo-cerebro-help' }, 'Cadastra o produto e cria o Cérebro dele.'),
+        el('form', {
+          class: 'novo-cerebro-form',
+          onsubmit: async (ev) => {
+            ev.preventDefault();
+            const nome = ev.target.nome.value.trim();
+            const emoji = ev.target.emoji.value.trim() || '📦';
+            const descricao = ev.target.descricao.value.trim() || null;
+            if (!nome) return;
+            const slug = nome.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+            // Cria produto
+            const { data: prod, error: eProd } = await sb.from('produtos').insert({
+              slug, nome, emoji, descricao, status: 'em_construcao',
+            }).select('id').single();
+            if (eProd) {
+              await alertarDark({ titulo: 'Falha ao cadastrar', mensagem: eProd.message, tipo: 'erro' });
+              return;
+            }
+
+            // Cria cérebro ligado ao produto
+            const { error: eCer } = await sb.from('cerebros').insert({ produto_id: prod.id });
+            if (eCer) {
+              await alertarDark({ titulo: 'Falha ao criar Cérebro', mensagem: eCer.message, tipo: 'erro' });
+              return;
+            }
+
+            fechar();
+            cerebrosCache = await fetchCerebrosCatalogo();
+            abrirCerebroDetalhe(slug);
+          },
+        }, [
+          el('input', { name: 'nome', placeholder: 'Nome do produto (ex: Protocolo Venda Viral)', required: 'true', class: 'form-input' }),
+          el('div', { style: 'display:flex;gap:.5rem' }, [
+            el('input', { name: 'emoji', placeholder: '📦', maxlength: 4, style: 'width:80px', class: 'form-input' }),
+            el('input', { name: 'descricao', placeholder: 'Descrição curta (opcional)', class: 'form-input', style: 'flex:1' }),
+          ]),
+          el('button', { type: 'submit', class: 'btn btn-primary' }, 'Cadastrar + Alimentar'),
+        ]),
+      ]),
+    ]),
+  );
+
+  back.append(card);
+  document.body.append(back);
+  requestAnimationFrame(() => back.classList.add('open'));
 }
 
 /* ----- Tela detalhada de 1 cérebro ----- */
