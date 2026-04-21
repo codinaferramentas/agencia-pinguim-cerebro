@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Como o sistema Pinguim treina agentes — sem treinar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --card-bg: #151515;
+    --card-bg-2: #1a1a2e;
+    --accent: #E85C00;
+    --accent-hover: #FB923C;
+    --text: #e0e0e0;
+    --text-secondary: #a8b2d1;
+    --text-muted: #8892b0;
+    --text-dim: #666;
+    --border: #222;
+    --hero-gradient: linear-gradient(135deg, #1a1a2e 0%, #2a1a0e 50%, #3a1f00 100%);
+    --highlight-bg: linear-gradient(135deg, #1a1a2e, #2a1a0e);
+    --insight-bg: linear-gradient(135deg, #1a1a2e, #2e1300);
+    --success: #4ade80;
+    --warning: #f0c040;
+    --danger: #ff6b6b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Geist', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  code, .mono { font-family: 'Geist Mono', ui-monospace, monospace; }
+
+  /* HERO */
+  .hero {
+    background: var(--hero-gradient);
+    padding: 90px 30px 70px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+  .hero-badge {
+    display: inline-block;
+    padding: 6px 14px;
+    background: rgba(232,92,0,0.1);
+    border: 1px solid rgba(232,92,0,0.3);
+    color: var(--accent);
+    font-family: 'Geist Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    border-radius: 100px;
+    margin-bottom: 1.5rem;
+  }
+  .hero h1 {
+    font-size: clamp(2rem, 5vw, 3.25rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    max-width: 900px;
+    margin: 0 auto 1.25rem;
+  }
+  .hero h1 .hl { color: var(--accent); }
+  .hero-sub {
+    color: var(--text-muted);
+    font-size: 1.0625rem;
+    max-width: 680px;
+    margin: 0 auto;
+    line-height: 1.55;
+  }
+
+  /* NAV sticky */
+  nav.top-nav {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(10,10,10,0.95);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+    padding: 0.875rem 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  nav.top-nav a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.8125rem;
+    padding: 0.5rem 0.875rem;
+    border-radius: 6px;
+    transition: background .15s, color .15s;
+  }
+  nav.top-nav a:hover { color: var(--accent); background: rgba(232,92,0,0.08); }
+
+  /* CONTAINER */
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 60px 30px;
+  }
+
+  section { margin-bottom: 4rem; scroll-margin-top: 80px; }
+  section:last-child { margin-bottom: 0; }
+
+  .section-num {
+    font-family: 'Geist Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    margin-bottom: 0.5rem;
+  }
+  h2 {
+    color: var(--accent);
+    font-size: clamp(1.375rem, 3vw, 1.75rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 1.5rem;
+    line-height: 1.2;
+  }
+  h3 {
+    color: var(--text);
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin: 1.75rem 0 0.75rem;
+  }
+  h4 {
+    color: var(--accent);
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.5rem;
+  }
+  p { color: var(--text-secondary); margin-bottom: 1rem; }
+  p strong { color: var(--text); font-weight: 600; }
+  ul, ol { color: var(--text-secondary); padding-left: 1.25rem; margin-bottom: 1rem; }
+  ul li, ol li { margin-bottom: 0.5rem; }
+  ul li strong, ol li strong { color: var(--text); }
+
+  /* CARDS */
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem 1.75rem;
+    transition: border-color .15s;
+    margin-bottom: 1rem;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+  }
+
+  /* HIGHLIGHT */
+  .highlight {
+    background: var(--highlight-bg);
+    border-left: 4px solid var(--accent);
+    padding: 1.125rem 1.375rem;
+    border-radius: 0 8px 8px 0;
+    margin: 1.5rem 0;
+  }
+  .highlight p { color: var(--text); margin: 0; }
+
+  /* INSIGHT */
+  .insight-box {
+    background: var(--insight-bg);
+    border: 1px solid rgba(232,92,0,0.3);
+    padding: 1.25rem 1.5rem;
+    border-radius: 10px;
+    margin: 1.5rem 0;
+  }
+  .insight-box h4 { margin-bottom: 0.625rem; }
+  .insight-box p { color: var(--text); }
+
+  /* METRIC grid */
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+  .metric {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem;
+    text-align: center;
+  }
+  .metric .value {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--accent);
+    font-family: 'Geist Mono', monospace;
+    line-height: 1.1;
+  }
+  .metric .value.small { font-size: 1.25rem; }
+  .metric .label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* DIAGRAM (fluxo) */
+  .diagram {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    padding: 1.25rem 1.5rem;
+    border-radius: 10px;
+    font-family: 'Geist Mono', monospace;
+    font-size: 0.8125rem;
+    color: var(--text);
+    margin: 1.5rem 0;
+    overflow-x: auto;
+    line-height: 1.6;
+    white-space: pre;
+  }
+
+  /* TABLE */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.25rem 0;
+    font-size: 0.875rem;
+  }
+  thead { background: var(--card-bg-2); }
+  th {
+    color: var(--accent);
+    text-align: left;
+    padding: 0.75rem 1rem;
+    font-weight: 600;
+    font-size: 0.8125rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  td {
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+  td strong { color: var(--text); }
+  tr:hover td { background: #111; }
+
+  /* CODE block */
+  pre {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+    font-size: 0.8125rem;
+    line-height: 1.55;
+  }
+  pre code { color: var(--text); }
+
+  /* COMPARISON */
+  .comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+  .comparison .col {
+    padding: 1.25rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+  .comparison .bad {
+    background: rgba(255,107,107,0.06);
+    border-color: rgba(255,107,107,0.25);
+  }
+  .comparison .good {
+    background: rgba(74,222,128,0.06);
+    border-color: rgba(74,222,128,0.25);
+  }
+  .comparison h4.bad-h { color: var(--danger); }
+  .comparison h4.good-h { color: var(--success); }
+
+  /* REGRA numerada */
+  .regras {
+    counter-reset: regra;
+    list-style: none;
+    padding: 0;
+  }
+  .regras li {
+    counter-increment: regra;
+    padding: 1rem 1.25rem 1rem 3.5rem;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 0.75rem;
+    position: relative;
+  }
+  .regras li::before {
+    content: counter(regra);
+    position: absolute;
+    left: 1rem;
+    top: 1rem;
+    width: 28px;
+    height: 28px;
+    background: rgba(232,92,0,0.15);
+    color: var(--accent);
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-family: 'Geist Mono', monospace;
+    font-weight: 700;
+    font-size: 0.8125rem;
+    border: 1px solid rgba(232,92,0,0.3);
+  }
+  .regras li strong { color: var(--text); display: block; margin-bottom: 0.25rem; }
+
+  /* FOOTER */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 2.5rem 1rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+  }
+  footer strong { color: var(--accent); }
+
+  @media (max-width: 640px) {
+    .hero { padding: 60px 20px 50px; }
+    .container { padding: 40px 20px; }
+    .comparison { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-badge">Arquitetura técnica — Agência Pinguim</div>
+  <h1>Como a gente <span class="hl">treina agentes</span><br>sem treinar nenhum</h1>
+  <p class="hero-sub">Custo de 1 página de vendas escrita por agente Copy do Elo: <strong style="color:var(--accent)">R$ 0,05</strong>. Como isso é possível — e por que não estamos fazendo "fine-tuning".</p>
+</div>
+
+<nav class="top-nav">
+  <a href="#treinar">1. O que é "treinar"</a>
+  <a href="#rag">2. RAG</a>
+  <a href="#formato">3. Formato no banco</a>
+  <a href="#fluxo">4. Fluxo ponta a ponta</a>
+  <a href="#alimentacao">5. Atualização automática</a>
+  <a href="#regras">6. Regras de ouro</a>
+</nav>
+
+<div class="container">
+
+  <section id="treinar">
+    <div class="section-num">Parte 1</div>
+    <h2>O que significa "treinar um agente"</h2>
+
+    <p>Quando alguém diz "vou treinar meu agente", <strong>três coisas diferentes</strong> podem estar sendo ditas. Confundir é caro.</p>
+
+    <div class="card">
+      <div class="card-title">A) Fine-tuning de verdade (ajustar pesos)</div>
+      <p>Modificar a rede neural do modelo. Exige dataset gigante, meses de engenharia, custa <strong>centenas de milhares de dólares</strong>. Ninguém da nossa escala faz isso. Nem a OpenAI recomenda pra maioria dos casos — ela diz expressamente: "tente RAG antes".</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">B) System prompt + few-shot examples</div>
+      <p>Escrever uma instrução boa ("você é um especialista em copy do programa Elo, tom assim, evita isso, sempre inclua aquilo") e colar 2–5 exemplos de saída ideal. <strong>É o que já temos</strong> — seus 60 prompts do Pinguim.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">C) RAG — Retrieval-Augmented Generation</div>
+      <p>Em vez de enfiar todo o Cérebro no prompt (inviável), <strong>o agente busca na hora só os trechos relevantes</strong> e usa esses. É o que vamos construir agora em cima do seu Supabase.</p>
+    </div>
+
+    <div class="insight-box">
+      <h4>Resumo prático</h4>
+      <p><strong>"Treinar o agente de copy do Elo"</strong> = System prompt do Copy Chief (que você já tem) + RAG no Cérebro Elo (que vamos fazer). Fine-tuning fica fora. A qualidade não perde. O custo cai 20–50x.</p>
+    </div>
+  </section>
+
+  <section id="rag">
+    <div class="section-num">Parte 2</div>
+    <h2>RAG é o coração da redução de token</h2>
+
+    <p>Vamos no número pra doer. Imagine o Cérebro Elo quando tiver 100 fontes grandes (aulas transcritas, páginas, depoimentos):</p>
+
+    <div class="comparison">
+      <div class="col bad">
+        <h4 class="bad-h">Abordagem ingênua</h4>
+        <p><strong>Jogar o Cérebro inteiro no prompt.</strong></p>
+        <p>~400 mil tokens por chamada.</p>
+        <p style="margin-top:0.75rem"><strong style="color:var(--danger)">~US$ 1 por requisição.</strong> Inviável.</p>
+      </div>
+      <div class="col good">
+        <h4 class="good-h">Abordagem RAG</h4>
+        <p><strong>Buscar só os 8 trechos mais relevantes</strong> e injetar no prompt.</p>
+        <p>~8 mil tokens por chamada.</p>
+        <p style="margin-top:0.75rem"><strong style="color:var(--success)">~US$ 0,02 por requisição.</strong> Escalável.</p>
+      </div>
+    </div>
+
+    <h3>Como o RAG funciona no nosso sistema</h3>
+
+    <div class="diagram">1. Quebro cada fonte em pedaços de ~500 tokens (chunks)
+   └── 1 aula de 2h vira ~40 chunks
+
+2. Passo cada chunk pela OpenAI text-embedding-3-small
+   └── Ele vira um vetor de 1536 números (embedding)
+   └── Custo: ~US$ 0,00002 por chunk. Irrelevante.
+
+3. Guardo os vetores no Supabase
+   └── Extensão pgvector nativa — zero serviço extra
+
+4. Quando agente precisar escrever algo:
+   ├── Transforma a pergunta em vetor também
+   ├── Pergunta pro Supabase: "dá os 8 chunks mais próximos"
+   └── SÓ esses 8 chunks vão no prompt do GPT</div>
+
+    <div class="metric-grid">
+      <div class="metric">
+        <div class="value">R$ 0,05</div>
+        <div class="label">custo por página gerada</div>
+      </div>
+      <div class="metric">
+        <div class="value">8 mil</div>
+        <div class="label">tokens por request</div>
+      </div>
+      <div class="metric">
+        <div class="value">50x</div>
+        <div class="label">mais barato que ingênuo</div>
+      </div>
+      <div class="metric">
+        <div class="value small">pgvector</div>
+        <div class="label">no próprio Supabase</div>
+      </div>
+    </div>
+
+    <div class="highlight">
+      <p><strong>Embedding é feito 1x só.</strong> Chunk novo? Embeda. Fonte editada? Re-embeda só ela. Custo incremental irrisório. Consulta é ilimitada.</p>
+    </div>
+  </section>
+
+  <section id="formato">
+    <div class="section-num">Parte 3</div>
+    <h2>Formato das fontes no Supabase</h2>
+
+    <p>Duas tabelas — uma pro <strong>humano</strong> (UI do Mission Control), outra pro <strong>agente</strong> (consulta RAG).</p>
+
+    <h3>Tabela 1 — <code>cerebro_fontes</code> (o que o humano vê)</h3>
+
+    <pre><code>cerebro_fontes (
+  id            uuid primary key,
+  cerebro_id    uuid references cerebros,
+  tipo          text,          -- aula, página, depoimento, etc (dinâmico, livre)
+  origem        text,          -- discord, whatsapp, upload, expert, scrap…
+  titulo        text,
+  conteudo_md   text,          -- markdown normalizado (ver "por quê" abaixo)
+  autor         text,
+  url           text,
+  metadata      jsonb,         -- duração, tags, data-gravação, qualquer extra
+  criado_em     timestamptz
+)</code></pre>
+
+    <h3>Tabela 2 — <code>cerebro_fontes_chunks</code> (o que o agente lê)</h3>
+
+    <pre><code>cerebro_fontes_chunks (
+  id              uuid primary key,
+  fonte_id        uuid references cerebro_fontes on delete cascade,
+  cerebro_id      uuid,         -- denormalizado pra filtrar rápido
+  chunk_index     int,          -- posição dentro da fonte
+  conteudo        text,         -- pedaço de ~500 tokens
+  embedding       vector(1536), -- pgvector — a "assinatura" semântica
+  token_count     int,
+  criado_em       timestamptz
+)</code></pre>
+
+    <h3>Por que essa estrutura é certa</h3>
+
+    <ul class="regras">
+      <li><strong>Markdown normalizado como único formato do banco</strong><br>PDF, DOCX, TXT, CSV — tudo é convertido pra MD antes de entrar. Agente nunca vê formato original, só texto limpo. Um único parser de contexto em vez de cinco.</li>
+      <li><strong>metadata jsonb para extensibilidade sem mexer em schema</strong><br>Tipo novo aparece (ex: "entrevista", "podcast")? Só jogar em <code>tipo</code> e detalhes em <code>metadata</code>. Zero migration.</li>
+      <li><strong>Chunks separados da fonte</strong><br>Uma aula aparece 1 vez no Kanban (UI lê <code>cerebro_fontes</code>), mas tem 40 chunks pro agente (RAG lê <code>cerebro_fontes_chunks</code>). Apagou a fonte? <code>on delete cascade</code> limpa os chunks.</li>
+      <li><strong>pgvector dentro do Postgres</strong><br>Busca semântica nativa. Zero Pinecone, zero Weaviate, zero serviço extra pra pagar. Se o Supabase tá de pé, RAG tá de pé.</li>
+    </ul>
+  </section>
+
+  <section id="fluxo">
+    <div class="section-num">Parte 4</div>
+    <h2>Fluxo de ponta a ponta</h2>
+
+    <h3>Alimentação (quando o André sobe 1 arquivo no painel)</h3>
+
+    <div class="diagram">Usuário sobe "Aula 4.pdf" no Cérebro Elo
+      ↓
+Edge Function "extract-text"
+   ├── lê PDF e extrai texto
+   └── converte pra Markdown limpo
+      ↓
+INSERT em cerebro_fontes (1 linha)
+      ↓
+Trigger do Postgres chama Edge Function "chunk-embed"
+   ├── quebra o MD em chunks de ~500 tokens
+   ├── chama OpenAI text-embedding-3-small
+   └── INSERT em cerebro_fontes_chunks (N linhas)
+      ↓
+Mission Control (UI) atualiza:
+   ├── +1 coluna "Aulas" no Kanban (se primeira)
+   ├── +1 card dentro da coluna
+   └── Persona Elo flagged "precisa re-sintetizar"</div>
+
+    <h3>Consumo (quando o agente de copy Elo escreve uma página)</h3>
+
+    <div class="diagram">Usuário: "Escreve página de vendas focada em consultores"
+      ↓
+Agente Copy-Elo monta request RAG:
+   ├── transforma a pergunta em vetor
+   └── query no Supabase: "top 8 chunks do Cérebro Elo
+                          mais próximos desse vetor"
+      ↓
+Prompt final pra OpenAI:
+   [System prompt do Copy Chief — cacheado]
+   [8 chunks do Cérebro Elo]
+   [Pergunta do usuário]
+      ↓
+OpenAI retorna página
+      ↓
+Agente retorna ao usuário + salva registro da
+execução (audit trail pra Qualidade)</div>
+
+    <div class="highlight">
+      <p><strong>Observação:</strong> não existe "re-treinamento" quando o Cérebro muda. Cada request busca o estado atual do banco. Adicionou fonte agora? Próxima chamada já usa. <strong>Cérebro = estado vivo; agente = função pura que consulta.</strong></p>
+    </div>
+  </section>
+
+  <section id="alimentacao">
+    <div class="section-num">Parte 5</div>
+    <h2>Como o Cérebro alimenta tudo automaticamente</h2>
+
+    <p>Você perguntou: "se eu mexer no Cérebro, o agente precisa ser re-alimentado?". A resposta é <strong>não</strong>. Mas existem algumas rotinas automáticas que rodam em cima:</p>
+
+    <table>
+      <thead>
+        <tr><th>Gatilho</th><th>Rotina automática</th><th>Onde roda</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Fonte adicionada</strong></td>
+          <td>Chunk + embed</td>
+          <td>Edge Function (Supabase)</td>
+        </tr>
+        <tr>
+          <td><strong>Fonte editada</strong></td>
+          <td>Re-chunk + re-embed só daquela</td>
+          <td>Edge Function (Supabase)</td>
+        </tr>
+        <tr>
+          <td><strong>Fonte removida</strong></td>
+          <td>Cascade limpa chunks</td>
+          <td>Postgres (trigger)</td>
+        </tr>
+        <tr>
+          <td><strong>Cérebro atualizado</strong></td>
+          <td>Flag "Persona precisa sintetizar"</td>
+          <td>Trigger + cron</td>
+        </tr>
+        <tr>
+          <td><strong>Cron de síntese Persona</strong></td>
+          <td>Lê os chunks, gera Persona nova, salva</td>
+          <td>pg_cron + Edge Function</td>
+        </tr>
+        <tr>
+          <td><strong>Cron canal Discord</strong></td>
+          <td>Busca novas mensagens → classifica → vira fonte</td>
+          <td>pg_cron + Edge Function</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="insight-box">
+      <h4>Por que isso não depende do OpenClaw</h4>
+      <p>Todas essas rotinas rodam <strong>dentro do Supabase</strong> (pg_cron + Edge Functions Deno). OpenClaw é opcional como front de execução de agentes complexos — a alimentação e o RAG vivem em baixo dele. Se o Pedro demorar 3 meses pra liberar, o sistema segue funcionando.</p>
+    </div>
+  </section>
+
+  <section id="regras">
+    <div class="section-num">Parte 6</div>
+    <h2>As 5 regras de ouro pra economizar token</h2>
+
+    <ol class="regras">
+      <li><strong>Nunca jogar Cérebro inteiro no prompt</strong>Sempre RAG com top-K (8 a 12 chunks). Fim de papo.</li>
+      <li><strong>Chunks de 500 tokens com overlap de 50</strong>Recomendação OpenAI/Anthropic. Menor que isso perde contexto. Maior desperdiça.</li>
+      <li><strong>System prompt sempre primeiro pra usar cache</strong>OpenAI e Anthropic cobram 50–90% menos em tokens cacheados. Funciona se o prefixo do prompt for igual em toda chamada. Nosso padrão: <em>[System prompt Copy Chief] + [Chunks] + [Pergunta]</em>. System primeiro cacheia. Troca só os chunks.</li>
+      <li><strong>Markdown, não JSON estruturado</strong>JSON tem overhead de aspas, chaves, vírgulas. MD passa a mesma informação com 30% menos tokens.</li>
+      <li><strong>Embedding uma vez só, busca infinita</strong>Reprocessa chunk só quando a fonte muda. Busca custa microcentavos. Não tem motivo pra re-embeddar tudo periodicamente.</li>
+    </ol>
+
+    <div class="highlight">
+      <p><strong>Fazendo as 5 certinhas:</strong> 1000 tarefas por mês no agente de Copy do Elo = ~R$ 50. Mesmo escalando pra 10 produtos × 10 agentes × 1000 tarefas = ~R$ 5 mil/mês. Caberia em qualquer orçamento da Pinguim.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-num">Resumo executivo</div>
+    <h2>O que isso significa em uma frase</h2>
+    <div class="insight-box" style="font-size:1.0625rem">
+      <p style="margin:0;color:var(--text)">Cada Cérebro é um <strong>estado vivo</strong> no Supabase. Cada agente é uma <strong>função pura</strong> que, a cada tarefa, busca os 8 trechos mais relevantes do Cérebro do produto que precisa, monta um prompt com seu system prompt especialista e os trechos, e responde. Não há re-treino. Não há drift. Não há fine-tuning. Custo por tarefa: centavos. Reprodutível pra qualquer cliente futuro que você tiver — esse é o case.</p>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  Preparado para <strong>André Codina · Dolphin / Agência Pinguim</strong><br>
+  Mission Control — Stack Supabase + pgvector + OpenAI · 2026
+</footer>
+
+</body>
+</html>
