@@ -495,6 +495,59 @@
         <div class="note-label">Calibração contínua</div>
         <p>Cada agente começa com um K-base. Se a qualidade cair, subimos. Se o custo apertar, testamos baixar com busca por diversidade (MMR) pra evitar chunks redundantes. Os números no resto deste documento usam <strong>K = 8</strong> como referência, por ser o meio-termo usado em copy e conteúdo.</p>
       </div>
+
+      <h3>Quem decide o K — e onde</h3>
+
+      <p>O agente não raciocina sobre o K. O valor é uma <strong>configuração fixa</strong> de cada agente, decidida na hora da criação e ajustável depois pelo painel. Na prática:</p>
+
+      <ul>
+        <li><strong>Nível 1 — no código:</strong> quando um agente é criado, o <code>retrieval_k</code> fica hardcoded no arquivo de configuração dele. O agente só executa: "busca top-K chunks, monta prompt, responde". Ele não escolhe K em tempo de execução.</li>
+        <li><strong>Nível 2 — no painel:</strong> na tela de Agentes, cada agente expõe <code>retrieval_k</code> como campo editável (ao lado de system prompt, temperatura, modelo). Mudou o número pelo painel, próxima execução já usa. Sem deploy, sem código.</li>
+      </ul>
+
+      <p>Por isso cada agente já nasce com um K sensato pra função dele:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Agente</th>
+            <th>K padrão</th>
+            <th>Motivo</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Copy Chief</strong> (qualquer produto)</td>
+            <td>8</td>
+            <td>Copy longa precisa de contexto amplo — tom, objeções, provas.</td>
+          </tr>
+          <tr>
+            <td><strong>Story Chief</strong></td>
+            <td>10</td>
+            <td>Storytelling pesca mais fontes pra compor narrativa.</td>
+          </tr>
+          <tr>
+            <td><strong>FAQ / Suporte</strong></td>
+            <td>4</td>
+            <td>Resposta curta com foco alto. Mais chunks só trazem ruído.</td>
+          </tr>
+          <tr>
+            <td><strong>Auditor de qualidade</strong></td>
+            <td>15</td>
+            <td>Análise profunda exige cobertura ampla do Cérebro.</td>
+          </tr>
+          <tr>
+            <td><strong>Classificador (curador)</strong></td>
+            <td>3</td>
+            <td>Decisão binária rápida — classifica tipo de fonte, não gera texto.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        <div class="note-label">Analogia</div>
+        <p>O K é como a rotação máxima de um motor: fixa pelo fabricante, ajustável pelo mecânico, não decidida pelo motorista. No dia a dia, você não pensa sobre K — o agente já sabe. Só mexe se a qualidade não bater.</p>
+      </div>
     </section>
 
     <section id="portas">
