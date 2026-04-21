@@ -2473,20 +2473,44 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
    PROGRESSO INGEST (modal Pacote)
    ====================================================================== */
 /* Upload bar + spinner do botão */
-.upload-bar-wrap {
-  margin-top: 0.625rem;
-  height: 6px;
+.upload-bar-wrap,
+.progresso-bar-wrap {
+  margin-top: 0.75rem;
+  height: 8px;
   background: var(--surface-3);
   border: 1px solid var(--border);
   border-radius: 999px;
   overflow: hidden;
+  position: relative;
 }
-.upload-bar {
+.upload-bar,
+.progresso-bar {
   height: 100%;
   width: 0%;
   background: var(--pc);
-  transition: width .15s ease-out;
+  transition: width .4s ease-out;
   border-radius: 999px;
+  position: relative;
+}
+/* Shimmer sutil pra indicar atividade */
+.progresso-bar::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.25) 50%,
+    transparent 100%
+  );
+  animation: progresso-shimmer 1.6s linear infinite;
+}
+.progresso-bar.falhou { background: var(--danger); }
+.progresso-bar.falhou::after { display: none; }
+
+@keyframes progresso-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 .btn-spinner {

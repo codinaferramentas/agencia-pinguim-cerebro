@@ -1,7 +1,7 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421i';
-import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421i';
+import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421j';
+import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421j';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -1081,8 +1081,11 @@ function renderStepPacote() {
         // 5. Troca pro layout de progresso do processamento
         areaProgresso.innerHTML = '';
         const status = el('div', { class: 'progresso-status' }, '⏳ Iniciando processamento no servidor…');
+        const progressoWrap = el('div', { class: 'progresso-bar-wrap' });
+        const progressoBar = el('div', { class: 'progresso-bar' });
+        progressoWrap.append(progressoBar);
         const tabela = el('div', { class: 'progresso-tabela' });
-        areaProgresso.append(status, tabela);
+        areaProgresso.append(status, progressoWrap, tabela);
 
         btnProcessar.style.display = 'none';
 
@@ -1095,6 +1098,33 @@ function renderStepPacote() {
           falhou: '❌ Falhou',
         };
 
+        // Estima chunks esperados: ~ 15 por fonte (média conservadora)
+        const estimarChunksTotal = (fontes) => Math.max(1, fontes * 15);
+
+        function calcularProgresso(lote) {
+          const total = lote.arquivos_totais || 0;
+          const fontes = lote.fontes_criadas || 0;
+          const chunks = lote.chunks_criados || 0;
+
+          if (lote.status === 'recebido') return 2;
+          if (lote.status === 'extraindo') return 5;
+          if (lote.status === 'classificando') {
+            // 10% inicial + até 50% adicional conforme fontes vão sendo criadas
+            if (total === 0) return 10;
+            return 10 + Math.round((fontes / total) * 50);
+          }
+          if (lote.status === 'vetorizando') {
+            // 60% + até 38% adicional conforme chunks entram
+            const esperados = estimarChunksTotal(fontes);
+            if (esperados === 0) return 60;
+            const pct = Math.min(1, chunks / esperados);
+            return 60 + Math.round(pct * 38);
+          }
+          if (lote.status === 'concluido') return 100;
+          if (lote.status === 'falhou') return 100;
+          return 0;
+        }
+
         pollInterval = setInterval(async () => {
           try {
             const { data: loteRow } = await sb.from('ingest_lotes')
@@ -1103,7 +1133,11 @@ function renderStepPacote() {
 
             if (!loteRow) return;
 
-            status.innerHTML = `<strong>${statusMap[loteRow.status] || loteRow.status}</strong> — ${loteRow.arquivos_totais || 0} arquivos · ${loteRow.fontes_criadas || 0} fontes · ${loteRow.chunks_criados || 0} chunks`;
+            const pct = calcularProgresso(loteRow);
+            progressoBar.style.width = pct + '%';
+            if (loteRow.status === 'falhou') progressoBar.classList.add('falhou');
+
+            status.innerHTML = `<strong>${statusMap[loteRow.status] || loteRow.status}</strong> · ${pct}% · ${loteRow.arquivos_totais || 0} arquivos · ${loteRow.fontes_criadas || 0} fontes · ${loteRow.chunks_criados || 0} chunks`;
 
             const { data: arqs } = await sb.from('ingest_arquivos')
               .select('nome_original, tipo_sugerido, tipo_confianca, status')
@@ -1156,13 +1190,13 @@ function renderStepPacote() {
         btnProcessar.disabled = false;
         btnProcessar.style.pointerEvents = '';
         btnProcessar.style.display = '';
-        btnProcessar.textContent = 'Processar pacote';
+        btnProcessar.textContent = 'Iniciar';
         atualizarBotao();
         areaProgresso.style.display = 'none';
         areaProgresso.innerHTML = '';
       }
     }
-  }, 'Processar pacote');
+  }, 'Iniciar');
 
   // Upload com progresso real via XHR (supabase-js não expõe progress no upload)
   function uploadZipComProgresso({ file, storagePath, supabaseUrl, anonKey, onProgress }) {
