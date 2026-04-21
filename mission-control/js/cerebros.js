@@ -1,7 +1,7 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421g';
-import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421g';
+import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421h';
+import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421h';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -638,17 +638,20 @@ function renderStepPacote() {
     btnProcessar.style.cursor = ok ? 'pointer' : 'not-allowed';
   }
 
+  let processandoAgora = false; // trava anti-double-click
+
   const btnProcessar = el('button', {
     class: 'btn btn-primary',
     disabled: true,
     style: 'opacity:0.5',
     onclick: async () => {
+      if (processandoAgora) return;
       if (!arquivoSelecionado) return;
 
       const sb = getSupabase();
       if (!sb) { await alertarDark({ titulo: 'Sem conexão', mensagem: 'Supabase não conectado. Recarregue a página e tente de novo.', tipo: 'erro' }); return; }
 
-      // Confirmação via modal dark (não browser confirm feio)
+      // Confirmação via modal dark
       const confirma = await confirmarProcessamento({
         nomeArquivo: arquivoSelecionado.name,
         tamanhoMB: (arquivoSelecionado.size / 1024 / 1024).toFixed(1),
@@ -656,11 +659,23 @@ function renderStepPacote() {
       });
       if (!confirma) return;
 
+      // TRAVA imediata + feedback visual instantâneo
+      processandoAgora = true;
       btnProcessar.disabled = true;
-      btnProcessar.textContent = 'Enviando pro Storage…';
+      btnProcessar.style.pointerEvents = 'none';
+      btnProcessar.innerHTML = '<span class="btn-spinner"></span> Preparando…';
+
+      // Mostra área de progresso JÁ com upload bar
+      areaProgresso.style.display = '';
+      areaProgresso.innerHTML = '';
+      const uploadStatus = el('div', { class: 'progresso-status' }, '⬆ Preparando upload…');
+      const uploadBarWrap = el('div', { class: 'upload-bar-wrap' });
+      const uploadBar = el('div', { class: 'upload-bar' });
+      uploadBarWrap.append(uploadBar);
+      areaProgresso.append(uploadStatus, uploadBarWrap);
 
       try {
-        // 1. Busca produto pelo slug pra achar cerebro_id
+        // 1. Busca produto
         const { data: prod, error: eProd } = await sb.from('produtos').select('id').eq('slug', cerebroSlug).single();
         if (eProd || !prod) throw new Error('Produto não encontrado: ' + cerebroSlug);
         const { data: cer, error: eCer } = await sb.from('cerebros').select('id').eq('produto_id', prod.id).single();
@@ -680,16 +695,24 @@ function renderStepPacote() {
 
         const storagePath = `lote/${lote.id}/${arquivoSelecionado.name}`;
 
-        // 3. Upload pro Storage
-        btnProcessar.textContent = 'Upload para o Storage…';
-        const { error: eUp } = await sb.storage.from('pinguim-uploads').upload(storagePath, arquivoSelecionado, {
-          contentType: 'application/zip',
-          upsert: true,
-        });
-        if (eUp) throw new Error('Erro upload Storage: ' + eUp.message);
+        // 3. Upload COM progresso real (via XHR direto pra API de storage)
+        uploadStatus.innerHTML = `<strong>⬆ Enviando zip para o servidor…</strong> 0% · 0 / ${(arquivoSelecionado.size / 1024 / 1024).toFixed(1)} MB`;
 
-        // 4. Dispara Edge Function
-        btnProcessar.textContent = 'Processando no servidor…';
+        await uploadZipComProgresso({
+          file: arquivoSelecionado,
+          storagePath,
+          supabaseUrl: window.__ENV__.SUPABASE_URL,
+          anonKey: window.__ENV__.SUPABASE_ANON_KEY,
+          onProgress: (pct, loaded, total) => {
+            uploadBar.style.width = pct + '%';
+            uploadStatus.innerHTML = `<strong>⬆ Enviando zip para o servidor…</strong> ${pct}% · ${(loaded / 1024 / 1024).toFixed(1)} / ${(total / 1024 / 1024).toFixed(1)} MB`;
+          },
+        });
+
+        uploadBar.style.width = '100%';
+        uploadStatus.innerHTML = `<strong>✓ Upload concluído</strong> · Acionando o motor de ingestão…`;
+
+        // 4. Dispara Edge Function (fire & forget)
         const envCfg = window.__ENV__ || {};
         fetch(`${envCfg.SUPABASE_URL}/functions/v1/ingest-pacote`, {
           method: 'POST',
@@ -704,22 +727,20 @@ function renderStepPacote() {
             origem: 'lote',
           }),
         }).catch(e => console.error('erro dispatch function:', e));
-        // Não espera resposta — polling cuida
 
-        // 5. Progresso em tempo real
-        areaProgresso.style.display = '';
+        // 5. Troca pro layout de progresso do processamento
         areaProgresso.innerHTML = '';
-        const status = el('div', { class: 'progresso-status' }, '⏳ Recebido, aguardando início…');
+        const status = el('div', { class: 'progresso-status' }, '⏳ Iniciando processamento no servidor…');
         const tabela = el('div', { class: 'progresso-tabela' });
         areaProgresso.append(status, tabela);
 
         btnProcessar.style.display = 'none';
 
         const statusMap = {
-          recebido: '⏳ Recebido',
-          extraindo: '📂 Extraindo arquivos',
-          classificando: '🧠 Classificando com IA',
-          vetorizando: '🔢 Vetorizando chunks',
+          recebido: '⏳ Recebido, aguardando worker',
+          extraindo: '📂 Abrindo zip e extraindo arquivos',
+          classificando: '🧠 Classificando tipo de cada fonte (IA)',
+          vetorizando: '🔢 Vetorizando texto pra busca semântica',
           concluido: '✅ Concluído',
           falhou: '❌ Falhou',
         };
@@ -780,12 +801,42 @@ function renderStepPacote() {
         }, 3000);
 
       } catch (e) {
+        processandoAgora = false;
         await alertarDark({ titulo: 'Falha no envio', mensagem: e.message, tipo: 'erro' });
         btnProcessar.disabled = false;
+        btnProcessar.style.pointerEvents = '';
+        btnProcessar.style.display = '';
         btnProcessar.textContent = 'Processar pacote';
+        atualizarBotao();
+        areaProgresso.style.display = 'none';
+        areaProgresso.innerHTML = '';
       }
     }
   }, 'Processar pacote');
+
+  // Upload com progresso real via XHR (supabase-js não expõe progress no upload)
+  function uploadZipComProgresso({ file, storagePath, supabaseUrl, anonKey, onProgress }) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const url = `${supabaseUrl}/storage/v1/object/pinguim-uploads/${storagePath}`;
+      xhr.open('POST', url);
+      xhr.setRequestHeader('Authorization', `Bearer ${anonKey}`);
+      xhr.setRequestHeader('Content-Type', 'application/zip');
+      xhr.setRequestHeader('x-upsert', 'true');
+      xhr.upload.onprogress = (ev) => {
+        if (ev.lengthComputable && onProgress) {
+          const pct = Math.round((ev.loaded / ev.total) * 100);
+          onProgress(pct, ev.loaded, ev.total);
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(`Upload HTTP ${xhr.status}: ${xhr.responseText || ''}`));
+      };
+      xhr.onerror = () => reject(new Error('Erro de rede no upload'));
+      xhr.send(file);
+    });
+  }
 
   step.append(
     el('div', { class: 'modal-head' }, [

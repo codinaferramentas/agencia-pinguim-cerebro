@@ -318,7 +318,41 @@ serve(async (req) => {
 
     const buffer = new Uint8Array(await arquivo.arrayBuffer());
     // Lista recursiva — entra em zips aninhados
-    const entries = await listarArquivosRecursivo(buffer);
+    const todosEntries = await listarArquivosRecursivo(buffer);
+
+    // Dedup por nome-base (sem extensão): prioridade PDF > DOCX > MD > TXT > demais
+    // Por quê: PDF preserva estrutura (parágrafos, tabelas) que ajuda o embedding.
+    // TXT é texto cru, pior sinal semântico. Se tem "aula.pdf" E "aula.txt", usa o PDF.
+    const prioridade: Record<string, number> = { pdf: 10, docx: 8, md: 6, markdown: 6, txt: 4 };
+    const porBase = new Map<string, typeof todosEntries[0]>();
+    const descartadosDup: string[] = [];
+
+    for (const e of todosEntries) {
+      // chave: caminho sem extensão (normalizado)
+      const semExt = e.caminho.replace(/\.[^.\/]+$/, '').toLowerCase();
+      const ext = (e.nome.split('.').pop() || '').toLowerCase();
+      const score = prioridade[ext] ?? 1;
+
+      const atual = porBase.get(semExt);
+      if (!atual) {
+        porBase.set(semExt, e);
+      } else {
+        const extAtual = (atual.nome.split('.').pop() || '').toLowerCase();
+        const scoreAtual = prioridade[extAtual] ?? 1;
+        if (score > scoreAtual) {
+          descartadosDup.push(atual.caminho);
+          porBase.set(semExt, e);
+        } else {
+          descartadosDup.push(e.caminho);
+        }
+      }
+    }
+
+    const entries = Array.from(porBase.values());
+    console.log(`dedup: ${todosEntries.length} -> ${entries.length} (descartados ${descartadosDup.length} duplicados por formato)`);
+    if (descartadosDup.length > 0) {
+      stats.arquivos_skip += descartadosDup.length;
+    }
 
     stats.arquivos_totais = entries.length;
     await client.from('ingest_lotes').update({
@@ -455,21 +489,24 @@ serve(async (req) => {
 
 **Duração:** ${(duracao / 1000).toFixed(1)}s
 
-## Arquivos
-- Totais: ${stats.arquivos_totais}
+## Arquivos no pacote
+- Detectados no zip: ${todosEntries.length}
+- Descartados por formato duplicado (PDF > DOCX > MD > TXT): ${descartadosDup.length}
 - Processados: ${stats.arquivos_ok}
-- Quarentena: ${stats.em_quarentena}
-- Duplicados: ${stats.arquivos_skip}
+- Em quarentena (confiança baixa ou sem texto): ${stats.em_quarentena}
+- Já existiam (sha256 igual, evitado reprocessamento): ${Math.max(0, stats.arquivos_skip - descartadosDup.length)}
 - Erros: ${stats.arquivos_erro}
 
-## Fontes + Chunks
-- Fontes: ${stats.fontes_criadas}
+## Fontes + Chunks no Cérebro
+- Fontes criadas: ${stats.fontes_criadas}
 - Chunks vetorizados: ${stats.chunks_criados}
 
-## Custos (USD)
-- Classificação: ${stats.custo_classificacao_usd.toFixed(6)}
-- Embedding: ${stats.custo_embedding_usd.toFixed(6)}
+## Custos
+- Classificação: US$ ${stats.custo_classificacao_usd.toFixed(6)}
+- Embedding: US$ ${stats.custo_embedding_usd.toFixed(6)}
 - **Total: US$ ${custoTotal.toFixed(6)} · ~ R$ ${(custoTotal * 5.1).toFixed(4)}**
+
+${descartadosDup.length > 0 ? '\n## Arquivos descartados por duplicata de formato\n' + descartadosDup.slice(0, 30).map(d => `- ${d}`).join('\n') + (descartadosDup.length > 30 ? `\n- ... + ${descartadosDup.length - 30} outros` : '') : ''}
 `;
 
     await client.from('ingest_lotes').update({
