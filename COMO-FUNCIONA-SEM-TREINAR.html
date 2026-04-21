@@ -3,942 +3,617 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Reduzindo tokens com RAG — Pinguim</title>
+<title>Reduzindo consumo de tokens com RAG · Pinguim</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600;9..144,900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #000000;
-    --ink: #FFFFFF;
-    --ink-2: #B8B8B8;
-    --ink-3: #7A7A7A;
-    --ink-4: #3D3D3D;
-    --line: #1A1A1A;
+    --bg: #0A0A0A;
+    --fg: #EDEDED;
+    --fg-2: #B4B4B4;
+    --fg-3: #7E7E7E;
+    --fg-4: #4E4E4E;
+    --line: #1F1F1F;
     --line-2: #2A2A2A;
-    --paper: #0A0A0A;
-    --f-display: 'Fraunces', Georgia, serif;
-    --f-mono: 'JetBrains Mono', ui-monospace, monospace;
-    --f-body: 'Fraunces', Georgia, serif;
+    --paper: #121212;
+    --code-bg: #141414;
+    --sans: 'IBM Plex Sans', -apple-system, system-ui, sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    --measure: 68ch;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { font-size: 17px; }
+
+  html {
+    font-size: 15px;
+    scroll-behavior: smooth;
+  }
 
   body {
-    font-family: var(--f-body);
+    font-family: var(--sans);
     font-weight: 400;
     background: var(--bg);
-    color: var(--ink-2);
-    line-height: 1.55;
+    color: var(--fg-2);
+    line-height: 1.65;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
-    position: relative;
-    overflow-x: hidden;
   }
 
-  /* Noise / grain overlay sutil */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 1;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    mix-blend-mode: overlay;
-    opacity: 0.5;
-  }
+  ::selection { background: rgba(255,255,255,0.18); color: var(--fg); }
 
-  main { position: relative; z-index: 2; }
-
-  /* =================== COVER =================== */
-  .cover {
-    min-height: 92vh;
-    padding: 64px 44px 80px;
+  /* =================== LAYOUT =================== */
+  .doc {
     display: grid;
-    grid-template-rows: auto 1fr auto;
-    position: relative;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .cover-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 2rem;
-  }
-  .wordmark {
-    font-family: var(--f-mono);
-    font-size: 0.6875rem;
-    letter-spacing: 0.3em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-  }
-  .wordmark b { color: var(--ink); font-weight: 700; }
-  .issue {
-    font-family: var(--f-mono);
-    font-size: 0.6875rem;
-    letter-spacing: 0.2em;
-    color: var(--ink-3);
-    text-align: right;
-  }
-
-  .cover-middle {
-    align-self: center;
-    max-width: 1200px;
-    padding: 4rem 0;
-  }
-
-  .eyebrow {
-    font-family: var(--f-mono);
-    font-size: 0.75rem;
-    letter-spacing: 0.28em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-    margin-bottom: 2.5rem;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-  }
-  .eyebrow::before {
-    content: '';
-    width: 40px;
-    height: 1px;
-    background: var(--ink-3);
-  }
-
-  h1.headline {
-    font-family: var(--f-display);
-    font-weight: 300;
-    font-size: clamp(3rem, 9vw, 8rem);
-    line-height: 0.95;
-    letter-spacing: -0.04em;
-    color: var(--ink);
-    margin-bottom: 2.5rem;
-  }
-  h1.headline em {
-    font-style: italic;
-    font-weight: 300;
-    color: var(--ink-2);
-  }
-  h1.headline b {
-    font-weight: 900;
-    color: var(--ink);
-  }
-
-  .deck {
-    font-family: var(--f-display);
-    font-weight: 300;
-    font-size: clamp(1.125rem, 1.8vw, 1.375rem);
-    line-height: 1.45;
-    color: var(--ink-2);
-    max-width: 620px;
-  }
-  .deck strong {
-    color: var(--ink);
-    font-weight: 600;
-  }
-
-  .cover-foot {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    gap: 2rem;
-    padding-top: 3rem;
-    border-top: 1px solid var(--line);
-    font-family: var(--f-mono);
-    font-size: 0.6875rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-  }
-  .cover-foot .chapters {
-    display: flex;
-    gap: 2.5rem;
-    flex-wrap: wrap;
-  }
-  .cover-foot .chapters a {
-    color: var(--ink-3);
-    text-decoration: none;
-    transition: color 0.2s;
-  }
-  .cover-foot .chapters a:hover { color: var(--ink); }
-
-  /* =================== CHAPTER =================== */
-  .chapter {
+    grid-template-columns: 240px 1fr;
     max-width: 1200px;
     margin: 0 auto;
-    padding: 120px 44px;
-    border-bottom: 1px solid var(--line);
-    scroll-margin-top: 2rem;
-    position: relative;
+    gap: 64px;
+    padding: 48px 40px 120px;
   }
 
-  .chapter-num {
-    font-family: var(--f-mono);
-    font-size: 0.6875rem;
-    letter-spacing: 0.3em;
-    text-transform: uppercase;
-    color: var(--ink-4);
-    margin-bottom: 2rem;
-    display: flex;
-    align-items: baseline;
-    gap: 1.5rem;
+  /* =================== SIDEBAR =================== */
+  aside.toc {
+    position: sticky;
+    top: 32px;
+    align-self: start;
+    max-height: calc(100vh - 64px);
+    overflow-y: auto;
   }
-  .chapter-num .num {
-    font-family: var(--f-display);
-    font-weight: 300;
-    font-style: italic;
-    font-size: 3rem;
-    color: var(--ink-3);
-    letter-spacing: -0.02em;
+  aside.toc .toc-head {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--fg-3);
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  aside.toc ol {
+    list-style: none;
+    counter-reset: toc;
+  }
+  aside.toc li {
+    counter-increment: toc;
+    font-size: 13px;
+  }
+  aside.toc li a {
+    display: flex;
+    gap: 10px;
+    padding: 6px 0;
+    color: var(--fg-3);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  aside.toc li a::before {
+    content: counter(toc, decimal-leading-zero);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-4);
+  }
+  aside.toc li a:hover { color: var(--fg); }
+
+  /* =================== CONTENT =================== */
+  article { min-width: 0; max-width: 780px; }
+
+  .hdr {
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 48px;
+  }
+  .hdr .breadcrumb {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .hdr .breadcrumb a {
+    color: var(--fg-3);
+    text-decoration: none;
+  }
+  .hdr .breadcrumb a:hover { color: var(--fg); }
+  .hdr h1 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 28px;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    color: var(--fg);
+    margin-bottom: 12px;
+  }
+  .hdr .lede {
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--fg-2);
+    max-width: var(--measure);
+  }
+  .hdr .meta {
+    display: flex;
+    gap: 24px;
+    margin-top: 20px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  section {
+    margin-bottom: 56px;
+    scroll-margin-top: 24px;
   }
 
   h2 {
-    font-family: var(--f-display);
-    font-weight: 300;
-    font-size: clamp(2.25rem, 5vw, 4rem);
-    line-height: 1.05;
-    letter-spacing: -0.035em;
-    color: var(--ink);
-    margin-bottom: 3rem;
-    max-width: 900px;
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 20px;
+    line-height: 1.3;
+    letter-spacing: -0.005em;
+    color: var(--fg);
+    margin-bottom: 16px;
+    padding-top: 8px;
   }
-  h2 em { font-style: italic; color: var(--ink-2); }
-  h2 b { font-weight: 900; }
+
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--fg-3);
+    margin-right: 12px;
+  }
 
   h3 {
-    font-family: var(--f-display);
+    font-family: var(--sans);
     font-weight: 600;
-    font-size: 1.625rem;
-    line-height: 1.2;
-    letter-spacing: -0.02em;
-    color: var(--ink);
-    margin: 3.5rem 0 1.25rem;
+    font-size: 15px;
+    color: var(--fg);
+    margin: 32px 0 10px;
+    letter-spacing: 0.005em;
   }
-  h3 em { font-style: italic; font-weight: 400; color: var(--ink-2); }
 
   p {
-    font-family: var(--f-display);
-    font-weight: 400;
-    font-size: 1.0625rem;
-    line-height: 1.65;
-    color: var(--ink-2);
-    margin-bottom: 1.25rem;
-    max-width: 680px;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--fg-2);
+    margin-bottom: 14px;
+    max-width: var(--measure);
   }
   p strong {
-    color: var(--ink);
+    color: var(--fg);
     font-weight: 600;
   }
-  p em {
-    font-style: italic;
-    color: var(--ink);
+  p code, li code, td code {
+    font-family: var(--mono);
+    font-size: 0.875em;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: var(--fg);
   }
 
-  /* =================== LAYOUT COLUMNS =================== */
-  .two-col {
+  ul, ol { padding-left: 20px; margin-bottom: 14px; color: var(--fg-2); max-width: var(--measure); }
+  li { font-size: 15px; line-height: 1.7; margin-bottom: 4px; }
+  li strong { color: var(--fg); font-weight: 600; }
+
+  a {
+    color: var(--fg);
+    text-decoration: underline;
+    text-decoration-color: var(--fg-4);
+    text-underline-offset: 3px;
+  }
+  a:hover { text-decoration-color: var(--fg); }
+
+  /* =================== NOTES / CALLOUTS =================== */
+  .note {
+    border-left: 2px solid var(--fg-3);
+    padding: 14px 0 14px 18px;
+    margin: 20px 0;
+    max-width: var(--measure);
+  }
+  .note .note-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--fg-3);
+    margin-bottom: 6px;
+  }
+  .note p { font-size: 14px; margin-bottom: 0; color: var(--fg-2); }
+  .note p + p { margin-top: 8px; }
+
+  /* =================== CODE =================== */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 16px 0;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--fg);
+    max-width: var(--measure);
+  }
+  pre .c { color: var(--fg-3); } /* comment */
+  pre .k { color: var(--fg); } /* keyword/accent */
+
+  /* =================== TABLES =================== */
+  table {
+    width: 100%;
+    max-width: var(--measure);
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 13px;
+  }
+  th {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--fg-3);
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line-2);
+  }
+  td {
+    padding: 12px;
+    border-bottom: 1px solid var(--line);
+    color: var(--fg-2);
+    vertical-align: top;
+  }
+  td strong { color: var(--fg); font-weight: 600; }
+  tr:last-child td { border-bottom: 0; }
+
+  /* =================== KEY-VALUE grid (for cost comparison etc) =================== */
+  .kvs {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 4rem;
-    align-items: start;
-    margin: 3rem 0;
-  }
-
-  .lede {
-    font-family: var(--f-display);
-    font-weight: 300;
-    font-size: 1.5rem;
-    line-height: 1.4;
-    color: var(--ink);
-    max-width: 720px;
-    padding-left: 2rem;
-    border-left: 1px solid var(--ink-4);
-  }
-  .lede em { font-style: italic; }
-
-  /* =================== HUGE NUMBERS =================== */
-  .big-stat {
-    display: grid;
-    grid-template-columns: 2fr 3fr;
-    gap: 3rem;
-    margin: 3rem 0;
-    padding: 3rem 0;
-    border-top: 1px solid var(--line);
-    border-bottom: 1px solid var(--line);
-    align-items: center;
-  }
-  .big-stat .num {
-    font-family: var(--f-display);
-    font-weight: 300;
-    font-size: clamp(4rem, 10vw, 8rem);
-    line-height: 0.9;
-    letter-spacing: -0.05em;
-    color: var(--ink);
-  }
-  .big-stat .num em { font-style: italic; color: var(--ink-3); }
-  .big-stat .lbl {
-    font-family: var(--f-display);
-    font-size: 1.0625rem;
-    line-height: 1.55;
-    color: var(--ink-2);
-  }
-  .big-stat .lbl strong { color: var(--ink); font-weight: 600; }
-  .big-stat .lbl .tiny {
-    display: block;
-    font-family: var(--f-mono);
-    font-size: 0.6875rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--ink-4);
-    margin-top: 0.75rem;
-  }
-
-  /* =================== COMPARISON =================== */
-  .versus {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    gap: 3rem;
-    align-items: stretch;
-    margin: 3rem 0;
-    padding: 0;
-  }
-  .versus-side {
-    padding: 2.5rem 0;
-    position: relative;
-  }
-  .versus-side h4 {
-    font-family: var(--f-mono);
-    font-size: 0.6875rem;
-    letter-spacing: 0.28em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-    margin-bottom: 2rem;
-  }
-  .versus-side .big {
-    font-family: var(--f-display);
-    font-weight: 300;
-    font-size: clamp(2.5rem, 6vw, 4rem);
-    line-height: 0.95;
-    letter-spacing: -0.03em;
-    color: var(--ink);
-    margin-bottom: 1rem;
-  }
-  .versus-side .big em { font-style: italic; color: var(--ink-3); }
-  .versus-side p { font-size: 0.9375rem; color: var(--ink-2); max-width: 100%; }
-  .versus-side.bad .big { color: var(--ink-3); }
-  .versus-divider {
-    width: 1px;
-    background: var(--line);
-    position: relative;
-  }
-  .versus-divider::after {
-    content: 'vs';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: var(--bg);
-    padding: 0.5rem 0.75rem;
-    font-family: var(--f-display);
-    font-style: italic;
-    font-weight: 300;
-    font-size: 1.25rem;
-    color: var(--ink-3);
-  }
-
-  /* =================== FLOW DIAGRAM =================== */
-  .flow {
-    margin: 3rem 0;
-    display: grid;
-    gap: 1px;
-    background: var(--line);
+    gap: 0;
+    margin: 20px 0;
     border: 1px solid var(--line);
+    border-radius: 6px;
+    max-width: var(--measure);
+    overflow: hidden;
   }
-  .flow-step {
-    background: var(--bg);
-    padding: 1.75rem 2rem;
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 2rem;
-    align-items: center;
+  .kvs .kv {
+    padding: 16px 20px;
+    border-right: 1px solid var(--line);
   }
-  .flow-step .step-num {
-    font-family: var(--f-display);
-    font-style: italic;
-    font-weight: 300;
-    font-size: 2.75rem;
-    line-height: 1;
-    color: var(--ink-3);
-    min-width: 3rem;
+  .kvs .kv:last-child { border-right: 0; }
+  .kvs .kv .lbl {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--fg-3);
+    margin-bottom: 6px;
   }
-  .flow-step .step-title {
-    font-family: var(--f-display);
+  .kvs .kv .val {
+    font-family: var(--sans);
+    font-size: 24px;
     font-weight: 600;
-    font-size: 1.125rem;
-    color: var(--ink);
-    margin-bottom: 0.25rem;
+    color: var(--fg);
+    line-height: 1.1;
+    margin-bottom: 4px;
+    letter-spacing: -0.01em;
   }
-  .flow-step .step-desc {
-    font-family: var(--f-mono);
-    font-size: 0.8125rem;
-    color: var(--ink-3);
+  .kvs .kv .desc {
+    font-size: 12.5px;
+    color: var(--fg-3);
     line-height: 1.5;
   }
 
-  /* =================== PORTAS (entry points) =================== */
-  .porta {
-    padding: 3rem 0;
-    border-top: 1px solid var(--line);
-    display: grid;
-    grid-template-columns: 1fr 2fr;
-    gap: 4rem;
-    align-items: start;
+  /* =================== STEP LIST =================== */
+  .steps {
+    counter-reset: step;
+    list-style: none;
+    padding: 0;
+    margin: 16px 0;
+    max-width: var(--measure);
   }
-  .porta:last-of-type { border-bottom: 1px solid var(--line); }
-
-  .porta-meta {
-    font-family: var(--f-mono);
-    font-size: 0.6875rem;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-  }
-  .porta-meta .roman {
-    font-family: var(--f-display);
-    font-style: italic;
-    font-weight: 300;
-    font-size: 3rem;
-    line-height: 1;
-    color: var(--ink);
-    display: block;
-    margin-bottom: 0.75rem;
-  }
-  .porta h3 {
-    margin-top: 0;
-    margin-bottom: 1rem;
-  }
-  .porta p { margin-bottom: 1rem; }
-
-  .porta-code {
-    font-family: var(--f-mono);
-    font-size: 0.8125rem;
-    color: var(--ink);
-    background: var(--paper);
-    border: 1px solid var(--line);
-    padding: 1.25rem 1.5rem;
-    margin-top: 1.5rem;
-    white-space: pre;
-    overflow-x: auto;
+  .steps li {
+    counter-increment: step;
+    padding: 12px 0 12px 36px;
+    position: relative;
+    border-bottom: 1px solid var(--line);
+    font-size: 14px;
     line-height: 1.6;
   }
-  .porta-code .comment { color: var(--ink-3); font-style: italic; }
-  .porta-code .accent { color: var(--ink); font-weight: 500; }
+  .steps li:last-child { border-bottom: 0; }
+  .steps li::before {
+    content: counter(step, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-3);
+  }
+  .steps li strong { color: var(--fg); font-weight: 600; display: block; margin-bottom: 2px; font-size: 14px; }
+  .steps li span.hint { display: block; color: var(--fg-3); font-size: 13px; font-family: var(--mono); margin-top: 2px; }
 
-  /* =================== PULL QUOTE =================== */
-  .pull {
-    margin: 5rem 0;
-    padding: 3rem 0;
-    border-top: 1px solid var(--line);
-    border-bottom: 1px solid var(--line);
-    max-width: 900px;
-  }
-  .pull p {
-    font-family: var(--f-display);
-    font-weight: 300;
-    font-style: italic;
-    font-size: clamp(1.5rem, 3vw, 2.25rem);
-    line-height: 1.3;
-    color: var(--ink);
-    max-width: 100%;
-    margin: 0;
-    letter-spacing: -0.015em;
-  }
-  .pull p::before { content: '“'; margin-right: 0.1em; }
-  .pull p::after { content: '”'; margin-left: 0.1em; }
-
-  /* =================== TABLE =================== */
-  table.data {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 2.5rem 0;
-    font-family: var(--f-display);
-  }
-  table.data thead th {
-    font-family: var(--f-mono);
-    font-size: 0.6875rem;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-    text-align: left;
-    padding: 1rem 0.75rem;
-    border-top: 1px solid var(--ink);
-    border-bottom: 1px solid var(--line);
-    font-weight: 500;
-  }
-  table.data td {
-    padding: 1.25rem 0.75rem;
-    border-bottom: 1px solid var(--line);
-    font-size: 0.9375rem;
-    color: var(--ink-2);
-    vertical-align: top;
-  }
-  table.data td strong {
-    color: var(--ink);
-    font-weight: 600;
-  }
-  table.data tr:last-child td {
-    border-bottom: 1px solid var(--ink);
-  }
-
-  /* =================== RULES =================== */
-  .rules {
-    margin: 3rem 0;
-    counter-reset: rule;
-  }
-  .rule {
-    counter-increment: rule;
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 2.5rem;
-    padding: 2rem 0;
-    border-top: 1px solid var(--line);
-    align-items: baseline;
-  }
-  .rules .rule:last-child { border-bottom: 1px solid var(--line); }
-  .rule::before {
-    content: '0' counter(rule);
-    font-family: var(--f-display);
-    font-weight: 300;
-    font-style: italic;
-    font-size: 3.5rem;
-    line-height: 0.9;
-    color: var(--ink-4);
-    letter-spacing: -0.02em;
-  }
-  .rule h4 {
-    font-family: var(--f-display);
-    font-weight: 600;
-    font-size: 1.375rem;
-    line-height: 1.25;
-    color: var(--ink);
-    margin-bottom: 0.5rem;
-    letter-spacing: -0.015em;
-  }
-  .rule p { font-size: 1rem; max-width: 680px; margin: 0; }
-
-  /* =================== CLOSER =================== */
-  .closer {
-    padding: 140px 44px 160px;
-    max-width: 1200px;
-    margin: 0 auto;
-    text-align: center;
-  }
-  .closer .kicker {
-    font-family: var(--f-mono);
-    font-size: 0.6875rem;
-    letter-spacing: 0.28em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-    margin-bottom: 2.5rem;
-  }
-  .closer h2 {
-    max-width: 100%;
-    text-align: center;
-    margin: 0 auto 3rem;
-    font-size: clamp(2rem, 5vw, 3.75rem);
-  }
-  .closer .tagline {
-    font-family: var(--f-display);
-    font-style: italic;
-    font-weight: 300;
-    font-size: 1.5rem;
-    line-height: 1.4;
-    color: var(--ink-2);
-    max-width: 640px;
-    margin: 0 auto;
-  }
-
+  /* =================== FOOTER =================== */
   footer.end {
+    grid-column: 1 / -1;
+    margin-top: 40px;
+    padding-top: 24px;
     border-top: 1px solid var(--line);
-    padding: 3rem 44px;
-    max-width: 1200px;
-    margin: 0 auto;
     display: flex;
     justify-content: space-between;
-    font-family: var(--f-mono);
-    font-size: 0.6875rem;
-    letter-spacing: 0.2em;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--ink-3);
+    color: var(--fg-3);
   }
-  footer.end a { color: var(--ink-3); text-decoration: none; }
-  footer.end a:hover { color: var(--ink); }
-
-  /* =================== ENTRANCE ANIMATION =================== */
-  @keyframes rise {
-    from { opacity: 0; transform: translateY(12px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  .cover-middle > * { animation: rise 1s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
-  .cover-middle .eyebrow { animation-delay: 0.1s; }
-  .cover-middle h1 { animation-delay: 0.25s; }
-  .cover-middle .deck { animation-delay: 0.5s; }
+  footer.end a { color: var(--fg-3); text-decoration: none; }
+  footer.end a:hover { color: var(--fg); }
 
   /* =================== RESPONSIVE =================== */
-  @media (max-width: 780px) {
-    .cover, .chapter, .closer, footer.end { padding-left: 24px; padding-right: 24px; }
-    .chapter { padding-top: 80px; padding-bottom: 80px; }
-    .two-col, .porta, .big-stat, .versus { grid-template-columns: 1fr; gap: 2rem; }
-    .versus-divider { display: none; }
-    .cover-foot { flex-direction: column; align-items: flex-start; gap: 1.5rem; }
-    .lede { padding-left: 1.25rem; font-size: 1.25rem; }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation: none !important; }
+  @media (max-width: 860px) {
+    .doc {
+      grid-template-columns: 1fr;
+      gap: 32px;
+      padding: 24px 20px 80px;
+    }
+    aside.toc {
+      position: static;
+      max-height: none;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--line);
+    }
+    .kvs { grid-template-columns: 1fr; }
+    .kvs .kv { border-right: 0; border-bottom: 1px solid var(--line); }
+    .kvs .kv:last-child { border-bottom: 0; }
   }
 </style>
 </head>
 <body>
 
-<main>
+<main class="doc">
 
-<!-- =============================================================
-     COVER — editorial opening
-     ============================================================= -->
-<section class="cover">
-  <header class="cover-head">
-    <div class="wordmark"><b>Pinguim</b> &nbsp;·&nbsp; Mission Control</div>
-    <div class="issue">Nota técnica<br>Abril, 2026</div>
-  </header>
+  <aside class="toc" aria-label="Sumário">
+    <div class="toc-head">Neste documento</div>
+    <ol>
+      <li><a href="#alimentar">Alimentar o Cérebro</a></li>
+      <li><a href="#rag">O que o RAG muda</a></li>
+      <li><a href="#portas">Portas de entrada</a></li>
+      <li><a href="#consumo">Consumo no dia a dia</a></li>
+      <li><a href="#regras">Regras de ouro</a></li>
+    </ol>
+  </aside>
 
-  <div class="cover-middle">
-    <div class="eyebrow">Arquitetura · Agentes de IA</div>
-    <h1 class="headline">
-      Como reduzir o<br>
-      <em>consumo de tokens</em><br>
-      ao treinar <b>agentes</b>.
-    </h1>
-    <p class="deck">
-      A gente adota <strong>RAG sobre Supabase</strong> pra que cada agente consulte só o que importa, no momento exato. A conta do mês cai de centenas para <strong>dezenas de reais</strong> — sem perder qualidade.
-    </p>
-  </div>
+  <article>
 
-  <footer class="cover-foot">
-    <div class="chapters">
-      <a href="#alimentar">I · Alimentar o Cérebro</a>
-      <a href="#rag">II · RAG</a>
-      <a href="#portas">III · Portas de entrada</a>
-      <a href="#consumo">IV · Consumo real</a>
-      <a href="#regras">V · Regras de ouro</a>
-    </div>
-    <div>⌖ Index</div>
-  </footer>
-</section>
-
-<!-- =============================================================
-     CHAPTER I — Alimentar o Cérebro
-     ============================================================= -->
-<section class="chapter" id="alimentar">
-  <div class="chapter-num"><span class="num">I</span> Etapa 01 — Alimentar</div>
-  <h2>Cada produto tem um <em>Cérebro</em>, e cada Cérebro precisa ser <b>alimentado</b> antes de servir.</h2>
-
-  <div class="lede">
-    Aulas, páginas, depoimentos, objeções, sacadas. Tudo entra no Cérebro em formato único, vai pro <em>Supabase</em> e é transformado em vetores buscáveis. O agente nunca conversa com o Cérebro inteiro — só com o pedacinho que importa.
-  </div>
-
-  <h3>A regra de ouro da alimentação</h3>
-  <p>Antes de <em>gerar</em> qualquer coisa, o Cérebro precisa existir. Cada fonte que entra é quebrada em pedaços pequenos — cerca de <strong>500 tokens</strong> cada — e vetorizada. Esses pedacinhos ficam guardados no Supabase, prontos pra serem consultados instantaneamente.</p>
-  <p>É isso que a gente chama de <strong>RAG</strong> — <em>Retrieval-Augmented Generation</em>. O agente não memoriza o Cérebro. Ele <em>consulta</em> o Cérebro no instante em que precisa.</p>
-
-  <div class="big-stat">
-    <div class="num">500<em>.</em></div>
-    <div class="lbl">
-      <strong>tokens por chunk</strong>, o tamanho ideal para preservar contexto sem desperdiçar capacidade.
-      <span class="tiny">recomendação Anthropic + OpenAI</span>
-    </div>
-  </div>
-</section>
-
-<!-- =============================================================
-     CHAPTER II — RAG é o coração
-     ============================================================= -->
-<section class="chapter" id="rag">
-  <div class="chapter-num"><span class="num">II</span> O que o RAG muda</div>
-  <h2><em>RAG</em> é o coração da redução de <b>custo</b>.</h2>
-
-  <p>Imagine o Cérebro Elo maduro: <strong>100 fontes grandes</strong> — aulas transcritas, páginas, depoimentos, sacadas. Juntas, elas formam centenas de milhares de tokens. Se o agente recebesse tudo isso em toda chamada, a conta explodiria.</p>
-
-  <div class="versus">
-    <div class="versus-side bad">
-      <h4>Sem RAG</h4>
-      <div class="big"><em>US$</em> 1<em>,00</em></div>
-      <p>Cérebro inteiro enviado em toda chamada. <strong>~400 mil tokens</strong> por requisição. Insustentável em qualquer escala.</p>
-    </div>
-    <div class="versus-divider"></div>
-    <div class="versus-side">
-      <h4>Com RAG</h4>
-      <div class="big"><em>US$</em> 0<em>,02</em></div>
-      <p>Só os 8 trechos mais relevantes viajam no prompt. <strong>~8 mil tokens</strong>. Barato o bastante pra rodar em qualquer volume.</p>
-    </div>
-  </div>
-
-  <div class="pull">
-    <p>50 vezes mais barato. E a qualidade não cai — na verdade, melhora, porque o agente recebe só contexto relevante, sem ruído.</p>
-  </div>
-
-  <h3>Como RAG opera, passo a passo</h3>
-
-  <div class="flow">
-    <div class="flow-step">
-      <div class="step-num">01</div>
-      <div>
-        <div class="step-title">Quebra em pedaços</div>
-        <div class="step-desc">Cada fonte vira N chunks de ~500 tokens · 1 aula de 2h ≈ 40 chunks</div>
+    <header class="hdr">
+      <div class="breadcrumb"><a href="/">Pinguim</a> &nbsp;/&nbsp; <a href="/docs/">Docs</a> &nbsp;/&nbsp; Arquitetura</div>
+      <h1>Reduzindo consumo de tokens com RAG</h1>
+      <p class="lede">Documento técnico explicando como a operação do Pinguim vai alimentar os Cérebros dos produtos e como os agentes vão consumir esse contexto no dia a dia — com custo previsível e sem dependência de treinamento de modelo.</p>
+      <div class="meta">
+        <span>Versão 1</span>
+        <span>Abril 2026</span>
+        <span>Leitura ~ 7 min</span>
       </div>
-    </div>
-    <div class="flow-step">
-      <div class="step-num">02</div>
-      <div>
-        <div class="step-title">Vetoriza pela OpenAI</div>
-        <div class="step-desc">text-embedding-3-small · custo: US$ 0,00002 por chunk · irrelevante</div>
+    </header>
+
+    <section id="alimentar">
+      <h2><span class="num">01.</span>Alimentar o Cérebro</h2>
+
+      <p>Cada produto da Pinguim tem um Cérebro próprio: Elo, ProAlt, Taurus, Lira, Orion, além do Cérebro da empresa. Antes que qualquer agente consiga gerar conteúdo útil, o Cérebro precisa ser alimentado com contexto — aulas, páginas, depoimentos, objeções, sacadas.</p>
+
+      <p>A regra geral: toda fonte que entra é <strong>convertida pra Markdown</strong>, <strong>quebrada em pedaços de cerca de 500 tokens</strong> (chunks) e <strong>vetorizada</strong>. Os chunks e seus vetores ficam no Supabase, prontos pra serem consultados em milissegundos.</p>
+
+      <div class="note">
+        <div class="note-label">O porquê dos 500 tokens</div>
+        <p>Tamanho recomendado pela OpenAI e Anthropic. Menor que isso perde contexto. Maior desperdiça. Com 50 tokens de <em>overlap</em> entre chunks vizinhos, a continuidade semântica é preservada.</p>
       </div>
-    </div>
-    <div class="flow-step">
-      <div class="step-num">03</div>
-      <div>
-        <div class="step-title">Guarda no Supabase</div>
-        <div class="step-desc">pgvector nativo · zero Pinecone, zero Weaviate, zero serviço extra</div>
-      </div>
-    </div>
-    <div class="flow-step">
-      <div class="step-num">04</div>
-      <div>
-        <div class="step-title">Agente consulta on-demand</div>
-        <div class="step-desc">pergunta vira vetor · Supabase devolve top-8 chunks mais próximos · esses vão pro prompt</div>
-      </div>
-    </div>
-  </div>
-</section>
 
-<!-- =============================================================
-     CHAPTER III — 3 portas de entrada
-     ============================================================= -->
-<section class="chapter" id="portas">
-  <div class="chapter-num"><span class="num">III</span> Portas de entrada</div>
-  <h2>Três caminhos, <em>um mesmo destino</em>.</h2>
+      <p>Esse mecanismo é o que a gente chama de <strong>RAG</strong> — <em>Retrieval-Augmented Generation</em>. O agente não memoriza o Cérebro. Ele <strong>consulta</strong> o Cérebro no instante em que precisa.</p>
+    </section>
 
-  <p>Toda fonte vira vetor antes de entrar no Cérebro. Mas <em>quem</em> faz essa vetorização depende de <em>de onde</em> a fonte vem. A gente trabalha com três portas diferentes — todas acabam no mesmo lugar, no mesmo formato.</p>
+    <section id="rag">
+      <h2><span class="num">02.</span>O que o RAG muda</h2>
 
-  <div class="porta">
-    <div class="porta-meta">
-      <span class="roman">I.</span>
-      Porta Um · <strong style="color:var(--ink)">Carga Inicial</strong>
-    </div>
-    <div>
-      <h3>Do que já temos <em>hoje</em></h3>
-      <p>Transcrições no VS Code, PDFs, briefings. Tudo isso entra via script rodando <strong>na máquina do André</strong>, uma única vez, com a chave da OpenAI ficando segura em um .env local — nunca no GitHub.</p>
-      <div class="porta-code"><span class="comment">// rodado 1x só, da sua máquina</span>
-<span class="accent">node</span> scripts/import-elo-local.mjs
-  → lê 21 aulas do Cérebro Elo
-  → 842 chunks · custo ~<span class="accent">R$ 0,09</span>
-  → populado no Supabase</div>
-    </div>
-  </div>
+      <p>Imagine o Cérebro Elo já maduro: cem fontes grandes, incluindo vinte e uma aulas transcritas, páginas de vendas, depoimentos, sacadas do expert. Juntas, essas fontes somariam várias centenas de milhares de tokens. Se o agente recebesse tudo isso em toda chamada, a conta explodiria.</p>
 
-  <div class="porta">
-    <div class="porta-meta">
-      <span class="roman">II.</span>
-      Porta Dois · <strong style="color:var(--ink)">Upload Manual</strong>
-    </div>
-    <div>
-      <h3>Quando alguém sobe arquivo <em>pelo painel</em></h3>
-      <p>O usuário arrasta um PDF no Mission Control. <strong>Uma Edge Function do Supabase</strong> recebe o arquivo, extrai, chunka, vetoriza e grava. A chave da OpenAI fica guardada como secret no servidor — nunca trafega pelo navegador.</p>
-      <div class="porta-code"><span class="comment">// disparado pelo usuário no painel</span>
-Browser → Supabase Storage → Edge Function
-  → PDF vira Markdown limpo
-  → chunka + vetoriza
-  → INSERT em cerebro_fontes + chunks</div>
-    </div>
-  </div>
-
-  <div class="porta">
-    <div class="porta-meta">
-      <span class="roman">III.</span>
-      Porta Três · <strong style="color:var(--ink)">Cron Automático</strong>
-    </div>
-    <div>
-      <h3>Quando o sistema <em>alimenta sozinho</em></h3>
-      <p>Você configura no painel: <em>"a cada hora, puxa depoimentos novos do Discord"</em>. O <strong>pg_cron</strong> (cron nativo do Postgres) dispara uma Edge Function igual à da Porta Dois. Roda sem ninguém apertar botão.</p>
-      <div class="porta-code"><span class="comment">// configurado pelo painel, executado pelo Supabase</span>
-pg_cron → a cada 1h
-  → busca no Discord mensagens novas
-  → classifica tipo (depoimento? sacada?)
-  → chunka + vetoriza
-  → INSERT no Cérebro correto</div>
-    </div>
-  </div>
-
-  <h3 style="margin-top: 4rem">Comparação rápida</h3>
-  <table class="data">
-    <thead>
-      <tr>
-        <th>Porta</th>
-        <th>Quem dispara</th>
-        <th>Onde roda</th>
-        <th>Frequência</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><strong>Carga Inicial</strong></td>
-        <td>André, via terminal</td>
-        <td>Máquina local</td>
-        <td>1 vez, por produto</td>
-      </tr>
-      <tr>
-        <td><strong>Upload Manual</strong></td>
-        <td>Equipe, pelo painel</td>
-        <td>Edge Function Supabase</td>
-        <td>Sob demanda</td>
-      </tr>
-      <tr>
-        <td><strong>Cron Automático</strong></td>
-        <td>pg_cron agendado</td>
-        <td>Edge Function Supabase</td>
-        <td>Recorrente · 1h / 6h / diário</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <div class="pull" style="margin-top: 4rem">
-    <p>Não importa de qual porta a fonte veio — ela acaba no mesmo Supabase, no mesmo formato. A partir daí, todo agente consulta igual, sem saber de onde veio.</p>
-  </div>
-</section>
-
-<!-- =============================================================
-     CHAPTER IV — Consumo no dia a dia
-     ============================================================= -->
-<section class="chapter" id="consumo">
-  <div class="chapter-num"><span class="num">IV</span> O consumo no dia a dia</div>
-  <h2>Como um agente <em>realmente</em> gasta <b>token</b>.</h2>
-
-  <p>Momento da verdade. O agente Copy Elo recebe a instrução: <em>"Escreve uma nova página de vendas pro Desafio Elo, foco em consultores iniciantes"</em>. O que acontece por baixo:</p>
-
-  <div class="flow">
-    <div class="flow-step">
-      <div class="step-num">01</div>
-      <div>
-        <div class="step-title">Pergunta vira vetor</div>
-        <div class="step-desc">embedding da instrução · <strong style="color:var(--ink)">~US$ 0,00002</strong></div>
-      </div>
-    </div>
-    <div class="flow-step">
-      <div class="step-num">02</div>
-      <div>
-        <div class="step-title">Supabase devolve top-8 chunks</div>
-        <div class="step-desc">busca semântica por similaridade · instantânea · sem custo adicional</div>
-      </div>
-    </div>
-    <div class="flow-step">
-      <div class="step-num">03</div>
-      <div>
-        <div class="step-title">Prompt montado</div>
-        <div class="step-desc">[system prompt Copy Chief] + [8 chunks] + [instrução] · ~8k tokens no total</div>
-      </div>
-    </div>
-    <div class="flow-step">
-      <div class="step-num">04</div>
-      <div>
-        <div class="step-title">GPT responde</div>
-        <div class="step-desc">página completa de vendas · ~2k tokens output · <strong style="color:var(--ink)">~R$ 0,05 total</strong></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="big-stat">
-    <div class="num">R$ <em>0</em>,<em>05</em></div>
-    <div class="lbl">
-      <strong>Por página gerada.</strong> Mesmo custo pra copy de anúncio, análise de objeção, script de e-mail, roteiro de vídeo.
-      <span class="tiny">Agente Copy Chief · Cérebro Elo · volume médio</span>
-    </div>
-  </div>
-
-  <div class="two-col">
-    <div>
-      <h3>Escala do Pinguim hoje</h3>
-      <p>Se a gente imagina <strong>1000 tarefas por mês</strong> no agente de Copy do Elo — seja página, anúncio, e-mail — a conta fecha em <strong>~R$ 50</strong> por agente, por mês.</p>
-      <p>Extrapolando pra toda a operação:</p>
-    </div>
-    <div>
-      <div class="big-stat" style="margin: 0; padding: 0; border: 0">
-        <div class="num">R$ <em>5</em>k</div>
-        <div class="lbl">
-          Mensais pra rodar <strong>10 produtos × 10 agentes × 1000 tarefas</strong>.
-          <span class="tiny">Estimativa conservadora · a conta real tende a ser menor</span>
+      <div class="kvs">
+        <div class="kv">
+          <div class="lbl">Sem RAG</div>
+          <div class="val">US$ 1,00</div>
+          <div class="desc">Cérebro inteiro enviado a cada requisição (~400k tokens). Inviável em qualquer escala.</div>
+        </div>
+        <div class="kv">
+          <div class="lbl">Com RAG</div>
+          <div class="val">US$ 0,02</div>
+          <div class="desc">Apenas os 8 trechos mais relevantes viajam no prompt (~8k tokens). Escalável.</div>
         </div>
       </div>
-    </div>
-  </div>
 
-  <p>E cada tarefa deixa rastro. Toda execução grava <em>qual pergunta foi feita, quais chunks o agente usou, qual saída gerou</em>. Virou audit trail completo da Qualidade — em qualquer reclamação, a gente sabe o que alimentou a resposta.</p>
-</section>
+      <p>A redução é de aproximadamente 50 vezes, e a qualidade não cai — tende a melhorar, porque o agente recebe contexto relevante sem ruído.</p>
 
-<!-- =============================================================
-     CHAPTER V — Regras de ouro
-     ============================================================= -->
-<section class="chapter" id="regras">
-  <div class="chapter-num"><span class="num">V</span> Regras de ouro</div>
-  <h2>Cinco <em>disciplinas</em> pra manter a conta <b>baixa</b>.</h2>
+      <h3>Como o RAG opera</h3>
 
-  <div class="rules">
-    <div class="rule">
-      <div>
-        <h4>Nunca joga o Cérebro inteiro no prompt</h4>
-        <p>Sempre RAG com top-K — 8 a 12 chunks por chamada. Fim de papo. Quem joga tudo paga 50 vezes mais, sem ganhar em qualidade.</p>
-      </div>
-    </div>
-    <div class="rule">
-      <div>
-        <h4>Chunks de 500 tokens, com 50 de overlap</h4>
-        <p>Padrão recomendado pela OpenAI e Anthropic. Menor perde contexto, maior desperdiça. O overlap garante continuidade entre pedaços.</p>
-      </div>
-    </div>
-    <div class="rule">
-      <div>
-        <h4>System prompt sempre antes — pra cache</h4>
-        <p>OpenAI cobra até 90% menos em tokens cacheados. Se o prefixo do prompt é igual em toda chamada (o system prompt do Copy Chief), ele cacheia. Por isso a ordem importa: system antes, chunks depois, pergunta no fim.</p>
-      </div>
-    </div>
-    <div class="rule">
-      <div>
-        <h4>Markdown sempre, nunca JSON pesado</h4>
-        <p>JSON tem overhead de aspas, chaves, vírgulas. Markdown carrega a mesma informação com ~30% menos tokens. O agente entende os dois igual.</p>
-      </div>
-    </div>
-    <div class="rule">
-      <div>
-        <h4>Vetoriza uma vez só, consulta infinita</h4>
-        <p>Cada chunk é embeddado só quando a fonte muda. Busca é grátis (pgvector é nativo). Nunca existe razão pra re-embeddar tudo periodicamente.</p>
-      </div>
-    </div>
-  </div>
-</section>
+      <ol class="steps">
+        <li>
+          <strong>Quebra em pedaços</strong>
+          Cada fonte vira N chunks de ~500 tokens. Uma aula de 2h corresponde a aproximadamente 40 chunks.
+        </li>
+        <li>
+          <strong>Vetorização pela OpenAI</strong>
+          Cada chunk é transformado em vetor via <code>text-embedding-3-small</code>.
+          <span class="hint">custo ~ US$ 0,00002 por chunk</span>
+        </li>
+        <li>
+          <strong>Persistência no Supabase</strong>
+          Os vetores vão pra extensão <code>pgvector</code> nativa do Postgres. Sem Pinecone, sem Weaviate, sem serviço extra.
+        </li>
+        <li>
+          <strong>Consulta on-demand</strong>
+          A pergunta do agente também vira vetor. O Supabase devolve os top-8 chunks mais próximos. Só esses entram no prompt final.
+        </li>
+      </ol>
+    </section>
 
-<!-- =============================================================
-     CLOSER
-     ============================================================= -->
-<section class="closer">
-  <div class="kicker">O sistema em uma frase</div>
-  <h2>Cada Cérebro é um <em>estado vivo</em> no banco.<br>Cada agente, uma <b>função pura</b> que consulta.</h2>
-  <p class="tagline">Nada de re-treino. Nada de drift. Nada de fine-tuning. Só contexto certo, no momento certo, a custo de centavos — replicável pra qualquer cliente futuro.</p>
-</section>
+    <section id="portas">
+      <h2><span class="num">03.</span>Portas de entrada</h2>
 
-<footer class="end">
-  <div>Pinguim · Mission Control · <em>2026</em></div>
-  <a href="/">⌖ Voltar ao painel</a>
-</footer>
+      <p>A vetorização é sempre feita no servidor, mas <em>onde</em> exatamente esse servidor está depende de <em>de onde</em> a fonte veio. A operação trabalha com três portas de entrada — todas terminam no mesmo banco, no mesmo formato.</p>
+
+      <h3>Porta 1 · Carga inicial</h3>
+      <p>Do material que já existe hoje — transcrições, PDFs, briefings. Entra via script executado <strong>uma vez só</strong>, na máquina do André, usando uma chave da OpenAI local (no <code>.env</code>, nunca no GitHub).</p>
+
+<pre><span class="c"># executado uma única vez, da máquina local</span>
+node scripts/import-elo-local.mjs
+  <span class="c">→ lê 21 aulas do Cérebro Elo</span>
+  <span class="c">→ 842 chunks · custo ~ R$ 0,09</span>
+  <span class="c">→ INSERT no Supabase</span></pre>
+
+      <h3>Porta 2 · Upload manual</h3>
+      <p>Quando alguém da equipe abre o Mission Control e sobe um arquivo pelo botão <em>+ Alimentar</em>. O processamento acontece numa <strong>Edge Function do Supabase</strong> — a chave da OpenAI fica guardada como secret, nunca é exposta ao navegador.</p>
+
+<pre><span class="c"># disparado pelo usuário no painel</span>
+Browser → Supabase Storage → Edge Function
+  <span class="c">→ PDF convertido em Markdown limpo</span>
+  <span class="c">→ chunks + embeddings</span>
+  <span class="c">→ INSERT em cerebro_fontes + chunks</span></pre>
+
+      <h3>Porta 3 · Cron automático</h3>
+      <p>Agendamento configurado pelo painel — por exemplo, <em>"a cada hora, puxar depoimentos novos do canal #depoimentos do Discord"</em>. Quem dispara é o <code>pg_cron</code>, nativo do Postgres do Supabase. A mesma Edge Function da Porta 2 roda automaticamente.</p>
+
+<pre><span class="c"># configurado pelo painel, executado pelo Supabase</span>
+pg_cron → a cada 1h
+  <span class="c">→ busca mensagens novas do Discord</span>
+  <span class="c">→ classifica tipo via GPT-4o-mini</span>
+  <span class="c">→ chunks + embeddings</span>
+  <span class="c">→ INSERT no Cérebro correto</span></pre>
+
+      <h3>Resumo comparativo</h3>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Porta</th>
+            <th>Quem dispara</th>
+            <th>Onde roda</th>
+            <th>Frequência</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>1 · Carga inicial</strong></td>
+            <td>André, via terminal</td>
+            <td>Máquina local</td>
+            <td>Uma vez, por produto</td>
+          </tr>
+          <tr>
+            <td><strong>2 · Upload manual</strong></td>
+            <td>Equipe, pelo painel</td>
+            <td>Edge Function Supabase</td>
+            <td>Sob demanda</td>
+          </tr>
+          <tr>
+            <td><strong>3 · Cron automático</strong></td>
+            <td>pg_cron agendado</td>
+            <td>Edge Function Supabase</td>
+            <td>Recorrente (1h, 6h, diário)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        <div class="note-label">Nota</div>
+        <p>Independente da porta de entrada, a fonte acaba na mesma tabela, no mesmo formato. A partir daí, qualquer agente consulta igual — sem saber de onde a fonte veio.</p>
+      </div>
+    </section>
+
+    <section id="consumo">
+      <h2><span class="num">04.</span>Consumo no dia a dia</h2>
+
+      <p>Vamos pro momento da verdade: o agente Copy Elo recebe a instrução <em>"Escreva uma página de vendas focada em consultores iniciantes"</em>. Por baixo dos panos:</p>
+
+      <ol class="steps">
+        <li>
+          <strong>Pergunta vira vetor</strong>
+          Embedding da instrução pela mesma API de sempre.
+          <span class="hint">~ US$ 0,00002</span>
+        </li>
+        <li>
+          <strong>Supabase devolve top-8 chunks</strong>
+          Busca por similaridade semântica dentro do Cérebro Elo. Instantânea. Sem custo adicional.
+        </li>
+        <li>
+          <strong>Prompt montado</strong>
+          <code>[system prompt Copy Chief] + [8 chunks] + [instrução]</code> — cerca de 8k tokens no total.
+        </li>
+        <li>
+          <strong>GPT-4o responde</strong>
+          Página completa gerada em ~2k tokens de saída.
+          <span class="hint">~ R$ 0,05 total</span>
+        </li>
+      </ol>
+
+      <h3>Escalando a operação</h3>
+
+      <p>Estimando 1000 tarefas por mês no agente de Copy do Elo — páginas, anúncios, e-mails — a conta fica em torno de <strong>R$ 50 por agente por mês</strong>. Extrapolando pra toda a Pinguim, em um cenário conservador com 10 produtos × 10 agentes × 1000 tarefas, o custo operacional com modelos fica na casa de <strong>R$ 5 mil mensais</strong>.</p>
+
+      <p>Cada execução deixa rastro. Toda tarefa guarda <em>qual pergunta foi feita, quais chunks foram usados, qual foi a saída</em>. Isso vira audit trail da área de Qualidade — em qualquer reclamação, dá pra reconstituir o que alimentou a resposta.</p>
+    </section>
+
+    <section id="regras">
+      <h2><span class="num">05.</span>Regras de ouro</h2>
+
+      <p>Cinco disciplinas pra manter a conta sob controle no longo prazo.</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 40%">Regra</th>
+            <th>Por que importa</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Nunca enviar o Cérebro inteiro</strong></td>
+            <td>Sempre RAG com top-K (8 a 12 chunks). Enviar tudo custa ~50× mais sem ganho de qualidade.</td>
+          </tr>
+          <tr>
+            <td><strong>Chunks de 500 tokens, overlap 50</strong></td>
+            <td>Padrão recomendado OpenAI/Anthropic. Menor perde contexto; maior desperdiça capacidade.</td>
+          </tr>
+          <tr>
+            <td><strong>System prompt antes dos chunks</strong></td>
+            <td>OpenAI cobra até 90% menos em tokens cacheados. O prefixo precisa ser estável pra cachear.</td>
+          </tr>
+          <tr>
+            <td><strong>Markdown, não JSON pesado</strong></td>
+            <td>Markdown carrega a mesma informação com ~30% menos tokens de overhead.</td>
+          </tr>
+          <tr>
+            <td><strong>Vetorizar só quando a fonte muda</strong></td>
+            <td>Busca com pgvector é gratuita. Não existe motivo pra re-embeddar tudo periodicamente.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        <div class="note-label">Resumo</div>
+        <p>O Cérebro é o estado vivo no banco. O agente é uma função pura que consulta esse estado no momento de agir. Não existe re-treinamento, não existe drift, não existe fine-tuning. Só contexto certo, no momento certo, a custo previsível — replicável pra qualquer cliente futuro.</p>
+      </div>
+    </section>
+
+  </article>
+
+  <footer class="end">
+    <div>Pinguim · Mission Control · 2026</div>
+    <a href="/">Voltar ao painel</a>
+  </footer>
 
 </main>
 
