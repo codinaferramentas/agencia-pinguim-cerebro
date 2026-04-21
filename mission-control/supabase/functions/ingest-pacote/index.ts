@@ -446,6 +446,14 @@ serve(async (req) => {
         const chunks = chunkText(texto);
         fontesPraVetorizar.push({ fonteId: fonte!.id, chunks });
 
+        // Atualiza contador no banco a cada 5 arquivos pra UI não parecer travada
+        if (stats.fontes_criadas % 5 === 0) {
+          await client.from('ingest_lotes').update({
+            fontes_criadas: stats.fontes_criadas,
+            em_quarentena: stats.em_quarentena,
+          }).eq('id', lote_id);
+        }
+
       } catch (e) {
         stats.arquivos_erro++;
         await client.from('ingest_arquivos').update({
@@ -460,6 +468,7 @@ serve(async (req) => {
     await client.from('ingest_lotes').update({ status: 'vetorizando' }).eq('id', lote_id);
     const BATCH = 50;
 
+    let fontesVetorizadas = 0;
     for (const { fonteId, chunks } of fontesPraVetorizar) {
       for (let i = 0; i < chunks.length; i += BATCH) {
         const slice = chunks.slice(i, i + BATCH);
@@ -479,6 +488,14 @@ serve(async (req) => {
         stats.custo_embedding_usd += (tokens / 1_000_000) * 0.02;
       }
       await client.from('cerebro_fontes').update({ ingest_status: 'ok' }).eq('id', fonteId);
+      fontesVetorizadas++;
+
+      // Atualiza contador de chunks no banco a cada 3 fontes vetorizadas
+      if (fontesVetorizadas % 3 === 0) {
+        await client.from('ingest_lotes').update({
+          chunks_criados: stats.chunks_criados,
+        }).eq('id', lote_id);
+      }
     }
 
     // Relatório
