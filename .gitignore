@@ -9,3 +9,6 @@ node_modules/
 # Supabase CLI metadata (auto-gerada no link/deploy)
 /supabase/.temp/
 /supabase/.branches/
+
+# Claude Code — configuração local (permissões pessoais)
+.claude/settings.local.json
