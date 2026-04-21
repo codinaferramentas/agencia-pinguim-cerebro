@@ -5,3 +5,7 @@ node_modules/
 *.log
 .DS_Store
 .vercel/
+
+# Supabase CLI metadata (auto-gerada no link/deploy)
+/supabase/.temp/
+/supabase/.branches/
