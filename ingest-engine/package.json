@@ -5,6 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "start": "node src/server.mjs",
     "ingest": "node src/ingest.mjs",
     "setup-elo": "node src/setup-cerebros.mjs",
     "test-env": "node src/test-env.mjs"

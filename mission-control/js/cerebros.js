@@ -1,7 +1,7 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas } from './sb-client.js?v=20260421a';
-import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421a';
+import { fetchCerebrosCatalogo, fetchCerebroPecas } from './sb-client.js?v=20260421b';
+import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421b';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -454,14 +454,22 @@ function renderStepModo() {
       el('button', { class: 'modal-close', onclick: fecharModal }, '×'),
     ]),
     el('div', { class: 'modal-body' }, [
-      el('div', { class: 'modo-grid' }, [
+      el('div', { class: 'modo-grid modo-grid-3' }, [
+        el('button', {
+          class: 'modo-card',
+          onclick: () => trocarStep(renderStepPacote()),
+        }, [
+          el('div', { class: 'modo-icon' }, '📦'),
+          el('div', { class: 'modo-title' }, 'Pacote'),
+          el('div', { class: 'modo-desc' }, 'Sobe um .zip com tudo misturado. O motor extrai, classifica por tipo e vetoriza. Aceita filtro por palavra.'),
+        ]),
         el('button', {
           class: 'modo-card',
           onclick: () => trocarStep(renderStepManual()),
         }, [
           el('div', { class: 'modo-icon' }, '📤'),
           el('div', { class: 'modo-title' }, 'Manual'),
-          el('div', { class: 'modo-desc' }, 'Upload de arquivos (.md, .txt, .pdf, .csv), colar texto ou link. Você escolhe o tipo no próximo passo.'),
+          el('div', { class: 'modo-desc' }, 'Upload de 1 arquivo (.md, .txt, .pdf, .csv), colar texto ou link. Você escolhe o tipo.'),
         ]),
         el('button', {
           class: 'modo-card',
@@ -474,6 +482,220 @@ function renderStepModo() {
       ]),
     ]),
   );
+  return step;
+}
+
+/* --- PASSO 2C: Pacote (zip) --- */
+const INGEST_SERVER_URL = 'http://localhost:4100';
+
+function renderStepPacote() {
+  let arquivoSelecionado = null;
+  let filtro = '';
+  let loteIdAtivo = null;
+  let pollInterval = null;
+
+  const step = el('div', { class: 'modal-step' });
+
+  // arquivo zip
+  const inputArquivo = el('input', {
+    type: 'file',
+    accept: '.zip',
+    style: 'display:none',
+    id: 'pacote-file-input',
+    onchange: (e) => {
+      arquivoSelecionado = e.target.files[0];
+      renderArquivo();
+      atualizarBotao();
+    }
+  });
+
+  const btnEscolher = el('button', {
+    class: 'btn',
+    onclick: () => inputArquivo.click(),
+  }, '📎 Escolher arquivo .zip');
+
+  const infoArquivo = el('div', { class: 'arquivos-lista' });
+
+  function renderArquivo() {
+    infoArquivo.innerHTML = '';
+    if (!arquivoSelecionado) return;
+    infoArquivo.append(el('div', { class: 'arquivo-row' }, [
+      el('span', { class: 'arquivo-icon' }, '📦'),
+      el('span', { class: 'arquivo-nome' }, arquivoSelecionado.name),
+      el('span', { class: 'arquivo-size' }, `${(arquivoSelecionado.size / 1024 / 1024).toFixed(1)} MB`),
+      el('button', {
+        class: 'arquivo-remove',
+        onclick: () => { arquivoSelecionado = null; inputArquivo.value = ''; renderArquivo(); atualizarBotao(); }
+      }, '×'),
+    ]));
+  }
+
+  // filtro por palavra
+  const inputFiltro = el('input', {
+    class: 'input',
+    type: 'text',
+    placeholder: 'Ex: elo — só processa arquivos/pastas cujo caminho contém essa palavra',
+    oninput: (e) => { filtro = e.target.value.trim(); atualizarBotao(); }
+  });
+
+  // área de progresso (aparece durante a execução)
+  const areaProgresso = el('div', { style: 'display:none' });
+
+  function atualizarBotao() {
+    btnProcessar.disabled = !arquivoSelecionado;
+    btnProcessar.style.opacity = arquivoSelecionado ? '1' : '0.5';
+    btnProcessar.style.cursor = arquivoSelecionado ? 'pointer' : 'not-allowed';
+  }
+
+  const btnProcessar = el('button', {
+    class: 'btn btn-primary',
+    disabled: true,
+    style: 'opacity:0.5',
+    onclick: async () => {
+      if (!arquivoSelecionado) return;
+      btnProcessar.disabled = true;
+      btnProcessar.textContent = 'Enviando…';
+
+      try {
+        // ping no server
+        try {
+          const ping = await fetch(`${INGEST_SERVER_URL}/health`, { method: 'GET' });
+          if (!ping.ok) throw new Error('health check falhou');
+        } catch {
+          alert(`Motor de ingestão não está rodando.\n\nAbra o terminal na pasta ingest-engine e rode:\n\nnpm start\n\nDepois tente de novo.`);
+          btnProcessar.disabled = false;
+          btnProcessar.textContent = 'Processar pacote';
+          return;
+        }
+
+        // upload
+        const resp = await fetch(`${INGEST_SERVER_URL}/ingest`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            'X-Cerebro-Slug': cerebroAtual.slug,
+            'X-Filename': arquivoSelecionado.name,
+            'X-Filtro': filtro,
+            'X-Origem': 'lote',
+          },
+          body: arquivoSelecionado,
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || `HTTP ${resp.status}`);
+        }
+
+        const { lote_id } = await resp.json();
+        loteIdAtivo = lote_id;
+
+        // mostra progresso e começa polling
+        areaProgresso.style.display = '';
+        areaProgresso.innerHTML = '';
+        const status = el('div', { class: 'progresso-status' }, '⏳ Recebido, processando…');
+        const tabela = el('div', { class: 'progresso-tabela' });
+        areaProgresso.append(status, tabela);
+
+        btnProcessar.style.display = 'none';
+
+        pollInterval = setInterval(async () => {
+          try {
+            const r = await fetch(`${INGEST_SERVER_URL}/lotes/${lote_id}`);
+            const lote = await r.json();
+
+            const statusMap = {
+              recebido: '⏳ Recebido',
+              extraindo: '📂 Extraindo arquivos',
+              classificando: '🧠 Classificando com IA',
+              vetorizando: '🔢 Vetorizando chunks',
+              concluido: '✅ Concluído',
+              falhou: '❌ Falhou',
+            };
+            status.innerHTML = `<strong>${statusMap[lote.status] || lote.status}</strong> — ${lote.arquivos_totais || 0} arquivos · ${lote.fontes_criadas || 0} fontes · ${lote.chunks_criados || 0} chunks`;
+
+            // lista de arquivos
+            const arqs = await (await fetch(`${INGEST_SERVER_URL}/lotes/${lote_id}/arquivos`)).json();
+            tabela.innerHTML = '';
+            if (arqs.length > 0) {
+              const header = el('div', { class: 'progresso-tabela-header' }, [
+                el('div', {}, 'Arquivo'),
+                el('div', {}, 'Tipo'),
+                el('div', {}, 'Status'),
+              ]);
+              tabela.append(header);
+              arqs.slice(-15).forEach(a => {
+                const statusLabel = a.status === 'ok' ? '✓' : a.status === 'quarentena' ? '⚠' : a.status === 'erro' ? '✗' : '…';
+                tabela.append(el('div', { class: 'progresso-tabela-row' }, [
+                  el('div', { class: 'progresso-nome' }, a.nome_original || '—'),
+                  el('div', {}, a.tipo_sugerido || '—'),
+                  el('div', {}, statusLabel + ' ' + (a.status || '')),
+                ]));
+              });
+              if (arqs.length > 15) {
+                tabela.append(el('div', { class: 'progresso-tabela-mais' }, `... +${arqs.length - 15} arquivos anteriores`));
+              }
+            }
+
+            if (lote.status === 'concluido' || lote.status === 'falhou') {
+              clearInterval(pollInterval);
+              pollInterval = null;
+              // mostra relatório final
+              if (lote.log_md) {
+                const rel = el('pre', { class: 'progresso-relatorio' }, lote.log_md);
+                areaProgresso.append(rel);
+              }
+              // botão fechar
+              areaProgresso.append(el('div', { class: 'progresso-footer' }, [
+                el('button', {
+                  class: 'btn btn-primary',
+                  onclick: () => {
+                    fecharModal();
+                    // recarrega o detalhe do cérebro
+                    abrirCerebroDetalhe(cerebroAtual.slug);
+                  },
+                }, lote.status === 'concluido' ? 'Fechar e ver fontes' : 'Fechar'),
+              ]));
+            }
+          } catch (e) {
+            console.error('erro polling', e);
+          }
+        }, 2000);
+
+      } catch (e) {
+        alert('Erro: ' + e.message);
+        btnProcessar.disabled = false;
+        btnProcessar.textContent = 'Processar pacote';
+      }
+    }
+  }, 'Processar pacote');
+
+  step.append(
+    el('div', { class: 'modal-head' }, [
+      el('button', { class: 'modal-back', onclick: () => { if (pollInterval) clearInterval(pollInterval); trocarStep(renderStepModo()); } }, '‹'),
+      el('h2', {}, 'Alimentação em pacote'),
+      el('div', { class: 'modal-sub' }, `Cérebro ${cerebroAtual?.nome || ''} — motor classifica e vetoriza automaticamente`),
+      el('button', { class: 'modal-close', onclick: fecharModal }, '×'),
+    ]),
+    el('div', { class: 'modal-body' }, [
+      el('div', { class: 'field' }, [
+        el('label', {}, 'Arquivo .zip'),
+        btnEscolher,
+        inputArquivo,
+        infoArquivo,
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', {}, 'Filtro (opcional)'),
+        inputFiltro,
+        el('div', { style: 'font-size:0.6875rem;color:var(--fg-dim);margin-top:0.25rem;line-height:1.5' }, 'Só arquivos cujo nome OU caminho dentro do zip contém essa palavra serão processados. Ex: "elo" processa só as coisas do Elo, ignora ProAlt/Taurus.'),
+      ]),
+      areaProgresso,
+    ]),
+    el('div', { class: 'modal-foot' }, [
+      el('button', { class: 'btn btn-ghost', onclick: fecharModal }, 'Cancelar'),
+      btnProcessar,
+    ]),
+  );
+
   return step;
 }
 
