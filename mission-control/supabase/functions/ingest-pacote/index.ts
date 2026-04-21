@@ -523,37 +523,112 @@ async function processarOnda(lote_id: string, storage_path: string, cerebro_id: 
 async function concluirLote(lote_id: string, storage_path: string) {
   const client = sb();
 
+  // ============= RECONCILIAÇÃO =============
+  // Antes de declarar concluído, varre fontes deste lote e corrige
+  // estados intermediários que podem ter ficado pra trás (ex: update
+  // do status falhou silenciosamente no meio da onda).
+  //
+  // Regra: fonte com chunks vetorizados → ok. Fonte sem chunks → erro.
+  // ==========================================
+
+  const { data: fontesPendentes } = await client.from('cerebro_fontes')
+    .select('id')
+    .eq('ingest_lote_id', lote_id)
+    .eq('ingest_status', 'processando');
+
+  const inconsistencias: string[] = [];
+
+  if (fontesPendentes && fontesPendentes.length > 0) {
+    for (const f of fontesPendentes) {
+      const { count: chunksDaFonte } = await client.from('cerebro_fontes_chunks')
+        .select('id', { count: 'exact', head: true })
+        .eq('fonte_id', f.id);
+
+      if ((chunksDaFonte || 0) > 0) {
+        // tem chunks, só o status ficou pra trás — corrige
+        await client.from('cerebro_fontes').update({ ingest_status: 'ok' }).eq('id', f.id);
+        inconsistencias.push(`fonte ${f.id}: status corrigido pra ok (${chunksDaFonte} chunks presentes)`);
+      } else {
+        // sem chunks, realmente falhou
+        await client.from('cerebro_fontes').update({ ingest_status: 'erro' }).eq('id', f.id);
+        inconsistencias.push(`fonte ${f.id}: marcada como erro (0 chunks)`);
+      }
+    }
+  }
+
+  // Recalcula contagens REAIS direto das tabelas (não confia no contador cacheado)
+  const { count: realFontes } = await client.from('cerebro_fontes')
+    .select('id', { count: 'exact', head: true })
+    .eq('ingest_lote_id', lote_id)
+    .eq('ingest_status', 'ok');
+
+  const { count: realQuarentena } = await client.from('cerebro_fontes')
+    .select('id', { count: 'exact', head: true })
+    .eq('ingest_lote_id', lote_id)
+    .eq('ingest_status', 'quarentena');
+
+  const { count: realChunks } = await client.from('cerebro_fontes_chunks')
+    .select('id', { count: 'exact', head: true })
+    .in('fonte_id',
+      (await client.from('cerebro_fontes').select('id').eq('ingest_lote_id', lote_id)).data?.map(r => r.id) || []
+    );
+
   const { data: lote } = await client.from('ingest_lotes')
-    .select('arquivos_totais, fontes_criadas, chunks_criados, em_quarentena, custo_usd, criado_em')
+    .select('arquivos_totais, custo_usd, criado_em')
     .eq('id', lote_id).single();
 
-  const { count: totalErros } = await client.from('ingest_arquivos')
-    .select('id', { count: 'exact', head: true })
-    .eq('lote_id', lote_id)
-    .eq('status', 'erro');
+  const { data: arqsPorStatus } = await client.from('ingest_arquivos')
+    .select('status')
+    .eq('lote_id', lote_id);
+  const arqOk = (arqsPorStatus || []).filter(a => a.status === 'ok').length;
+  const arqQuar = (arqsPorStatus || []).filter(a => a.status === 'quarentena').length;
+  const arqErro = (arqsPorStatus || []).filter(a => a.status === 'erro').length;
+  const arqPendente = (arqsPorStatus || []).filter(a => a.status === 'pendente').length;
+  const arqProcessando = (arqsPorStatus || []).filter(a => a.status === 'processando').length;
+  const arqTotal = (arqsPorStatus || []).length;
+
+  // Checagem de consistência: soma dos estados tem que bater com o total
+  const somaEstados = arqOk + arqQuar + arqErro + arqPendente + arqProcessando;
+  if (somaEstados !== arqTotal) {
+    inconsistencias.push(`contagem de ingest_arquivos não bate: soma=${somaEstados} total=${arqTotal}`);
+  }
+  if (arqPendente > 0 || arqProcessando > 0) {
+    inconsistencias.push(`ainda há ${arqPendente} pendentes e ${arqProcessando} processando após conclusão`);
+  }
 
   const duracao = lote?.criado_em ? (Date.now() - new Date(lote.criado_em).getTime()) : 0;
   const custoTotal = Number(lote?.custo_usd || 0);
 
+  const statusFinal = inconsistencias.length > 0 && (arqPendente > 0 || arqProcessando > 0)
+    ? 'falhou'
+    : 'concluido';
+
   const relatorio = `# Relatório de Ingestão
 
 **Duração total:** ${(duracao / 1000).toFixed(1)}s
+**Status:** ${statusFinal === 'concluido' ? '✅ Concluído' : '❌ Finalizado com inconsistência'}
 
-## Resultado
-- Arquivos processados: ${lote?.arquivos_totais || 0}
-- Fontes criadas: ${lote?.fontes_criadas || 0}
-- Chunks vetorizados: ${lote?.chunks_criados || 0}
-- Em quarentena (confiança baixa ou sem texto): ${lote?.em_quarentena || 0}
-- Erros: ${totalErros || 0}
+## Resultado (contagem real no banco)
+- Arquivos no pacote: ${arqTotal}
+- OK: ${arqOk}
+- Quarentena: ${arqQuar}
+- Erros: ${arqErro}
+- Fontes ativas no Cérebro: ${realFontes || 0}
+- Chunks vetorizados: ${realChunks || 0}
 
 ## Custo
 - **Total: US$ ${custoTotal.toFixed(6)} · ~ R$ ${(custoTotal * 5.1).toFixed(4)}**
-`;
+${inconsistencias.length > 0 ? `\n## ⚠ Reconciliação\n${inconsistencias.map(i => `- ${i}`).join('\n')}\n` : ''}`;
 
+  // Atualiza contadores cacheados com os valores reais + status final
   await client.from('ingest_lotes').update({
-    status: 'concluido',
+    status: statusFinal,
+    fontes_criadas: realFontes || 0,
+    chunks_criados: realChunks || 0,
+    em_quarentena: realQuarentena || 0,
     duracao_ms: duracao,
     log_md: relatorio,
+    erro_detalhes: inconsistencias.length > 0 ? inconsistencias.join(' | ') : null,
     finalizado_em: new Date().toISOString(),
   }).eq('id', lote_id);
 
@@ -565,9 +640,10 @@ async function concluirLote(lote_id: string, storage_path: string) {
     processados: 0,
     restantes: 0,
     concluido: true,
-    fontes_criadas: lote?.fontes_criadas || 0,
-    chunks_criados: lote?.chunks_criados || 0,
-    em_quarentena: lote?.em_quarentena || 0,
+    fontes_criadas: realFontes || 0,
+    chunks_criados: realChunks || 0,
+    em_quarentena: realQuarentena || 0,
+    inconsistencias: inconsistencias.length,
   };
 }
 
