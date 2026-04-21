@@ -225,6 +225,52 @@ function excluir(nome: string): boolean {
   return false;
 }
 
+/**
+ * Lista recursivamente arquivos de um zip. Se encontrar .zip dentro,
+ * entra nele também. Protege contra profundidade infinita (max 5 níveis).
+ *
+ * Retorna lista com { nome, caminho, buffer } onde `caminho` reflete o
+ * aninhamento (ex: "Elo.zip > Mod2 > aula.pdf").
+ */
+async function listarArquivosRecursivo(
+  buffer: Uint8Array,
+  prefixo = '',
+  profundidade = 0,
+): Promise<{ nome: string; caminho: string; buffer: Uint8Array }[]> {
+  if (profundidade > 5) {
+    console.warn('profundidade máxima alcançada, parando recursão:', prefixo);
+    return [];
+  }
+
+  const zip = await JSZip.loadAsync(buffer);
+  const out: { nome: string; caminho: string; buffer: Uint8Array }[] = [];
+
+  for (const [caminho, entry] of Object.entries(zip.files)) {
+    if ((entry as any).dir) continue;
+    if (excluir(caminho)) continue;
+
+    const buf = await (entry as any).async('uint8array');
+    const nome = caminho.split('/').pop() || caminho;
+    const caminhoCompleto = prefixo ? `${prefixo}/${caminho}` : caminho;
+
+    // Se for zip aninhado, recurse
+    if (nome.toLowerCase().endsWith('.zip')) {
+      console.log('zip aninhado detectado:', caminhoCompleto);
+      try {
+        const subArquivos = await listarArquivosRecursivo(buf, caminhoCompleto, profundidade + 1);
+        out.push(...subArquivos);
+      } catch (e) {
+        console.error('erro lendo zip aninhado:', caminhoCompleto, e);
+      }
+      continue;
+    }
+
+    out.push({ nome, caminho: caminhoCompleto, buffer: buf });
+  }
+
+  return out;
+}
+
 // ========================================================================
 // Handler
 // ========================================================================
@@ -271,19 +317,8 @@ serve(async (req) => {
     if (errDl || !arquivo) throw new Error(`Erro download zip: ${errDl?.message}`);
 
     const buffer = new Uint8Array(await arquivo.arrayBuffer());
-    const zip = await JSZip.loadAsync(buffer);
-
-    const entries: { nome: string; caminho: string; buffer: Uint8Array }[] = [];
-    for (const [caminho, entry] of Object.entries(zip.files)) {
-      if ((entry as any).dir) continue;
-      if (excluir(caminho)) continue;
-      const buf = await (entry as any).async('uint8array');
-      entries.push({
-        nome: caminho.split('/').pop() || caminho,
-        caminho,
-        buffer: buf,
-      });
-    }
+    // Lista recursiva — entra em zips aninhados
+    const entries = await listarArquivosRecursivo(buffer);
 
     stats.arquivos_totais = entries.length;
     await client.from('ingest_lotes').update({
