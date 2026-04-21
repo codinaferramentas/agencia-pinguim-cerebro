@@ -1,6 +1,6 @@
 /* Tela Skills — catálogo de skills universais + por cérebro/agente */
 
-import { fetchSkills } from './sb-client.js?v=20260420g';
+import { fetchSkills } from './sb-client.js?v=20260421a';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
