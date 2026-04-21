@@ -1060,27 +1060,11 @@ function renderStepPacote() {
         });
 
         uploadBar.style.width = '100%';
-        uploadStatus.innerHTML = `<strong>✓ Upload concluído</strong> · Acionando o motor de ingestão…`;
+        uploadStatus.innerHTML = `<strong>✓ Upload concluído</strong> · Preparando pacote…`;
 
-        // 4. Dispara Edge Function (fire & forget)
-        const envCfg = window.__ENV__ || {};
-        fetch(`${envCfg.SUPABASE_URL}/functions/v1/ingest-pacote`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${envCfg.SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            lote_id: lote.id,
-            storage_path: storagePath,
-            cerebro_id: cer.id,
-            origem: 'lote',
-          }),
-        }).catch(e => console.error('erro dispatch function:', e));
-
-        // 5. Troca pro layout de progresso do processamento
+        // 4. Layout de progresso do processamento (ondas)
         areaProgresso.innerHTML = '';
-        const status = el('div', { class: 'progresso-status' }, '⏳ Iniciando processamento no servidor…');
+        const status = el('div', { class: 'progresso-status' }, '⏳ Preparando pacote no servidor…');
         const progressoWrap = el('div', { class: 'progresso-bar-wrap' });
         const progressoBar = el('div', { class: 'progresso-bar' });
         progressoWrap.append(progressoBar);
@@ -1089,62 +1073,16 @@ function renderStepPacote() {
 
         btnProcessar.style.display = 'none';
 
-        const statusMap = {
-          recebido: '⏳ Recebido, aguardando worker',
-          extraindo: '📂 Abrindo zip e extraindo arquivos',
-          classificando: '🧠 Classificando tipo de cada fonte (IA)',
-          vetorizando: '🔢 Vetorizando texto pra busca semântica',
-          concluido: '✅ Concluído',
-          falhou: '❌ Falhou',
-        };
+        const envCfg = window.__ENV__ || {};
 
-        // Estima chunks esperados: ~ 15 por fonte (média conservadora)
-        const estimarChunksTotal = (fontes) => Math.max(1, fontes * 15);
-
-        function calcularProgresso(lote) {
-          const total = lote.arquivos_totais || 0;
-          const fontes = lote.fontes_criadas || 0;
-          const chunks = lote.chunks_criados || 0;
-
-          if (lote.status === 'recebido') return 2;
-          if (lote.status === 'extraindo') return 5;
-          if (lote.status === 'classificando') {
-            // 10% inicial + até 50% adicional conforme fontes vão sendo criadas
-            if (total === 0) return 10;
-            return 10 + Math.round((fontes / total) * 50);
-          }
-          if (lote.status === 'vetorizando') {
-            // 60% + até 38% adicional conforme chunks entram
-            const esperados = estimarChunksTotal(fontes);
-            if (esperados === 0) return 60;
-            const pct = Math.min(1, chunks / esperados);
-            return 60 + Math.round(pct * 38);
-          }
-          if (lote.status === 'concluido') return 100;
-          if (lote.status === 'falhou') return 100;
-          return 0;
-        }
-
+        // Polling secundário: atualiza a tabela de arquivos a cada 3s
         pollInterval = setInterval(async () => {
           try {
-            const { data: loteRow } = await sb.from('ingest_lotes')
-              .select('id, status, arquivos_totais, fontes_criadas, chunks_criados, em_quarentena, custo_usd, duracao_ms, log_md, erro_detalhes')
-              .eq('id', lote.id).single();
-
-            if (!loteRow) return;
-
-            const pct = calcularProgresso(loteRow);
-            progressoBar.style.width = pct + '%';
-            if (loteRow.status === 'falhou') progressoBar.classList.add('falhou');
-
-            status.innerHTML = `<strong>${statusMap[loteRow.status] || loteRow.status}</strong> · ${pct}% · ${loteRow.arquivos_totais || 0} arquivos · ${loteRow.fontes_criadas || 0} fontes · ${loteRow.chunks_criados || 0} chunks`;
-
             const { data: arqs } = await sb.from('ingest_arquivos')
-              .select('nome_original, tipo_sugerido, tipo_confianca, status')
+              .select('nome_original, tipo_sugerido, status')
               .eq('lote_id', lote.id)
               .order('criado_em', { ascending: false })
               .limit(15);
-
             tabela.innerHTML = '';
             if (arqs && arqs.length > 0) {
               const header = el('div', { class: 'progresso-tabela-header' }, [
@@ -1154,7 +1092,8 @@ function renderStepPacote() {
               ]);
               tabela.append(header);
               arqs.forEach(a => {
-                const statusLabel = a.status === 'ok' ? '✓' : a.status === 'quarentena' ? '⚠' : a.status === 'erro' ? '✗' : '…';
+                const statusLabel = a.status === 'ok' ? '✓' : a.status === 'quarentena' ? '⚠'
+                  : a.status === 'erro' ? '✗' : a.status === 'processando' ? '⏳' : '…';
                 tabela.append(el('div', { class: 'progresso-tabela-row' }, [
                   el('div', { class: 'progresso-nome' }, a.nome_original || '—'),
                   el('div', {}, a.tipo_sugerido || '—'),
@@ -1162,31 +1101,106 @@ function renderStepPacote() {
                 ]));
               });
             }
-
-            if (loteRow.status === 'concluido' || loteRow.status === 'falhou') {
-              clearInterval(pollInterval);
-              pollInterval = null;
-              if (loteRow.log_md) {
-                areaProgresso.append(el('pre', { class: 'progresso-relatorio' }, loteRow.log_md));
-              }
-              if (loteRow.erro_detalhes && loteRow.status === 'falhou') {
-                areaProgresso.append(el('pre', { class: 'progresso-relatorio', style: 'color:var(--danger)' }, 'Erro: ' + loteRow.erro_detalhes));
-              }
-              areaProgresso.append(el('div', { class: 'progresso-footer' }, [
-                el('button', {
-                  class: 'btn btn-primary',
-                  onclick: () => { fecharModal(); abrirCerebroDetalhe(cerebroSlug); }
-                }, loteRow.status === 'concluido' ? 'Fechar e ver fontes' : 'Fechar'),
-              ]));
-            }
-          } catch (e) {
-            console.error('erro polling', e);
-          }
+          } catch (e) { console.error('erro polling tabela', e); }
         }, 3000);
 
+        // Helper: chama Edge Function, valida resposta
+        async function chamarFunction(body, tentativa = 1) {
+          try {
+            const resp = await fetch(`${envCfg.SUPABASE_URL}/functions/v1/ingest-pacote`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${envCfg.SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(body),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+            return data;
+          } catch (e) {
+            if (tentativa >= 3) throw e;
+            const espera = tentativa * 3000; // 3s, 6s
+            await new Promise(r => setTimeout(r, espera));
+            return chamarFunction(body, tentativa + 1);
+          }
+        }
+
+        // FASE 1: preparar
+        progressoBar.style.width = '5%';
+        status.innerHTML = `<strong>⏳ Preparando pacote</strong> · extraindo e indexando arquivos`;
+
+        const prep = await chamarFunction({
+          modo: 'preparar',
+          lote_id: lote.id,
+          storage_path: storagePath,
+          cerebro_id: cer.id,
+        });
+
+        const totalArquivos = prep.total_pendentes || 0;
+        if (totalArquivos === 0) {
+          clearInterval(pollInterval); pollInterval = null;
+          progressoBar.style.width = '100%';
+          const msg = prep.duplicados_historico > 0
+            ? `Todos os ${prep.duplicados_historico} arquivos já existiam no Cérebro (dedup por sha256). Nada a processar.`
+            : 'Nenhum arquivo processável encontrado no zip.';
+          status.innerHTML = `<strong>⚠ Pacote vazio</strong> · ${msg}`;
+          areaProgresso.append(el('div', { class: 'progresso-footer' }, [
+            el('button', { class: 'btn btn-primary', onclick: () => { fecharModal(); abrirCerebroDetalhe(cerebroSlug); } }, 'Fechar'),
+          ]));
+          return;
+        }
+
+        // FASE 2: ondas
+        let processadosTotal = 0;
+        let concluido = false;
+        const ondaInfo = { fontes: 0, chunks: 0, quarentena: 0 };
+
+        while (!concluido) {
+          const pct = Math.min(98, 5 + Math.round((processadosTotal / totalArquivos) * 93));
+          progressoBar.style.width = pct + '%';
+          status.innerHTML = `<strong>🔢 Processando em ondas</strong> · ${pct}% · ${processadosTotal}/${totalArquivos} arquivos · ${ondaInfo.fontes} fontes · ${ondaInfo.chunks} chunks`;
+
+          const onda = await chamarFunction({
+            modo: 'processar-onda',
+            lote_id: lote.id,
+            storage_path: storagePath,
+            cerebro_id: cer.id,
+            origem: 'lote',
+          });
+
+          processadosTotal += (onda.processados || 0) + 0;
+          ondaInfo.fontes = onda.fontes_criadas || ondaInfo.fontes;
+          ondaInfo.chunks = onda.chunks_criados || ondaInfo.chunks;
+          ondaInfo.quarentena = onda.em_quarentena || ondaInfo.quarentena;
+
+          if (onda.concluido) { concluido = true; break; }
+          if ((onda.processados || 0) === 0 && (onda.restantes || 0) > 0) {
+            // nada progrediu numa onda — algo trancou. Aborta pra não rodar infinito.
+            throw new Error('Onda não processou nenhum arquivo. Verifique logs da Edge Function.');
+          }
+        }
+
+        // FASE 3: finalização
+        clearInterval(pollInterval); pollInterval = null;
+        progressoBar.style.width = '100%';
+        status.innerHTML = `<strong>✅ Concluído</strong> · ${ondaInfo.fontes} fontes · ${ondaInfo.chunks} chunks · ${ondaInfo.quarentena} em quarentena`;
+
+        // Lê relatório final
+        const { data: loteFinal } = await sb.from('ingest_lotes')
+          .select('log_md, erro_detalhes, status')
+          .eq('id', lote.id).single();
+        if (loteFinal?.log_md) {
+          areaProgresso.append(el('pre', { class: 'progresso-relatorio' }, loteFinal.log_md));
+        }
+        areaProgresso.append(el('div', { class: 'progresso-footer' }, [
+          el('button', { class: 'btn btn-primary', onclick: () => { fecharModal(); abrirCerebroDetalhe(cerebroSlug); } }, 'Fechar e ver fontes'),
+        ]));
+
       } catch (e) {
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
         processandoAgora = false;
-        await alertarDark({ titulo: 'Falha no envio', mensagem: e.message, tipo: 'erro' });
+        await alertarDark({ titulo: 'Falha no processamento', mensagem: e.message, tipo: 'erro' });
         btnProcessar.disabled = false;
         btnProcessar.style.pointerEvents = '';
         btnProcessar.style.display = '';
@@ -1235,7 +1249,7 @@ function renderStepPacote() {
         el('p', {}, `Antes de enviar, garanta que o .zip contém SÓ material do ${cerebroNome}. O sistema classifica os tipos automaticamente, mas confia que o produto é ${cerebroNome}. Se misturar material de outros produtos, eles entram no Cérebro errado.`),
       ]),
       el('div', { class: 'field' }, [
-        el('label', {}, 'Arquivo .zip (limite: ' + MAX_UPLOAD_MB + 'MB)'),
+        el('label', {}, 'Arquivo .zip (limite upload: ' + MAX_UPLOAD_MB + 'MB — processamento ocorre em ondas automáticas)'),
         btnEscolher,
         inputArquivo,
         infoArquivo,

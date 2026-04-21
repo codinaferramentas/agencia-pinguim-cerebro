@@ -1,17 +1,19 @@
 // ========================================================================
-// Edge Function: ingest-pacote
+// Edge Function: ingest-pacote (modo ONDAS)
 // ========================================================================
-// Recebe um pacote .zip já uploaded no Supabase Storage (bucket pinguim-uploads)
-// + metadados (cerebro_slug, lote_id) e processa:
-//   - extrai arquivos do zip
-//   - extrai texto (pdf, docx, txt, md, csv)
-//   - classifica via OpenAI gpt-4o-mini
-//   - chunka em ~500 tokens
-//   - vetoriza via text-embedding-3-small
-//   - INSERT em cerebro_fontes + cerebro_fontes_chunks
+// Duas fases pra caber no limite de execução da Edge Function (~150s):
 //
-// Todo upload passa pelo mesmo caminho: Storage → função → banco.
-// Nenhum código executa na máquina do usuário.
+//   modo=preparar        — baixa zip, extrai, dedup, cria ingest_arquivos
+//                          com status='pendente'. Não toca em OpenAI.
+//                          Retorna { total_pendentes }.
+//
+//   modo=processar-onda  — pega até ONDA_TAMANHO arquivos pendentes,
+//                          extrai texto → classifica → cria fonte →
+//                          chunka → vetoriza. Marca como 'ok' no final.
+//                          Retorna { processados, restantes, concluido }.
+//
+// Painel dispara preparar 1x e depois processar-onda em loop até concluir.
+// Se onda cair no meio, a próxima retoma do banco — nada é perdido.
 // ========================================================================
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
@@ -29,9 +31,11 @@ const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')!;
 
 const CLASSIFIER_MODEL = 'gpt-4o-mini';
 const EMBEDDING_MODEL = 'text-embedding-3-small';
-const CHUNK_SIZE_CHARS = 2000;  // ~500 tokens (aproximação por caracteres — Deno não tem tiktoken fácil)
+const CHUNK_SIZE_CHARS = 2000;
 const CHUNK_OVERLAP_CHARS = 200;
 const CONFIANCA_MINIMA = 0.65;
+const ONDA_TAMANHO = 5;            // arquivos processados por onda
+const EMBED_BATCH = 50;            // chunks por chamada OpenAI
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -39,16 +43,23 @@ const cors = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey',
 };
 
-// ========================================================================
-// Helpers
-// ========================================================================
-
 function sb() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
     db: { schema: 'pinguim' },
   });
 }
+
+function jsonResp(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, 'Content-Type': 'application/json' },
+  });
+}
+
+// ========================================================================
+// Helpers de conteúdo
+// ========================================================================
 
 async function classificar(nome: string, amostra: string) {
   const prompt = `Classifique o arquivo em UM destes tipos de fonte:
@@ -97,7 +108,7 @@ ${amostra.slice(0, 1200)}`;
       tokens_out: j.usage?.completion_tokens || 0,
     };
   } catch (e) {
-    return { tipo: 'outro', confianca: 0, justificativa: 'erro LLM: ' + e.message, tokens_in: 0, tokens_out: 0 };
+    return { tipo: 'outro', confianca: 0, justificativa: 'erro LLM: ' + (e as Error).message, tokens_in: 0, tokens_out: 0 };
   }
 }
 
@@ -110,6 +121,10 @@ async function embed(textos: string[]): Promise<number[][]> {
     },
     body: JSON.stringify({ model: EMBEDDING_MODEL, input: textos }),
   });
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error(`embed HTTP ${r.status}: ${txt.slice(0, 200)}`);
+  }
   const j = await r.json();
   return j.data.map((d: any) => d.embedding);
 }
@@ -145,7 +160,7 @@ function decideTipoPorNome(nome: string): string | null {
   const n = nome.toLowerCase();
   if (n.endsWith('.csv')) return 'csv';
   if (n.includes('whats') || n.includes('_chat')) return 'chat_export';
-  return null; // deixa LLM classificar
+  return null;
 }
 
 async function extrairTexto(nome: string, buffer: Uint8Array): Promise<string> {
@@ -185,7 +200,6 @@ async function extrairTexto(nome: string, buffer: Uint8Array): Promise<string> {
       .trim();
   }
 
-  // PDF via unpdf (funciona em Deno)
   if (ext === 'pdf') {
     try {
       const pdf = await getDocumentProxy(buffer);
@@ -197,15 +211,10 @@ async function extrairTexto(nome: string, buffer: Uint8Array): Promise<string> {
     }
   }
 
-  // DOCX — ainda não fácil em Deno puro. Por enquanto skip.
-  if (ext === 'docx' || ext === 'doc') {
-    return '';
-  }
+  if (ext === 'docx' || ext === 'doc') return '';
 
-  // Tenta UTF-8 como fallback
   try {
     const texto = new TextDecoder('utf-8').decode(buffer);
-    // heurística simples: se tem muitos caracteres não-printáveis, é binário
     const naoImprimivel = texto.split('').filter(c => {
       const code = c.charCodeAt(0);
       return code < 32 && code !== 9 && code !== 10 && code !== 13;
@@ -225,22 +234,12 @@ function excluir(nome: string): boolean {
   return false;
 }
 
-/**
- * Lista recursivamente arquivos de um zip. Se encontrar .zip dentro,
- * entra nele também. Protege contra profundidade infinita (max 5 níveis).
- *
- * Retorna lista com { nome, caminho, buffer } onde `caminho` reflete o
- * aninhamento (ex: "Elo.zip > Mod2 > aula.pdf").
- */
 async function listarArquivosRecursivo(
   buffer: Uint8Array,
   prefixo = '',
   profundidade = 0,
 ): Promise<{ nome: string; caminho: string; buffer: Uint8Array }[]> {
-  if (profundidade > 5) {
-    console.warn('profundidade máxima alcançada, parando recursão:', prefixo);
-    return [];
-  }
+  if (profundidade > 5) return [];
 
   const zip = await JSZip.loadAsync(buffer);
   const out: { nome: string; caminho: string; buffer: Uint8Array }[] = [];
@@ -253,12 +252,10 @@ async function listarArquivosRecursivo(
     const nome = caminho.split('/').pop() || caminho;
     const caminhoCompleto = prefixo ? `${prefixo}/${caminho}` : caminho;
 
-    // Se for zip aninhado, recurse
     if (nome.toLowerCase().endsWith('.zip')) {
-      console.log('zip aninhado detectado:', caminhoCompleto);
       try {
-        const subArquivos = await listarArquivosRecursivo(buf, caminhoCompleto, profundidade + 1);
-        out.push(...subArquivos);
+        const subs = await listarArquivosRecursivo(buf, caminhoCompleto, profundidade + 1);
+        out.push(...subs);
       } catch (e) {
         console.error('erro lendo zip aninhado:', caminhoCompleto, e);
       }
@@ -272,209 +269,193 @@ async function listarArquivosRecursivo(
 }
 
 // ========================================================================
-// Handler
+// MODO 1: preparar
 // ========================================================================
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
-
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'POST required' }), {
-      status: 405,
-      headers: { ...cors, 'Content-Type': 'application/json' },
-    });
-  }
-
-  const body = await req.json();
-  const { lote_id, storage_path, cerebro_id, origem } = body;
-
-  if (!lote_id || !storage_path || !cerebro_id) {
-    return new Response(JSON.stringify({ error: 'lote_id, storage_path, cerebro_id obrigatórios' }), {
-      status: 400,
-      headers: { ...cors, 'Content-Type': 'application/json' },
-    });
-  }
-
+async function preparar(lote_id: string, storage_path: string, cerebro_id: string) {
   const client = sb();
-  const inicio = Date.now();
+  await client.from('ingest_lotes').update({ status: 'extraindo' }).eq('id', lote_id);
+
+  const { data: arquivo, error: errDl } = await client.storage.from('pinguim-uploads').download(storage_path);
+  if (errDl || !arquivo) throw new Error(`Erro download zip: ${errDl?.message}`);
+
+  const buffer = new Uint8Array(await arquivo.arrayBuffer());
+  const todosEntries = await listarArquivosRecursivo(buffer);
+
+  // Dedup por nome-base: PDF > DOCX > MD > TXT > demais
+  const prioridade: Record<string, number> = { pdf: 10, docx: 8, md: 6, markdown: 6, txt: 4 };
+  const porBase = new Map<string, typeof todosEntries[0]>();
+  const descartadosDup: string[] = [];
+
+  for (const e of todosEntries) {
+    const semExt = e.caminho.replace(/\.[^.\/]+$/, '').toLowerCase();
+    const ext = (e.nome.split('.').pop() || '').toLowerCase();
+    const score = prioridade[ext] ?? 1;
+    const atual = porBase.get(semExt);
+    if (!atual) { porBase.set(semExt, e); continue; }
+    const extAtual = (atual.nome.split('.').pop() || '').toLowerCase();
+    const scoreAtual = prioridade[extAtual] ?? 1;
+    if (score > scoreAtual) {
+      descartadosDup.push(atual.caminho);
+      porBase.set(semExt, e);
+    } else {
+      descartadosDup.push(e.caminho);
+    }
+  }
+
+  const entries = Array.from(porBase.values());
+
+  // Cria ingest_arquivos com status='pendente' (dedup por sha256 contra histórico)
+  let pendentes = 0;
+  let duplicadosHistorico = 0;
+  for (const arq of entries) {
+    const hashBuf = await crypto.subtle.digest('SHA-256', arq.buffer);
+    const sha = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    const { data: dup } = await client.from('ingest_arquivos').select('id').eq('sha256', sha).maybeSingle();
+    if (dup) { duplicadosHistorico++; continue; }
+
+    await client.from('ingest_arquivos').insert({
+      lote_id,
+      cerebro_id,
+      nome_original: arq.nome,
+      caminho: arq.caminho,
+      tamanho_bytes: arq.buffer.length,
+      sha256: sha,
+      status: 'pendente',
+    });
+    pendentes++;
+  }
+
+  await client.from('ingest_lotes').update({
+    status: 'classificando',  // reusa enum: "preparado, aguardando ondas"
+    arquivos_totais: pendentes,
+  }).eq('id', lote_id);
+
+  return {
+    total_pendentes: pendentes,
+    descartados_formato: descartadosDup.length,
+    duplicados_historico: duplicadosHistorico,
+    detectados_no_zip: todosEntries.length,
+  };
+}
+
+// ========================================================================
+// MODO 2: processar-onda
+// ========================================================================
+
+async function processarOnda(lote_id: string, storage_path: string, cerebro_id: string, origem: string) {
+  const client = sb();
+
+  // Marca lote como "vetorizando" (= rodando ondas)
+  await client.from('ingest_lotes').update({ status: 'vetorizando' }).eq('id', lote_id);
+
+  // Pega próximos arquivos pendentes deste lote
+  const { data: pendentes } = await client.from('ingest_arquivos')
+    .select('id, nome_original, caminho, sha256')
+    .eq('lote_id', lote_id)
+    .eq('status', 'pendente')
+    .order('criado_em', { ascending: true })
+    .limit(ONDA_TAMANHO);
+
+  if (!pendentes || pendentes.length === 0) {
+    return await concluirLote(lote_id, storage_path);
+  }
+
+  // Baixa zip uma vez por onda
+  const { data: arquivoZip, error: errDl } = await client.storage.from('pinguim-uploads').download(storage_path);
+  if (errDl || !arquivoZip) throw new Error(`Erro download zip na onda: ${errDl?.message}`);
+  const bufZip = new Uint8Array(await arquivoZip.arrayBuffer());
+  const todos = await listarArquivosRecursivo(bufZip);
+  const porCaminho = new Map(todos.map(t => [t.caminho, t]));
+
+  // Stats incrementais (lemos do lote e somamos)
+  const { data: loteAtual } = await client.from('ingest_lotes')
+    .select('fontes_criadas, chunks_criados, em_quarentena, custo_usd')
+    .eq('id', lote_id).single();
+
   const stats = {
-    arquivos_totais: 0,
-    arquivos_ok: 0,
-    arquivos_skip: 0,
-    arquivos_erro: 0,
-    fontes_criadas: 0,
-    chunks_criados: 0,
-    em_quarentena: 0,
-    custo_classificacao_usd: 0,
-    custo_embedding_usd: 0,
+    processados: 0,
+    fontes_criadas: loteAtual?.fontes_criadas || 0,
+    chunks_criados: loteAtual?.chunks_criados || 0,
+    em_quarentena: loteAtual?.em_quarentena || 0,
+    custo_usd: Number(loteAtual?.custo_usd || 0),
   };
 
-  try {
-    await client.from('ingest_lotes').update({ status: 'extraindo' }).eq('id', lote_id);
+  for (const arq of pendentes) {
+    // Marca como 'processando' (evita reentrada se outra chamada ler antes)
+    await client.from('ingest_arquivos').update({ status: 'processando' }).eq('id', arq.id);
 
-    // Baixa zip do Storage
-    const { data: arquivo, error: errDl } = await client.storage.from('pinguim-uploads').download(storage_path);
-    if (errDl || !arquivo) throw new Error(`Erro download zip: ${errDl?.message}`);
-
-    const buffer = new Uint8Array(await arquivo.arrayBuffer());
-    // Lista recursiva — entra em zips aninhados
-    const todosEntries = await listarArquivosRecursivo(buffer);
-
-    // Dedup por nome-base (sem extensão): prioridade PDF > DOCX > MD > TXT > demais
-    // Por quê: PDF preserva estrutura (parágrafos, tabelas) que ajuda o embedding.
-    // TXT é texto cru, pior sinal semântico. Se tem "aula.pdf" E "aula.txt", usa o PDF.
-    const prioridade: Record<string, number> = { pdf: 10, docx: 8, md: 6, markdown: 6, txt: 4 };
-    const porBase = new Map<string, typeof todosEntries[0]>();
-    const descartadosDup: string[] = [];
-
-    for (const e of todosEntries) {
-      // chave: caminho sem extensão (normalizado)
-      const semExt = e.caminho.replace(/\.[^.\/]+$/, '').toLowerCase();
-      const ext = (e.nome.split('.').pop() || '').toLowerCase();
-      const score = prioridade[ext] ?? 1;
-
-      const atual = porBase.get(semExt);
-      if (!atual) {
-        porBase.set(semExt, e);
-      } else {
-        const extAtual = (atual.nome.split('.').pop() || '').toLowerCase();
-        const scoreAtual = prioridade[extAtual] ?? 1;
-        if (score > scoreAtual) {
-          descartadosDup.push(atual.caminho);
-          porBase.set(semExt, e);
-        } else {
-          descartadosDup.push(e.caminho);
-        }
-      }
-    }
-
-    const entries = Array.from(porBase.values());
-    console.log(`dedup: ${todosEntries.length} -> ${entries.length} (descartados ${descartadosDup.length} duplicados por formato)`);
-    if (descartadosDup.length > 0) {
-      stats.arquivos_skip += descartadosDup.length;
-    }
-
-    stats.arquivos_totais = entries.length;
-    await client.from('ingest_lotes').update({
-      status: 'classificando',
-      arquivos_totais: entries.length,
-    }).eq('id', lote_id);
-
-    // Processa cada arquivo
-    const fontesPraVetorizar: { fonteId: string; chunks: any[] }[] = [];
-
-    for (const arq of entries) {
-      // sha256 simples pra dedup
-      const hashBuf = await crypto.subtle.digest('SHA-256', arq.buffer);
-      const sha = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
-
-      // dedup
-      const { data: dup } = await client.from('ingest_arquivos').select('id').eq('sha256', sha).maybeSingle();
-      if (dup) {
-        stats.arquivos_skip++;
+    try {
+      const entry = porCaminho.get(arq.caminho);
+      if (!entry) {
+        await client.from('ingest_arquivos').update({
+          status: 'erro',
+          motivo_erro: 'arquivo não encontrado no zip (re-extração falhou)',
+          processado_em: new Date().toISOString(),
+        }).eq('id', arq.id);
         continue;
       }
 
-      const { data: arqRow } = await client.from('ingest_arquivos').insert({
-        lote_id,
+      const texto = await extrairTexto(entry.nome, entry.buffer);
+      if (!texto || !texto.trim()) {
+        await client.from('ingest_arquivos').update({
+          status: 'quarentena',
+          motivo_erro: 'sem texto extraído (PDF escaneado, DOCX ou binário)',
+          processado_em: new Date().toISOString(),
+        }).eq('id', arq.id);
+        stats.em_quarentena++;
+        continue;
+      }
+
+      const tipoHeuristica = decideTipoPorNome(entry.nome);
+      let classif;
+      if (tipoHeuristica) {
+        classif = { tipo: tipoHeuristica, confianca: 1.0, justificativa: 'heurística por nome', tokens_in: 0, tokens_out: 0 };
+      } else {
+        classif = await classificar(entry.nome, texto);
+        stats.custo_usd += (classif.tokens_in / 1_000_000) * 0.15 + (classif.tokens_out / 1_000_000) * 0.60;
+      }
+
+      const emQuarentena = classif.confianca < CONFIANCA_MINIMA;
+
+      const { data: fonte } = await client.from('cerebro_fontes').insert({
         cerebro_id,
-        nome_original: arq.nome,
-        caminho: arq.caminho,
-        tamanho_bytes: arq.buffer.length,
-        sha256: sha,
-        status: 'processando',
+        tipo: classif.tipo,
+        titulo: entry.nome.replace(/\.[^.]+$/, ''),
+        conteudo_md: texto,
+        origem: origem || 'lote',
+        autor: null,
+        arquivo_nome: entry.nome,
+        mime: null,
+        tamanho_bytes: texto.length,
+        ingest_lote_id: lote_id,
+        ingest_status: emQuarentena ? 'quarentena' : 'processando',
+        metadata: { classificacao: classif, caminho_original: entry.caminho },
       }).select('id').single();
 
-      const arquivoId = arqRow!.id;
-
-      try {
-        const texto = await extrairTexto(arq.nome, arq.buffer);
-
-        if (!texto || !texto.trim()) {
-          await client.from('ingest_arquivos').update({
-            status: 'quarentena',
-            motivo_erro: 'sem texto extraído (PDF/DOCX ainda não suportado ou arquivo binário)',
-            processado_em: new Date().toISOString(),
-          }).eq('id', arquivoId);
-          stats.em_quarentena++;
-          continue;
-        }
-
-        // Classificação: tenta heurística rápida primeiro
-        const tipoHeuristica = decideTipoPorNome(arq.nome);
-        let classif;
-        if (tipoHeuristica) {
-          classif = { tipo: tipoHeuristica, confianca: 1.0, justificativa: 'heurística por nome', tokens_in: 0, tokens_out: 0 };
-        } else {
-          classif = await classificar(arq.nome, texto);
-          // custo
-          stats.custo_classificacao_usd += (classif.tokens_in / 1_000_000) * 0.15 + (classif.tokens_out / 1_000_000) * 0.60;
-        }
-
-        const emQuarentena = classif.confianca < CONFIANCA_MINIMA;
-
-        const { data: fonte } = await client.from('cerebro_fontes').insert({
-          cerebro_id,
-          tipo: classif.tipo,
-          titulo: arq.nome.replace(/\.[^.]+$/, ''),
-          conteudo_md: texto,
-          origem: origem || 'lote',
-          autor: null,
-          arquivo_nome: arq.nome,
-          mime: null,
-          tamanho_bytes: texto.length,
-          ingest_lote_id: lote_id,
-          ingest_status: emQuarentena ? 'quarentena' : 'processando',
-          metadata: { classificacao: classif, caminho_original: arq.caminho },
-        }).select('id').single();
-
+      if (emQuarentena) {
         await client.from('ingest_arquivos').update({
           fonte_id: fonte!.id,
-          status: emQuarentena ? 'quarentena' : 'ok',
+          status: 'quarentena',
           tipo_sugerido: classif.tipo,
           tipo_confianca: classif.confianca,
           tipo_justificativa: classif.justificativa,
           classificado_por: tipoHeuristica ? 'heuristica' : CLASSIFIER_MODEL,
           processado_em: new Date().toISOString(),
-        }).eq('id', arquivoId);
-
+        }).eq('id', arq.id);
         stats.fontes_criadas++;
-        if (emQuarentena) { stats.em_quarentena++; continue; }
-        stats.arquivos_ok++;
-
-        // Encola pra vetorizar
-        const chunks = chunkText(texto);
-        fontesPraVetorizar.push({ fonteId: fonte!.id, chunks });
-
-        // Atualiza contador no banco a cada 5 arquivos pra UI não parecer travada
-        if (stats.fontes_criadas % 5 === 0) {
-          await client.from('ingest_lotes').update({
-            fontes_criadas: stats.fontes_criadas,
-            em_quarentena: stats.em_quarentena,
-          }).eq('id', lote_id);
-        }
-
-      } catch (e) {
-        stats.arquivos_erro++;
-        await client.from('ingest_arquivos').update({
-          status: 'erro',
-          motivo_erro: (e as Error).message,
-          processado_em: new Date().toISOString(),
-        }).eq('id', arquivoId);
+        stats.em_quarentena++;
+        continue;
       }
-    }
 
-    // Vetorizar em batches
-    await client.from('ingest_lotes').update({ status: 'vetorizando' }).eq('id', lote_id);
-    const BATCH = 50;
-
-    let fontesVetorizadas = 0;
-    for (const { fonteId, chunks } of fontesPraVetorizar) {
-      for (let i = 0; i < chunks.length; i += BATCH) {
-        const slice = chunks.slice(i, i + BATCH);
+      // Vetorização
+      const chunks = chunkText(texto);
+      for (let i = 0; i < chunks.length; i += EMBED_BATCH) {
+        const slice = chunks.slice(i, i + EMBED_BATCH);
         const vetores = await embed(slice.map(c => c.conteudo));
         const rows = slice.map((c, idx) => ({
-          fonte_id: fonteId,
+          fonte_id: fonte!.id,
           cerebro_id,
           chunk_index: c.chunk_index,
           conteudo: c.conteudo,
@@ -485,75 +466,152 @@ serve(async (req) => {
         await client.from('cerebro_fontes_chunks').insert(rows);
         stats.chunks_criados += slice.length;
         const tokens = slice.reduce((s, c) => s + (c.token_count || 0), 0);
-        stats.custo_embedding_usd += (tokens / 1_000_000) * 0.02;
+        stats.custo_usd += (tokens / 1_000_000) * 0.02;
       }
-      await client.from('cerebro_fontes').update({ ingest_status: 'ok' }).eq('id', fonteId);
-      fontesVetorizadas++;
 
-      // Atualiza contador de chunks no banco a cada 3 fontes vetorizadas
-      if (fontesVetorizadas % 3 === 0) {
-        await client.from('ingest_lotes').update({
-          chunks_criados: stats.chunks_criados,
-        }).eq('id', lote_id);
-      }
+      await client.from('cerebro_fontes').update({ ingest_status: 'ok' }).eq('id', fonte!.id);
+      await client.from('ingest_arquivos').update({
+        fonte_id: fonte!.id,
+        status: 'ok',
+        tipo_sugerido: classif.tipo,
+        tipo_confianca: classif.confianca,
+        tipo_justificativa: classif.justificativa,
+        classificado_por: tipoHeuristica ? 'heuristica' : CLASSIFIER_MODEL,
+        processado_em: new Date().toISOString(),
+      }).eq('id', arq.id);
+
+      stats.fontes_criadas++;
+      stats.processados++;
+
+    } catch (e) {
+      await client.from('ingest_arquivos').update({
+        status: 'erro',
+        motivo_erro: (e as Error).message,
+        processado_em: new Date().toISOString(),
+      }).eq('id', arq.id);
     }
+  }
 
-    // Relatório
-    const duracao = Date.now() - inicio;
-    const custoTotal = stats.custo_classificacao_usd + stats.custo_embedding_usd;
+  // Atualiza contadores do lote depois da onda inteira
+  await client.from('ingest_lotes').update({
+    fontes_criadas: stats.fontes_criadas,
+    chunks_criados: stats.chunks_criados,
+    em_quarentena: stats.em_quarentena,
+    custo_usd: stats.custo_usd,
+  }).eq('id', lote_id);
 
-    const relatorio = `# Relatório de Ingestão
+  // Quantos ainda faltam
+  const { count: restantes } = await client.from('ingest_arquivos')
+    .select('id', { count: 'exact', head: true })
+    .eq('lote_id', lote_id)
+    .eq('status', 'pendente');
 
-**Duração:** ${(duracao / 1000).toFixed(1)}s
+  if ((restantes || 0) === 0) {
+    return await concluirLote(lote_id, storage_path);
+  }
 
-## Arquivos no pacote
-- Detectados no zip: ${todosEntries.length}
-- Descartados por formato duplicado (PDF > DOCX > MD > TXT): ${descartadosDup.length}
-- Processados: ${stats.arquivos_ok}
-- Em quarentena (confiança baixa ou sem texto): ${stats.em_quarentena}
-- Já existiam (sha256 igual, evitado reprocessamento): ${Math.max(0, stats.arquivos_skip - descartadosDup.length)}
-- Erros: ${stats.arquivos_erro}
+  return {
+    processados: stats.processados,
+    restantes: restantes || 0,
+    concluido: false,
+    fontes_criadas: stats.fontes_criadas,
+    chunks_criados: stats.chunks_criados,
+    em_quarentena: stats.em_quarentena,
+  };
+}
 
-## Fontes + Chunks no Cérebro
-- Fontes criadas: ${stats.fontes_criadas}
-- Chunks vetorizados: ${stats.chunks_criados}
+async function concluirLote(lote_id: string, storage_path: string) {
+  const client = sb();
 
-## Custos
-- Classificação: US$ ${stats.custo_classificacao_usd.toFixed(6)}
-- Embedding: US$ ${stats.custo_embedding_usd.toFixed(6)}
+  const { data: lote } = await client.from('ingest_lotes')
+    .select('arquivos_totais, fontes_criadas, chunks_criados, em_quarentena, custo_usd, criado_em')
+    .eq('id', lote_id).single();
+
+  const { count: totalErros } = await client.from('ingest_arquivos')
+    .select('id', { count: 'exact', head: true })
+    .eq('lote_id', lote_id)
+    .eq('status', 'erro');
+
+  const duracao = lote?.criado_em ? (Date.now() - new Date(lote.criado_em).getTime()) : 0;
+  const custoTotal = Number(lote?.custo_usd || 0);
+
+  const relatorio = `# Relatório de Ingestão
+
+**Duração total:** ${(duracao / 1000).toFixed(1)}s
+
+## Resultado
+- Arquivos processados: ${lote?.arquivos_totais || 0}
+- Fontes criadas: ${lote?.fontes_criadas || 0}
+- Chunks vetorizados: ${lote?.chunks_criados || 0}
+- Em quarentena (confiança baixa ou sem texto): ${lote?.em_quarentena || 0}
+- Erros: ${totalErros || 0}
+
+## Custo
 - **Total: US$ ${custoTotal.toFixed(6)} · ~ R$ ${(custoTotal * 5.1).toFixed(4)}**
-
-${descartadosDup.length > 0 ? '\n## Arquivos descartados por duplicata de formato\n' + descartadosDup.slice(0, 30).map(d => `- ${d}`).join('\n') + (descartadosDup.length > 30 ? `\n- ... + ${descartadosDup.length - 30} outros` : '') : ''}
 `;
 
-    await client.from('ingest_lotes').update({
-      status: 'concluido',
-      fontes_criadas: stats.fontes_criadas,
-      chunks_criados: stats.chunks_criados,
-      em_quarentena: stats.em_quarentena,
-      custo_usd: custoTotal,
-      duracao_ms: duracao,
-      log_md: relatorio,
-      finalizado_em: new Date().toISOString(),
-    }).eq('id', lote_id);
+  await client.from('ingest_lotes').update({
+    status: 'concluido',
+    duracao_ms: duracao,
+    log_md: relatorio,
+    finalizado_em: new Date().toISOString(),
+  }).eq('id', lote_id);
 
-    // Apaga o zip do storage (economia de espaço — não precisamos mais)
-    await client.storage.from('pinguim-uploads').remove([storage_path]);
+  if (storage_path) {
+    await client.storage.from('pinguim-uploads').remove([storage_path]).catch(() => {});
+  }
 
-    return new Response(JSON.stringify({ ok: true, lote_id, stats }), {
-      headers: { ...cors, 'Content-Type': 'application/json' },
-    });
+  return {
+    processados: 0,
+    restantes: 0,
+    concluido: true,
+    fontes_criadas: lote?.fontes_criadas || 0,
+    chunks_criados: lote?.chunks_criados || 0,
+    em_quarentena: lote?.em_quarentena || 0,
+  };
+}
+
+// ========================================================================
+// Handler
+// ========================================================================
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
+  if (req.method !== 'POST') return jsonResp({ error: 'POST required' }, 405);
+
+  let body: any;
+  try { body = await req.json(); } catch { return jsonResp({ error: 'body inválido' }, 400); }
+
+  const { modo, lote_id, storage_path, cerebro_id, origem } = body;
+
+  if (!lote_id || !cerebro_id) {
+    return jsonResp({ error: 'lote_id e cerebro_id obrigatórios' }, 400);
+  }
+
+  const client = sb();
+
+  try {
+    if (modo === 'preparar') {
+      if (!storage_path) return jsonResp({ error: 'storage_path obrigatório em preparar' }, 400);
+      const r = await preparar(lote_id, storage_path, cerebro_id);
+      return jsonResp({ ok: true, ...r });
+    }
+
+    if (modo === 'processar-onda') {
+      if (!storage_path) return jsonResp({ error: 'storage_path obrigatório em processar-onda' }, 400);
+      const r = await processarOnda(lote_id, storage_path, cerebro_id, origem || 'lote');
+      return jsonResp({ ok: true, ...r });
+    }
+
+    return jsonResp({ error: `modo inválido: ${modo}. use 'preparar' ou 'processar-onda'` }, 400);
 
   } catch (e) {
     await client.from('ingest_lotes').update({
       status: 'falhou',
       erro_detalhes: (e as Error).message,
       finalizado_em: new Date().toISOString(),
-    }).eq('id', lote_id);
+    }).eq('id', lote_id).catch(() => {});
 
-    return new Response(JSON.stringify({ error: (e as Error).message }), {
-      status: 500,
-      headers: { ...cors, 'Content-Type': 'application/json' },
-    });
+    return jsonResp({ error: (e as Error).message }, 500);
   }
 });
