@@ -232,10 +232,33 @@ async function zerarCerebro() {
   if (!cer) return;
 
   // DELETE em cascata (order importa por conta de FK)
-  await sb.from('cerebro_fontes_chunks').delete().eq('cerebro_id', cer.id);
-  await sb.from('cerebro_fontes').delete().eq('cerebro_id', cer.id);
-  await sb.from('ingest_arquivos').delete().eq('cerebro_id', cer.id);
-  await sb.from('ingest_lotes').delete().eq('cerebro_id', cer.id);
+  // Usa .select() pra saber quantas linhas foram afetadas — se grant estiver faltando,
+  // Supabase retorna sucesso mas 0 linhas. Checagem explícita pega esse caso.
+  const steps = [
+    () => sb.from('cerebro_fontes_chunks').delete().eq('cerebro_id', cer.id).select('id'),
+    () => sb.from('cerebro_fontes').delete().eq('cerebro_id', cer.id).select('id'),
+    () => sb.from('ingest_arquivos').delete().eq('cerebro_id', cer.id).select('id'),
+    () => sb.from('ingest_lotes').delete().eq('cerebro_id', cer.id).select('id'),
+  ];
+  for (const run of steps) {
+    const { error } = await run();
+    if (error) {
+      await alertarDark({ titulo: 'Falha ao zerar', mensagem: error.message, tipo: 'erro' });
+      return;
+    }
+  }
+
+  // Valida que ficou mesmo vazio (detecta falha de grant silenciosa)
+  const { count: sobraFontes } = await sb.from('cerebro_fontes').select('id', { count: 'exact', head: true }).eq('cerebro_id', cer.id);
+  if ((sobraFontes || 0) > 0) {
+    await alertarDark({
+      titulo: 'Zerar não completou',
+      mensagem: `Ainda restam ${sobraFontes} fontes no Cérebro. Provável falta de permissão DELETE no banco. Rode fix-grants-delete.sql no SQL Editor.`,
+      tipo: 'erro',
+    });
+    return;
+  }
+
   await sb.from('cerebros').update({ ultima_alimentacao: null }).eq('id', cer.id);
 
   await alertarDark({ titulo: 'Cérebro zerado', mensagem: `${cerebroAtual.nome} voltou ao estado inicial. Pronto pra nova carga.`, tipo: 'info' });
@@ -330,19 +353,43 @@ async function reverterLote(lote) {
   if (!confirma) return;
 
   // Pega todas as fontes desse lote
-  const { data: fontes } = await sb.from('cerebro_fontes')
+  const { data: fontes, error: eFontes } = await sb.from('cerebro_fontes')
     .select('id')
     .eq('ingest_lote_id', lote.id);
+  if (eFontes) {
+    await alertarDark({ titulo: 'Falha ao buscar fontes do lote', mensagem: eFontes.message, tipo: 'erro' });
+    return;
+  }
 
   const fonteIds = (fontes || []).map(f => f.id);
   if (fonteIds.length > 0) {
-    await sb.from('cerebro_fontes_chunks').delete().in('fonte_id', fonteIds);
-    await sb.from('cerebro_fontes').delete().in('id', fonteIds);
+    const { error: e1 } = await sb.from('cerebro_fontes_chunks').delete().in('fonte_id', fonteIds).select('id');
+    if (e1) { await alertarDark({ titulo: 'Falha ao apagar chunks', mensagem: e1.message, tipo: 'erro' }); return; }
+    const { data: fontesApagadas, error: e2 } = await sb.from('cerebro_fontes').delete().in('id', fonteIds).select('id');
+    if (e2) { await alertarDark({ titulo: 'Falha ao apagar fontes', mensagem: e2.message, tipo: 'erro' }); return; }
+    if ((fontesApagadas?.length || 0) < fonteIds.length) {
+      await alertarDark({
+        titulo: 'Reversão incompleta',
+        mensagem: `Apenas ${fontesApagadas?.length || 0} de ${fonteIds.length} fontes foram apagadas. Provável falta de permissão DELETE no banco. Rode fix-grants-delete.sql no SQL Editor.`,
+        tipo: 'erro',
+      });
+      return;
+    }
   }
 
   // Apaga também o log do lote
-  await sb.from('ingest_arquivos').delete().eq('lote_id', lote.id);
-  await sb.from('ingest_lotes').delete().eq('id', lote.id);
+  const { error: e3 } = await sb.from('ingest_arquivos').delete().eq('lote_id', lote.id).select('id');
+  if (e3) { await alertarDark({ titulo: 'Falha ao limpar ingest_arquivos', mensagem: e3.message, tipo: 'erro' }); return; }
+  const { data: loteApagado, error: e4 } = await sb.from('ingest_lotes').delete().eq('id', lote.id).select('id');
+  if (e4) { await alertarDark({ titulo: 'Falha ao apagar lote', mensagem: e4.message, tipo: 'erro' }); return; }
+  if (!loteApagado || loteApagado.length === 0) {
+    await alertarDark({
+      titulo: 'Lote não foi apagado',
+      mensagem: 'DELETE retornou 0 linhas. Provável falta de permissão no banco.',
+      tipo: 'erro',
+    });
+    return;
+  }
 
   await alertarDark({
     titulo: 'Lote revertido',
@@ -367,8 +414,24 @@ async function excluirFonte(fonteId) {
   if (!confirma) return;
 
   // Chunks vêm com on delete cascade, mas vou explicitar
-  await sb.from('cerebro_fontes_chunks').delete().eq('fonte_id', fonteId);
-  await sb.from('cerebro_fontes').delete().eq('id', fonteId);
+  const { error: e1 } = await sb.from('cerebro_fontes_chunks').delete().eq('fonte_id', fonteId);
+  if (e1) {
+    await alertarDark({ titulo: 'Falha ao excluir chunks', mensagem: e1.message, tipo: 'erro' });
+    return;
+  }
+  const { data: apagada, error: e2 } = await sb.from('cerebro_fontes').delete().eq('id', fonteId).select('id');
+  if (e2) {
+    await alertarDark({ titulo: 'Falha ao excluir fonte', mensagem: e2.message, tipo: 'erro' });
+    return;
+  }
+  if (!apagada || apagada.length === 0) {
+    await alertarDark({
+      titulo: 'Exclusão não aplicou',
+      mensagem: 'O DELETE retornou 0 linhas afetadas. Provável falta de permissão no banco (grant DELETE pro anon). Avise o admin.',
+      tipo: 'erro',
+    });
+    return;
+  }
 
   abrirCerebroDetalhe(cerebroAtual.slug);
 }
