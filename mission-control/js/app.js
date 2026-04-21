@@ -2,12 +2,12 @@
    Orquestra o lazy-load das telas.
 */
 
-import { dataMode, fetchOperacaoData, fetchRoadmapData, fetchCerebrosCatalogo } from './sb-client.js?v=20260421b';
-import { renderHome } from './home.js?v=20260421b';
-import { renderCerebros, initDrawer } from './cerebros.js?v=20260421b';
-import { renderCrons } from './crons.js?v=20260421b';
-import { renderSkills } from './skills.js?v=20260421b';
-import { renderStub } from './stubs.js?v=20260421b';
+import { dataMode, fetchOperacaoData, fetchRoadmapData, fetchCerebrosCatalogo } from './sb-client.js?v=20260421c';
+import { renderHome } from './home.js?v=20260421c';
+import { renderCerebros, initDrawer } from './cerebros.js?v=20260421c';
+import { renderCrons } from './crons.js?v=20260421c';
+import { renderSkills } from './skills.js?v=20260421c';
+import { renderStub } from './stubs.js?v=20260421c';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));

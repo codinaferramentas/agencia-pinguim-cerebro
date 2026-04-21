@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mission Control — Pinguim</title>
-<link rel="stylesheet" href="css/style.css?v=20260421b">
+<link rel="stylesheet" href="css/style.css?v=20260421c">
 </head>
 <body>
 <div class="app">
@@ -154,9 +154,17 @@
   <div class="sb-item"><span id="sb-hora">—</span></div>
 </div>
 
+<!-- Config Supabase (anon key é pública, pode ficar no front) -->
+<script>
+  window.__ENV__ = {
+    SUPABASE_URL: 'https://wmelierxzpjamiofeemh.supabase.co',
+    SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtZWxpZXJ4enBqYW1pb2ZlZW1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyMzY5MzQsImV4cCI6MjA4ODgxMjkzNH0.kbzLkX7yDmNfT_wJ00M4KKphTgyc0QXaVpaplO0i-jk',
+  };
+</script>
+
 <!-- Scripts (carregados em ordem de dependência) -->
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script type="module" src="js/sb-client.js?v=20260421b"></script>
-<script type="module" src="js/app.js?v=20260421b"></script>
+<script type="module" src="js/sb-client.js?v=20260421c"></script>
+<script type="module" src="js/app.js?v=20260421c"></script>
 </body>
 </html>

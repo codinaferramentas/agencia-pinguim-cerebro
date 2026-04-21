@@ -13,10 +13,13 @@ let mode = 'offline';
 
 if (SUPABASE_URL && SUPABASE_ANON_KEY && typeof window.supabase !== 'undefined') {
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: false }
+    auth: { persistSession: false },
+    db: { schema: 'pinguim' },
   });
   mode = 'supabase';
 }
+
+export const getSupabase = () => sb;
 
 export const dataMode = () => mode;
 

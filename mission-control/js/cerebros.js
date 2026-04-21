@@ -1,7 +1,7 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas } from './sb-client.js?v=20260421b';
-import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421b';
+import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421c';
+import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421c';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -485,18 +485,17 @@ function renderStepModo() {
   return step;
 }
 
-/* --- PASSO 2C: Pacote (zip) --- */
-const INGEST_SERVER_URL = 'http://localhost:4100';
+/* --- PASSO 2C: Pacote (zip) via Edge Function --- */
+const MAX_UPLOAD_MB = 50;
 
 function renderStepPacote() {
   let arquivoSelecionado = null;
-  let filtro = '';
-  let loteIdAtivo = null;
   let pollInterval = null;
+  const cerebroNome = cerebroAtual?.nome || '';
+  const cerebroSlug = cerebroAtual?.slug || '';
 
   const step = el('div', { class: 'modal-step' });
 
-  // arquivo zip
   const inputArquivo = el('input', {
     type: 'file',
     accept: '.zip',
@@ -515,36 +514,36 @@ function renderStepPacote() {
   }, '📎 Escolher arquivo .zip');
 
   const infoArquivo = el('div', { class: 'arquivos-lista' });
+  const avisoLimite = el('div', { style: 'display:none' });
 
   function renderArquivo() {
     infoArquivo.innerHTML = '';
+    avisoLimite.style.display = 'none';
+    avisoLimite.innerHTML = '';
     if (!arquivoSelecionado) return;
+    const mb = arquivoSelecionado.size / 1024 / 1024;
     infoArquivo.append(el('div', { class: 'arquivo-row' }, [
       el('span', { class: 'arquivo-icon' }, '📦'),
       el('span', { class: 'arquivo-nome' }, arquivoSelecionado.name),
-      el('span', { class: 'arquivo-size' }, `${(arquivoSelecionado.size / 1024 / 1024).toFixed(1)} MB`),
+      el('span', { class: 'arquivo-size' }, `${mb.toFixed(1)} MB`),
       el('button', {
         class: 'arquivo-remove',
         onclick: () => { arquivoSelecionado = null; inputArquivo.value = ''; renderArquivo(); atualizarBotao(); }
       }, '×'),
     ]));
+    if (mb > MAX_UPLOAD_MB) {
+      avisoLimite.style.display = '';
+      avisoLimite.innerHTML = `<div class="cron-infobox"><strong>Arquivo muito grande</strong><p>Limite é ${MAX_UPLOAD_MB}MB por upload. Divida este zip em 2 ou 3 pacotes menores e suba um de cada vez.</p></div>`;
+    }
   }
 
-  // filtro por palavra
-  const inputFiltro = el('input', {
-    class: 'input',
-    type: 'text',
-    placeholder: 'Ex: elo — só processa arquivos/pastas cujo caminho contém essa palavra',
-    oninput: (e) => { filtro = e.target.value.trim(); atualizarBotao(); }
-  });
-
-  // área de progresso (aparece durante a execução)
   const areaProgresso = el('div', { style: 'display:none' });
 
   function atualizarBotao() {
-    btnProcessar.disabled = !arquivoSelecionado;
-    btnProcessar.style.opacity = arquivoSelecionado ? '1' : '0.5';
-    btnProcessar.style.cursor = arquivoSelecionado ? 'pointer' : 'not-allowed';
+    const ok = arquivoSelecionado && (arquivoSelecionado.size / 1024 / 1024) <= MAX_UPLOAD_MB;
+    btnProcessar.disabled = !ok;
+    btnProcessar.style.opacity = ok ? '1' : '0.5';
+    btnProcessar.style.cursor = ok ? 'pointer' : 'not-allowed';
   }
 
   const btnProcessar = el('button', {
@@ -553,77 +552,107 @@ function renderStepPacote() {
     style: 'opacity:0.5',
     onclick: async () => {
       if (!arquivoSelecionado) return;
+
+      const sb = getSupabase();
+      if (!sb) { alert('Supabase não conectado. Recarregue a página.'); return; }
+
+      // Confirmação
+      const confirma = confirm(`Processar "${arquivoSelecionado.name}" no Cérebro ${cerebroNome}?\n\nTodos os arquivos dentro do zip serão classificados e vetorizados como conteúdo do ${cerebroNome}.\n\nSe o zip tiver material de outros produtos misturado, eles entrarão no Cérebro errado.`);
+      if (!confirma) return;
+
       btnProcessar.disabled = true;
-      btnProcessar.textContent = 'Enviando…';
+      btnProcessar.textContent = 'Enviando pro Storage…';
 
       try {
-        // ping no server
-        try {
-          const ping = await fetch(`${INGEST_SERVER_URL}/health`, { method: 'GET' });
-          if (!ping.ok) throw new Error('health check falhou');
-        } catch {
-          alert(`Motor de ingestão não está rodando.\n\nAbra o terminal na pasta ingest-engine e rode:\n\nnpm start\n\nDepois tente de novo.`);
-          btnProcessar.disabled = false;
-          btnProcessar.textContent = 'Processar pacote';
-          return;
-        }
+        // 1. Busca produto pelo slug pra achar cerebro_id
+        const { data: prod, error: eProd } = await sb.from('produtos').select('id').eq('slug', cerebroSlug).single();
+        if (eProd || !prod) throw new Error('Produto não encontrado: ' + cerebroSlug);
+        const { data: cer, error: eCer } = await sb.from('cerebros').select('id').eq('produto_id', prod.id).single();
+        if (eCer || !cer) throw new Error('Cérebro não encontrado');
 
-        // upload
-        const resp = await fetch(`${INGEST_SERVER_URL}/ingest`, {
+        // 2. Cria lote
+        const { data: lote, error: eLote } = await sb.from('ingest_lotes').insert({
+          cerebro_id: cer.id,
+          tipo: 'pacote_zip',
+          status: 'recebido',
+          nome_arquivo: arquivoSelecionado.name,
+          tamanho_bytes: arquivoSelecionado.size,
+          disparado_por: 'painel',
+          disparado_via: 'web',
+        }).select('id').single();
+        if (eLote) throw new Error('Erro ao criar lote: ' + eLote.message);
+
+        const storagePath = `lote/${lote.id}/${arquivoSelecionado.name}`;
+
+        // 3. Upload pro Storage
+        btnProcessar.textContent = 'Upload para o Storage…';
+        const { error: eUp } = await sb.storage.from('pinguim-uploads').upload(storagePath, arquivoSelecionado, {
+          contentType: 'application/zip',
+          upsert: true,
+        });
+        if (eUp) throw new Error('Erro upload Storage: ' + eUp.message);
+
+        // 4. Dispara Edge Function
+        btnProcessar.textContent = 'Processando no servidor…';
+        const envCfg = window.__ENV__ || {};
+        fetch(`${envCfg.SUPABASE_URL}/functions/v1/ingest-pacote`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/octet-stream',
-            'X-Cerebro-Slug': cerebroAtual.slug,
-            'X-Filename': arquivoSelecionado.name,
-            'X-Filtro': filtro,
-            'X-Origem': 'lote',
+            'Authorization': `Bearer ${envCfg.SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
           },
-          body: arquivoSelecionado,
-        });
+          body: JSON.stringify({
+            lote_id: lote.id,
+            storage_path: storagePath,
+            cerebro_id: cer.id,
+            origem: 'lote',
+          }),
+        }).catch(e => console.error('erro dispatch function:', e));
+        // Não espera resposta — polling cuida
 
-        if (!resp.ok) {
-          const err = await resp.json().catch(() => ({}));
-          throw new Error(err.error || `HTTP ${resp.status}`);
-        }
-
-        const { lote_id } = await resp.json();
-        loteIdAtivo = lote_id;
-
-        // mostra progresso e começa polling
+        // 5. Progresso em tempo real
         areaProgresso.style.display = '';
         areaProgresso.innerHTML = '';
-        const status = el('div', { class: 'progresso-status' }, '⏳ Recebido, processando…');
+        const status = el('div', { class: 'progresso-status' }, '⏳ Recebido, aguardando início…');
         const tabela = el('div', { class: 'progresso-tabela' });
         areaProgresso.append(status, tabela);
 
         btnProcessar.style.display = 'none';
 
+        const statusMap = {
+          recebido: '⏳ Recebido',
+          extraindo: '📂 Extraindo arquivos',
+          classificando: '🧠 Classificando com IA',
+          vetorizando: '🔢 Vetorizando chunks',
+          concluido: '✅ Concluído',
+          falhou: '❌ Falhou',
+        };
+
         pollInterval = setInterval(async () => {
           try {
-            const r = await fetch(`${INGEST_SERVER_URL}/lotes/${lote_id}`);
-            const lote = await r.json();
+            const { data: loteRow } = await sb.from('ingest_lotes')
+              .select('id, status, arquivos_totais, fontes_criadas, chunks_criados, em_quarentena, custo_usd, duracao_ms, log_md, erro_detalhes')
+              .eq('id', lote.id).single();
 
-            const statusMap = {
-              recebido: '⏳ Recebido',
-              extraindo: '📂 Extraindo arquivos',
-              classificando: '🧠 Classificando com IA',
-              vetorizando: '🔢 Vetorizando chunks',
-              concluido: '✅ Concluído',
-              falhou: '❌ Falhou',
-            };
-            status.innerHTML = `<strong>${statusMap[lote.status] || lote.status}</strong> — ${lote.arquivos_totais || 0} arquivos · ${lote.fontes_criadas || 0} fontes · ${lote.chunks_criados || 0} chunks`;
+            if (!loteRow) return;
 
-            // lista de arquivos
-            const arqs = await (await fetch(`${INGEST_SERVER_URL}/lotes/${lote_id}/arquivos`)).json();
+            status.innerHTML = `<strong>${statusMap[loteRow.status] || loteRow.status}</strong> — ${loteRow.arquivos_totais || 0} arquivos · ${loteRow.fontes_criadas || 0} fontes · ${loteRow.chunks_criados || 0} chunks`;
+
+            const { data: arqs } = await sb.from('ingest_arquivos')
+              .select('nome_original, tipo_sugerido, tipo_confianca, status')
+              .eq('lote_id', lote.id)
+              .order('criado_em', { ascending: false })
+              .limit(15);
+
             tabela.innerHTML = '';
-            if (arqs.length > 0) {
+            if (arqs && arqs.length > 0) {
               const header = el('div', { class: 'progresso-tabela-header' }, [
                 el('div', {}, 'Arquivo'),
                 el('div', {}, 'Tipo'),
                 el('div', {}, 'Status'),
               ]);
               tabela.append(header);
-              arqs.slice(-15).forEach(a => {
+              arqs.forEach(a => {
                 const statusLabel = a.status === 'ok' ? '✓' : a.status === 'quarentena' ? '⚠' : a.status === 'erro' ? '✗' : '…';
                 tabela.append(el('div', { class: 'progresso-tabela-row' }, [
                   el('div', { class: 'progresso-nome' }, a.nome_original || '—'),
@@ -631,35 +660,28 @@ function renderStepPacote() {
                   el('div', {}, statusLabel + ' ' + (a.status || '')),
                 ]));
               });
-              if (arqs.length > 15) {
-                tabela.append(el('div', { class: 'progresso-tabela-mais' }, `... +${arqs.length - 15} arquivos anteriores`));
-              }
             }
 
-            if (lote.status === 'concluido' || lote.status === 'falhou') {
+            if (loteRow.status === 'concluido' || loteRow.status === 'falhou') {
               clearInterval(pollInterval);
               pollInterval = null;
-              // mostra relatório final
-              if (lote.log_md) {
-                const rel = el('pre', { class: 'progresso-relatorio' }, lote.log_md);
-                areaProgresso.append(rel);
+              if (loteRow.log_md) {
+                areaProgresso.append(el('pre', { class: 'progresso-relatorio' }, loteRow.log_md));
               }
-              // botão fechar
+              if (loteRow.erro_detalhes && loteRow.status === 'falhou') {
+                areaProgresso.append(el('pre', { class: 'progresso-relatorio', style: 'color:var(--danger)' }, 'Erro: ' + loteRow.erro_detalhes));
+              }
               areaProgresso.append(el('div', { class: 'progresso-footer' }, [
                 el('button', {
                   class: 'btn btn-primary',
-                  onclick: () => {
-                    fecharModal();
-                    // recarrega o detalhe do cérebro
-                    abrirCerebroDetalhe(cerebroAtual.slug);
-                  },
-                }, lote.status === 'concluido' ? 'Fechar e ver fontes' : 'Fechar'),
+                  onclick: () => { fecharModal(); abrirCerebroDetalhe(cerebroSlug); }
+                }, loteRow.status === 'concluido' ? 'Fechar e ver fontes' : 'Fechar'),
               ]));
             }
           } catch (e) {
             console.error('erro polling', e);
           }
-        }, 2000);
+        }, 3000);
 
       } catch (e) {
         alert('Erro: ' + e.message);
@@ -673,20 +695,20 @@ function renderStepPacote() {
     el('div', { class: 'modal-head' }, [
       el('button', { class: 'modal-back', onclick: () => { if (pollInterval) clearInterval(pollInterval); trocarStep(renderStepModo()); } }, '‹'),
       el('h2', {}, 'Alimentação em pacote'),
-      el('div', { class: 'modal-sub' }, `Cérebro ${cerebroAtual?.nome || ''} — motor classifica e vetoriza automaticamente`),
+      el('div', { class: 'modal-sub' }, `Cérebro ${cerebroNome} — tudo no zip entra como conteúdo do ${cerebroNome}`),
       el('button', { class: 'modal-close', onclick: fecharModal }, '×'),
     ]),
     el('div', { class: 'modal-body' }, [
+      el('div', { class: 'cron-infobox' }, [
+        el('strong', {}, `📦 Pacote do ${cerebroNome}`),
+        el('p', {}, `Antes de enviar, garanta que o .zip contém SÓ material do ${cerebroNome}. O sistema classifica os tipos automaticamente, mas confia que o produto é ${cerebroNome}. Se misturar material de outros produtos, eles entram no Cérebro errado.`),
+      ]),
       el('div', { class: 'field' }, [
-        el('label', {}, 'Arquivo .zip'),
+        el('label', {}, 'Arquivo .zip (limite: ' + MAX_UPLOAD_MB + 'MB)'),
         btnEscolher,
         inputArquivo,
         infoArquivo,
-      ]),
-      el('div', { class: 'field' }, [
-        el('label', {}, 'Filtro (opcional)'),
-        inputFiltro,
-        el('div', { style: 'font-size:0.6875rem;color:var(--fg-dim);margin-top:0.25rem;line-height:1.5' }, 'Só arquivos cujo nome OU caminho dentro do zip contém essa palavra serão processados. Ex: "elo" processa só as coisas do Elo, ignora ProAlt/Taurus.'),
+        avisoLimite,
       ]),
       areaProgresso,
     ]),
