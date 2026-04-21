@@ -348,9 +348,10 @@
   <a href="#treinar">1. O que é "treinar"</a>
   <a href="#rag">2. RAG</a>
   <a href="#formato">3. Formato no banco</a>
-  <a href="#fluxo">4. Fluxo ponta a ponta</a>
-  <a href="#alimentacao">5. Atualização automática</a>
-  <a href="#regras">6. Regras de ouro</a>
+  <a href="#portas">4. 3 portas de entrada</a>
+  <a href="#fluxo">5. Fluxo ponta a ponta</a>
+  <a href="#alimentacao">6. Atualização automática</a>
+  <a href="#regras">7. Regras de ouro</a>
 </nav>
 
 <div class="container">
@@ -488,8 +489,124 @@
     </ul>
   </section>
 
-  <section id="fluxo">
+  <section id="portas">
     <div class="section-num">Parte 4</div>
+    <h2>As 3 portas de entrada de fontes</h2>
+
+    <p>Pergunta que sempre aparece: <em>"quem transforma o arquivo em vetor? Meu computador? O navegador? O Supabase?"</em>. Resposta: depende de qual das 3 portas está sendo usada. <strong>Mas o destino é sempre o mesmo</strong> — tabela <code>cerebro_fontes_chunks</code> no Supabase.</p>
+
+    <div class="highlight">
+      <p><strong>Em todos os 3 casos</strong>, o vetor (embedding) é gerado chamando a API <code>text-embedding-3-small</code> da OpenAI. O que muda é <strong>quem faz a chamada</strong>. O custo é irrelevante: cada chunk custa US$ 0,00002. Uma aula de 2h inteira custa ~R$ 0,005 pra vetorizar.</p>
+    </div>
+
+    <h3>Porta 1 — Carga inicial (uma vez só, do que já existe)</h3>
+
+    <p>Hoje já temos material: transcrições no VS Code, PDFs, briefings, planilhas. Isso entra via <strong>script rodando na máquina do André</strong>, uma vez só, usando a chave OpenAI dele (que fica local, nunca vai pro GitHub).</p>
+
+    <div class="diagram">Arquivos em c:\Squad\cerebros\elo\*.md
+      ↓
+Script node scripts/import-elo-local.mjs (roda local)
+   ├── lê os .md
+   ├── chunka em pedaços de ~500 tokens
+   ├── chama OpenAI embeddings (com OPENAI_API_KEY do .env local)
+   └── INSERT direto no Supabase (com SERVICE_ROLE_KEY)
+      ↓
+Cérebro Elo populado — rodou 1x, fim.</div>
+
+    <p><strong>Por que local e não Edge Function?</strong> Porque esse material não passa por internet pública — tá no disco, só faz sentido processar direto dali. Além disso, carga inicial pode ser grande (1000+ chunks), e rodar uma vez na sua máquina é mais simples que subir tudo pro Supabase Storage só pra processar.</p>
+
+    <h3>Porta 2 — Upload manual pelo painel</h3>
+
+    <p>Alguém da equipe (você, sua sócia, um analista) abre o Mission Control, clica <strong>+ Alimentar</strong>, arrasta um PDF. <strong>Quem gera o vetor? Uma Edge Function do Supabase</strong> — não o navegador.</p>
+
+    <div class="diagram">Browser faz upload → Supabase Storage
+      ↓
+Supabase dispara Edge Function "ingest-fonte"
+   ├── pega o arquivo do Storage
+   ├── extrai texto (PDF/DOCX → Markdown)
+   ├── chunka em ~500 tokens
+   ├── chama OpenAI embeddings (chave fica SECRETA no servidor)
+   └── INSERT em cerebro_fontes + cerebro_fontes_chunks
+      ↓
+Painel atualiza: "Fonte processada · X chunks"</div>
+
+    <div class="insight-box">
+      <h4>Por que não chamar OpenAI direto do navegador?</h4>
+      <p>Porque qualquer um com F12 no Chrome veria a chave e roubaria. Chave de API NUNCA vai pro front-end. Fica como secret no Supabase, só a Edge Function enxerga. Edge Function é gratuita até 500 mil execuções/mês — não vamos chegar perto.</p>
+    </div>
+
+    <h3>Porta 3 — Automação (crons)</h3>
+
+    <p>Você configura pelo painel: <em>"a cada hora, puxar mensagens novas do canal #depoimentos do Discord e virar fonte no Cérebro Elo"</em>. <strong>Quem roda? A mesma Edge Function da Porta 2</strong>, mas disparada automaticamente por <code>pg_cron</code> (cron nativo do Postgres que vem no Supabase).</p>
+
+    <div class="diagram">pg_cron dispara a cada 1 hora (configurado pelo painel)
+      ↓
+Edge Function "cron-discord-depoimentos"
+   ├── conecta no Discord com bot token (secret)
+   ├── pega mensagens desde a última execução
+   ├── classifica tipo via GPT-4o-mini (depoimento? sacada?)
+   ├── chunka + embeda
+   └── INSERT em cerebro_fontes + cerebro_fontes_chunks
+      ↓
+Próxima execução só vai pegar mensagens ainda mais novas</div>
+
+    <h3>Comparação rápida</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Porta</th>
+          <th>Quem dispara</th>
+          <th>Onde roda</th>
+          <th>Frequência</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1. Carga inicial</strong></td>
+          <td>André via terminal</td>
+          <td>Máquina do André</td>
+          <td>1 vez só, por produto</td>
+        </tr>
+        <tr>
+          <td><strong>2. Upload manual</strong></td>
+          <td>Equipe no painel</td>
+          <td>Edge Function Supabase</td>
+          <td>Sob demanda</td>
+        </tr>
+        <tr>
+          <td><strong>3. Cron automático</strong></td>
+          <td>pg_cron agendado</td>
+          <td>Edge Function Supabase</td>
+          <td>Recorrente (ex: 1h, 6h, diário)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="highlight">
+      <p><strong>Fim da história:</strong> não importa de qual porta veio — a fonte acaba no <strong>mesmo lugar</strong> (Supabase), no <strong>mesmo formato</strong> (tabela + chunks vetorizados). A partir daí, qualquer agente consulta igual, sem saber de onde veio.</p>
+    </div>
+
+    <h3>Bônus: 2 APIs OpenAI diferentes no sistema</h3>
+
+    <p>Confusão comum: a OpenAI é chamada em <strong>dois momentos diferentes</strong>, com APIs diferentes. Vale separar pra não confundir custo:</p>
+
+    <div class="comparison">
+      <div class="col">
+        <h4 class="good-h" style="color:var(--accent)">Na ALIMENTAÇÃO</h4>
+        <p><strong>text-embedding-3-small</strong></p>
+        <p style="margin-top:0.5rem">Transforma texto em vetor. Usado <strong>1 vez</strong> por chunk, fica guardado. Custo: US$ 0,00002 por chunk.</p>
+      </div>
+      <div class="col">
+        <h4 class="good-h" style="color:var(--accent)">No CONSUMO</h4>
+        <p><strong>gpt-4o / gpt-4o-mini</strong></p>
+        <p style="margin-top:0.5rem">Gera resposta (página, copy, análise). Usado toda vez que um agente é acionado. Custo: centavos por tarefa.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="fluxo">
+    <div class="section-num">Parte 5</div>
     <h2>Fluxo de ponta a ponta</h2>
 
     <h3>Alimentação (quando o André sobe 1 arquivo no painel)</h3>
@@ -537,7 +654,7 @@ execução (audit trail pra Qualidade)</div>
   </section>
 
   <section id="alimentacao">
-    <div class="section-num">Parte 5</div>
+    <div class="section-num">Parte 6</div>
     <h2>Como o Cérebro alimenta tudo automaticamente</h2>
 
     <p>Você perguntou: "se eu mexer no Cérebro, o agente precisa ser re-alimentado?". A resposta é <strong>não</strong>. Mas existem algumas rotinas automáticas que rodam em cima:</p>
@@ -587,7 +704,7 @@ execução (audit trail pra Qualidade)</div>
   </section>
 
   <section id="regras">
-    <div class="section-num">Parte 6</div>
+    <div class="section-num">Parte 7</div>
     <h2>As 5 regras de ouro pra economizar token</h2>
 
     <ol class="regras">
