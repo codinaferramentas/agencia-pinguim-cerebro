@@ -1,7 +1,7 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421n';
-import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421n';
+import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421o';
+import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421o';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -257,8 +257,7 @@ async function abrirCerebroDetalhe(slug) {
     console.error('Erro ao carregar fontes do Supabase:', err);
     fontesServidor = [];
   }
-  const fontesLocais = lerFontesLocaisPorCerebro(slug);
-  pecasCache = [...fontesLocais, ...fontesServidor];
+  pecasCache = fontesServidor;
 
   page.innerHTML = '';
   const acoes = el('div', { class: 'cerebro-detail-actions' }, [
@@ -981,8 +980,6 @@ function gerarFontesMockadas(cerebro) {
    Quando Supabase estiver conectado, esse blob vira bulk insert.
    ================================================================ */
 
-const LS_KEY_FONTES = 'mc.fontes.v1';
-
 function abrirModalAlimentar() {
   const backdrop = el('div', { class: 'modal-backdrop', onclick: (e) => {
     if (e.target === backdrop) fecharModal();
@@ -1022,11 +1019,11 @@ function renderStepModo() {
         ]),
         el('button', {
           class: 'modo-card',
-          onclick: () => trocarStep(renderStepManual()),
+          onclick: () => trocarStep(renderStepAvulso()),
         }, [
           el('div', { class: 'modo-icon' }, '📤'),
-          el('div', { class: 'modo-title' }, 'Manual'),
-          el('div', { class: 'modo-desc' }, 'Upload de 1 arquivo (.md, .txt, .pdf, .csv), colar texto ou link. Você escolhe o tipo.'),
+          el('div', { class: 'modo-title' }, 'Avulso'),
+          el('div', { class: 'modo-desc' }, 'Upload de 1 arquivo (.md, .txt, .pdf, .csv). Passa pelo mesmo motor do Pacote — classifica e vetoriza.'),
         ]),
         el('button', {
           class: 'modo-card',
@@ -1034,7 +1031,7 @@ function renderStepModo() {
         }, [
           el('div', { class: 'modo-icon' }, '⏱'),
           el('div', { class: 'modo-title' }, 'Automático'),
-          el('div', { class: 'modo-desc' }, 'Configurar cron que busca e classifica fontes recorrentes (Discord, WhatsApp, Telegram, RSS).'),
+          el('div', { class: 'modo-desc' }, 'Integrações com Discord, WhatsApp, Telegram. Em breve.'),
         ]),
       ]),
     ]),
@@ -1044,6 +1041,31 @@ function renderStepModo() {
 
 /* --- PASSO 2C: Pacote (zip) via Edge Function --- */
 const MAX_UPLOAD_MB = 50;
+
+// Upload com progresso real via XHR (supabase-js não expõe onprogress no upload).
+// Usado por Pacote e Avulso — ambos mandam um .zip pro Storage.
+function uploadZipComProgresso({ file, storagePath, supabaseUrl, anonKey, onProgress }) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const url = `${supabaseUrl}/storage/v1/object/pinguim-uploads/${storagePath}`;
+    xhr.open('POST', url);
+    xhr.setRequestHeader('Authorization', `Bearer ${anonKey}`);
+    xhr.setRequestHeader('Content-Type', 'application/zip');
+    xhr.setRequestHeader('x-upsert', 'true');
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable && onProgress) {
+        const pct = Math.round((ev.loaded / ev.total) * 100);
+        onProgress(pct, ev.loaded, ev.total);
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`Upload HTTP ${xhr.status}: ${xhr.responseText || ''}`));
+    };
+    xhr.onerror = () => reject(new Error('Erro de rede no upload'));
+    xhr.send(file);
+  });
+}
 
 /**
  * Modal dark de alerta (substitui alert() feio do browser).
@@ -1423,30 +1445,6 @@ function renderStepPacote() {
     }
   }, 'Iniciar');
 
-  // Upload com progresso real via XHR (supabase-js não expõe progress no upload)
-  function uploadZipComProgresso({ file, storagePath, supabaseUrl, anonKey, onProgress }) {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      const url = `${supabaseUrl}/storage/v1/object/pinguim-uploads/${storagePath}`;
-      xhr.open('POST', url);
-      xhr.setRequestHeader('Authorization', `Bearer ${anonKey}`);
-      xhr.setRequestHeader('Content-Type', 'application/zip');
-      xhr.setRequestHeader('x-upsert', 'true');
-      xhr.upload.onprogress = (ev) => {
-        if (ev.lengthComputable && onProgress) {
-          const pct = Math.round((ev.loaded / ev.total) * 100);
-          onProgress(pct, ev.loaded, ev.total);
-        }
-      };
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) resolve();
-        else reject(new Error(`Upload HTTP ${xhr.status}: ${xhr.responseText || ''}`));
-      };
-      xhr.onerror = () => reject(new Error('Erro de rede no upload'));
-      xhr.send(file);
-    });
-  }
-
   step.append(
     el('div', { class: 'modal-head' }, [
       el('button', { class: 'modal-back', onclick: () => { if (pollInterval) clearInterval(pollInterval); trocarStep(renderStepModo()); } }, '‹'),
@@ -1484,209 +1482,261 @@ function trocarStep(newStep) {
   card.append(newStep);
 }
 
-/* --- PASSO 2A: Manual --- */
-function renderStepManual() {
-  const TIPOS_CHIPS = [
-    { k: 'aula', l: 'Aula' },
-    { k: 'pagina_venda', l: 'Página' },
-    { k: 'objecao', l: 'Objeção' },
-    { k: 'depoimento', l: 'Depoimento' },
-    { k: 'sacada', l: 'Sacada' },
-    { k: 'pitch', l: 'Pitch' },
-    { k: 'faq', l: 'FAQ' },
-    { k: 'externo', l: 'Externo' },
-    { k: 'csv', l: 'CSV' },
-  ];
-
-  let tipoSelecionado = 'aula';
-  let arquivosSelecionados = [];
-
+/* --- PASSO 2A: Avulso (1 arquivo, mesmo motor do Pacote) ---
+ * Estratégia: cria zip de 1 arquivo no browser (via JSZip CDN) e passa
+ * pelo mesmo fluxo preparar → processar-onda. Garante que a classificação
+ * e vetorização são idênticas ao Pacote — uma implementação só.
+ */
+function renderStepAvulso() {
   const step = el('div', { class: 'modal-step' });
+  let arquivoSelecionado = null;
 
-  const chips = el('div', { class: 'chips' });
-  TIPOS_CHIPS.forEach((t, i) => {
-    const c = el('button', {
-      class: 'chip' + (i === 0 ? ' selected' : ''),
-      onclick: () => {
-        chips.querySelectorAll('.chip').forEach(x => x.classList.remove('selected'));
-        c.classList.add('selected');
-        tipoSelecionado = t.k;
-        inputOutro.value = '';
-      }
-    }, t.l);
-    chips.append(c);
-  });
+  const infoArquivo = el('div', { class: 'arquivos-lista', style: 'margin-top:.5rem' });
+  const avisoLimite = el('div', { style: 'display:none;margin-top:.5rem' });
+  const areaProgresso = el('div', { style: 'display:none;margin-top:1rem' });
 
-  const inputOutro = el('input', {
-    class: 'input',
-    type: 'text',
-    placeholder: 'Outro tipo (ex: entrevista, podcast, benchmark…)',
-    oninput: (e) => {
-      if (e.target.value.trim()) {
-        chips.querySelectorAll('.chip').forEach(x => x.classList.remove('selected'));
-        tipoSelecionado = e.target.value.trim().toLowerCase().replace(/\s+/g, '_');
-      }
+  function renderArquivo() {
+    infoArquivo.innerHTML = '';
+    avisoLimite.style.display = 'none';
+    avisoLimite.innerHTML = '';
+    if (!arquivoSelecionado) return;
+    const mb = arquivoSelecionado.size / 1024 / 1024;
+    infoArquivo.append(el('div', { class: 'arquivo-row' }, [
+      el('span', { class: 'arquivo-icon' }, '📄'),
+      el('span', { class: 'arquivo-nome' }, arquivoSelecionado.name),
+      el('span', { class: 'arquivo-size' }, `${mb.toFixed(1)} MB`),
+      el('button', { class: 'arquivo-remove', onclick: () => { arquivoSelecionado = null; inputArquivo.value = ''; renderArquivo(); atualizarBotao(); } }, '×'),
+    ]));
+    if (mb > MAX_UPLOAD_MB) {
+      avisoLimite.style.display = '';
+      avisoLimite.innerHTML = `<div class="cron-infobox"><strong>Arquivo muito grande</strong><p>Limite é ${MAX_UPLOAD_MB}MB.</p></div>`;
     }
-  });
+  }
 
-  const listaArquivos = el('div', { class: 'arquivos-lista' });
-
-  const renderListaArquivos = () => {
-    listaArquivos.innerHTML = '';
-    arquivosSelecionados.forEach((f, idx) => {
-      listaArquivos.append(el('div', { class: 'arquivo-row' }, [
-        el('span', { class: 'arquivo-icon' }, '📄'),
-        el('span', { class: 'arquivo-nome' }, f.name),
-        el('span', { class: 'arquivo-size' }, `${(f.size/1024).toFixed(1)} KB`),
-        el('button', { class: 'arquivo-remove', onclick: () => {
-          arquivosSelecionados.splice(idx, 1);
-          renderListaArquivos();
-        }}, '×'),
-      ]));
-    });
-  };
+  function atualizarBotao() {
+    const ok = arquivoSelecionado && (arquivoSelecionado.size / 1024 / 1024) <= MAX_UPLOAD_MB;
+    btnProcessar.disabled = !ok;
+    btnProcessar.style.opacity = ok ? '1' : '0.5';
+    btnProcessar.style.cursor = ok ? 'pointer' : 'not-allowed';
+  }
 
   const inputArquivo = el('input', {
     type: 'file',
-    multiple: '',
-    accept: '.md,.txt,.pdf,.csv,.docx',
+    accept: '.md,.txt,.pdf,.csv,.html,.json',
     style: 'display:none',
-    id: 'modal-file-input',
     onchange: (e) => {
-      arquivosSelecionados = [...arquivosSelecionados, ...Array.from(e.target.files)];
-      renderListaArquivos();
+      arquivoSelecionado = e.target.files[0] || null;
+      renderArquivo();
+      atualizarBotao();
     }
   });
 
-  const btnUpload = el('button', {
+  const btnEscolher = el('button', {
     class: 'btn',
+    style: 'width:100%;padding:1rem;border-style:dashed',
     onclick: () => inputArquivo.click()
-  }, '📎 Selecionar arquivos');
+  }, '📎 Escolher arquivo');
 
-  const textoColar = el('textarea', {
-    class: 'textarea',
-    placeholder: 'Ou cole texto aqui (transcrição, depoimento, etc)…',
-    rows: '4',
-  });
+  let processandoAgora = false;
+  let pollInterval = null;
 
-  const autorInput = el('input', {
-    class: 'input',
-    type: 'text',
-    placeholder: 'Autor (opcional — ex: Luiz Fernando, @user discord)',
-  });
-
-  const origemInput = el('input', {
-    class: 'input',
-    type: 'text',
-    placeholder: 'Origem (ex: upload, discord, whatsapp, scrap, expert)',
-    value: 'upload',
-  });
-
-  const urlInput = el('input', {
-    class: 'input',
-    type: 'url',
-    placeholder: 'URL da fonte (opcional)',
-  });
-
-  const btnSalvar = el('button', {
+  const btnProcessar = el('button', {
     class: 'btn btn-primary',
-    onclick: () => {
-      const arquivos = arquivosSelecionados;
-      const textoPuro = textoColar.value.trim();
-      if (arquivos.length === 0 && !textoPuro) {
-        alert('Selecione ao menos 1 arquivo ou cole um texto.');
-        return;
-      }
+    disabled: true,
+    style: 'opacity:0.5',
+    onclick: async () => {
+      if (processandoAgora || !arquivoSelecionado) return;
 
-      const novasFontes = [];
+      const sb = getSupabase();
+      if (!sb) { await alertarDark({ titulo: 'Sem conexão', mensagem: 'Supabase não conectado.', tipo: 'erro' }); return; }
 
-      arquivos.forEach(f => {
-        novasFontes.push({
-          id: 'f' + Date.now() + Math.random().toString(36).slice(2, 6),
-          cerebro_slug: cerebroAtual.slug,
-          tipo: tipoSelecionado,
-          titulo: f.name.replace(/\.[^.]+$/, ''),
-          origem: origemInput.value.trim() || 'upload',
-          autor: autorInput.value.trim() || null,
-          criado_em: new Date().toISOString(),
-          arquivo_nome: f.name,
-          arquivo_size: f.size,
-          url: urlInput.value.trim() || null,
+      processandoAgora = true;
+      btnProcessar.disabled = true;
+      btnProcessar.style.pointerEvents = 'none';
+      btnProcessar.innerHTML = '<span class="btn-spinner"></span> Preparando…';
+
+      areaProgresso.style.display = '';
+      areaProgresso.innerHTML = '';
+      const uploadStatus = el('div', { class: 'progresso-status' }, '⬆ Preparando upload…');
+      const uploadBarWrap = el('div', { class: 'upload-bar-wrap' });
+      const uploadBar = el('div', { class: 'upload-bar' });
+      uploadBarWrap.append(uploadBar);
+      areaProgresso.append(uploadStatus, uploadBarWrap);
+
+      try {
+        // Garante JSZip carregado
+        if (typeof window.JSZip === 'undefined') {
+          throw new Error('JSZip não carregado. Recarregue a página.');
+        }
+
+        // Busca cérebro
+        const { data: prod } = await sb.from('produtos').select('id').eq('slug', cerebroAtual.slug).single();
+        if (!prod) throw new Error('Produto não encontrado');
+        const { data: cer } = await sb.from('cerebros').select('id').eq('produto_id', prod.id).single();
+        if (!cer) throw new Error('Cérebro não encontrado');
+
+        // Cria lote
+        const { data: lote, error: eLote } = await sb.from('ingest_lotes').insert({
+          cerebro_id: cer.id,
+          tipo: 'upload_manual',
+          status: 'recebido',
+          nome_arquivo: arquivoSelecionado.name,
+          tamanho_bytes: arquivoSelecionado.size,
+          disparado_por: 'painel',
+          disparado_via: 'avulso',
+        }).select('id').single();
+        if (eLote) throw new Error('Erro ao criar lote: ' + eLote.message);
+
+        // Cria zip com o 1 arquivo (mesmo motor do Pacote)
+        uploadStatus.innerHTML = '<strong>📦 Empacotando…</strong>';
+        const zip = new window.JSZip();
+        const arrBuf = await arquivoSelecionado.arrayBuffer();
+        zip.file(arquivoSelecionado.name, arrBuf);
+        const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+        const zipFile = new File([zipBlob], `${arquivoSelecionado.name}.zip`, { type: 'application/zip' });
+
+        const storagePath = `lote/${lote.id}/${zipFile.name}`;
+
+        uploadStatus.innerHTML = `<strong>⬆ Enviando…</strong> 0 / ${(zipFile.size / 1024 / 1024).toFixed(1)} MB`;
+        await uploadZipComProgresso({
+          file: zipFile,
+          storagePath,
+          supabaseUrl: window.__ENV__.SUPABASE_URL,
+          anonKey: window.__ENV__.SUPABASE_ANON_KEY,
+          onProgress: (pct, loaded, total) => {
+            uploadBar.style.width = pct + '%';
+            uploadStatus.innerHTML = `<strong>⬆ Enviando…</strong> ${pct}%`;
+          },
         });
-      });
+        uploadBar.style.width = '100%';
 
-      if (textoPuro) {
-        const titulo = textoPuro.slice(0, 60).replace(/\n/g,' ') + (textoPuro.length > 60 ? '…' : '');
-        novasFontes.push({
-          id: 't' + Date.now() + Math.random().toString(36).slice(2, 6),
-          cerebro_slug: cerebroAtual.slug,
-          tipo: tipoSelecionado,
-          titulo,
-          conteudo_md: textoPuro,
-          origem: origemInput.value.trim() || 'upload',
-          autor: autorInput.value.trim() || null,
-          criado_em: new Date().toISOString(),
-          url: urlInput.value.trim() || null,
+        // Progresso do processamento
+        areaProgresso.innerHTML = '';
+        const status = el('div', { class: 'progresso-status' }, '⏳ Preparando pacote…');
+        const progressoWrap = el('div', { class: 'progresso-bar-wrap' });
+        const progressoBar = el('div', { class: 'progresso-bar' });
+        progressoWrap.append(progressoBar);
+        areaProgresso.append(status, progressoWrap);
+        btnProcessar.style.display = 'none';
+
+        const envCfg = window.__ENV__ || {};
+
+        async function chamarFunction(body, tentativa = 1) {
+          try {
+            const resp = await fetch(`${envCfg.SUPABASE_URL}/functions/v1/ingest-pacote`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${envCfg.SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(body),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+            return data;
+          } catch (e) {
+            if (tentativa >= 3) throw e;
+            await new Promise(r => setTimeout(r, tentativa * 3000));
+            return chamarFunction(body, tentativa + 1);
+          }
+        }
+
+        // preparar
+        progressoBar.style.width = '10%';
+        status.innerHTML = '<strong>⏳ Preparando</strong> · extraindo e indexando';
+        const prep = await chamarFunction({
+          modo: 'preparar',
+          lote_id: lote.id,
+          storage_path: storagePath,
+          cerebro_id: cer.id,
         });
+
+        if ((prep.total_pendentes || 0) === 0) {
+          status.innerHTML = '<strong>⚠ Arquivo já existia</strong> (dedup por sha256) ou não tinha texto extraível.';
+          progressoBar.style.width = '100%';
+          areaProgresso.append(el('div', { class: 'progresso-footer' }, [
+            el('button', { class: 'btn btn-primary', onclick: () => { fecharModal(); abrirCerebroDetalhe(cerebroAtual.slug); } }, 'Fechar'),
+          ]));
+          return;
+        }
+
+        // uma onda resolve (só 1 arquivo)
+        let concluido = false;
+        while (!concluido) {
+          progressoBar.style.width = '60%';
+          status.innerHTML = '<strong>🔢 Classificando + vetorizando…</strong>';
+          const onda = await chamarFunction({
+            modo: 'processar-onda',
+            lote_id: lote.id,
+            storage_path: storagePath,
+            cerebro_id: cer.id,
+            origem: 'upload_manual',
+          });
+          if (onda.concluido) { concluido = true; break; }
+          if ((onda.processados || 0) === 0 && (onda.restantes || 0) > 0) {
+            throw new Error('Onda não processou. Veja logs da Edge Function.');
+          }
+        }
+
+        progressoBar.style.width = '100%';
+        status.innerHTML = '<strong>✅ Concluído</strong>';
+
+        const { data: loteFinal } = await sb.from('ingest_lotes')
+          .select('log_md, fontes_criadas, chunks_criados')
+          .eq('id', lote.id).single();
+        if (loteFinal?.log_md) {
+          const relatorioEl = el('pre', { class: 'progresso-relatorio' }, loteFinal.log_md);
+          areaProgresso.append(relatorioEl);
+          requestAnimationFrame(() => relatorioEl.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+        }
+        areaProgresso.append(el('div', { class: 'progresso-footer' }, [
+          el('button', { class: 'btn btn-primary', onclick: () => { fecharModal(); abrirCerebroDetalhe(cerebroAtual.slug); } }, 'Fechar e ver fontes'),
+        ]));
+
+      } catch (e) {
+        processandoAgora = false;
+        await alertarDark({ titulo: 'Falha', mensagem: e.message, tipo: 'erro' });
+        btnProcessar.disabled = false;
+        btnProcessar.style.pointerEvents = '';
+        btnProcessar.style.display = '';
+        btnProcessar.textContent = 'Alimentar';
+        atualizarBotao();
+        areaProgresso.style.display = 'none';
       }
-
-      salvarFontesLocais(novasFontes);
-      fecharModal();
-
-      alert(`${novasFontes.length} fonte${novasFontes.length === 1 ? '' : 's'} adicionada${novasFontes.length === 1 ? '' : 's'} ao Cérebro ${cerebroAtual.nome}.\n\nObs: salvo em localStorage (demo). Quando o Supabase estiver conectado, vira persist real no banco.`);
-
-      abrirCerebroDetalhe(cerebroAtual.slug);
     }
-  }, 'Alimentar Cérebro');
+  }, 'Alimentar');
 
   step.append(
     el('div', { class: 'modal-head' }, [
       el('button', { class: 'modal-back', onclick: () => trocarStep(renderStepModo()) }, '‹'),
-      el('h2', {}, 'Alimentação manual'),
-      el('div', { class: 'modal-sub' }, `Cérebro ${cerebroAtual?.nome || ''} — adicione uma ou várias fontes`),
+      el('h2', {}, 'Alimentação avulsa'),
+      el('div', { class: 'modal-sub' }, `Cérebro ${cerebroAtual?.nome || ''} — 1 arquivo por vez`),
       el('button', { class: 'modal-close', onclick: fecharModal }, '×'),
     ]),
     el('div', { class: 'modal-body' }, [
-      el('div', { class: 'field' }, [
-        el('label', {}, 'Tipo da fonte'),
-        chips,
-        inputOutro,
+      el('div', { class: 'cron-infobox' }, [
+        el('strong', {}, `📄 Avulso do ${cerebroAtual?.nome || ''}`),
+        el('p', {}, 'Sobe 1 arquivo por vez. Passa pelo mesmo motor do Pacote: extrai texto, classifica o tipo com IA (aula, página, depoimento…), e vetoriza pra busca semântica. Formatos: .pdf, .txt, .md, .csv, .html, .json.'),
       ]),
       el('div', { class: 'field' }, [
-        el('label', {}, 'Arquivos'),
-        btnUpload,
+        el('label', {}, `Arquivo (limite: ${MAX_UPLOAD_MB}MB)`),
+        btnEscolher,
         inputArquivo,
-        listaArquivos,
+        infoArquivo,
+        avisoLimite,
       ]),
-      el('div', { class: 'field' }, [
-        el('label', {}, 'Ou cole texto'),
-        textoColar,
-      ]),
-      el('div', { class: 'row2' }, [
-        el('div', { class: 'field' }, [
-          el('label', {}, 'Origem'),
-          origemInput,
-        ]),
-        el('div', { class: 'field' }, [
-          el('label', {}, 'Autor'),
-          autorInput,
-        ]),
-      ]),
-      el('div', { class: 'field' }, [
-        el('label', {}, 'URL (opcional)'),
-        urlInput,
-      ]),
+      areaProgresso,
     ]),
     el('div', { class: 'modal-foot' }, [
       el('button', { class: 'btn btn-ghost', onclick: fecharModal }, 'Cancelar'),
-      btnSalvar,
+      btnProcessar,
     ]),
   );
 
   return step;
 }
 
-/* --- PASSO 2B: Automático (configura cron) --- */
+/* --- PASSO 2B: Automático (placeholder "em breve") --- */
 function renderStepAutomatico() {
   const step = el('div', { class: 'modal-step' });
 
@@ -1694,87 +1744,22 @@ function renderStepAutomatico() {
     el('div', { class: 'modal-head' }, [
       el('button', { class: 'modal-back', onclick: () => trocarStep(renderStepModo()) }, '‹'),
       el('h2', {}, 'Alimentação automática'),
-      el('div', { class: 'modal-sub' }, 'Configure um cron que roda no Supabase'),
+      el('div', { class: 'modal-sub' }, 'Em breve'),
       el('button', { class: 'modal-close', onclick: fecharModal }, '×'),
     ]),
     el('div', { class: 'modal-body' }, [
-      el('div', { class: 'cron-infobox' }, [
-        el('strong', {}, '💡 Como funciona'),
-        el('p', {}, 'Crons rodam direto no Supabase (pg_cron + edge functions) — não dependem do OpenClaw. Cada cron busca conteúdo num canal, classifica o tipo e grava no Cérebro correto automaticamente.'),
-      ]),
-
-      el('div', { class: 'field' }, [
-        el('label', {}, 'Fonte'),
-        el('select', { class: 'input', id: 'cron-canal' }, [
-          el('option', { value: 'discord' }, 'Discord (canal #depoimentos)'),
-          el('option', { value: 'whatsapp' }, 'WhatsApp (grupo via webhook)'),
-          el('option', { value: 'telegram' }, 'Telegram (bot + chat_id)'),
-          el('option', { value: 'rss' }, 'RSS / feed externo'),
-          el('option', { value: 'drive' }, 'Google Drive (pasta monitorada)'),
-        ]),
-      ]),
-
-      el('div', { class: 'field' }, [
-        el('label', {}, 'Frequência'),
-        el('select', { class: 'input', id: 'cron-freq' }, [
-          el('option', { value: '*/15 * * * *' }, 'A cada 15 minutos'),
-          el('option', { value: '0 * * * *' }, 'A cada hora'),
-          el('option', { value: '0 */6 * * *' }, 'A cada 6 horas'),
-          el('option', { value: '0 9 * * *' }, 'Diariamente às 9h'),
-          el('option', { value: '0 9 * * 1' }, 'Semanalmente (segunda 9h)'),
-        ]),
-      ]),
-
-      el('div', { class: 'field' }, [
-        el('label', {}, 'Tipo padrão (quando curador não conseguir classificar)'),
-        el('input', { class: 'input', type: 'text', placeholder: 'ex: depoimento', id: 'cron-tipo', value: 'depoimento' }),
-      ]),
-
-      el('div', { class: 'field' }, [
-        el('label', {}, 'Observação'),
-        el('textarea', { class: 'textarea', rows: '2', placeholder: 'Ex: Scrape do canal #depoimentos do Discord, prioridade tag @validado', id: 'cron-obs' }),
+      el('div', { class: 'stub-screen', style: 'margin:1rem 0' }, [
+        el('div', { class: 'stub-badge' }, 'em breve'),
+        el('h2', {}, 'Integrações automáticas'),
+        el('p', {}, 'Estamos construindo a ponte com Discord, WhatsApp e Telegram. Quando ficar pronto, agentes vão captar depoimentos, objeções e sacadas automaticamente — sem você precisar subir nada manualmente.'),
+        el('p', { style: 'margin-top:.75rem;font-size:.8125rem;color:var(--fg-muted)' }, 'Por enquanto, use Pacote (zip) ou Avulso (1 arquivo).'),
       ]),
     ]),
     el('div', { class: 'modal-foot' }, [
-      el('button', { class: 'btn btn-ghost', onclick: fecharModal }, 'Cancelar'),
-      el('button', {
-        class: 'btn btn-primary',
-        onclick: () => {
-          const canal = document.getElementById('cron-canal').value;
-          const freq = document.getElementById('cron-freq').value;
-          const tipo = document.getElementById('cron-tipo').value;
-          const obs = document.getElementById('cron-obs').value;
-
-          const cron = {
-            id: 'cr' + Date.now(),
-            cerebro_slug: cerebroAtual.slug,
-            canal, freq, tipo_padrao: tipo, obs,
-            criado_em: new Date().toISOString(),
-            status: 'pendente_supabase',
-          };
-
-          const crons = JSON.parse(localStorage.getItem('mc.crons.v1') || '[]');
-          crons.push(cron);
-          localStorage.setItem('mc.crons.v1', JSON.stringify(crons));
-
-          fecharModal();
-          alert(`Cron configurado para ${cerebroAtual.nome}.\n\nCanal: ${canal}\nFrequência: ${freq}\n\nPendente de ativação no Supabase (pg_cron). Veja a tela Crons no sidebar.`);
-        }
-      }, 'Criar cron'),
+      el('button', { class: 'btn btn-primary', onclick: () => trocarStep(renderStepModo()) }, '← Voltar às opções'),
     ]),
   );
 
   return step;
 }
 
-/* --- Persistência local --- */
-function salvarFontesLocais(fontes) {
-  const atual = JSON.parse(localStorage.getItem(LS_KEY_FONTES) || '[]');
-  atual.push(...fontes);
-  localStorage.setItem(LS_KEY_FONTES, JSON.stringify(atual));
-}
-
-export function lerFontesLocaisPorCerebro(slug) {
-  const atual = JSON.parse(localStorage.getItem(LS_KEY_FONTES) || '[]');
-  return atual.filter(f => f.cerebro_slug === slug);
-}
