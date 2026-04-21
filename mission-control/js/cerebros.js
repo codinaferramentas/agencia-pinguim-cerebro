@@ -1,7 +1,7 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421f';
-import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421f';
+import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421g';
+import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421g';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -141,9 +141,15 @@ async function abrirCerebroDetalhe(slug) {
 
   const page = document.getElementById('page-cerebros');
   page.innerHTML = '';
-  page.append(el('div', { html: `<div style="padding:3rem;color:var(--fg-muted);text-align:center">Carregando peças do Cérebro ${cerebroAtual.nome}…</div>` }));
+  page.append(el('div', { html: `<div style="padding:3rem;color:var(--fg-muted);text-align:center">Carregando fontes do Cérebro ${cerebroAtual.nome}…</div>` }));
 
-  const fontesServidor = await fetchCerebroPecas(slug);
+  let fontesServidor = [];
+  try {
+    fontesServidor = await fetchCerebroPecas(slug);
+  } catch (err) {
+    console.error('Erro ao carregar fontes do Supabase:', err);
+    fontesServidor = [];
+  }
   const fontesLocais = lerFontesLocaisPorCerebro(slug);
   pecasCache = [...fontesLocais, ...fontesServidor];
 
@@ -239,7 +245,7 @@ function abrirDrawer(peca) {
       <b>Tags</b><span>${(peca.tags || []).map(t => `<span class="task-tag" style="margin-right:.25rem">${t}</span>`).join('') || '—'}</span>
       ${peca.fonte_url ? `<b>URL</b><span><a href="${peca.fonte_url}" target="_blank">${peca.fonte_url}</a></span>` : ''}
     </div>
-    ${peca.conteudo_md ? `<pre>${escapeHtml(peca.conteudo_md.slice(0, 2000))}${peca.conteudo_md.length > 2000 ? '\n\n…(conteúdo truncado, abra no repositório)' : ''}</pre>` : '<em style="color:var(--fg-muted)">Sem conteúdo — peça criada como referência (ex: URL externa).</em>'}
+    ${peca.conteudo_md ? `<pre>${escapeHtml(peca.conteudo_md.slice(0, 2000))}${peca.conteudo_md.length > 2000 ? '\n\n…(conteúdo truncado, abra no repositório)' : ''}</pre>` : '<em style="color:var(--fg-muted)">Sem conteúdo — fonte sem texto extraível (ex: URL externa).</em>'}
   `;
   d.classList.add('open');
 }

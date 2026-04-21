@@ -62,44 +62,24 @@ export async function fetchCerebrosCatalogo() {
   ];
 }
 
-export async function fetchCerebroPecas(cerebroSlug) {
+export async function fetchCerebroFontes(cerebroSlug) {
   if (mode === 'supabase') {
     const { data: produto } = await sb.from('produtos').select('id').eq('slug', cerebroSlug).single();
     if (!produto) return [];
     const { data: cerebro } = await sb.from('cerebros').select('id').eq('produto_id', produto.id).single();
     if (!cerebro) return [];
-    const { data, error } = await sb.from('cerebro_pecas').select('*')
+    const { data, error } = await sb.from('cerebro_fontes').select('*')
       .eq('cerebro_id', cerebro.id)
-      .eq('status_curador', 'aprovado')
+      .eq('ingest_status', 'ok')
       .order('criado_em', { ascending: false });
     if (error) throw error;
-    return data;
-  }
-  // Fallback — mock mínimo
-  if (cerebroSlug === 'elo') {
-    return Array.from({ length: 21 }, (_, i) => ({
-      id: 'mock-elo-' + i,
-      tipo: 'aula',
-      titulo: `Aula ${i + 1} (mock)`,
-      conteudo_md: 'Transcrição (modo offline - conecte Supabase para ver conteúdo real)',
-      origem: 'upload',
-      autor: 'André (import inicial)',
-      status_curador: 'aprovado',
-      peso: 7,
-      tags: ['elo', 'transcricao', 'aula'],
-      criado_em: new Date(Date.now() - i * 3600 * 1000).toISOString()
-    }));
-  }
-  if (cerebroSlug === 'proalt') {
-    return [
-      { id: 'm1', tipo: 'pitch', titulo: 'Pitch deck ProAlt', origem: 'upload', autor: 'Luiz', status_curador: 'aprovado', peso: 9, tags: ['proalt','pitch'], criado_em: new Date().toISOString(), conteudo_md: '4 módulos, 5 protocolos. (mock — conectar Supabase)' },
-      { id: 'm2', tipo: 'aula', titulo: 'Módulo 1 — Fundamentos', origem: 'upload', autor: 'Luiz', status_curador: 'aprovado', peso: 8, tags: ['proalt','mod-1'], criado_em: new Date().toISOString(), conteudo_md: '(mock)' },
-      { id: 'm3', tipo: 'aula', titulo: 'Módulo 2 — Escalada', origem: 'upload', autor: 'Luiz', status_curador: 'aprovado', peso: 8, tags: ['proalt','mod-2'], criado_em: new Date().toISOString(), conteudo_md: '(mock)' },
-      { id: 'm4', tipo: 'sacada', titulo: 'Sacada Luiz sobre ticket', origem: 'expert', autor: 'Luiz', status_curador: 'aprovado', peso: 7, tags: ['proalt','preco'], criado_em: new Date().toISOString(), conteudo_md: '(mock)' },
-    ];
+    return data || [];
   }
   return [];
 }
+
+// Compat: nome antigo continua funcionando
+export const fetchCerebroPecas = fetchCerebroFontes;
 
 export async function fetchCrons() {
   if (mode === 'supabase') {
