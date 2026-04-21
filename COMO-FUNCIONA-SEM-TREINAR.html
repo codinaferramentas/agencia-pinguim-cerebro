@@ -595,9 +595,55 @@ pg_cron → a cada 1h
         </li>
       </ol>
 
-      <h3>Escalando a operação</h3>
+      <h3>O que conta como uma tarefa</h3>
 
-      <p>Estimando 1000 tarefas por mês no agente de Copy do Elo — páginas, anúncios, e-mails — a conta fica em torno de <strong>R$ 50 por agente por mês</strong>. Extrapolando pra toda a Pinguim, em um cenário conservador com 10 produtos × 10 agentes × 1000 tarefas, o custo operacional com modelos fica na casa de <strong>R$ 5 mil mensais</strong>.</p>
+      <p>Uma tarefa é cada vez que um agente é acionado pra produzir algo. Escrever uma página de vendas é uma tarefa. Gerar cinco variações de headline pra anúncio é uma tarefa. Analisar um depoimento e extrair objeções é uma tarefa. Responder uma pergunta no Discord é uma tarefa.</p>
+
+      <h3>Custo real por cenário</h3>
+
+      <p>A conta é linear: <strong>R$ 0,05 × número de tarefas</strong>. O que varia é o volume da operação. A tabela abaixo dimensiona cenários reais, da fase atual até o teto extremo.</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Cenário</th>
+            <th>Tarefas/mês</th>
+            <th>Custo mensal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Pinguim hoje, fase inicial</strong></td>
+            <td>50</td>
+            <td>R$ 2,50</td>
+          </tr>
+          <tr>
+            <td><strong>1 produto rodando com consistência</strong></td>
+            <td>200</td>
+            <td>R$ 10</td>
+          </tr>
+          <tr>
+            <td><strong>3 produtos ativos em paralelo</strong></td>
+            <td>500</td>
+            <td>R$ 25</td>
+          </tr>
+          <tr>
+            <td><strong>Operação madura, 1 produto a todo vapor</strong></td>
+            <td>1.000</td>
+            <td>R$ 50</td>
+          </tr>
+          <tr>
+            <td><strong>Teto extremo · 10 produtos × 10 agentes × 1k tarefas</strong></td>
+            <td>100.000</td>
+            <td>R$ 5.000</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        <div class="note-label">Sobre o teto</div>
+        <p>O cenário de R$ 5 mil mensais pressupõe a Pinguim rodando 10 produtos simultaneamente, cada um com 10 agentes ativos, cada agente produzindo 1000 tarefas/mês. É um teto hipotético que mostra que <strong>mesmo em escala cheia</strong>, o custo de modelos permanece administrável — não é o custo esperado pra fase atual.</p>
+      </div>
 
       <p>Cada execução deixa rastro. Toda tarefa guarda <em>qual pergunta foi feita, quais chunks foram usados, qual foi a saída</em>. Isso vira audit trail da área de Qualidade — em qualquer reclamação, dá pra reconstituir o que alimentou a resposta.</p>
     </section>
