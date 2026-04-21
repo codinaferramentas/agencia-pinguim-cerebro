@@ -1,7 +1,7 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421d';
-import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421d';
+import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421e';
+import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421e';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -488,6 +488,54 @@ function renderStepModo() {
 /* --- PASSO 2C: Pacote (zip) via Edge Function --- */
 const MAX_UPLOAD_MB = 50;
 
+/**
+ * Modal dark de confirmação (substitui confirm() feio do browser).
+ * Retorna Promise<boolean>.
+ */
+function confirmarProcessamento({ nomeArquivo, tamanhoMB, cerebroNome }) {
+  return new Promise((resolve) => {
+    const back = el('div', {
+      class: 'modal-backdrop modal-confirm',
+      style: 'z-index:9999',
+      onclick: (e) => { if (e.target === back) fechar(false); }
+    });
+    const card = el('div', { class: 'modal-card', style: 'max-width:480px' });
+
+    function fechar(valor) {
+      back.classList.remove('open');
+      setTimeout(() => back.remove(), 180);
+      resolve(valor);
+    }
+
+    card.append(
+      el('div', { class: 'modal-head' }, [
+        el('h2', {}, `Processar pacote no Cérebro ${cerebroNome}?`),
+        el('div', { class: 'modal-sub' }, `Confirma que todo o conteúdo do zip é do ${cerebroNome}`),
+      ]),
+      el('div', { class: 'modal-body' }, [
+        el('div', { class: 'cron-infobox', style: 'margin:0' }, [
+          el('strong', {}, `📦 ${nomeArquivo}`),
+          el('p', { style: 'font-family:var(--font-mono);font-size:0.6875rem;letter-spacing:0.08em;margin-top:2px' }, `${tamanhoMB} MB`),
+        ]),
+        el('p', { style: 'font-size:0.875rem;color:var(--fg-muted);margin-top:0.875rem;line-height:1.5' },
+          `Todos os arquivos dentro deste zip serão classificados e vetorizados como conteúdo do Cérebro ${cerebroNome}.`
+        ),
+        el('p', { style: 'font-size:0.8125rem;color:var(--fg-dim);margin-top:0.5rem;line-height:1.5' },
+          `Se o zip tiver material de outros produtos misturado, eles entrarão no Cérebro errado. Cancele e verifique o conteúdo antes de prosseguir.`
+        ),
+      ]),
+      el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn btn-ghost', onclick: () => fechar(false) }, 'Cancelar'),
+        el('button', { class: 'btn btn-primary', onclick: () => fechar(true) }, 'Processar pacote'),
+      ]),
+    );
+
+    back.append(card);
+    document.body.append(back);
+    requestAnimationFrame(() => back.classList.add('open'));
+  });
+}
+
 function renderStepPacote() {
   let arquivoSelecionado = null;
   let pollInterval = null;
@@ -556,8 +604,12 @@ function renderStepPacote() {
       const sb = getSupabase();
       if (!sb) { alert('Supabase não conectado. Recarregue a página.'); return; }
 
-      // Confirmação
-      const confirma = confirm(`Processar "${arquivoSelecionado.name}" no Cérebro ${cerebroNome}?\n\nTodos os arquivos dentro do zip serão classificados e vetorizados como conteúdo do ${cerebroNome}.\n\nSe o zip tiver material de outros produtos misturado, eles entrarão no Cérebro errado.`);
+      // Confirmação via modal dark (não browser confirm feio)
+      const confirma = await confirmarProcessamento({
+        nomeArquivo: arquivoSelecionado.name,
+        tamanhoMB: (arquivoSelecionado.size / 1024 / 1024).toFixed(1),
+        cerebroNome,
+      });
       if (!confirma) return;
 
       btnProcessar.disabled = true;
