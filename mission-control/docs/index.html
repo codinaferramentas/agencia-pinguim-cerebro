@@ -3,86 +3,156 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Docs — Pinguim Mission Control</title>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700;800&display=swap" rel="stylesheet">
+<title>Docs — Pinguim</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600;9..144,900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+  :root {
+    --bg: #000000;
+    --ink: #FFFFFF;
+    --ink-2: #B8B8B8;
+    --ink-3: #7A7A7A;
+    --line: #1A1A1A;
+    --paper: #0A0A0A;
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: 'Geist', -apple-system, sans-serif;
-    background: #0a0a0a;
-    color: #e0e0e0;
+    font-family: 'Fraunces', Georgia, serif;
+    background: var(--bg);
+    color: var(--ink-2);
     min-height: 100vh;
-    padding: 60px 24px;
+    padding: 80px 44px;
     -webkit-font-smoothing: antialiased;
+    position: relative;
   }
-  .wrap { max-width: 780px; margin: 0 auto; }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    mix-blend-mode: overlay;
+    opacity: 0.5;
+    z-index: 1;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; position: relative; z-index: 2; }
+
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6875rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 2rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .eyebrow::before { content: ''; width: 32px; height: 1px; background: var(--ink-3); }
+
   h1 {
-    font-size: 2rem;
-    font-weight: 800;
-    letter-spacing: -0.03em;
-    margin-bottom: 0.5rem;
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: clamp(3rem, 7vw, 5.5rem);
+    line-height: 0.95;
+    letter-spacing: -0.035em;
+    color: var(--ink);
+    margin-bottom: 1.5rem;
   }
-  h1 span { color: #E85C00; }
-  .sub { color: #8892b0; margin-bottom: 2.5rem; }
-  .card {
+  h1 em { font-style: italic; color: var(--ink-2); }
+
+  .sub {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 1.25rem;
+    color: var(--ink-2);
+    max-width: 560px;
+    line-height: 1.5;
+    margin-bottom: 5rem;
+  }
+
+  .doc {
     display: block;
-    background: #151515;
-    border: 1px solid #222;
-    border-radius: 12px;
-    padding: 1.5rem 1.75rem;
+    padding: 2.5rem 0;
     text-decoration: none;
     color: inherit;
+    border-top: 1px solid var(--line);
+    transition: padding-left 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .doc:last-of-type { border-bottom: 1px solid var(--line); }
+  .doc:hover { padding-left: 1.5rem; }
+
+  .doc .row1 {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 2rem;
     margin-bottom: 0.75rem;
-    transition: border-color .15s, transform .12s;
   }
-  .card:hover {
-    border-color: #E85C00;
-    transform: translateY(-1px);
+  .doc h3 {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: clamp(1.5rem, 3vw, 2.25rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: var(--ink);
   }
-  .card h3 {
-    font-size: 1.0625rem;
-    font-weight: 600;
-    color: #e0e0e0;
-    margin-bottom: 0.375rem;
-  }
-  .card p {
-    font-size: 0.875rem;
-    color: #a8b2d1;
-    line-height: 1.55;
-  }
-  .card .meta {
-    font-family: ui-monospace, monospace;
+  .doc h3 em { font-style: italic; }
+  .doc .meta {
+    font-family: 'JetBrains Mono', monospace;
     font-size: 0.6875rem;
-    color: #666;
+    letter-spacing: 0.2em;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-top: 0.75rem;
+    color: var(--ink-3);
+    white-space: nowrap;
+    align-self: center;
   }
-  footer {
-    margin-top: 3rem;
-    padding-top: 2rem;
-    border-top: 1px solid #222;
-    color: #666;
-    font-size: 0.8125rem;
-    text-align: center;
+  .doc p {
+    font-size: 1rem;
+    line-height: 1.55;
+    color: var(--ink-2);
+    max-width: 720px;
   }
-  footer a { color: #E85C00; text-decoration: none; }
+
+  .foot {
+    margin-top: 5rem;
+    padding-top: 3rem;
+    border-top: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6875rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .foot a { color: var(--ink-3); text-decoration: none; transition: color 0.2s; }
+  .foot a:hover { color: var(--ink); }
+
+  @media (max-width: 640px) {
+    body { padding: 48px 24px; }
+    .doc .row1 { flex-direction: column; gap: 0.5rem; }
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1><span>Docs</span> Pinguim</h1>
-  <p class="sub">Materiais técnicos e comerciais do Mission Control. Links compartilháveis.</p>
+  <div class="eyebrow">Pinguim · Arquivo técnico</div>
+  <h1>Docs</h1>
+  <p class="sub">Notas técnicas e materiais comerciais do Mission Control. Links compartilháveis, sempre atualizados.</p>
 
-  <a href="como-funciona.html" class="card">
-    <h3>Como a gente treina agentes sem treinar nenhum</h3>
-    <p>Arquitetura RAG + Supabase pgvector — por que custa centavos, como o Cérebro alimenta tudo, 5 regras de ouro pra economizar token.</p>
-    <div class="meta">Técnico · 6 seções · ~10 min</div>
+  <a href="como-funciona.html" class="doc">
+    <div class="row1">
+      <h3>Como reduzir o <em>consumo de tokens</em> ao treinar agentes</h3>
+      <div class="meta">Técnico · 5 capítulos</div>
+    </div>
+    <p>Arquitetura RAG sobre Supabase · três portas de entrada · custo real por tarefa · as cinco regras de ouro pra manter a conta baixa.</p>
   </a>
-</div>
 
-<footer>
-  <a href="/">← Voltar para o painel</a>
-</footer>
+  <footer class="foot">
+    <div>Pinguim · <em>2026</em></div>
+    <a href="/">⌖ Voltar ao painel</a>
+  </footer>
+</div>
 </body>
 </html>
