@@ -1,7 +1,7 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas } from './sb-client.js?v=20260420f';
-import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260420f';
+import { fetchCerebrosCatalogo, fetchCerebroPecas } from './sb-client.js?v=20260420g';
+import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260420g';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -62,17 +62,9 @@ export async function renderCerebros() {
 
 function renderCerebroCard(c) {
   const isPinguim = c.slug === 'pinguim';
-  const tipos = [
-    { key: 'aulas', icon: '📚', label: 'Aulas', val: c.total_aulas },
-    { key: 'paginas', icon: '📄', label: 'Páginas', val: c.total_paginas },
-    { key: 'objecoes', icon: '❓', label: 'Objeções', val: c.total_objecoes },
-    { key: 'depoimentos', icon: '⭐', label: 'Depos', val: c.total_depoimentos },
-    { key: 'sacadas', icon: '💡', label: 'Sacadas', val: c.total_sacadas },
-    { key: 'outros', icon: '📦', label: 'Outros', val: Math.max(0, (c.total_pecas || 0) - (c.total_aulas || 0) - (c.total_paginas || 0) - (c.total_objecoes || 0) - (c.total_depoimentos || 0) - (c.total_sacadas || 0)) },
-  ];
-
-  const fontes = detectarFontes(c);
   const atualizacao = formatarAtualizacao(c.ultima_alimentacao);
+  const tiposPresentes = construirTiposDinamicos(c);
+  const totalFontes = tiposPresentes.reduce((sum, t) => sum + t.val, 0);
 
   return el('div', {
     class: 'cerebro-card' + (isPinguim ? ' featured' : ''),
@@ -80,46 +72,41 @@ function renderCerebroCard(c) {
   }, [
     el('div', { class: 'cerebro-card-top' }, [
       el('div', { class: 'cerebro-emoji' }, c.emoji || '📦'),
-      el('div', { style: 'flex:1' }, [
+      el('div', { style: 'flex:1;min-width:0' }, [
         el('div', { class: 'cerebro-nome' }, c.nome),
         el('div', { class: 'cerebro-desc' }, c.descricao || '—'),
       ]),
     ]),
-    el('div', { class: 'preenchimento-wrap' }, [
-      el('div', { class: 'preenchimento-label' }, [
-        el('span', {}, 'Preenchimento'),
-        el('strong', {}, `${c.preenchimento_pct || 0}%`),
-      ]),
-      el('div', { class: 'preenchimento-bar' }, [
-        el('div', { class: 'preenchimento-fill', style: `width:${Math.max(2, c.preenchimento_pct || 0)}%` }),
-      ]),
-    ]),
-    el('div', { class: 'tipos-mini' }, tipos.map(t => el('div', { class: 'tipo-item', title: t.label }, [
-      el('div', { class: 'tipo-icon' }, t.icon),
-      el('div', { class: 'tipo-num' }, String(t.val || 0)),
-      el('div', { class: 'tipo-label' }, t.label),
-    ]))),
+    tiposPresentes.length > 0
+      ? el('div', { class: 'cerebro-tipos-lista' },
+          tiposPresentes.map(t => el('div', { class: 'cerebro-tipo-row', title: t.label }, [
+            el('span', { class: 'cerebro-tipo-icon' }, t.icon),
+            el('span', { class: 'cerebro-tipo-label' }, t.label),
+            el('span', { class: 'cerebro-tipo-count' }, String(t.val)),
+          ]))
+        )
+      : el('div', { class: 'cerebro-tipos-empty' }, 'Ainda sem fontes — clique em Alimentar'),
     el('div', { class: 'cerebro-card-footer' }, [
-      el('div', { class: 'cerebro-card-badges' }, fontes.map(f => el('span', { class: 'badge-fonte' }, f))),
-      el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end;gap:.25rem' }, [
-        c.pecas_ultima_semana > 0
-          ? el('span', { class: 'cerebro-growth' }, `+${c.pecas_ultima_semana} nesta semana`)
-          : null,
-        el('span', { class: 'cerebro-atualizacao' + (atualizacao.recente ? ' recente' : '') }, atualizacao.texto),
-      ]),
+      el('div', { class: 'cerebro-total-fontes' }, `${totalFontes} fonte${totalFontes === 1 ? '' : 's'}`),
+      el('span', { class: 'cerebro-atualizacao' + (atualizacao.recente ? ' recente' : '') }, atualizacao.texto),
     ]),
   ]);
 }
 
-function detectarFontes(c) {
-  // No V0 inferimos pelas quantidades; em V1 vem do campo origem real
-  const fontes = [];
-  if (c.total_aulas > 0) fontes.push('Transcrições');
-  if (c.total_paginas > 0) fontes.push('Páginas');
-  if (c.total_depoimentos > 0) fontes.push('Depoimentos');
-  if (c.total_sacadas > 0) fontes.push('Sacadas');
-  if (fontes.length === 0) fontes.push('Vazio');
-  return fontes;
+/* Constrói lista dinâmica — só aparecem tipos que têm >0 itens, ordenados por volume */
+function construirTiposDinamicos(c) {
+  const todos = [
+    { key: 'aulas',       icon: '📚', label: 'Aulas',       val: c.total_aulas || 0 },
+    { key: 'paginas',     icon: '📄', label: 'Páginas',     val: c.total_paginas || 0 },
+    { key: 'objecoes',    icon: '❓', label: 'Objeções',    val: c.total_objecoes || 0 },
+    { key: 'depoimentos', icon: '⭐', label: 'Depoimentos', val: c.total_depoimentos || 0 },
+    { key: 'sacadas',     icon: '💡', label: 'Sacadas',     val: c.total_sacadas || 0 },
+  ];
+  const contados = todos.reduce((s, t) => s + t.val, 0);
+  const outros = Math.max(0, (c.total_pecas || 0) - contados);
+  if (outros > 0) todos.push({ key: 'outros', icon: '📦', label: 'Outros', val: outros });
+
+  return todos.filter(t => t.val > 0).sort((a, b) => b.val - a.val);
 }
 
 function formatarAtualizacao(iso) {
@@ -156,13 +143,13 @@ async function abrirCerebroDetalhe(slug) {
   page.innerHTML = '';
   page.append(el('div', { html: `<div style="padding:3rem;color:var(--fg-muted);text-align:center">Carregando peças do Cérebro ${cerebroAtual.nome}…</div>` }));
 
-  pecasCache = await fetchCerebroPecas(slug);
+  const fontesServidor = await fetchCerebroPecas(slug);
+  const fontesLocais = lerFontesLocaisPorCerebro(slug);
+  pecasCache = [...fontesLocais, ...fontesServidor];
 
   page.innerHTML = '';
   const acoes = el('div', { class: 'cerebro-detail-actions' }, [
-    el('button', { class: 'btn', onclick: () => alert('Upload de arquivo — V0: placeholder. V1: upload real.') }, '+ Alimentar'),
-    el('button', { class: 'btn' }, 'Configurar curador'),
-    el('button', { class: 'btn btn-ghost' }, 'Exportar'),
+    el('button', { class: 'btn btn-primary', onclick: () => abrirModalAlimentar() }, '+ Alimentar'),
     el('button', { class: 'btn btn-ghost', onclick: () => renderCerebros() }, '← Voltar'),
   ]);
 
@@ -172,7 +159,6 @@ async function abrirCerebroDetalhe(slug) {
       el('div', { class: 'cerebro-nome' }, `Cérebro ${cerebroAtual.nome}`),
       el('div', { class: 'cerebro-desc' }, cerebroAtual.descricao || '—'),
       el('div', { style: 'display:flex;gap:.75rem;margin-top:.5rem;font-size:.75rem;color:var(--fg-muted)' }, [
-        el('span', {}, `Preenchimento: ${cerebroAtual.preenchimento_pct}%`),
         el('span', {}, `${pecasCache.length} fontes`),
         el('span', {}, formatarAtualizacao(cerebroAtual.ultima_alimentacao).texto),
       ]),
@@ -273,7 +259,7 @@ export function initDrawer() {
    ================================================================ */
 
 const TIPO_ORDEM = [
-  'aula', 'pagina_venda', 'persona', 'objecao',
+  'aula', 'pagina_venda', 'objecao',
   'depoimento', 'sacada', 'pitch', 'faq',
   'externo', 'csv', 'outro'
 ];
@@ -281,7 +267,6 @@ const TIPO_ORDEM = [
 const TIPO_META = {
   aula:         { label: 'Aulas',        icon: '📚', desc: 'Transcrições de vídeo-aulas' },
   pagina_venda: { label: 'Páginas',      icon: '📄', desc: 'Copy de página de vendas' },
-  persona:      { label: 'Persona',      icon: '👤', desc: 'Avatar / ICP' },
   objecao:      { label: 'Objeções',     icon: '❓', desc: 'Objeções reais do público' },
   depoimento:   { label: 'Depoimentos',  icon: '⭐', desc: 'Prints + texto de alunos' },
   sacada:       { label: 'Sacadas',      icon: '💡', desc: 'Insights do expert' },
@@ -413,10 +398,6 @@ function gerarFontesMockadas(cerebro) {
     { id: 's4', tipo: 'sacada', titulo: 'Protocolo secreto: call de 90min', origem: 'expert', autor: 'Luiz Fernando', criado_em: d(13) },
     { id: 's5', tipo: 'sacada', titulo: 'Script do último e-mail (88% open)', origem: 'expert', autor: 'Luiz Fernando', criado_em: d(19) },
 
-    // Persona (2)
-    { id: 'pe1', tipo: 'persona', titulo: 'Avatar 1 — Consultor iniciante', origem: 'upload', autor: 'André', criado_em: d(30) },
-    { id: 'pe2', tipo: 'persona', titulo: 'Avatar 2 — Especialista plateau', origem: 'upload', autor: 'André', criado_em: d(29) },
-
     // Pitch (2)
     { id: 'pi1', tipo: 'pitch', titulo: 'Abertura live — primeiros 7 min', origem: 'upload', autor: 'Luiz Fernando', criado_em: d(22) },
     { id: 'pi2', tipo: 'pitch', titulo: 'Fechamento com prova social', origem: 'upload', autor: 'Luiz Fernando', criado_em: d(21) },
@@ -435,4 +416,365 @@ function gerarFontesMockadas(cerebro) {
     { id: 'c1', tipo: 'csv', titulo: 'Planilha de vendas T1/26', origem: 'csv', autor: 'FinOps', criado_em: d(33) },
     { id: 'c2', tipo: 'csv', titulo: 'Base de alunos ativos', origem: 'csv', autor: 'André', criado_em: d(34) },
   ];
+}
+
+/* ================================================================
+   MODAL "+ Alimentar" — upload manual + configuração de cron
+   Persiste no localStorage por enquanto (mission-control-fontes).
+   Quando Supabase estiver conectado, esse blob vira bulk insert.
+   ================================================================ */
+
+const LS_KEY_FONTES = 'mc.fontes.v1';
+
+function abrirModalAlimentar() {
+  const backdrop = el('div', { class: 'modal-backdrop', onclick: (e) => {
+    if (e.target === backdrop) fecharModal();
+  }});
+  const modal = el('div', { class: 'modal-card modal-alimentar' });
+  modal.append(renderStepModo());
+  backdrop.append(modal);
+  document.body.append(backdrop);
+  requestAnimationFrame(() => backdrop.classList.add('open'));
+}
+
+function fecharModal() {
+  const b = document.querySelector('.modal-backdrop');
+  if (!b) return;
+  b.classList.remove('open');
+  setTimeout(() => b.remove(), 180);
+}
+
+/* --- PASSO 1: escolher modo (manual vs automático) --- */
+function renderStepModo() {
+  const step = el('div', { class: 'modal-step' });
+  step.append(
+    el('div', { class: 'modal-head' }, [
+      el('h2', {}, 'Alimentar Cérebro ' + (cerebroAtual?.nome || '')),
+      el('div', { class: 'modal-sub' }, 'Como você quer adicionar fontes agora?'),
+      el('button', { class: 'modal-close', onclick: fecharModal }, '×'),
+    ]),
+    el('div', { class: 'modal-body' }, [
+      el('div', { class: 'modo-grid' }, [
+        el('button', {
+          class: 'modo-card',
+          onclick: () => trocarStep(renderStepManual()),
+        }, [
+          el('div', { class: 'modo-icon' }, '📤'),
+          el('div', { class: 'modo-title' }, 'Manual'),
+          el('div', { class: 'modo-desc' }, 'Upload de arquivos (.md, .txt, .pdf, .csv), colar texto ou link. Você escolhe o tipo no próximo passo.'),
+        ]),
+        el('button', {
+          class: 'modo-card',
+          onclick: () => trocarStep(renderStepAutomatico()),
+        }, [
+          el('div', { class: 'modo-icon' }, '⏱'),
+          el('div', { class: 'modo-title' }, 'Automático'),
+          el('div', { class: 'modo-desc' }, 'Configurar cron que busca e classifica fontes recorrentes (Discord, WhatsApp, Telegram, RSS).'),
+        ]),
+      ]),
+    ]),
+  );
+  return step;
+}
+
+function trocarStep(newStep) {
+  const card = document.querySelector('.modal-alimentar');
+  if (!card) return;
+  card.innerHTML = '';
+  card.append(newStep);
+}
+
+/* --- PASSO 2A: Manual --- */
+function renderStepManual() {
+  const TIPOS_CHIPS = [
+    { k: 'aula', l: 'Aula' },
+    { k: 'pagina_venda', l: 'Página' },
+    { k: 'objecao', l: 'Objeção' },
+    { k: 'depoimento', l: 'Depoimento' },
+    { k: 'sacada', l: 'Sacada' },
+    { k: 'pitch', l: 'Pitch' },
+    { k: 'faq', l: 'FAQ' },
+    { k: 'externo', l: 'Externo' },
+    { k: 'csv', l: 'CSV' },
+  ];
+
+  let tipoSelecionado = 'aula';
+  let arquivosSelecionados = [];
+
+  const step = el('div', { class: 'modal-step' });
+
+  const chips = el('div', { class: 'chips' });
+  TIPOS_CHIPS.forEach((t, i) => {
+    const c = el('button', {
+      class: 'chip' + (i === 0 ? ' selected' : ''),
+      onclick: () => {
+        chips.querySelectorAll('.chip').forEach(x => x.classList.remove('selected'));
+        c.classList.add('selected');
+        tipoSelecionado = t.k;
+        inputOutro.value = '';
+      }
+    }, t.l);
+    chips.append(c);
+  });
+
+  const inputOutro = el('input', {
+    class: 'input',
+    type: 'text',
+    placeholder: 'Outro tipo (ex: entrevista, podcast, benchmark…)',
+    oninput: (e) => {
+      if (e.target.value.trim()) {
+        chips.querySelectorAll('.chip').forEach(x => x.classList.remove('selected'));
+        tipoSelecionado = e.target.value.trim().toLowerCase().replace(/\s+/g, '_');
+      }
+    }
+  });
+
+  const listaArquivos = el('div', { class: 'arquivos-lista' });
+
+  const renderListaArquivos = () => {
+    listaArquivos.innerHTML = '';
+    arquivosSelecionados.forEach((f, idx) => {
+      listaArquivos.append(el('div', { class: 'arquivo-row' }, [
+        el('span', { class: 'arquivo-icon' }, '📄'),
+        el('span', { class: 'arquivo-nome' }, f.name),
+        el('span', { class: 'arquivo-size' }, `${(f.size/1024).toFixed(1)} KB`),
+        el('button', { class: 'arquivo-remove', onclick: () => {
+          arquivosSelecionados.splice(idx, 1);
+          renderListaArquivos();
+        }}, '×'),
+      ]));
+    });
+  };
+
+  const inputArquivo = el('input', {
+    type: 'file',
+    multiple: '',
+    accept: '.md,.txt,.pdf,.csv,.docx',
+    style: 'display:none',
+    id: 'modal-file-input',
+    onchange: (e) => {
+      arquivosSelecionados = [...arquivosSelecionados, ...Array.from(e.target.files)];
+      renderListaArquivos();
+    }
+  });
+
+  const btnUpload = el('button', {
+    class: 'btn',
+    onclick: () => inputArquivo.click()
+  }, '📎 Selecionar arquivos');
+
+  const textoColar = el('textarea', {
+    class: 'textarea',
+    placeholder: 'Ou cole texto aqui (transcrição, depoimento, etc)…',
+    rows: '4',
+  });
+
+  const autorInput = el('input', {
+    class: 'input',
+    type: 'text',
+    placeholder: 'Autor (opcional — ex: Luiz Fernando, @user discord)',
+  });
+
+  const origemInput = el('input', {
+    class: 'input',
+    type: 'text',
+    placeholder: 'Origem (ex: upload, discord, whatsapp, scrap, expert)',
+    value: 'upload',
+  });
+
+  const urlInput = el('input', {
+    class: 'input',
+    type: 'url',
+    placeholder: 'URL da fonte (opcional)',
+  });
+
+  const btnSalvar = el('button', {
+    class: 'btn btn-primary',
+    onclick: () => {
+      const arquivos = arquivosSelecionados;
+      const textoPuro = textoColar.value.trim();
+      if (arquivos.length === 0 && !textoPuro) {
+        alert('Selecione ao menos 1 arquivo ou cole um texto.');
+        return;
+      }
+
+      const novasFontes = [];
+
+      arquivos.forEach(f => {
+        novasFontes.push({
+          id: 'f' + Date.now() + Math.random().toString(36).slice(2, 6),
+          cerebro_slug: cerebroAtual.slug,
+          tipo: tipoSelecionado,
+          titulo: f.name.replace(/\.[^.]+$/, ''),
+          origem: origemInput.value.trim() || 'upload',
+          autor: autorInput.value.trim() || null,
+          criado_em: new Date().toISOString(),
+          arquivo_nome: f.name,
+          arquivo_size: f.size,
+          url: urlInput.value.trim() || null,
+        });
+      });
+
+      if (textoPuro) {
+        const titulo = textoPuro.slice(0, 60).replace(/\n/g,' ') + (textoPuro.length > 60 ? '…' : '');
+        novasFontes.push({
+          id: 't' + Date.now() + Math.random().toString(36).slice(2, 6),
+          cerebro_slug: cerebroAtual.slug,
+          tipo: tipoSelecionado,
+          titulo,
+          conteudo_md: textoPuro,
+          origem: origemInput.value.trim() || 'upload',
+          autor: autorInput.value.trim() || null,
+          criado_em: new Date().toISOString(),
+          url: urlInput.value.trim() || null,
+        });
+      }
+
+      salvarFontesLocais(novasFontes);
+      fecharModal();
+
+      alert(`${novasFontes.length} fonte${novasFontes.length === 1 ? '' : 's'} adicionada${novasFontes.length === 1 ? '' : 's'} ao Cérebro ${cerebroAtual.nome}.\n\nObs: salvo em localStorage (demo). Quando o Supabase estiver conectado, vira persist real no banco.`);
+
+      abrirCerebroDetalhe(cerebroAtual.slug);
+    }
+  }, 'Alimentar Cérebro');
+
+  step.append(
+    el('div', { class: 'modal-head' }, [
+      el('button', { class: 'modal-back', onclick: () => trocarStep(renderStepModo()) }, '‹'),
+      el('h2', {}, 'Alimentação manual'),
+      el('div', { class: 'modal-sub' }, `Cérebro ${cerebroAtual?.nome || ''} — adicione uma ou várias fontes`),
+      el('button', { class: 'modal-close', onclick: fecharModal }, '×'),
+    ]),
+    el('div', { class: 'modal-body' }, [
+      el('div', { class: 'field' }, [
+        el('label', {}, 'Tipo da fonte'),
+        chips,
+        inputOutro,
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', {}, 'Arquivos'),
+        btnUpload,
+        inputArquivo,
+        listaArquivos,
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', {}, 'Ou cole texto'),
+        textoColar,
+      ]),
+      el('div', { class: 'row2' }, [
+        el('div', { class: 'field' }, [
+          el('label', {}, 'Origem'),
+          origemInput,
+        ]),
+        el('div', { class: 'field' }, [
+          el('label', {}, 'Autor'),
+          autorInput,
+        ]),
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', {}, 'URL (opcional)'),
+        urlInput,
+      ]),
+    ]),
+    el('div', { class: 'modal-foot' }, [
+      el('button', { class: 'btn btn-ghost', onclick: fecharModal }, 'Cancelar'),
+      btnSalvar,
+    ]),
+  );
+
+  return step;
+}
+
+/* --- PASSO 2B: Automático (configura cron) --- */
+function renderStepAutomatico() {
+  const step = el('div', { class: 'modal-step' });
+
+  step.append(
+    el('div', { class: 'modal-head' }, [
+      el('button', { class: 'modal-back', onclick: () => trocarStep(renderStepModo()) }, '‹'),
+      el('h2', {}, 'Alimentação automática'),
+      el('div', { class: 'modal-sub' }, 'Configure um cron que roda no Supabase'),
+      el('button', { class: 'modal-close', onclick: fecharModal }, '×'),
+    ]),
+    el('div', { class: 'modal-body' }, [
+      el('div', { class: 'cron-infobox' }, [
+        el('strong', {}, '💡 Como funciona'),
+        el('p', {}, 'Crons rodam direto no Supabase (pg_cron + edge functions) — não dependem do OpenClaw. Cada cron busca conteúdo num canal, classifica o tipo e grava no Cérebro correto automaticamente.'),
+      ]),
+
+      el('div', { class: 'field' }, [
+        el('label', {}, 'Fonte'),
+        el('select', { class: 'input', id: 'cron-canal' }, [
+          el('option', { value: 'discord' }, 'Discord (canal #depoimentos)'),
+          el('option', { value: 'whatsapp' }, 'WhatsApp (grupo via webhook)'),
+          el('option', { value: 'telegram' }, 'Telegram (bot + chat_id)'),
+          el('option', { value: 'rss' }, 'RSS / feed externo'),
+          el('option', { value: 'drive' }, 'Google Drive (pasta monitorada)'),
+        ]),
+      ]),
+
+      el('div', { class: 'field' }, [
+        el('label', {}, 'Frequência'),
+        el('select', { class: 'input', id: 'cron-freq' }, [
+          el('option', { value: '*/15 * * * *' }, 'A cada 15 minutos'),
+          el('option', { value: '0 * * * *' }, 'A cada hora'),
+          el('option', { value: '0 */6 * * *' }, 'A cada 6 horas'),
+          el('option', { value: '0 9 * * *' }, 'Diariamente às 9h'),
+          el('option', { value: '0 9 * * 1' }, 'Semanalmente (segunda 9h)'),
+        ]),
+      ]),
+
+      el('div', { class: 'field' }, [
+        el('label', {}, 'Tipo padrão (quando curador não conseguir classificar)'),
+        el('input', { class: 'input', type: 'text', placeholder: 'ex: depoimento', id: 'cron-tipo', value: 'depoimento' }),
+      ]),
+
+      el('div', { class: 'field' }, [
+        el('label', {}, 'Observação'),
+        el('textarea', { class: 'textarea', rows: '2', placeholder: 'Ex: Scrape do canal #depoimentos do Discord, prioridade tag @validado', id: 'cron-obs' }),
+      ]),
+    ]),
+    el('div', { class: 'modal-foot' }, [
+      el('button', { class: 'btn btn-ghost', onclick: fecharModal }, 'Cancelar'),
+      el('button', {
+        class: 'btn btn-primary',
+        onclick: () => {
+          const canal = document.getElementById('cron-canal').value;
+          const freq = document.getElementById('cron-freq').value;
+          const tipo = document.getElementById('cron-tipo').value;
+          const obs = document.getElementById('cron-obs').value;
+
+          const cron = {
+            id: 'cr' + Date.now(),
+            cerebro_slug: cerebroAtual.slug,
+            canal, freq, tipo_padrao: tipo, obs,
+            criado_em: new Date().toISOString(),
+            status: 'pendente_supabase',
+          };
+
+          const crons = JSON.parse(localStorage.getItem('mc.crons.v1') || '[]');
+          crons.push(cron);
+          localStorage.setItem('mc.crons.v1', JSON.stringify(crons));
+
+          fecharModal();
+          alert(`Cron configurado para ${cerebroAtual.nome}.\n\nCanal: ${canal}\nFrequência: ${freq}\n\nPendente de ativação no Supabase (pg_cron). Veja a tela Crons no sidebar.`);
+        }
+      }, 'Criar cron'),
+    ]),
+  );
+
+  return step;
+}
+
+/* --- Persistência local --- */
+function salvarFontesLocais(fontes) {
+  const atual = JSON.parse(localStorage.getItem(LS_KEY_FONTES) || '[]');
+  atual.push(...fontes);
+  localStorage.setItem(LS_KEY_FONTES, JSON.stringify(atual));
+}
+
+export function lerFontesLocaisPorCerebro(slug) {
+  const atual = JSON.parse(localStorage.getItem(LS_KEY_FONTES) || '[]');
+  return atual.filter(f => f.cerebro_slug === slug);
 }

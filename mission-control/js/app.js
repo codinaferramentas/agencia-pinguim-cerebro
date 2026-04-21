@@ -2,12 +2,12 @@
    Orquestra o lazy-load das telas.
 */
 
-import { dataMode, fetchOperacaoData, fetchRoadmapData, fetchCerebrosCatalogo } from './sb-client.js?v=20260420f';
-import { renderHome } from './home.js?v=20260420f';
-import { renderCerebros, initDrawer } from './cerebros.js?v=20260420f';
-import { renderCrons } from './crons.js?v=20260420f';
-import { renderSkills } from './skills.js?v=20260420f';
-import { renderStub } from './stubs.js?v=20260420f';
+import { dataMode, fetchOperacaoData, fetchRoadmapData, fetchCerebrosCatalogo } from './sb-client.js?v=20260420g';
+import { renderHome } from './home.js?v=20260420g';
+import { renderCerebros, initDrawer } from './cerebros.js?v=20260420g';
+import { renderCrons } from './crons.js?v=20260420g';
+import { renderSkills } from './skills.js?v=20260420g';
+import { renderStub } from './stubs.js?v=20260420g';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
@@ -58,6 +58,7 @@ async function navegar(pageSlug) {
       switch (pageSlug) {
         case 'home':      await renderHome(); break;
         case 'cerebros':  await renderCerebros(); break;
+        case 'personas':  await renderPersonas(); break;
         case 'operacao':  await renderOperacao(); break;
         case 'agentes':   await renderAgentes(); break;
         case 'squads':    await renderSquadsPage(); break;
@@ -101,12 +102,27 @@ const SUBNAV_CONFIG = {
       return cerebros.map(c => ({
         id: c.slug || c.id,
         label: c.nome,
-        meta: (c.preenchimento_pct ?? 0) + '%',
+        meta: (c.total_pecas ?? 0) + ' fontes',
         emoji: c.emoji || '⚛',
       }));
     },
     onSelect: (id) => {
       window.dispatchEvent(new CustomEvent('cerebro:select', { detail: { slug: id } }));
+    }
+  },
+  personas: {
+    title: 'Personas',
+    loader: async () => {
+      const cerebros = await fetchCerebrosCatalogo();
+      return cerebros.map(c => ({
+        id: c.slug || c.id,
+        label: c.nome,
+        meta: 'auto',
+        emoji: c.emoji || '👤',
+      }));
+    },
+    onSelect: (id) => {
+      window.dispatchEvent(new CustomEvent('persona:select', { detail: { slug: id } }));
     }
   },
   squads: {
@@ -203,6 +219,118 @@ async function atualizarStatusbar() {
 }
 
 /* -------- Telas migradas do V0 antigo -------- */
+
+/* Personas — output gerado a partir do Cérebro. Editável com aviso. */
+let personasListenerReady = false;
+async function renderPersonas(slugPreSelecionado) {
+  if (!personasListenerReady) {
+    personasListenerReady = true;
+    window.addEventListener('persona:select', (ev) => {
+      const slug = ev.detail?.slug;
+      if (slug) renderPersonaDetalhe(slug);
+    });
+  }
+
+  const page = $('#page-personas');
+  page.innerHTML = '';
+
+  const cerebros = await fetchCerebrosCatalogo();
+
+  page.append(
+    el('div', { class: 'page-header' }, [
+      el('div', {}, [
+        el('h1', { class: 'page-title' }, 'Personas'),
+        el('div', { class: 'page-subtitle' }, 'Uma persona por produto, gerada e mantida automaticamente pelo Cérebro. Cada alimentação do Cérebro atualiza a Persona.'),
+      ]),
+    ]),
+    el('div', { class: 'cerebros-grid' },
+      cerebros.map(c => el('div', {
+        class: 'cerebro-card',
+        onclick: () => renderPersonaDetalhe(c.slug)
+      }, [
+        el('div', { class: 'cerebro-card-top' }, [
+          el('div', { class: 'cerebro-emoji' }, c.emoji || '👤'),
+          el('div', { style: 'flex:1;min-width:0' }, [
+            el('div', { class: 'cerebro-nome' }, 'Persona ' + c.nome),
+            el('div', { class: 'cerebro-desc' }, 'Derivada do Cérebro ' + c.nome),
+          ]),
+        ]),
+        el('div', { class: 'persona-status' }, [
+          el('span', { class: 'persona-status-dot' }),
+          el('span', {}, (c.total_pecas || 0) > 0 ? 'Atualizada após última alimentação' : 'Sem dados — alimente o Cérebro primeiro'),
+        ]),
+      ]))
+    )
+  );
+
+  if (slugPreSelecionado) renderPersonaDetalhe(slugPreSelecionado);
+}
+
+async function renderPersonaDetalhe(slug) {
+  const cerebros = await fetchCerebrosCatalogo();
+  const c = cerebros.find(x => x.slug === slug);
+  if (!c) return;
+
+  const page = $('#page-personas');
+  page.innerHTML = '';
+
+  const total = c.total_pecas || 0;
+  const temDados = total > 0;
+
+  page.append(
+    el('div', { class: 'cerebro-detail' }, [
+      el('div', { class: 'cerebro-detail-header' }, [
+        el('div', { class: 'cerebro-emoji' }, c.emoji || '👤'),
+        el('div', { style: 'flex:1' }, [
+          el('div', { class: 'cerebro-nome' }, 'Persona ' + c.nome),
+          el('div', { class: 'cerebro-desc' }, 'Derivada do Cérebro ' + c.nome),
+          el('div', { style: 'display:flex;gap:.75rem;margin-top:.5rem;font-size:.75rem;color:var(--fg-muted)' }, [
+            el('span', {}, `Cérebro: ${total} fonte${total === 1 ? '' : 's'}`),
+            el('span', {}, temDados ? 'Última síntese: agora há pouco' : 'Aguardando 1ª alimentação'),
+          ]),
+        ]),
+        el('div', { class: 'cerebro-detail-actions' }, [
+          el('button', {
+            class: 'btn',
+            disabled: !temDados ? '' : null,
+            onclick: () => alert('Editar Persona — esta edição fica registrada. Se você apontar falta de contexto, o sistema vai sugerir alimentar o Cérebro primeiro (não editar manualmente). V1 com Supabase conectado.')
+          }, '✎ Editar'),
+          el('button', {
+            class: 'btn btn-ghost',
+            onclick: () => renderPersonas()
+          }, '← Voltar'),
+        ]),
+      ]),
+
+      !temDados
+        ? el('div', { class: 'stub-screen' }, [
+            el('div', { class: 'stub-badge' }, 'sem dados'),
+            el('h2', {}, 'Alimente o Cérebro primeiro'),
+            el('p', {}, 'A Persona é gerada automaticamente a partir das fontes do Cérebro. Adicione aulas, depoimentos, objeções e sacadas antes de esperar uma persona útil aqui.'),
+          ])
+        : el('div', { class: 'persona-detail' }, [
+            el('div', { class: 'persona-aviso' }, [
+              el('strong', {}, '🧠 Como esta persona foi gerada'),
+              el('p', {}, `Síntese automática a partir de ${total} fontes do Cérebro ${c.nome}. Edições manuais ficam sinalizadas — se algo parecer faltar, alimente o Cérebro em vez de corrigir direto aqui.`),
+            ]),
+            el('div', { class: 'persona-secoes' }, [
+              personaSecao('Quem é', 'Persona síntese — aguardando integração com o Cérebro real. Mock temporário.'),
+              personaSecao('Dor principal', 'Principal objeção recorrente detectada nas fontes.'),
+              personaSecao('Gatilhos de compra', 'Sacadas do expert + padrões nos depoimentos.'),
+              personaSecao('Objeções', 'Top 3 objeções do grupo, ordenadas por frequência.'),
+              personaSecao('Linguagem', 'Vocabulário coletado de depoimentos e perguntas reais.'),
+            ]),
+          ]),
+    ])
+  );
+}
+
+function personaSecao(titulo, texto) {
+  return el('div', { class: 'persona-secao' }, [
+    el('h3', {}, titulo),
+    el('p', {}, texto),
+  ]);
+}
 
 async function renderOperacao() {
   const page = $('#page-operacao');
