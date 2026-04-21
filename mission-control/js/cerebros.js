@@ -1,7 +1,7 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421c';
-import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421c';
+import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421d';
+import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421d';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -188,7 +188,7 @@ function renderView() {
   });
 
   if (viewModoAtual === 'kanban') {
-    const fontes = pecasCache.length > 0 ? pecasCache : gerarFontesMockadas(cerebroAtual);
+    const fontes = pecasCache;
     renderKanbanFontes(area, fontes);
   } else if (viewModoAtual === 'lista') {
     const tabela = el('table', { class: 'pecas-tabela' });
