@@ -1,7 +1,7 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421o';
-import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421o';
+import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421p';
+import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421p';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -1042,6 +1042,17 @@ function renderStepModo() {
 /* --- PASSO 2C: Pacote (zip) via Edge Function --- */
 const MAX_UPLOAD_MB = 50;
 
+// Sanitiza nome pra virar storage key válida.
+// Supabase Storage rejeita: colchetes [], espaços, acentos, outros símbolos.
+function sanitizarNomeArquivo(nome) {
+  return nome
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase();
+}
+
 // Upload com progresso real via XHR (supabase-js não expõe onprogress no upload).
 // Usado por Pacote e Avulso — ambos mandam um .zip pro Storage.
 function uploadZipComProgresso({ file, storagePath, supabaseUrl, anonKey, onProgress }) {
@@ -1266,7 +1277,7 @@ function renderStepPacote() {
         }).select('id').single();
         if (eLote) throw new Error('Erro ao criar lote: ' + eLote.message);
 
-        const storagePath = `lote/${lote.id}/${arquivoSelecionado.name}`;
+        const storagePath = `lote/${lote.id}/${sanitizarNomeArquivo(arquivoSelecionado.name)}`;
 
         // 3. Upload COM progresso real (via XHR direto pra API de storage)
         uploadStatus.innerHTML = `<strong>⬆ Enviando zip para o servidor…</strong> 0% · 0 / ${(arquivoSelecionado.size / 1024 / 1024).toFixed(1)} MB`;
@@ -1575,6 +1586,31 @@ function renderStepAvulso() {
         const { data: cer } = await sb.from('cerebros').select('id').eq('produto_id', prod.id).single();
         if (!cer) throw new Error('Cérebro não encontrado');
 
+        // Checa se já existe fonte com mesmo nome no cérebro (UX: perguntar antes)
+        const tituloBase = arquivoSelecionado.name.replace(/\.[^.]+$/, '');
+        const { data: existentes } = await sb.from('cerebro_fontes')
+          .select('id, titulo')
+          .eq('cerebro_id', cer.id)
+          .eq('arquivo_nome', arquivoSelecionado.name)
+          .limit(1);
+        if (existentes && existentes.length > 0) {
+          const confirmar = await confirmarDark({
+            titulo: 'Arquivo já existe no Cérebro',
+            mensagem: `Já existe uma fonte chamada "${tituloBase}" neste Cérebro. Se o conteúdo for idêntico, o sistema vai ignorar (dedup por sha256). Se for diferente, será adicionado normalmente.\n\nQuer continuar mesmo assim?`,
+            confirmar: 'Sim, subir',
+            perigoso: false,
+          });
+          if (!confirmar) {
+            processandoAgora = false;
+            btnProcessar.disabled = false;
+            btnProcessar.style.pointerEvents = '';
+            btnProcessar.innerHTML = 'Alimentar';
+            atualizarBotao();
+            areaProgresso.style.display = 'none';
+            return;
+          }
+        }
+
         // Cria lote
         const { data: lote, error: eLote } = await sb.from('ingest_lotes').insert({
           cerebro_id: cer.id,
@@ -1595,7 +1631,7 @@ function renderStepAvulso() {
         const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         const zipFile = new File([zipBlob], `${arquivoSelecionado.name}.zip`, { type: 'application/zip' });
 
-        const storagePath = `lote/${lote.id}/${zipFile.name}`;
+        const storagePath = `lote/${lote.id}/${sanitizarNomeArquivo(zipFile.name)}`;
 
         uploadStatus.innerHTML = `<strong>⬆ Enviando…</strong> 0 / ${(zipFile.size / 1024 / 1024).toFixed(1)} MB`;
         await uploadZipComProgresso({
