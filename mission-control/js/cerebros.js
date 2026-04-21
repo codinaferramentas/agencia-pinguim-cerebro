@@ -1,7 +1,7 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421e';
-import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421e';
+import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421f';
+import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421f';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -489,6 +489,44 @@ function renderStepModo() {
 const MAX_UPLOAD_MB = 50;
 
 /**
+ * Modal dark de alerta (substitui alert() feio do browser).
+ * Retorna Promise<void>.
+ */
+function alertarDark({ titulo, mensagem, tipo = 'info' }) {
+  return new Promise((resolve) => {
+    const back = el('div', {
+      class: 'modal-backdrop modal-confirm',
+      style: 'z-index:10000',
+      onclick: (e) => { if (e.target === back) fechar(); }
+    });
+    const card = el('div', { class: 'modal-card', style: 'max-width:440px' });
+    function fechar() {
+      back.classList.remove('open');
+      setTimeout(() => back.remove(), 180);
+      resolve();
+    }
+
+    const icone = tipo === 'erro' ? '✗' : tipo === 'aviso' ? '⚠' : 'ℹ';
+    const cor = tipo === 'erro' ? 'var(--danger)' : tipo === 'aviso' ? 'var(--warning)' : 'var(--pc)';
+
+    card.append(
+      el('div', { class: 'modal-head' }, [
+        el('h2', { style: `color:${cor}` }, `${icone}  ${titulo}`),
+      ]),
+      el('div', { class: 'modal-body' }, [
+        el('p', { style: 'font-size:0.875rem;color:var(--fg-muted);line-height:1.6;white-space:pre-wrap' }, mensagem),
+      ]),
+      el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn btn-primary', onclick: fechar }, 'OK'),
+      ]),
+    );
+    back.append(card);
+    document.body.append(back);
+    requestAnimationFrame(() => back.classList.add('open'));
+  });
+}
+
+/**
  * Modal dark de confirmação (substitui confirm() feio do browser).
  * Retorna Promise<boolean>.
  */
@@ -602,7 +640,7 @@ function renderStepPacote() {
       if (!arquivoSelecionado) return;
 
       const sb = getSupabase();
-      if (!sb) { alert('Supabase não conectado. Recarregue a página.'); return; }
+      if (!sb) { await alertarDark({ titulo: 'Sem conexão', mensagem: 'Supabase não conectado. Recarregue a página e tente de novo.', tipo: 'erro' }); return; }
 
       // Confirmação via modal dark (não browser confirm feio)
       const confirma = await confirmarProcessamento({
@@ -736,7 +774,7 @@ function renderStepPacote() {
         }, 3000);
 
       } catch (e) {
-        alert('Erro: ' + e.message);
+        await alertarDark({ titulo: 'Falha no envio', mensagem: e.message, tipo: 'erro' });
         btnProcessar.disabled = false;
         btnProcessar.textContent = 'Processar pacote';
       }
