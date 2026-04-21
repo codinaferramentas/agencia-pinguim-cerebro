@@ -432,7 +432,7 @@
         <div class="kv">
           <div class="lbl">Com RAG</div>
           <div class="val">US$ 0,02</div>
-          <div class="desc">Apenas os 8 trechos mais relevantes viajam no prompt (~8k tokens). Escalável.</div>
+          <div class="desc">Apenas os top-K trechos mais relevantes viajam no prompt. Com K=8, o prompt fica em ~8k tokens. Escalável.</div>
         </div>
       </div>
 
@@ -456,9 +456,45 @@
         </li>
         <li>
           <strong>Consulta on-demand</strong>
-          A pergunta do agente também vira vetor. O Supabase devolve os top-8 chunks mais próximos. Só esses entram no prompt final.
+          A pergunta do agente também vira vetor. O Supabase devolve os top-K chunks mais próximos. Só esses entram no prompt final.
         </li>
       </ol>
+
+      <h3>Como definimos o K (top-K)</h3>
+
+      <p>O <strong>K</strong> é o número de chunks que o agente recebe em cada chamada. <strong>Não é uma constante mágica</strong> — é um parâmetro de tuning que calibramos por tipo de tarefa. A escolha começa em 8 por convenção da indústria (papers da OpenAI e Anthropic sugerem entre 5 e 10 como ponto de partida pra RAG de texto), e depois ajustamos com base no comportamento real.</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Tipo de tarefa</th>
+            <th>K recomendado</th>
+            <th>Por quê</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>FAQ / pergunta fechada</strong></td>
+            <td>3 a 5</td>
+            <td>A resposta geralmente mora em um único trecho. K alto traz ruído.</td>
+          </tr>
+          <tr>
+            <td><strong>Copy / página de vendas</strong></td>
+            <td>8 a 12</td>
+            <td>Precisa pescar tom do expert, objeções, depoimentos, provas. Contexto amplo melhora o resultado.</td>
+          </tr>
+          <tr>
+            <td><strong>Análise ou auditoria longa</strong></td>
+            <td>15 a 20</td>
+            <td>Tarefa exige cobertura ampla do Cérebro. Custo sobe, mas se justifica pela profundidade.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        <div class="note-label">Calibração contínua</div>
+        <p>Cada agente começa com um K-base. Se a qualidade cair, subimos. Se o custo apertar, testamos baixar com busca por diversidade (MMR) pra evitar chunks redundantes. Os números no resto deste documento usam <strong>K = 8</strong> como referência, por ser o meio-termo usado em copy e conteúdo.</p>
+      </div>
     </section>
 
     <section id="portas">
@@ -545,12 +581,12 @@ pg_cron → a cada 1h
           <span class="hint">~ US$ 0,00002</span>
         </li>
         <li>
-          <strong>Supabase devolve top-8 chunks</strong>
-          Busca por similaridade semântica dentro do Cérebro Elo. Instantânea. Sem custo adicional.
+          <strong>Supabase devolve os top-K chunks</strong>
+          Busca por similaridade semântica dentro do Cérebro Elo. Para agente de copy, K = 8. Instantânea. Sem custo adicional.
         </li>
         <li>
           <strong>Prompt montado</strong>
-          <code>[system prompt Copy Chief] + [8 chunks] + [instrução]</code> — cerca de 8k tokens no total.
+          <code>[system prompt Copy Chief] + [K chunks] + [instrução]</code> — cerca de 8k tokens no total com K = 8.
         </li>
         <li>
           <strong>GPT-4o responde</strong>
