@@ -1,7 +1,7 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421l';
-import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421l';
+import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421m';
+import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421m';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);

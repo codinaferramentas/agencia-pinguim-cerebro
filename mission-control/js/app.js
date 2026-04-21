@@ -2,12 +2,12 @@
    Orquestra o lazy-load das telas.
 */
 
-import { dataMode, fetchOperacaoData, fetchRoadmapData, fetchCerebrosCatalogo } from './sb-client.js?v=20260421l';
-import { renderHome } from './home.js?v=20260421l';
-import { renderCerebros, initDrawer } from './cerebros.js?v=20260421l';
-import { renderCrons } from './crons.js?v=20260421l';
-import { renderSkills } from './skills.js?v=20260421l';
-import { renderStub } from './stubs.js?v=20260421l';
+import { dataMode, fetchOperacaoData, fetchRoadmapData, fetchCerebrosCatalogo } from './sb-client.js?v=20260421m';
+import { renderHome } from './home.js?v=20260421m';
+import { renderCerebros, initDrawer } from './cerebros.js?v=20260421m';
+import { renderCrons } from './crons.js?v=20260421m';
+import { renderSkills } from './skills.js?v=20260421m';
+import { renderStub } from './stubs.js?v=20260421m';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
@@ -117,12 +117,15 @@ const SUBNAV_CONFIG = {
     title: 'Personas',
     loader: async () => {
       const cerebros = await fetchCerebrosCatalogo();
-      return cerebros.map(c => ({
-        id: c.slug || c.id,
-        label: c.nome,
-        meta: 'auto',
-        emoji: c.emoji || '👤',
-      }));
+      // Persona só existe se Cérebro tem fonte (pai existe)
+      return cerebros
+        .filter(c => (c.total_fontes || 0) > 0)
+        .map(c => ({
+          id: c.slug || c.id,
+          label: c.nome,
+          meta: 'auto',
+          emoji: c.emoji || '👤',
+        }));
     },
     onSelect: (id) => {
       window.dispatchEvent(new CustomEvent('persona:select', { detail: { slug: id } }));
@@ -238,6 +241,8 @@ async function renderPersonas(slugPreSelecionado) {
   page.innerHTML = '';
 
   const cerebros = await fetchCerebrosCatalogo();
+  // Cérebro é o pai de tudo: Persona só existe se o Cérebro tem fontes
+  const comConteudo = cerebros.filter(c => (c.total_fontes || 0) > 0);
 
   page.append(
     el('div', { class: 'page-header' }, [
@@ -246,24 +251,35 @@ async function renderPersonas(slugPreSelecionado) {
         el('div', { class: 'page-subtitle' }, 'Uma persona por produto, gerada e mantida automaticamente pelo Cérebro. Cada alimentação do Cérebro atualiza a Persona.'),
       ]),
     ]),
-    el('div', { class: 'cerebros-grid' },
-      cerebros.map(c => el('div', {
-        class: 'cerebro-card',
-        onclick: () => renderPersonaDetalhe(c.slug)
-      }, [
-        el('div', { class: 'cerebro-card-top' }, [
-          el('div', { class: 'cerebro-emoji' }, c.emoji || '👤'),
-          el('div', { style: 'flex:1;min-width:0' }, [
-            el('div', { class: 'cerebro-nome' }, 'Persona ' + c.nome),
-            el('div', { class: 'cerebro-desc' }, 'Derivada do Cérebro ' + c.nome),
-          ]),
-        ]),
-        el('div', { class: 'persona-status' }, [
-          el('span', { class: 'persona-status-dot' }),
-          el('span', {}, (c.total_fontes || 0) > 0 ? 'Atualizada após última alimentação' : 'Sem dados — alimente o Cérebro primeiro'),
-        ]),
-      ]))
-    )
+    comConteudo.length === 0
+      ? el('div', { class: 'stub-screen' }, [
+          el('div', { class: 'stub-badge' }, 'sem dados'),
+          el('h2', {}, 'Alimente um Cérebro primeiro'),
+          el('p', {}, 'A Persona é gerada automaticamente a partir das fontes de cada Cérebro. Enquanto nenhum Cérebro tiver conteúdo, não há Persona pra mostrar.'),
+          el('button', {
+            class: 'btn btn-primary',
+            style: 'margin-top:1rem',
+            onclick: () => { document.querySelector('.nav-item[data-page="cerebros"]').click(); },
+          }, 'Ir pra Cérebros →'),
+        ])
+      : el('div', { class: 'cerebros-grid' },
+          comConteudo.map(c => el('div', {
+            class: 'cerebro-card',
+            onclick: () => renderPersonaDetalhe(c.slug)
+          }, [
+            el('div', { class: 'cerebro-card-top' }, [
+              el('div', { class: 'cerebro-emoji' }, c.emoji || '👤'),
+              el('div', { style: 'flex:1;min-width:0' }, [
+                el('div', { class: 'cerebro-nome' }, 'Persona ' + c.nome),
+                el('div', { class: 'cerebro-desc' }, 'Derivada do Cérebro ' + c.nome),
+              ]),
+            ]),
+            el('div', { class: 'persona-status' }, [
+              el('span', { class: 'persona-status-dot' }),
+              el('span', {}, 'Atualizada após última alimentação'),
+            ]),
+          ]))
+        )
   );
 
   if (slugPreSelecionado) renderPersonaDetalhe(slugPreSelecionado);
