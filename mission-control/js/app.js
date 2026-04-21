@@ -2,12 +2,12 @@
    Orquestra o lazy-load das telas.
 */
 
-import { dataMode, fetchOperacaoData, fetchRoadmapData, fetchCerebrosCatalogo } from './sb-client.js?v=20260421j';
-import { renderHome } from './home.js?v=20260421j';
-import { renderCerebros, initDrawer } from './cerebros.js?v=20260421j';
-import { renderCrons } from './crons.js?v=20260421j';
-import { renderSkills } from './skills.js?v=20260421j';
-import { renderStub } from './stubs.js?v=20260421j';
+import { dataMode, fetchOperacaoData, fetchRoadmapData, fetchCerebrosCatalogo } from './sb-client.js?v=20260421k';
+import { renderHome } from './home.js?v=20260421k';
+import { renderCerebros, initDrawer } from './cerebros.js?v=20260421k';
+import { renderCrons } from './crons.js?v=20260421k';
+import { renderSkills } from './skills.js?v=20260421k';
+import { renderStub } from './stubs.js?v=20260421k';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
@@ -99,12 +99,15 @@ const SUBNAV_CONFIG = {
     title: 'Cérebros',
     loader: async () => {
       const cerebros = await fetchCerebrosCatalogo();
-      return cerebros.map(c => ({
-        id: c.slug || c.id,
-        label: c.nome,
-        meta: (c.total_pecas ?? 0) + ' fontes',
-        emoji: c.emoji || '⚛',
-      }));
+      // Filtra: só cérebros com produto real, sem Pinguim Empresa (foco em cérebros de produto)
+      return cerebros
+        .filter(c => c.slug !== 'pinguim')
+        .map(c => ({
+          id: c.slug || c.id,
+          label: c.nome,
+          meta: (c.total_fontes ?? 0) + ' fontes',
+          emoji: c.emoji || '⚛',
+        }));
     },
     onSelect: (id) => {
       window.dispatchEvent(new CustomEvent('cerebro:select', { detail: { slug: id } }));
@@ -257,7 +260,7 @@ async function renderPersonas(slugPreSelecionado) {
         ]),
         el('div', { class: 'persona-status' }, [
           el('span', { class: 'persona-status-dot' }),
-          el('span', {}, (c.total_pecas || 0) > 0 ? 'Atualizada após última alimentação' : 'Sem dados — alimente o Cérebro primeiro'),
+          el('span', {}, (c.total_fontes || 0) > 0 ? 'Atualizada após última alimentação' : 'Sem dados — alimente o Cérebro primeiro'),
         ]),
       ]))
     )
@@ -274,7 +277,7 @@ async function renderPersonaDetalhe(slug) {
   const page = $('#page-personas');
   page.innerHTML = '';
 
-  const total = c.total_pecas || 0;
+  const total = c.total_fontes || 0;
   const temDados = total > 0;
 
   page.append(
@@ -533,9 +536,9 @@ function renderSquadCardMapa(c) {
     ]),
     el('div', { style: 'font-size:.8125rem;color:var(--fg-muted);line-height:1.5' }, c.descricao || '—'),
     el('div', { class: 'squad-card-stats' }, [
-      statMini(c.total_pecas || 0, 'Peças'),
+      statMini(c.total_fontes || 0, 'Fontes'),
       statMini(`${c.preenchimento_pct || 0}%`, 'Preench.'),
-      statMini(c.pecas_ultima_semana || 0, '7d'),
+      statMini(c.fontes_ultima_semana || 0, '7d'),
     ]),
   ]);
 }
@@ -695,5 +698,5 @@ function qualiCard(val, lbl, alerta = false) {
   initDrawer();
   await atualizarStatusbar();
   // Renderiza Home primeiro (tela default)
-  navegar('home');
+  navegar('cerebros');
 })();

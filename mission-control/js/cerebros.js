@@ -1,7 +1,7 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421j';
-import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421j';
+import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421k';
+import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421k';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -38,6 +38,9 @@ export async function renderCerebros() {
     return;
   }
 
+  // Esconde Pinguim Empresa temporariamente (foco em cérebros de produto)
+  const cerebrosVisiveis = cerebrosCache.filter(c => c.slug !== 'pinguim');
+
   page.innerHTML = '';
   page.append(
     el('div', { class: 'cerebros-header' }, [
@@ -51,7 +54,7 @@ export async function renderCerebros() {
       }, '+ Novo Produto'),
     ]),
     el('div', { class: 'cerebros-grid' }, [
-      ...cerebrosCache.map(renderCerebroCard),
+      ...cerebrosVisiveis.map(renderCerebroCard),
       el('button', {
         class: 'btn-add-produto',
         onclick: () => abrirModalNovoProduto()
@@ -64,7 +67,8 @@ function renderCerebroCard(c) {
   const isPinguim = c.slug === 'pinguim';
   const atualizacao = formatarAtualizacao(c.ultima_alimentacao);
   const tiposPresentes = construirTiposDinamicos(c);
-  const totalFontes = tiposPresentes.reduce((sum, t) => sum + t.val, 0);
+  // Usa total_fontes da view (número real do banco), não soma dos tipos conhecidos
+  const totalFontes = c.total_fontes || 0;
 
   return el('div', {
     class: 'cerebro-card' + (isPinguim ? ' featured' : ''),
@@ -103,7 +107,8 @@ function construirTiposDinamicos(c) {
     { key: 'sacadas',     icon: '💡', label: 'Sacadas',     val: c.total_sacadas || 0 },
   ];
   const contados = todos.reduce((s, t) => s + t.val, 0);
-  const outros = Math.max(0, (c.total_pecas || 0) - contados);
+  // "Outros" = total_fontes (número real no banco) menos os tipos já listados
+  const outros = Math.max(0, (c.total_fontes || 0) - contados);
   if (outros > 0) todos.push({ key: 'outros', icon: '📦', label: 'Outros', val: outros });
 
   return todos.filter(t => t.val > 0).sort((a, b) => b.val - a.val);
@@ -180,7 +185,7 @@ async function abrirCerebroDetalhe(slug) {
       el('div', { class: 'cerebro-nome' }, `Cérebro ${cerebroAtual.nome}`),
       el('div', { class: 'cerebro-desc' }, cerebroAtual.descricao || '—'),
       el('div', { style: 'display:flex;gap:.75rem;margin-top:.5rem;font-size:.75rem;color:var(--fg-muted)' }, [
-        el('span', {}, `${pecasCache.length} fontes`),
+        el('span', { class: 'cerebro-detalhe-header-count' }, `${pecasCache.length} font${pecasCache.length === 1 ? 'e' : 'es'}`),
         el('span', {}, formatarAtualizacao(cerebroAtual.ultima_alimentacao).texto),
       ]),
     ]),
@@ -433,7 +438,38 @@ async function excluirFonte(fonteId) {
     return;
   }
 
-  abrirCerebroDetalhe(cerebroAtual.slug);
+  // UX: remove só o card da fonte do DOM + atualiza contadores, sem recarregar a tela toda
+  await atualizarDepoisDeExcluirFonte(fonteId);
+}
+
+/**
+ * Pós-exclusão de fonte única: remove o card do DOM e atualiza
+ * contadores de header/Kanban, sem reconstruir a tela inteira.
+ */
+async function atualizarDepoisDeExcluirFonte(fonteId) {
+  // Remove do cache local
+  const idx = pecasCache.findIndex(p => p.id === fonteId);
+  if (idx >= 0) pecasCache.splice(idx, 1);
+
+  // Remove o card do DOM (qualquer view: kanban/lista/timeline)
+  document.querySelectorAll(`[data-fonte-id="${fonteId}"]`).forEach(el => el.remove());
+
+  // Atualiza contador "X fontes" no header do cérebro
+  const headerCount = document.querySelector('.cerebro-detalhe-header-count');
+  if (headerCount) headerCount.textContent = `${pecasCache.length} font${pecasCache.length === 1 ? 'e' : 'es'}`;
+
+  // Atualiza contador nas colunas do Kanban (se visível)
+  document.querySelectorAll('.fontes-col').forEach(col => {
+    const tipo = col.dataset.tipo;
+    if (!tipo) return;
+    const count = pecasCache.filter(p => p.tipo === tipo).length;
+    const badge = col.querySelector('.fontes-col-count');
+    if (badge) badge.textContent = String(count);
+    if (count === 0) col.remove();
+  });
+
+  // Atualiza cache do catálogo em background (pro sidebar refletir)
+  fetchCerebrosCatalogo().then(cat => { cerebrosCache = cat; }).catch(() => {});
 }
 
 async function reclassificarFonte(fonte) {
@@ -664,7 +700,7 @@ function renderKanbanFontes(area, fontes) {
     const corBg = `var(--peca-${tipo.replace('_','-')}-bg, var(--peca-outro-bg))`;
     const count = grupos[tipo].length;
 
-    const col = el('div', { class: 'fontes-col' }, [
+    const col = el('div', { class: 'fontes-col', 'data-tipo': tipo }, [
       el('div', { class: 'fontes-col-header', style: `--col-color: ${cor}; --col-bg: ${corBg}` }, [
         el('div', { class: 'fontes-col-icon' }, meta.icon),
         el('div', { style: 'flex:1;min-width:0' }, [
@@ -721,7 +757,7 @@ function renderFonteCard(fonte, tipo) {
     title: 'Ações',
   }, '⋮');
 
-  const card = el('div', { class: 'fonte-card', onclick: () => abrirDrawer(fonte) }, [
+  const card = el('div', { class: 'fonte-card', 'data-fonte-id': fonte.id, onclick: () => abrirDrawer(fonte) }, [
     el('div', { class: 'fonte-card-head' }, [
       el('div', { class: 'fonte-card-title' }, fonte.titulo),
       btnMenu,
