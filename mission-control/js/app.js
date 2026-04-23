@@ -293,6 +293,51 @@ async function renderPersonas(slugPreSelecionado) {
   if (slugPreSelecionado) renderPersonaDetalhe(slugPreSelecionado);
 }
 
+async function fetchPersonaPorSlug(slug) {
+  const { getSupabaseClient } = await import('./sb-client.js');
+  const sb = getSupabaseClient();
+  if (!sb) return null;
+  const { data: prod } = await sb.from('produtos').select('id').eq('slug', slug).single();
+  if (!prod) return null;
+  const { data: cer } = await sb.from('cerebros').select('id').eq('produto_id', prod.id).single();
+  if (!cer) return null;
+  const { data: persona } = await sb.from('personas').select('*').eq('cerebro_id', cer.id).maybeSingle();
+  return persona || null;
+}
+
+async function gerarPersonaAgora(slug, btn) {
+  const { getSupabaseClient } = await import('./sb-client.js');
+  const sb = getSupabaseClient();
+  if (!sb) return alert('Supabase não conectado');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Gerando...';
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const resp = await fetch(`${window.__ENV__.SUPABASE_URL}/functions/v1/gerar-persona`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || window.__ENV__.SUPABASE_ANON_KEY}`,
+        'apikey': window.__ENV__.SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ cerebro_slug: slug }),
+    });
+    const j = await resp.json();
+    if (!resp.ok || j.error) throw new Error(j.error || `HTTP ${resp.status}`);
+    renderPersonaDetalhe(slug);
+  } catch (e) {
+    alert(`Falha ao gerar persona: ${e.message}`);
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
+function formatarTexto(texto) {
+  if (!texto) return '';
+  return texto.replace(/\n/g, '<br>');
+}
+
 async function renderPersonaDetalhe(slug) {
   const cerebros = await fetchCerebrosCatalogo();
   const c = cerebros.find(x => x.slug === slug);
@@ -304,6 +349,12 @@ async function renderPersonaDetalhe(slug) {
   const total = c.total_fontes || 0;
   const temDados = total > 0;
 
+  const persona = temDados ? await fetchPersonaPorSlug(slug) : null;
+
+  const ultimaSintese = persona
+    ? `Última síntese: ${new Date(persona.atualizado_em).toLocaleString('pt-BR')}`
+    : (temDados ? 'Persona ainda não gerada — clique em "Gerar agora"' : 'Aguardando 1ª alimentação');
+
   page.append(
     el('div', { class: 'cerebro-detail' }, [
       el('div', { class: 'cerebro-detail-header' }, [
@@ -313,20 +364,20 @@ async function renderPersonaDetalhe(slug) {
           el('div', { class: 'cerebro-desc' }, 'Derivada do Cérebro ' + c.nome),
           el('div', { style: 'display:flex;gap:.75rem;margin-top:.5rem;font-size:.75rem;color:var(--fg-muted)' }, [
             el('span', {}, `Cérebro: ${total} fonte${total === 1 ? '' : 's'}`),
-            el('span', {}, temDados ? 'Última síntese: agora há pouco' : 'Aguardando 1ª alimentação'),
-          ]),
+            el('span', {}, ultimaSintese),
+            persona ? el('span', {}, `Modelo: ${persona.modelo || '—'}`) : null,
+          ].filter(Boolean)),
         ]),
         el('div', { class: 'cerebro-detail-actions' }, [
-          el('button', {
-            class: 'btn',
-            disabled: !temDados ? '' : null,
-            onclick: () => alert('Editar Persona — esta edição fica registrada. Se você apontar falta de contexto, o sistema vai sugerir alimentar o Cérebro primeiro (não editar manualmente). V1 com Supabase conectado.')
-          }, '✎ Editar'),
+          temDados ? el('button', {
+            class: 'btn btn-primary',
+            onclick: (ev) => gerarPersonaAgora(slug, ev.currentTarget),
+          }, persona ? '↻ Regenerar' : '⚡ Gerar agora') : null,
           el('button', {
             class: 'btn btn-ghost',
             onclick: () => renderPersonas()
           }, '← Voltar'),
-        ]),
+        ].filter(Boolean)),
       ]),
 
       !temDados
@@ -335,27 +386,35 @@ async function renderPersonaDetalhe(slug) {
             el('h2', {}, 'Alimente o Cérebro primeiro'),
             el('p', {}, 'A Persona é gerada automaticamente a partir das fontes do Cérebro. Adicione aulas, depoimentos, objeções e sacadas antes de esperar uma persona útil aqui.'),
           ])
-        : el('div', { class: 'persona-detail' }, [
-            el('div', { class: 'persona-aviso' }, [
-              el('strong', {}, '🧠 Como esta persona foi gerada'),
-              el('p', {}, `Síntese automática a partir de ${total} fontes do Cérebro ${c.nome}. Edições manuais ficam sinalizadas — se algo parecer faltar, alimente o Cérebro em vez de corrigir direto aqui.`),
+        : !persona
+          ? el('div', { class: 'stub-screen' }, [
+              el('div', { class: 'stub-badge' }, 'pendente'),
+              el('h2', {}, 'Persona ainda não gerada'),
+              el('p', {}, `O Cérebro ${c.nome} já tem ${total} fontes. Clique em "Gerar agora" no topo pra sintetizar a persona a partir delas. O processo leva de 10 a 30 segundos.`),
+            ])
+          : el('div', { class: 'persona-detail' }, [
+              el('div', { class: 'persona-aviso' }, [
+                el('strong', {}, '🧠 Como esta persona foi gerada'),
+                el('p', {}, `Síntese via ${persona.modelo || 'IA'} a partir de ${persona.fontes_usadas || total} fontes do Cérebro ${c.nome}. Para atualizar, alimente o Cérebro com mais fontes e clique em "Regenerar".`),
+              ]),
+              el('div', { class: 'persona-secoes' }, [
+                personaSecao('Quem é', persona.quem_e),
+                personaSecao('Dor principal', persona.dor_principal),
+                personaSecao('Gatilhos de compra', persona.gatilhos_compra),
+                personaSecao('Objeções', persona.objecoes),
+                personaSecao('Linguagem', persona.linguagem),
+              ]),
             ]),
-            el('div', { class: 'persona-secoes' }, [
-              personaSecao('Quem é', 'Persona síntese — aguardando integração com o Cérebro real. Mock temporário.'),
-              personaSecao('Dor principal', 'Principal objeção recorrente detectada nas fontes.'),
-              personaSecao('Gatilhos de compra', 'Sacadas do expert + padrões nos depoimentos.'),
-              personaSecao('Objeções', 'Top 3 objeções do grupo, ordenadas por frequência.'),
-              personaSecao('Linguagem', 'Vocabulário coletado de depoimentos e perguntas reais.'),
-            ]),
-          ]),
     ])
   );
 }
 
 function personaSecao(titulo, texto) {
+  const p = el('p', {}, '');
+  p.innerHTML = formatarTexto(texto || '—');
   return el('div', { class: 'persona-secao' }, [
     el('h3', {}, titulo),
-    el('p', {}, texto),
+    p,
   ]);
 }
 
