@@ -13,7 +13,7 @@ let mode = 'offline';
 
 if (SUPABASE_URL && SUPABASE_ANON_KEY && typeof window.supabase !== 'undefined') {
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: false },
+    auth: { persistSession: true, autoRefreshToken: true, storage: window.localStorage },
     db: { schema: 'pinguim' },
   });
   mode = 'supabase';

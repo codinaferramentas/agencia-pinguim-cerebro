@@ -107,7 +107,13 @@
 <!-- Scripts (carregados em ordem de dependência) -->
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script type="module" src="js/sb-client.js?v=20260421p"></script>
-<script type="module" src="js/app.js?v=20260421p"></script>
+<script type="module">
+  import { guard } from './js/auth-gate.js?v=20260423a';
+  const ok = await guard();
+  if (ok) {
+    await import('./js/sb-client.js?v=20260423a');
+    await import('./js/app.js?v=20260423a');
+  }
+</script>
 </body>
 </html>
