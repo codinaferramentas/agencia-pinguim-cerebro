@@ -221,7 +221,15 @@ async function atualizarStatusbar() {
 
   // Nav footer
   $('#nav-env-badge').textContent = dataMode() === 'supabase' ? 'V0 · Supabase' : 'V0 · Offline';
-  $('#nav-env-hint').textContent = dataMode() === 'supabase' ? 'conectado ao banco' : 'rode com Supabase pra V0 real';
+  const userEmail = await (async () => {
+    try {
+      const sb = (await import('./sb-client.js')).getSupabaseClient();
+      if (!sb) return null;
+      const { data } = await sb.auth.getUser();
+      return data?.user?.email || null;
+    } catch { return null; }
+  })();
+  $('#nav-env-hint').textContent = userEmail || (dataMode() === 'supabase' ? 'conectado ao banco' : 'modo offline');
 }
 
 /* -------- Telas migradas do V0 antigo -------- */

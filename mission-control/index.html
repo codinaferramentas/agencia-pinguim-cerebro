@@ -33,6 +33,9 @@
     <div class="nav-footer">
       <div id="nav-env-badge">V0 · Carregando…</div>
       <div id="nav-env-hint">mission-control.local</div>
+      <button id="nav-logout" class="nav-logout" type="button" title="Sair">
+        <span>↪</span> Sair
+      </button>
     </div>
   </nav>
 
@@ -108,11 +111,13 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="module">
-  import { guard } from './js/auth-gate.js?v=20260423a';
+  import { guard, logout } from './js/auth-gate.js?v=20260423b';
   const ok = await guard();
   if (ok) {
-    await import('./js/sb-client.js?v=20260423a');
-    await import('./js/app.js?v=20260423a');
+    await import('./js/sb-client.js?v=20260423b');
+    await import('./js/app.js?v=20260423b');
+    const btn = document.getElementById('nav-logout');
+    if (btn) btn.addEventListener('click', logout);
   }
 </script>
 </body>

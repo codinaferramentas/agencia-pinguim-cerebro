@@ -423,6 +423,30 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   letter-spacing: 0.04em;
   color: var(--fg-dim);
 }
+.nav-logout {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.625rem;
+  background: transparent;
+  color: var(--fg-dim);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.nav-logout:hover {
+  color: var(--fg);
+  border-color: var(--pc);
+  background: rgba(232, 92, 0, 0.06);
+}
+.nav-logout span { font-size: 0.875rem; line-height: 1; }
 
 .nav-list { display: flex; flex-direction: column; gap: 1px; }
 .nav-divider {
