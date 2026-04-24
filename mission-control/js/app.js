@@ -441,8 +441,8 @@ async function iniciarGeracaoComSquad(slug) {
   const c = cerebros.find(x => x.slug === slug);
   const cerebroNome = c?.nome || slug;
 
-  const { abrirSquadModal } = await import('./squad-modal.js?v=20260424f');
-  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260424f');
+  const { abrirSquadModal } = await import('./squad-modal.js?v=20260424g');
+  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260424g');
 
   try {
     // apiCall e resolvida pelo roteiro. Encapsulamos a chamada real numa promise unica.
@@ -462,7 +462,7 @@ async function iniciarGeracaoComSquad(slug) {
 }
 
 async function iniciarGeracaoComBarra(slug) {
-  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260424f');
+  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260424g');
 
   // Overlay modal centralizado — impossivel de nao ver
   const overlay = el('div', { class: 'persona-progresso-overlay' }, [

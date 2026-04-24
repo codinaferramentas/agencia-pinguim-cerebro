@@ -3,8 +3,8 @@
    instancia a engine, roda o roteiro escolhido e retorna a promise final.
 */
 
-import { criarEngine, SQUAD_AGENTS } from './squad-animation.js?v=20260424f';
-import { ROTEIROS } from './squad-roteiros.js?v=20260424f';
+import { criarEngine, SQUAD_AGENTS } from './squad-animation.js?v=20260424g';
+import { ROTEIROS } from './squad-roteiros.js?v=20260424g';
 
 export async function abrirSquadModal({ roteiro, apiCall, titulo, subtitulo, cerebroNome }) {
   const roteiroFn = ROTEIROS[roteiro];
@@ -34,16 +34,16 @@ export async function abrirSquadModal({ roteiro, apiCall, titulo, subtitulo, cer
             <div class="squad-counters">
               <div><span class="squad-counter-num" id="squad-c-elapsed">0s</span><span class="squad-counter-label">Tempo</span></div>
               <div><span class="squad-counter-num" id="squad-c-steps">0</span><span class="squad-counter-label">Etapas</span></div>
-              <div><span class="squad-counter-num">${SQUAD_AGENTS.length}</span><span class="squad-counter-label">Agentes</span></div>
+              <div><span class="squad-counter-num" id="squad-c-ativos">0<span class="squad-counter-total">/${SQUAD_AGENTS.length}</span></span><span class="squad-counter-label">Na missao</span></div>
             </div>
-          </div>
-          <div class="squad-panel-block">
-            <div class="squad-panel-title">Equipe</div>
-            <div class="squad-agent-list" id="squad-agents"></div>
           </div>
           <div class="squad-panel-block">
             <div class="squad-panel-title">Log de atividade</div>
             <div class="squad-log" id="squad-log"></div>
+          </div>
+          <div class="squad-panel-block">
+            <div class="squad-panel-title">Equipe Pinguim</div>
+            <div class="squad-agent-list" id="squad-agents"></div>
           </div>
         </aside>
       </div>
@@ -63,7 +63,7 @@ export async function abrirSquadModal({ roteiro, apiCall, titulo, subtitulo, cer
         <div class="squad-agent-name">${a.name}</div>
         <div class="squad-agent-role">${a.role}</div>
       </div>
-      <div class="squad-agent-status">idle</div>
+      <div class="squad-agent-status">em dia a dia</div>
     `;
     agentsEl.appendChild(row);
   });
@@ -73,8 +73,28 @@ export async function abrirSquadModal({ roteiro, apiCall, titulo, subtitulo, cer
   const logEl = overlay.querySelector('#squad-log');
   const cSteps = overlay.querySelector('#squad-c-steps');
   const cElapsed = overlay.querySelector('#squad-c-elapsed');
+  const cAtivos = overlay.querySelector('#squad-c-ativos');
 
-  const engine = criarEngine(canvas);
+  const engineRaw = criarEngine(canvas);
+
+  // Wrapper: intercepta setProtagonists pra atualizar UI (contador + status dos itens)
+  const engine = {
+    ...engineRaw,
+    setProtagonists: (ids) => {
+      engineRaw.setProtagonists(ids);
+      // Atualiza contador "Na missao"
+      if (cAtivos) cAtivos.innerHTML = `${ids.length}<span class="squad-counter-total">/${SQUAD_AGENTS.length}</span>`;
+      // Atualiza status visual de cada item na lista de agentes
+      SQUAD_AGENTS.forEach(a => {
+        const row = overlay.querySelector(`#squad-agent-${a.id}`);
+        if (!row) return;
+        const isAtivo = ids.includes(a.id);
+        row.classList.toggle('squad-agent-ativo', isAtivo);
+        const status = row.querySelector('.squad-agent-status');
+        if (status) status.textContent = isAtivo ? 'na missao' : 'em dia a dia';
+      });
+    },
+  };
 
   const t0 = Date.now();
   const elapsedTimer = setInterval(() => {

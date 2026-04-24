@@ -3195,6 +3195,12 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   font-weight: 700;
   color: #60a5fa;
 }
+.squad-counter-num .squad-counter-total {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #8b95a7;
+  margin-left: 1px;
+}
 .squad-counter-label {
   font-size: 0.5625rem;
   color: #8b95a7;
@@ -3212,6 +3218,12 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   border-radius: 5px;
   border-left: 3px solid transparent;
   transition: all 0.2s;
+  opacity: 0.55;
+}
+.squad-agent-item.squad-agent-ativo {
+  opacity: 1;
+  border-left-color: #fbbf24;
+  background: #1a1610;
 }
 .squad-agent-avatar {
   width: 24px; height: 24px;
@@ -3226,6 +3238,10 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
 .squad-agent-name { font-weight: 600; color: #e6e9ef; font-size: 0.75rem; }
 .squad-agent-role { font-size: 0.625rem; color: #8b95a7; }
 .squad-agent-status { font-size: 0.625rem; color: #8b95a7; }
+.squad-agent-item.squad-agent-ativo .squad-agent-status {
+  color: #fbbf24;
+  font-weight: 600;
+}
 
 .squad-log {
   max-height: 240px;
