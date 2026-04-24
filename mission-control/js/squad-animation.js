@@ -352,16 +352,32 @@ function drawCharacter(ctx, x, y, agent, state, frame, direction, holdingPaper, 
 }
 
 function drawSpeechBubble(ctx, x, y, text) {
-  ctx.font = 'bold 12px -apple-system, "Segoe UI", sans-serif';
-  const w = ctx.measureText(text).width + 16;
-  const h = 22;
+  ctx.font = 'bold 15px -apple-system, "Segoe UI", sans-serif';
+  const padX = 12;
+  const padY = 8;
+  const w = ctx.measureText(text).width + padX * 2;
+  const h = 28;
   const bx = x - w/2;
-  const by = y - 48;
-  ctx.fillStyle = 'rgba(255,255,255,0.95)';
-  ctx.beginPath(); ctx.moveTo(x - 4, by + h); ctx.lineTo(x + 4, by + h); ctx.lineTo(x, by + h + 5); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fillRect(bx, by, w, h);
-  ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1; ctx.strokeRect(bx, by, w, h);
-  ctx.fillStyle = '#1a1a1a'; ctx.textAlign = 'center'; ctx.fillText(text, x, by + 15); ctx.textAlign = 'left';
+  const by = y - 56;
+  // Sombra suave
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(bx + 2, by + 2, w, h);
+  // Balao
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(bx, by, w, h);
+  ctx.strokeStyle = '#0a0a0a'; ctx.lineWidth = 2; ctx.strokeRect(bx, by, w, h);
+  // Rabinho
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.moveTo(x - 6, by + h); ctx.lineTo(x + 6, by + h); ctx.lineTo(x, by + h + 8); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#0a0a0a'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x - 6, by + h); ctx.lineTo(x, by + h + 8); ctx.lineTo(x + 6, by + h); ctx.stroke();
+  // Texto
+  ctx.fillStyle = '#0a0a0a';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, by + h/2 + 1);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
 }
 
 /* ============================== ENGINE ============================== */
@@ -371,16 +387,17 @@ export function criarEngine(canvas) {
   const W = canvas.width, H = canvas.height;
 
   const agentState = {};
-  AGENTS_DEF.forEach(a => {
+  AGENTS_DEF.forEach((a, i) => {
     agentState[a.id] = {
       x: a.home.x, y: a.home.y,
       targetX: a.home.x, targetY: a.home.y,
       waypoints: [], state: 'idle', direction: 'down',
       pendingState: null, holdingPaper: false,
       speechBubble: null, speechTimer: 0,
-      protagonist: false,           // halo amarelo se true
-      idleNextAt: 0,                // frame em que a proxima acao idle ocorre
-      idleBusy: false,              // evita sobrepor novas acoes idle
+      protagonist: false,
+      // Offset escalonado (30-120 frames) — agentes comecam em momentos diferentes
+      idleNextAt: 30 + i * 18 + Math.floor(Math.random() * 40),
+      idleBusy: false,
     };
   });
 
@@ -390,7 +407,31 @@ export function criarEngine(canvas) {
   let rafId = null;
   let destroyed = false;
 
-  // Sorteia uma acao idle discreta na casa do agente pra dar vida ao cenario
+  // Retorna um ponto aleatorio dentro da sala do agente, com margem
+  function pontoRandomNaSala(agent, margem = 40) {
+    const room = ROOMS.find(r => r.id === agent.roomId);
+    if (!room) return { x: agent.home.x, y: agent.home.y };
+    const minX = room.x + margem;
+    const maxX = room.x + room.w - margem;
+    const minY = Math.max(room.y + margem + 8, room.y + 30);
+    const maxY = room.y + room.h - margem;
+    return {
+      x: Math.round(minX + Math.random() * (maxX - minX)),
+      y: Math.round(minY + Math.random() * (maxY - minY)),
+    };
+  }
+
+  // Banco de falas decorativas por agente (contextual ao departamento)
+  const FALAS_IDLE = {
+    finn:    ['Hmm...', '📊', 'Vamos crescer!', 'Meta batida?', '💭', 'Revisando...', '👍', 'Proxima semana...'],
+    aurora:  ['Persona...', '💡', 'Copy nova!', 'Testa isso', '✍', 'Hmm...', '📝', 'Qual dor?'],
+    zezinho: ['Fechou!', '📞', 'Alo?', 'Proposta...', '💼', 'Pipeline', '🎯', 'Ligando...'],
+    dipsy:   ['Contrato...', '👥', 'Entrevista', 'Avaliacao', '📋', 'Cultura!', 'Hmm...', '✅'],
+    aranha:  ['Caixa ok', '💰', 'Boleto...', 'Nota fiscal', '📑', 'Orcamento', 'Aprovado!', '💼'],
+    byte:    ['Respondendo', '💬', 'Tudo ok!', 'Anotado', '🙂', 'Ticket...', 'Processando', '📩'],
+  };
+
+  // Sorteia uma acao idle variada na casa do agente pra dar vida ao cenario
   function agendarIdleDecorativo(id) {
     const s = agentState[id];
     const agent = AGENTS_DEF.find(a => a.id === id);
@@ -399,33 +440,28 @@ export function criarEngine(canvas) {
     if (s.state === 'walking') return;
 
     s.idleBusy = true;
+    const falasAgente = FALAS_IDLE[id] || ['Hmm...'];
+
     const acoes = [
-      // Olhar ao redor (muda direcao)
+      // 1) Olhar ao redor (muda direcao varias vezes)
       () => {
-        const dirs = ['down', 'left', 'right'];
-        s.direction = dirs[Math.floor(Math.random() * dirs.length)];
-        setTimeout(() => {
-          if (!destroyed) { s.direction = 'down'; s.idleBusy = false; }
-        }, 1200 + Math.random() * 800);
+        const dirs = ['down', 'left', 'right', 'up'];
+        let step = 0;
+        const trocarDir = () => {
+          if (destroyed || step >= 3) { if (!destroyed) { s.direction = 'down'; s.idleBusy = false; } return; }
+          s.direction = dirs[Math.floor(Math.random() * dirs.length)];
+          step++;
+          setTimeout(trocarDir, 700 + Math.random() * 500);
+        };
+        trocarDir();
       },
-      // Alongar / coçar cabeça — balao rapido
+      // 2) Caminhar ate ponto aleatorio e voltar pra mesa
       () => {
-        const frases = ['Hmm...', '👍', '📊', '💡', '📝'];
-        s.speechBubble = frases[Math.floor(Math.random() * frases.length)];
-        s.speechTimer = 80;
-        setTimeout(() => { if (!destroyed) s.idleBusy = false; }, 1500);
-      },
-      // Breve caminhada pela sala (ida e volta) — só se nao esta andando
-      () => {
-        const dx = (Math.random() - 0.5) * 60;
-        const dy = (Math.random() - 0.5) * 40;
-        const tx = Math.max(agent.home.x - 40, Math.min(agent.home.x + 40, s.x + dx));
-        const ty = Math.max(agent.home.y - 30, Math.min(agent.home.y + 30, s.y + dy));
-        s.waypoints = [{ x: tx, y: ty }, { x: agent.home.x, y: agent.home.y }];
+        const destino = pontoRandomNaSala(agent, 40);
+        s.waypoints = [destino, { x: agent.home.x, y: agent.home.y }];
         s.pendingState = 'idle';
         s.targetX = s.waypoints[0].x; s.targetY = s.waypoints[0].y;
         s.waypoints.shift();
-        // Marca nao-busy apos caminhada terminar
         const tryFinish = () => {
           if (destroyed) return;
           if (s.waypoints.length === 0 && Math.abs(s.targetX - s.x) < 3 && Math.abs(s.targetY - s.y) < 3) {
@@ -434,13 +470,77 @@ export function criarEngine(canvas) {
         };
         tryFinish();
       },
-      // Trabalho breve (typing sound)
+      // 3) Caminhar em "circuito" (3 paradas curtas pela sala)
+      () => {
+        const p1 = pontoRandomNaSala(agent, 30);
+        const p2 = pontoRandomNaSala(agent, 30);
+        const p3 = { x: agent.home.x, y: agent.home.y };
+        s.waypoints = [p1, p2, p3];
+        s.pendingState = 'idle';
+        s.targetX = s.waypoints[0].x; s.targetY = s.waypoints[0].y;
+        s.waypoints.shift();
+        const tryFinish = () => {
+          if (destroyed) return;
+          if (s.waypoints.length === 0 && Math.abs(s.targetX - s.x) < 3 && Math.abs(s.targetY - s.y) < 3) {
+            s.idleBusy = false;
+          } else requestAnimationFrame(tryFinish);
+        };
+        tryFinish();
+      },
+      // 4) Balao de fala contextual (sem andar)
+      () => {
+        s.speechBubble = falasAgente[Math.floor(Math.random() * falasAgente.length)];
+        s.speechTimer = 100;
+        setTimeout(() => { if (!destroyed) s.idleBusy = false; }, 1800);
+      },
+      // 5) Trabalho breve (digitando na mesa) + balao as vezes
       () => {
         s.state = 'working';
-        setTimeout(() => { if (!destroyed) { s.state = 'idle'; s.idleBusy = false; } }, 2000 + Math.random() * 2000);
+        if (Math.random() < 0.5) {
+          s.speechBubble = falasAgente[Math.floor(Math.random() * falasAgente.length)];
+          s.speechTimer = 100;
+        }
+        setTimeout(() => { if (!destroyed) { s.state = 'idle'; s.idleBusy = false; } }, 2200 + Math.random() * 2800);
+      },
+      // 6) Ir ate a estante/parede/canto e voltar (imita "pegar algo")
+      () => {
+        const room = ROOMS.find(r => r.id === agent.roomId);
+        if (!room) { s.idleBusy = false; return; }
+        // Canto aleatorio da sala (nao mesa)
+        const cantos = [
+          { x: room.x + 30, y: room.y + 40 },
+          { x: room.x + room.w - 30, y: room.y + 40 },
+          { x: room.x + 30, y: room.y + room.h - 30 },
+          { x: room.x + room.w - 30, y: room.y + room.h - 30 },
+        ];
+        const canto = cantos[Math.floor(Math.random() * cantos.length)];
+        s.waypoints = [canto, { x: agent.home.x, y: agent.home.y }];
+        s.pendingState = 'idle';
+        s.targetX = s.waypoints[0].x; s.targetY = s.waypoints[0].y;
+        s.waypoints.shift();
+        // Ao chegar no canto, balao rapido
+        const tickBalao = setTimeout(() => {
+          if (!destroyed) {
+            s.speechBubble = falasAgente[Math.floor(Math.random() * falasAgente.length)];
+            s.speechTimer = 80;
+          }
+        }, 1500);
+        const tryFinish = () => {
+          if (destroyed) { clearTimeout(tickBalao); return; }
+          if (s.waypoints.length === 0 && Math.abs(s.targetX - s.x) < 3 && Math.abs(s.targetY - s.y) < 3) {
+            s.idleBusy = false;
+          } else requestAnimationFrame(tryFinish);
+        };
+        tryFinish();
       },
     ];
-    acoes[Math.floor(Math.random() * acoes.length)]();
+    // Distribuicao ponderada: mais movimento (caminhadas) do que falas paradas
+    const pesos = [1, 3, 2, 1, 2, 2]; // olhar, caminhar, circuito, fala, trabalho, canto
+    const total = pesos.reduce((a, b) => a + b, 0);
+    let r = Math.random() * total;
+    let idx = 0;
+    for (let i = 0; i < pesos.length; i++) { r -= pesos[i]; if (r <= 0) { idx = i; break; } }
+    acoes[idx]();
   }
 
   function updateAgent(id) {
@@ -495,13 +595,15 @@ export function criarEngine(canvas) {
     drawFloatingPapers();
 
     // Idle decorativo — agentes nao protagonistas fazem pequenas acoes random
+    // Cada um com cadencia propria pra parecer empresa real (nao sincronizada)
     AGENTS_DEF.forEach(a => {
       const s = agentState[a.id];
       if (protagonistSet.has(a.id)) return;
       if (s.idleBusy || s.state === 'walking') return;
       if (frame < s.idleNextAt) return;
       agendarIdleDecorativo(a.id);
-      s.idleNextAt = frame + 180 + Math.floor(Math.random() * 240); // proxima em 3-7s
+      // Proxima acao entre 1.5s e 4s (60fps): agitado, mas nao frenetico
+      s.idleNextAt = frame + 90 + Math.floor(Math.random() * 150);
     });
 
     const sorted = [...AGENTS_DEF].sort((a, b) => agentState[a.id].y - agentState[b.id].y);
