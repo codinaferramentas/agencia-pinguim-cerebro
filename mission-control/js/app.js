@@ -333,50 +333,7 @@ async function renderPersonas(slugPreSelecionado) {
   if (slugPreSelecionado) renderPersonaDetalhe(slugPreSelecionado);
 }
 
-async function fetchPersonaPorSlug(slug) {
-  const { getSupabaseClient } = await import('./sb-client.js');
-  const sb = getSupabaseClient();
-  if (!sb) return null;
-  const { data: prod } = await sb.from('produtos').select('id').eq('slug', slug).single();
-  if (!prod) return null;
-  const { data: cer } = await sb.from('cerebros').select('id').eq('produto_id', prod.id).single();
-  if (!cer) return null;
-  const { data: persona } = await sb.from('personas').select('*').eq('cerebro_id', cer.id).maybeSingle();
-  return persona || null;
-}
-
-async function gerarPersonaAgora(slug, btn) {
-  const { getSupabaseClient } = await import('./sb-client.js');
-  const sb = getSupabaseClient();
-  if (!sb) return alert('Supabase não conectado');
-  const originalText = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = '⏳ Gerando...';
-  try {
-    const { data: { session } } = await sb.auth.getSession();
-    const resp = await fetch(`${window.__ENV__.SUPABASE_URL}/functions/v1/gerar-persona`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session?.access_token || window.__ENV__.SUPABASE_ANON_KEY}`,
-        'apikey': window.__ENV__.SUPABASE_ANON_KEY,
-      },
-      body: JSON.stringify({ cerebro_slug: slug }),
-    });
-    const j = await resp.json();
-    if (!resp.ok || j.error) throw new Error(j.error || `HTTP ${resp.status}`);
-    renderPersonaDetalhe(slug);
-  } catch (e) {
-    alert(`Falha ao gerar persona: ${e.message}`);
-    btn.disabled = false;
-    btn.textContent = originalText;
-  }
-}
-
-function formatarTexto(texto) {
-  if (!texto) return '';
-  return texto.replace(/\n/g, '<br>');
-}
+let personaReloadListenerReady = false;
 
 async function renderPersonaDetalhe(slug) {
   const cerebros = await fetchCerebrosCatalogo();
@@ -386,13 +343,24 @@ async function renderPersonaDetalhe(slug) {
   // Mantém subnav sincronizado
   window.__marcarSubnavAtivo?.(slug);
 
+  // Listener pra recarregar quando usuario edita um campo
+  if (!personaReloadListenerReady) {
+    personaReloadListenerReady = true;
+    window.addEventListener('persona:reload', () => {
+      const slugAtual = window.__personaSlugAtual;
+      if (slugAtual) renderPersonaDetalhe(slugAtual);
+    });
+  }
+  window.__personaSlugAtual = slug;
+
   const page = $('#page-personas');
   page.innerHTML = '';
 
   const total = c.total_fontes || 0;
   const temDados = total > 0;
 
-  const persona = temDados ? await fetchPersonaPorSlug(slug) : null;
+  const { fetchPersonaCompleta, gerarPersonaComProgresso, renderBlocoNoPainel, exportarPDF } = await import('./personas.js?v=20260424a');
+  const persona = temDados ? await fetchPersonaCompleta(slug) : null;
 
   const ultimaSintese = persona
     ? `Última síntese: ${new Date(persona.atualizado_em).toLocaleString('pt-BR')}`
@@ -404,17 +372,24 @@ async function renderPersonaDetalhe(slug) {
         el('div', { class: 'cerebro-emoji' }, c.emoji || '👤'),
         el('div', { style: 'flex:1' }, [
           el('div', { class: 'cerebro-nome' }, 'Persona ' + c.nome),
-          el('div', { class: 'cerebro-desc' }, 'Derivada do Cérebro ' + c.nome),
-          el('div', { style: 'display:flex;gap:.75rem;margin-top:.5rem;font-size:.75rem;color:var(--fg-muted)' }, [
+          el('div', { class: 'cerebro-desc' }, 'Dossiê derivado do Cérebro ' + c.nome),
+          el('div', { style: 'display:flex;gap:.75rem;margin-top:.5rem;font-size:.75rem;color:var(--fg-muted);flex-wrap:wrap' }, [
             el('span', {}, `Cérebro: ${total} fonte${total === 1 ? '' : 's'}`),
             el('span', {}, ultimaSintese),
+            persona ? el('span', {}, `Versão ${persona.versao || 1}`) : null,
             persona ? el('span', {}, `Modelo: ${persona.modelo || '—'}`) : null,
           ].filter(Boolean)),
         ]),
         el('div', { class: 'cerebro-detail-actions' }, [
+          persona ? el('button', {
+            class: 'btn',
+            onclick: () => exportarPDF(persona, c.nome),
+            title: 'Abre visualização imprimível (Ctrl+P salva como PDF)',
+          }, '⤓ Exportar PDF') : null,
           temDados ? el('button', {
             class: 'btn btn-primary',
-            onclick: (ev) => gerarPersonaAgora(slug, ev.currentTarget),
+            id: 'btn-gerar-persona',
+            onclick: () => iniciarGeracao(slug),
           }, persona ? '↻ Regenerar' : '⚡ Gerar agora') : null,
           el('button', {
             class: 'btn btn-ghost',
@@ -430,35 +405,60 @@ async function renderPersonaDetalhe(slug) {
             el('p', {}, 'A Persona é gerada automaticamente a partir das fontes do Cérebro. Adicione aulas, depoimentos, objeções e sacadas antes de esperar uma persona útil aqui.'),
           ])
         : !persona
-          ? el('div', { class: 'stub-screen' }, [
+          ? el('div', { class: 'stub-screen', id: 'persona-stub' }, [
               el('div', { class: 'stub-badge' }, 'pendente'),
               el('h2', {}, 'Persona ainda não gerada'),
               el('p', {}, `O Cérebro ${c.nome} já tem ${total} fontes. Clique em "Gerar agora" no topo pra sintetizar a persona a partir delas. O processo leva de 10 a 30 segundos.`),
             ])
-          : el('div', { class: 'persona-detail' }, [
-              el('div', { class: 'persona-aviso' }, [
-                el('strong', {}, '🧠 Como esta persona foi gerada'),
-                el('p', {}, `Síntese via ${persona.modelo || 'IA'} a partir de ${persona.fontes_usadas || total} fontes do Cérebro ${c.nome}. Para atualizar, alimente o Cérebro com mais fontes e clique em "Regenerar".`),
-              ]),
-              el('div', { class: 'persona-secoes' }, [
-                personaSecao('Quem é', persona.quem_e),
-                personaSecao('Dor principal', persona.dor_principal),
-                personaSecao('Gatilhos de compra', persona.gatilhos_compra),
-                personaSecao('Objeções', persona.objecoes),
-                personaSecao('Linguagem', persona.linguagem),
-              ]),
-            ]),
+          : (() => {
+              const wrap = el('div', { class: 'persona-dossie' }, [
+                el('div', { class: 'persona-aviso' }, [
+                  el('strong', {}, 'Dossiê completo · 11 blocos'),
+                  el('p', {}, `Sintetizado via ${persona.modelo || 'IA'} a partir de ${persona.fontes_usadas || total} fontes do Cérebro ${c.nome}. Edite qualquer bloco clicando em "Editar" — edições manuais ficam preservadas ao regenerar.`),
+                ]),
+                el('div', { class: 'persona-blocos' }, []),
+              ]);
+              const container = wrap.querySelector('.persona-blocos');
+              container.appendChild(renderBlocoNoPainel(persona, c));
+              return wrap;
+            })(),
     ])
   );
 }
 
-function personaSecao(titulo, texto) {
-  const p = el('p', {}, '');
-  p.innerHTML = formatarTexto(texto || '—');
-  return el('div', { class: 'persona-secao' }, [
-    el('h3', {}, titulo),
-    p,
+async function iniciarGeracao(slug) {
+  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260424a');
+
+  // Substitui botões + stub por barra de progresso
+  const actions = $('#page-personas .cerebro-detail-actions');
+  const stub = $('#persona-stub');
+  if (actions) actions.style.pointerEvents = 'none', actions.style.opacity = '0.5';
+
+  const progressoEl = el('div', { class: 'persona-progresso' }, [
+    el('div', { class: 'persona-progresso-label', id: 'pp-label' }, 'Iniciando...'),
+    el('div', { class: 'persona-progresso-bar' }, [
+      el('div', { class: 'persona-progresso-fill', id: 'pp-fill', style: 'width:0%' }),
+    ]),
+    el('div', { class: 'persona-progresso-etapa', id: 'pp-etapa' }, '—'),
   ]);
+
+  const detail = $('#page-personas .cerebro-detail');
+  if (stub) stub.replaceWith(progressoEl);
+  else if (detail) detail.appendChild(progressoEl);
+
+  try {
+    await gerarPersonaComProgresso(slug, ({ etapa, total, label }) => {
+      const pct = Math.round((etapa / total) * 100);
+      $('#pp-fill').style.width = pct + '%';
+      $('#pp-label').textContent = label;
+      $('#pp-etapa').textContent = `Etapa ${etapa} de ${total}`;
+    });
+    // Sucesso → re-renderiza tela com persona
+    await renderPersonaDetalhe(slug);
+  } catch (e) {
+    progressoEl.innerHTML = `<div style="color:var(--danger);padding:1rem">Falha ao gerar: ${e.message}</div>`;
+    if (actions) actions.style.pointerEvents = '', actions.style.opacity = '';
+  }
 }
 
 async function renderOperacao() {

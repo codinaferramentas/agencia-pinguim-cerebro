@@ -1,8 +1,12 @@
 // ========================================================================
-// Edge Function: gerar-persona
+// Edge Function: gerar-persona v2
 // ========================================================================
-// Lê fontes do Cérebro, manda pro OpenAI e persiste em pinguim.personas.
-// Input: { cerebro_slug: string }  OU  { cerebro_id: uuid }
+// Estrutura de dossie (11 blocos), inspirada em Eugene Schwartz + JTBD +
+// Russell Brunson + PDF de persona-analise do cliente.
+//
+// Caminho C hibrido:
+//   - Ao regenerar, campos marcados em `campos_editados` NAO sao sobrescritos
+//   - Snapshot automatico em pinguim.personas_snapshots antes de cada upsert
 // ========================================================================
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
@@ -14,7 +18,13 @@ const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')!;
 
 const MODEL = 'gpt-4o-mini';
 const MAX_FONTES = 30;
-const MAX_CHARS_POR_FONTE = 4000;
+const MAX_CHARS_POR_FONTE = 3000;
+
+const CAMPOS_V2 = [
+  'identidade', 'rotina', 'nivel_consciencia', 'jobs_to_be_done',
+  'vozes_cabeca', 'desejos_reais', 'crencas_limitantes',
+  'dores_latentes', 'objecoes_compra', 'vocabulario', 'onde_vive',
+];
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -36,26 +46,82 @@ function jsonResp(body: unknown, status = 200) {
   });
 }
 
+const SCHEMA_INSTRUCTION = `Retorne estritamente JSON neste formato, sem texto fora do JSON:
+{
+  "identidade": {
+    "nome_ficticio": "nome proprio que encaixa no perfil",
+    "idade": "faixa etaria (ex: Entre 35 e 55 anos)",
+    "profissao": "profissao ou contexto ocupacional",
+    "momento_de_vida": "2-3 frases sobre o momento atual da pessoa"
+  },
+  "rotina": {
+    "como_e_o_dia": "paragrafo descrevendo o dia tipico",
+    "desafios_diarios": "paragrafo sobre os desafios praticos e emocionais"
+  },
+  "nivel_consciencia": {
+    "estagio_predominante": "um de: inconsciente | dor | solucao | produto | mais_consciente",
+    "justificativa": "por que voce classificou assim com base nas fontes",
+    "abordagem_recomendada": "como falar com essa persona dado o estagio"
+  },
+  "jobs_to_be_done": {
+    "funcional": "a tarefa pratica que a pessoa quer resolver",
+    "emocional": "como a pessoa quer se sentir apos resolver",
+    "social": "como a pessoa quer ser vista pelos outros"
+  },
+  "vozes_cabeca": [
+    "10 pensamentos que essa pessoa repete em silencio, em primeira pessoa",
+    "use linguagem real das fontes",
+    "ate 10 itens"
+  ],
+  "desejos_reais": [
+    "10 desejos nao ditos, reprimidos ou adiados, em primeira pessoa",
+    "comece com 'Eu quero' ou 'Eu sonho' ou 'Eu gostaria'",
+    "ate 10 itens"
+  ],
+  "crencas_limitantes": [
+    "10 crencas que a impedem de conseguir, em primeira pessoa negativa",
+    "comece com 'Eu nao' ou 'Eu preciso de'",
+    "ate 10 itens"
+  ],
+  "dores_latentes": [
+    "10 frustracoes mal resolvidas do dia a dia, em primeira pessoa",
+    "comece com 'Eu me sinto' ou 'Eu nao tenho'",
+    "ate 10 itens"
+  ],
+  "objecoes_compra": [
+    "5-8 objecoes especificas que essa persona teria ao comprar este produto",
+    "em primeira pessoa: 'Sera que isso funciona pra mim?', 'Nao tenho tempo', etc",
+    "ordenadas da mais frequente pra menos"
+  ],
+  "vocabulario": [
+    { "palavra": "termo caracteristico", "por_que_usa": "explicacao curta do significado pro publico" },
+    "10 entradas"
+  ],
+  "onde_vive": {
+    "comunidades_online": "onde essa persona consome conteudo (grupos, redes, foruns)",
+    "influenciadores_tipicos": "criadores que ela provavelmente ja segue",
+    "podcasts_canais": "tipos de podcast/canal que atraem essa persona"
+  }
+}
+
+Regras:
+- Seja especifico, nunca generico. Extraia linguagem das fontes quando possivel.
+- Se dados insuficientes pra um campo, escreva "Dados insuficientes — alimente o Cerebro com [tipo que falta]"
+- Nao invente numeros ou dados quantitativos.`;
+
 async function callOpenAI(fontes: Array<{ titulo: string; tipo: string; conteudo_md: string }>, cerebroNome: string) {
   const bloco = fontes.map((f, i) => {
     const trecho = (f.conteudo_md || '').slice(0, MAX_CHARS_POR_FONTE);
     return `### Fonte ${i + 1} [${f.tipo}] — ${f.titulo}\n${trecho}`;
   }).join('\n\n---\n\n');
 
-  const system = `Você é um analista de audiência especializado em infoprodutos. Dado um conjunto de fontes (aulas, depoimentos, páginas de vendas, objeções, sacadas) de um produto, extraia a Persona desse produto — o cliente real que consome o material.
+  const system = `Voce e um analista de audiencia especializado em infoprodutos e copy de resposta direta. Seu trabalho e ler fontes reais (aulas, depoimentos, paginas, objecoes, sacadas, chats) de um produto e extrair um DOSSIE COMPLETO da persona real desse produto.
 
-Retorne estritamente JSON nesse formato, sem texto antes/depois:
-{
-  "quem_e": "2-4 frases descrevendo quem é a persona: idade aproximada, ocupação/contexto, nível de conhecimento, situação atual.",
-  "dor_principal": "A principal dor/frustração recorrente. 1-3 frases. Use a linguagem das fontes.",
-  "gatilhos_compra": "O que faz essa persona comprar. 3-5 bullets curtos em string separada por quebras de linha.",
-  "objecoes": "Top 3 objeções mais frequentes. Numere. Use linguagem real dos depoimentos quando possível.",
-  "linguagem": "Vocabulário característico da persona: 5-8 termos/expressões que ela usa, separados por vírgula."
-}
+Use o framework de Eugene Schwartz (niveis de consciencia), Jobs to be Done, e Voice of Customer. O dossie vai ser usado por agentes de IA pra criar copy, anuncios, scripts de venda e responder objecoes.
 
-Seja específico, nunca genérico. Se os dados não permitirem uma conclusão clara pra algum campo, escreva "Dados insuficientes — alimente o Cérebro com [tipo de fonte que falta]."`;
+${SCHEMA_INSTRUCTION}`;
 
-  const user = `Produto: ${cerebroNome}\nTotal de fontes analisadas: ${fontes.length}\n\n${bloco}`;
+  const user = `Produto: ${cerebroNome}\nTotal de fontes: ${fontes.length}\n\n${bloco}`;
 
   const r = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -65,7 +131,7 @@ Seja específico, nunca genérico. Se os dados não permitirem uma conclusão cl
     },
     body: JSON.stringify({
       model: MODEL,
-      temperature: 0.3,
+      temperature: 0.4,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: system },
@@ -88,11 +154,12 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
 
   try {
-    const { cerebro_slug, cerebro_id: cerebroIdInput } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { cerebro_slug, cerebro_id: cerebroIdInput, preservar_campos = true } = body;
 
     const client = sb();
 
-    // Resolve cérebro
+    // Resolve cerebro
     let cerebroId = cerebroIdInput as string | undefined;
     let cerebroNome = '';
     if (!cerebroId && cerebro_slug) {
@@ -125,25 +192,57 @@ serve(async (req) => {
       return jsonResp({ error: 'cerebro sem fontes — alimente primeiro' }, 400);
     }
 
-    // Chama OpenAI
-    const persona = await callOpenAI(fontes, cerebroNome);
+    // Persona existente (pra versao + preservar campos editados)
+    const { data: personaExistente } = await client
+      .from('personas')
+      .select('*')
+      .eq('cerebro_id', cerebroId)
+      .maybeSingle();
 
-    // Upsert na tabela personas
-    const { error: eUpsert } = await client.from('personas').upsert({
+    // Snapshot antes de sobrescrever
+    if (personaExistente) {
+      await client.from('personas_snapshots').insert({
+        persona_id: personaExistente.id,
+        cerebro_id: cerebroId,
+        versao: personaExistente.versao || 1,
+        snapshot: personaExistente,
+        motivo: 'regenerar',
+        fontes_usadas: personaExistente.fontes_usadas,
+        modelo: personaExistente.modelo,
+      });
+    }
+
+    // Chama OpenAI
+    const geradaPelaIA = await callOpenAI(fontes, cerebroNome);
+
+    // Monta payload preservando campos editados manualmente (caminho C)
+    const campos_editados: string[] = personaExistente?.campos_editados || [];
+    const payload: Record<string, unknown> = {
       cerebro_id: cerebroId,
-      quem_e: persona.quem_e || null,
-      dor_principal: persona.dor_principal || null,
-      gatilhos_compra: persona.gatilhos_compra || null,
-      objecoes: persona.objecoes || null,
-      linguagem: persona.linguagem || null,
       fontes_usadas: fontes.length,
       modelo: MODEL,
       atualizado_em: new Date().toISOString(),
-    }, { onConflict: 'cerebro_id' });
+      versao: (personaExistente?.versao || 0) + 1,
+      campos_editados,
+    };
 
+    for (const campo of CAMPOS_V2) {
+      if (preservar_campos && campos_editados.includes(campo) && personaExistente?.[campo] != null) {
+        payload[campo] = personaExistente[campo]; // mantem edicao manual
+      } else {
+        payload[campo] = geradaPelaIA[campo] || null;
+      }
+    }
+
+    // Upsert
+    const { error: eUpsert } = await client.from('personas').upsert(payload, { onConflict: 'cerebro_id' });
     if (eUpsert) return jsonResp({ error: eUpsert.message }, 500);
 
-    return jsonResp({ ok: true, fontes_usadas: fontes.length, persona });
+    return jsonResp({
+      ok: true,
+      fontes_usadas: fontes.length,
+      campos_preservados: campos_editados,
+    });
   } catch (e) {
     return jsonResp({ error: (e as Error).message }, 500);
   }
