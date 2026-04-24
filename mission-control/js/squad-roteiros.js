@@ -1,10 +1,9 @@
 /* Mission Control — Roteiros de animacao Squad por acao
-   Cada roteiro e uma async function que recebe a engine e utilidades.
-   A chamada real da API roda em paralelo. Agentes entram em loop de
-   trabalho se a API demorar; aceleram se a API terminar antes.
+   Cenario fixo: 6 departamentos Pinguim (Diretoria, Marketing, Comercial,
+   RH, Financeiro, Atendimento). Cada roteiro escolhe os protagonistas —
+   os demais ficam em idle decorativo dando vida ao escritorio.
 */
 
-// Delay utilitario que respeita cancelamento
 function delay(ms, sig) {
   return new Promise((resolve) => {
     const t = setTimeout(resolve, ms);
@@ -12,8 +11,6 @@ function delay(ms, sig) {
   });
 }
 
-// Espera ate apiPromise resolver OU atingir loopMax, fazendo loopFn a cada intervalo.
-// Retorna { result, error } quando apiPromise termina.
 async function esperarApiComLoop(apiPromise, loopFn, intervaloMs, sig) {
   let done = false;
   let result = null, error = null;
@@ -26,64 +23,53 @@ async function esperarApiComLoop(apiPromise, loopFn, intervaloMs, sig) {
 }
 
 /* ============================== GERAR PERSONA ==============================
-   Roteiro:
-   Finn recebe briefing -> caminha ate Byte
-   Byte vai pra bookshelf (Cerebro) -> ler
-   Byte entrega papel pra Aurora
-   Aurora senta, trabalha (API rodando em paralelo)
-   Se API demora: loop de "trabalhando"
-   Quando API termina: Aurora levanta, entrega pra Finn
-   Finn "entrega" ao cliente (sai pra frente do modal)
+   Protagonistas: Finn (Diretoria) + Aurora (Marketing).
+   Fluxo:
+     1. Finn recebe o pedido na Diretoria
+     2. Finn caminha ate a Diretoria-Marketing (corredor), chama Aurora
+     3. Aurora vai ate a estante (Cerebro) e consulta
+     4. Aurora senta e sintetiza (API OpenAI rodando em paralelo)
+     5. Aurora leva o dossie pra Finn
+     6. Finn "entrega" ao cliente (passo final)
 */
 export async function roteiroGerarPersona({ engine, log, setStatus, apiCall, cerebroNome }) {
-  const { walkTo, say, throwPaper, setHolding, setState } = engine;
+  const { walkTo, say, throwPaper, setHolding, setState, setProtagonists } = engine;
 
-  setStatus('🎯 Finn recebeu o pedido de atualizacao de persona');
+  // Marca protagonistas — halo + para idle decorativo
+  setProtagonists(['finn', 'aurora']);
+
+  setStatus('🎯 Finn (Diretoria) recebeu o pedido');
   log('Sistema', `Atualizar persona do Cerebro ${cerebroNome}`, 'info');
-  await delay(400);
-
-  // --- FINN vai ate BYTE ---
-  setStatus('🎯 Finn busca o pesquisador (Byte)');
-  setHolding('gerente', true);
-  say('gerente', 'Byte, preciso de voce!', 100);
-  await walkTo('gerente', 100, 220, 'idle');
-  log('Finn', 'Vamos atualizar a persona. Busca as fontes do Cerebro.', 'handoff');
-  await delay(400);
-  setHolding('gerente', false);
-  throwPaper('gerente', 'gancho');
   await delay(500);
-  setHolding('gancho', true);
-  walkTo('gerente', 160, 470, 'idle');
 
-  // --- BYTE vai ate a ESTANTE (bookshelf da COPY) -> "le" fontes ---
-  setStatus('🔎 Byte caminha ate a estante do Cerebro');
-  await walkTo('gancho', 360, 150, 'thinking');
-  setHolding('gancho', false);
-  say('gancho', 'Peguei as fontes!', 90);
-  log('Byte', 'Lendo fontes do Cerebro...', 'working');
-  await delay(1400);
-  log('Byte', 'Extrai padroes, objecoes, vocabulario, dores e desejos.', 'done');
-
-  // --- BYTE entrega pra AURORA ---
-  setStatus('🔎 Byte leva o material pra Aurora (analise)');
-  setHolding('gancho', true);
-  await walkTo('gancho', 440, 220, 'idle');
-  say('gancho', 'Aurora, sua vez!', 90);
-  log('Byte → Aurora', 'Dossie bruto pronto. Monta a persona.', 'handoff');
-  await delay(400);
-  setHolding('gancho', false);
-  throwPaper('gancho', 'desenvolv');
+  // --- FINN vai ate AURORA (Marketing) ---
+  setStatus('🎯 Finn desce pra Marketing chamar Aurora');
+  setHolding('finn', true);
+  say('finn', 'Aurora, preciso de voce!', 110);
+  await walkTo('finn', 100, 220, 'idle');
+  log('Finn', 'Atualiza a persona deste Cerebro, por favor.', 'handoff');
   await delay(500);
-  setHolding('desenvolv', true);
-  walkTo('gancho', 100, 230, 'idle');
+  setHolding('finn', false);
+  throwPaper('finn', 'aurora');
+  await delay(500);
+  setHolding('aurora', true);
+  // Finn volta pra Diretoria
+  walkTo('finn', 440, 230, 'idle');
 
-  // --- AURORA senta e trabalha (API paralela) ---
-  setStatus('✍ Aurora sintetizando dossie (IA processando)');
-  await walkTo('desenvolv', 440, 200, 'working');
-  setHolding('desenvolv', false);
-  log('Aurora', 'Analisando 11 blocos do dossie com IA...', 'working');
+  // --- AURORA vai ate a estante (Cerebro) ---
+  setStatus('✍ Aurora consulta o Cerebro (estante de fontes)');
+  await walkTo('aurora', 280, 150, 'thinking');
+  setHolding('aurora', false);
+  say('aurora', 'Fontes captadas!', 100);
+  log('Aurora', 'Lendo fontes do Cerebro para analisar a persona...', 'working');
+  await delay(1600);
+  log('Aurora', 'Identifiquei padroes, dores, desejos, vocabulario.', 'done');
 
-  // Loop de trabalho enquanto API nao termina
+  // --- AURORA volta a mesa e trabalha (API em paralelo) ---
+  setStatus('✍ Aurora na mesa sintetizando o dossie (IA processando)');
+  await walkTo('aurora', 100, 200, 'working');
+  log('Aurora', 'Montando dossie de 11 blocos com IA...', 'working');
+
   const bolhas = [
     'Analisando vozes...',
     'Extraindo dores...',
@@ -95,7 +81,7 @@ export async function roteiroGerarPersona({ engine, log, setStatus, apiCall, cer
   ];
   let bolhaIdx = 0;
   const loopTrabalho = async () => {
-    say('desenvolv', bolhas[bolhaIdx % bolhas.length], 80);
+    say('aurora', bolhas[bolhaIdx % bolhas.length], 80);
     bolhaIdx++;
   };
 
@@ -106,24 +92,24 @@ export async function roteiroGerarPersona({ engine, log, setStatus, apiCall, cer
   await delay(500);
 
   // --- AURORA leva pro FINN ---
-  setStatus('✍ Aurora entrega o dossie pra Finn');
-  setHolding('desenvolv', true);
-  setState('desenvolv', 'idle');
-  await walkTo('desenvolv', 160, 440, 'idle');
-  say('desenvolv', 'Persona pronta!', 100);
+  setStatus('✍ Aurora leva o dossie pra Finn');
+  setHolding('aurora', true);
+  setState('aurora', 'idle');
+  await walkTo('aurora', 440, 220, 'idle');
+  say('aurora', 'Persona pronta!', 110);
   log('Aurora → Finn', 'Dossie de persona finalizado.', 'handoff');
-  await delay(400);
-  setHolding('desenvolv', false);
-  throwPaper('desenvolv', 'gerente');
   await delay(500);
-  setHolding('gerente', true);
-  walkTo('desenvolv', 440, 230, 'idle');
+  setHolding('aurora', false);
+  throwPaper('aurora', 'finn');
+  await delay(500);
+  setHolding('finn', true);
+  walkTo('aurora', 100, 230, 'idle');
 
-  // --- FINN "entrega" ao cliente ---
+  // --- FINN entrega ao cliente ---
   setStatus('🎯 Finn faz a entrega final');
-  await walkTo('gerente', 160, 440, 'working');
-  setHolding('gerente', false);
-  say('gerente', 'Entregue!', 120);
+  await walkTo('finn', 440, 200, 'working');
+  setHolding('finn', false);
+  say('finn', 'Entregue!', 120);
   log('Finn', 'Persona entregue com sucesso.', 'final');
   await delay(900);
 

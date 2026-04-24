@@ -14,33 +14,35 @@ const C = {
 };
 
 const ROOMS = [
-  { id: 'marketing', name: 'MARKETING',       x: 20,  y: 40,  w: 300, h: 240, floor: 'carpet', color: '#60a5fa' },
-  { id: 'copy',      name: 'COPY & CONTEUDO', x: 340, y: 40,  w: 280, h: 240, floor: 'wood',   color: '#a78bfa' },
-  { id: 'design',    name: 'DESIGN',          x: 640, y: 40,  w: 300, h: 240, floor: 'tile',   color: '#f472b6' },
-  { id: 'rh',        name: 'RH & GESTAO',     x: 20,  y: 320, w: 280, h: 260, floor: 'green',  color: '#10b981' },
-  { id: 'revisao',   name: 'REVISAO & QA',    x: 320, y: 320, w: 300, h: 260, floor: 'wood',   color: '#fbbf24' },
-  { id: 'cliente',   name: 'SALA DO CLIENTE', x: 640, y: 320, w: 300, h: 260, floor: 'carpet', color: '#fb923c' },
+  { id: 'marketing',   name: 'MARKETING',    x: 20,  y: 40,  w: 300, h: 240, floor: 'carpet', color: '#60a5fa' },
+  { id: 'diretoria',   name: 'DIRETORIA',    x: 340, y: 40,  w: 280, h: 240, floor: 'wood',   color: '#a78bfa' },
+  { id: 'comercial',   name: 'COMERCIAL',    x: 640, y: 40,  w: 300, h: 240, floor: 'tile',   color: '#f472b6' },
+  { id: 'rh',          name: 'RH',           x: 20,  y: 320, w: 280, h: 260, floor: 'green',  color: '#10b981' },
+  { id: 'financeiro',  name: 'FINANCEIRO',   x: 320, y: 320, w: 300, h: 260, floor: 'wood',   color: '#fbbf24' },
+  { id: 'atendimento', name: 'ATENDIMENTO',  x: 640, y: 320, w: 300, h: 260, floor: 'carpet', color: '#fb923c' },
 ];
 
+// Finn (Diretoria) e Aurora (Marketing) sao os protagonistas do roteiro de Persona.
+// Os outros ficam em idle decorativo nas suas casas, dando vida ao escritorio.
 const AGENTS_DEF = [
-  { id: 'gerente',   name: 'Finn',    role: 'Gerente',         emoji: '🎯', roomId: 'rh',
-    skin: '#fcd7b6', shirt: '#10b981', pants: '#1f2937', hair: '#3a1f0a',
-    desk: { x: 160, y: 420 }, chair: { x: 160, y: 440 }, home: { x: 160, y: 470 } },
-  { id: 'gancho',    name: 'Byte',    role: 'Pesquisa',        emoji: '🔎', roomId: 'marketing',
-    skin: '#e8b48a', shirt: '#60a5fa', pants: '#2a3040', hair: '#0a0a0a',
-    desk: { x: 100, y: 180 }, chair: { x: 100, y: 200 }, home: { x: 100, y: 230 } },
-  { id: 'desenvolv', name: 'Aurora',  role: 'Analise',         emoji: '✍', roomId: 'copy',
-    skin: '#fcd7b6', shirt: '#a78bfa', pants: '#1f2937', hair: '#c05050',
-    desk: { x: 440, y: 180 }, chair: { x: 440, y: 200 }, home: { x: 440, y: 230 } },
-  { id: 'cta',       name: 'Zezinho', role: 'Entrega',         emoji: '📢', roomId: 'design',
+  { id: 'finn',    name: 'Finn',    role: 'Diretoria',    emoji: '🎯', roomId: 'diretoria',
+    skin: '#fcd7b6', shirt: '#a78bfa', pants: '#1f2937', hair: '#3a1f0a',
+    desk: { x: 440, y: 170 }, chair: { x: 440, y: 200 }, home: { x: 440, y: 230 } },
+  { id: 'aurora',  name: 'Aurora',  role: 'Marketing',    emoji: '✍',  roomId: 'marketing',
+    skin: '#fcd7b6', shirt: '#60a5fa', pants: '#1f2937', hair: '#c05050',
+    desk: { x: 100, y: 170 }, chair: { x: 100, y: 200 }, home: { x: 100, y: 230 } },
+  { id: 'zezinho', name: 'Zezinho', role: 'Comercial',    emoji: '📞', roomId: 'comercial',
     skin: '#d4a07a', shirt: '#f472b6', pants: '#2a3040', hair: '#2a1a0a',
-    desk: { x: 780, y: 180 }, chair: { x: 780, y: 200 }, home: { x: 780, y: 230 } },
-  { id: 'validador', name: 'Dipsy',   role: 'Validador',       emoji: '🔍', roomId: 'revisao',
-    skin: '#fcd7b6', shirt: '#fbbf24', pants: '#1f2937', hair: '#6a4a2a',
-    desk: { x: 470, y: 460 }, chair: { x: 470, y: 480 }, home: { x: 470, y: 510 } },
-  { id: 'oculto',    name: 'Aranha',  role: 'Cliente Oculto',  emoji: '👁', roomId: 'cliente',
+    desk: { x: 780, y: 170 }, chair: { x: 780, y: 200 }, home: { x: 780, y: 230 } },
+  { id: 'dipsy',   name: 'Dipsy',   role: 'RH',           emoji: '👥', roomId: 'rh',
+    skin: '#fcd7b6', shirt: '#10b981', pants: '#1f2937', hair: '#6a4a2a',
+    desk: { x: 160, y: 410 }, chair: { x: 160, y: 440 }, home: { x: 160, y: 470 } },
+  { id: 'aranha',  name: 'Aranha',  role: 'Financeiro',   emoji: '💼', roomId: 'financeiro',
+    skin: '#e8b48a', shirt: '#fbbf24', pants: '#2a3040', hair: '#0a0a0a',
+    desk: { x: 470, y: 450 }, chair: { x: 470, y: 480 }, home: { x: 470, y: 510 } },
+  { id: 'byte',    name: 'Byte',    role: 'Atendimento',  emoji: '💬', roomId: 'atendimento',
     skin: '#e8b48a', shirt: '#fb923c', pants: '#2a3040', hair: '#0a0a0a',
-    desk: { x: 800, y: 460 }, chair: { x: 800, y: 480 }, home: { x: 800, y: 510 } },
+    desk: { x: 800, y: 450 }, chair: { x: 800, y: 480 }, home: { x: 800, y: 510 } },
 ];
 
 /* ============================== FLOOR / WALLS / FURNITURE ============================== */
@@ -190,17 +192,23 @@ function drawTable(ctx, x, y) {
 }
 
 function drawFurniture(ctx) {
+  // MARKETING (azul) — mesa Aurora + estante Cerebro + whiteboard + planta
   drawDesk(ctx, 100, 170, '#60a5fa'); drawChair(ctx, 100, 200, '#2a3040');
   drawWhiteboard(ctx, 240, 95, '#60a5fa'); drawPlant(ctx, 40, 250, 0.9);
   drawBookshelf(ctx, 280, 175, '#60a5fa');
+  // DIRETORIA (roxo) — mesa Finn + estantes de relatorios
   drawDesk(ctx, 440, 170, '#a78bfa'); drawChair(ctx, 440, 200, '#2a3040');
   drawBookshelf(ctx, 360, 130, '#a78bfa'); drawBookshelf(ctx, 570, 130, '#a78bfa'); drawPlant(ctx, 360, 250, 0.8);
+  // COMERCIAL (rosa) — mesa Zezinho + whiteboard de funil + impressora + planta
   drawDesk(ctx, 780, 170, '#f472b6'); drawChair(ctx, 780, 200, '#2a3040');
   drawWhiteboard(ctx, 690, 95, '#f472b6'); drawPrinter(ctx, 900, 100); drawPlant(ctx, 910, 250, 0.9);
+  // RH (verde) — mesa Dipsy + sofa + mesa reuniao + planta
   drawDesk(ctx, 160, 410, '#10b981'); drawChair(ctx, 160, 440, '#2a3040');
   drawSofa(ctx, 80, 530, '#3a5b2e'); drawTable(ctx, 80, 500); drawPlant(ctx, 270, 530, 1.0);
+  // FINANCEIRO (amarelo) — mesa Aranha + cooler + estante pastas + planta
   drawDesk(ctx, 470, 450, '#fbbf24'); drawChair(ctx, 470, 480, '#2a3040');
   drawWaterCooler(ctx, 380, 470); drawBookshelf(ctx, 580, 460, '#fbbf24'); drawPlant(ctx, 380, 540, 0.8);
+  // ATENDIMENTO (laranja) — mesa Byte + sofa espera cliente + mesa apoio
   drawDesk(ctx, 800, 450, '#fb923c'); drawChair(ctx, 800, 480, '#2a3040');
   drawSofa(ctx, 720, 550, '#8b4513'); drawTable(ctx, 870, 530); drawPlant(ctx, 920, 450, 0.9);
 }
@@ -217,13 +225,25 @@ function drawBackground(ctx, W, H) {
 }
 
 /* ============================== CHARACTER ============================== */
-function drawCharacter(ctx, x, y, agent, state, frame, direction, holdingPaper) {
+function drawCharacter(ctx, x, y, agent, state, frame, direction, holdingPaper, isProtagonist) {
   const walkPhase = Math.floor(frame / 6) % 4;
   const walkBob = (state === 'walking') ? [0, -1, 0, 1][walkPhase] : 0;
   const legOffset = (state === 'walking') ? [0, 2, 0, -2][walkPhase] : 0;
   const armSwing = (state === 'walking') ? [0, 2, 0, -2][walkPhase] : 0;
   const breathe = state === 'working' ? Math.sin(frame * 0.1) * 0.5 : 0;
   const sitting = state === 'working' || state === 'sitting';
+
+  // Halo amarelo pulsante nos protagonistas — marca "quem esta na missao"
+  if (isProtagonist) {
+    const pulse = 0.6 + Math.sin(frame * 0.08) * 0.18;
+    const r = 22 + Math.sin(frame * 0.08) * 2;
+    const grad = ctx.createRadialGradient(x, y + 4, 2, x, y + 4, r);
+    grad.addColorStop(0, `rgba(251, 191, 36, ${pulse * 0.35})`);
+    grad.addColorStop(0.7, `rgba(251, 191, 36, ${pulse * 0.12})`);
+    grad.addColorStop(1, 'rgba(251, 191, 36, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x, y + 4, r, 0, Math.PI * 2); ctx.fill();
+  }
 
   ctx.save();
   ctx.translate(Math.round(x), Math.round(y + (sitting ? -2 : 0) + breathe));
@@ -358,13 +378,70 @@ export function criarEngine(canvas) {
       waypoints: [], state: 'idle', direction: 'down',
       pendingState: null, holdingPaper: false,
       speechBubble: null, speechTimer: 0,
+      protagonist: false,           // halo amarelo se true
+      idleNextAt: 0,                // frame em que a proxima acao idle ocorre
+      idleBusy: false,              // evita sobrepor novas acoes idle
     };
   });
 
+  const protagonistSet = new Set();
   let frame = 0;
   let floatingPapers = [];
   let rafId = null;
   let destroyed = false;
+
+  // Sorteia uma acao idle discreta na casa do agente pra dar vida ao cenario
+  function agendarIdleDecorativo(id) {
+    const s = agentState[id];
+    const agent = AGENTS_DEF.find(a => a.id === id);
+    if (!agent || s.idleBusy) return;
+    if (protagonistSet.has(id)) return;
+    if (s.state === 'walking') return;
+
+    s.idleBusy = true;
+    const acoes = [
+      // Olhar ao redor (muda direcao)
+      () => {
+        const dirs = ['down', 'left', 'right'];
+        s.direction = dirs[Math.floor(Math.random() * dirs.length)];
+        setTimeout(() => {
+          if (!destroyed) { s.direction = 'down'; s.idleBusy = false; }
+        }, 1200 + Math.random() * 800);
+      },
+      // Alongar / coçar cabeça — balao rapido
+      () => {
+        const frases = ['Hmm...', '👍', '📊', '💡', '📝'];
+        s.speechBubble = frases[Math.floor(Math.random() * frases.length)];
+        s.speechTimer = 80;
+        setTimeout(() => { if (!destroyed) s.idleBusy = false; }, 1500);
+      },
+      // Breve caminhada pela sala (ida e volta) — só se nao esta andando
+      () => {
+        const dx = (Math.random() - 0.5) * 60;
+        const dy = (Math.random() - 0.5) * 40;
+        const tx = Math.max(agent.home.x - 40, Math.min(agent.home.x + 40, s.x + dx));
+        const ty = Math.max(agent.home.y - 30, Math.min(agent.home.y + 30, s.y + dy));
+        s.waypoints = [{ x: tx, y: ty }, { x: agent.home.x, y: agent.home.y }];
+        s.pendingState = 'idle';
+        s.targetX = s.waypoints[0].x; s.targetY = s.waypoints[0].y;
+        s.waypoints.shift();
+        // Marca nao-busy apos caminhada terminar
+        const tryFinish = () => {
+          if (destroyed) return;
+          if (s.waypoints.length === 0 && Math.abs(s.targetX - s.x) < 3 && Math.abs(s.targetY - s.y) < 3) {
+            s.idleBusy = false;
+          } else requestAnimationFrame(tryFinish);
+        };
+        tryFinish();
+      },
+      // Trabalho breve (typing sound)
+      () => {
+        s.state = 'working';
+        setTimeout(() => { if (!destroyed) { s.state = 'idle'; s.idleBusy = false; } }, 2000 + Math.random() * 2000);
+      },
+    ];
+    acoes[Math.floor(Math.random() * acoes.length)]();
+  }
 
   function updateAgent(id) {
     const s = agentState[id];
@@ -416,10 +493,21 @@ export function criarEngine(canvas) {
     AGENTS_DEF.forEach(a => updateAgent(a.id));
     updateFloatingPapers();
     drawFloatingPapers();
+
+    // Idle decorativo — agentes nao protagonistas fazem pequenas acoes random
+    AGENTS_DEF.forEach(a => {
+      const s = agentState[a.id];
+      if (protagonistSet.has(a.id)) return;
+      if (s.idleBusy || s.state === 'walking') return;
+      if (frame < s.idleNextAt) return;
+      agendarIdleDecorativo(a.id);
+      s.idleNextAt = frame + 180 + Math.floor(Math.random() * 240); // proxima em 3-7s
+    });
+
     const sorted = [...AGENTS_DEF].sort((a, b) => agentState[a.id].y - agentState[b.id].y);
     sorted.forEach(a => {
       const s = agentState[a.id];
-      drawCharacter(ctx, s.x, s.y, a, s.state, frame, s.direction, s.holdingPaper);
+      drawCharacter(ctx, s.x, s.y, a, s.state, frame, s.direction, s.holdingPaper, s.protagonist);
       if (s.speechTimer > 0 && s.speechBubble) drawSpeechBubble(ctx, s.x, s.y, s.speechBubble);
     });
     rafId = requestAnimationFrame(render);
@@ -468,11 +556,25 @@ export function criarEngine(canvas) {
   }
   function setHolding(agentId, holding) { agentState[agentId].holdingPaper = holding; }
   function setState(agentId, state) { agentState[agentId].state = state; }
+  function setProtagonists(ids) {
+    protagonistSet.clear();
+    (ids || []).forEach(id => {
+      if (agentState[id]) {
+        agentState[id].protagonist = true;
+        agentState[id].idleBusy = false;
+        protagonistSet.add(id);
+      }
+    });
+    // Garante que nao-protagonistas percam flag
+    AGENTS_DEF.forEach(a => {
+      if (!protagonistSet.has(a.id)) agentState[a.id].protagonist = false;
+    });
+  }
 
   render();
 
   return {
-    walkTo, say, throwPaper, setHolding, setState,
+    walkTo, say, throwPaper, setHolding, setState, setProtagonists,
     agentsByPos: () => [...AGENTS_DEF].map(a => ({ id: a.id, name: a.name, role: a.role, emoji: a.emoji, shirt: a.shirt })),
     getAgentDef: (id) => AGENTS_DEF.find(a => a.id === id),
     destroy: () => { destroyed = true; if (rafId) cancelAnimationFrame(rafId); },
