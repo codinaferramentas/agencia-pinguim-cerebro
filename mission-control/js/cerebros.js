@@ -246,6 +246,9 @@ async function abrirCerebroDetalhe(slug) {
   cerebroAtual = cerebrosCache.find(c => c.slug === slug);
   if (!cerebroAtual) return;
 
+  // Mantém subnav sincronizado (destaca o cérebro ativo na sidebar)
+  window.__marcarSubnavAtivo?.(slug);
+
   const page = document.getElementById('page-cerebros');
   page.innerHTML = '';
   page.append(el('div', { html: `<div style="padding:3rem;color:var(--fg-muted);text-align:center">Carregando fontes do Cérebro ${cerebroAtual.nome}…</div>` }));

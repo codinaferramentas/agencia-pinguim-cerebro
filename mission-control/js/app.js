@@ -41,39 +41,43 @@ const KANBAN_COLS = [
 
 const STUB_PAGES = ['conteudo', 'funis', 'trafego', 'vendas', 'suporte', 'biblioteca', 'seguranca', 'debug'];
 
-/* -------- Navegação -------- */
-const rendered = new Set();
+/* -------- Navegação --------
+   Sempre re-renderiza a página ao navegar — evita estado "preso" de um
+   detalhe antigo (ex: clicar em Cérebros mas ainda ver o detalhe do Elo
+   da última vez). Lazy é bom pra inicialização; navegação explicita
+   deve ser sempre fresca.
+*/
+let paginaAtual = null;
 
-async function navegar(pageSlug) {
+async function navegar(pageSlug, { forcarRender = true } = {}) {
+  paginaAtual = pageSlug;
   $$('.nav-item').forEach(i => i.classList.toggle('active', i.dataset.page === pageSlug));
   $$('.page').forEach(p => p.classList.remove('active'));
   const page = document.getElementById('page-' + pageSlug);
   if (!page) return;
   page.classList.add('active');
 
-  // Lazy render — só renderiza quando for navegado pela primeira vez
-  if (!rendered.has(pageSlug)) {
-    rendered.add(pageSlug);
-    try {
-      switch (pageSlug) {
-        case 'home':      await renderHome(); break;
-        case 'cerebros':  await renderCerebros(); break;
-        case 'personas':  await renderPersonas(); break;
-        case 'operacao':  await renderOperacao(); break;
-        case 'agentes':   await renderAgentes(); break;
-        case 'squads':    await renderSquadsPage(); break;
-        case 'crons':     await renderCrons(); break;
-        case 'skills':    await renderSkills(); break;
-        case 'mapa':      await renderMapa(); break;
-        case 'roadmap':   await renderRoadmap(); break;
-        case 'qualidade': await renderQualidade(); break;
-        default:
-          if (STUB_PAGES.includes(pageSlug)) renderStub(pageSlug);
-      }
-    } catch (err) {
-      console.error('Erro ao renderizar', pageSlug, err);
-      page.innerHTML = `<div style="padding:2rem;color:var(--status-alerta)">Erro: ${err.message}</div>`;
+  if (!forcarRender) return;
+
+  try {
+    switch (pageSlug) {
+      case 'home':      await renderHome(); break;
+      case 'cerebros':  await renderCerebros(); break;
+      case 'personas':  await renderPersonas(); break;
+      case 'operacao':  await renderOperacao(); break;
+      case 'agentes':   await renderAgentes(); break;
+      case 'squads':    await renderSquadsPage(); break;
+      case 'crons':     await renderCrons(); break;
+      case 'skills':    await renderSkills(); break;
+      case 'mapa':      await renderMapa(); break;
+      case 'roadmap':   await renderRoadmap(); break;
+      case 'qualidade': await renderQualidade(); break;
+      default:
+        if (STUB_PAGES.includes(pageSlug)) renderStub(pageSlug);
     }
+  } catch (err) {
+    console.error('Erro ao renderizar', pageSlug, err);
+    page.innerHTML = `<div style="padding:2rem;color:var(--status-alerta)">Erro: ${err.message}</div>`;
   }
 }
 
@@ -90,7 +94,30 @@ function setupNav() {
     });
   });
 
-  $('#subnav-back')?.addEventListener('click', fecharSubnav);
+  // Seta "Voltar" do subnav: limpa detalhe e volta pra listagem da página
+  // que está aberta no subnav (Cérebros ou Personas).
+  $('#subnav-back')?.addEventListener('click', () => {
+    const page = subnavPageAtual || paginaAtual;
+    fecharSubnav();
+    if (page) navegar(page);
+  });
+
+  // Quando usuário seleciona cérebro/persona no subnav, já garante que
+  // a página certa está visível + ativa antes de abrir o detalhe.
+  window.addEventListener('cerebro:select', async (ev) => {
+    const slug = ev.detail?.slug;
+    if (!slug) return;
+    if (paginaAtual !== 'cerebros') {
+      await navegar('cerebros', { forcarRender: false });
+    }
+  });
+  window.addEventListener('persona:select', async (ev) => {
+    const slug = ev.detail?.slug;
+    if (!slug) return;
+    if (paginaAtual !== 'personas') {
+      await navegar('personas', { forcarRender: false });
+    }
+  });
 }
 
 /* -------- Sub-sidebar contextual (drill-down estilo Vercel) -------- */
@@ -149,10 +176,13 @@ const SUBNAV_CONFIG = {
   },
 };
 
+let subnavPageAtual = null;
+
 async function abrirSubnav(pageSlug) {
   const cfg = SUBNAV_CONFIG[pageSlug];
   if (!cfg) { fecharSubnav(); return; }
 
+  subnavPageAtual = pageSlug;
   document.querySelector('.app').classList.add('with-subnav');
   $('#subnav').setAttribute('aria-hidden', 'false');
   $('#subnav-title').textContent = cfg.title;
@@ -190,6 +220,16 @@ async function abrirSubnav(pageSlug) {
     body.innerHTML = `<div class="subnav-section" style="color:var(--danger)">Erro: ${err.message}</div>`;
   }
 }
+
+// Marca item do subnav como ativo com base no id (slug). Chamado quando
+// usuário abre detalhe por outros caminhos (card, evento), pra manter
+// sidebar sincronizada.
+function marcarSubnavAtivo(id) {
+  $$('.subnav-item').forEach(s => {
+    s.classList.toggle('active', s.dataset.id === id);
+  });
+}
+window.__marcarSubnavAtivo = marcarSubnavAtivo;
 
 function fecharSubnav() {
   document.querySelector('.app').classList.remove('with-subnav');
@@ -342,6 +382,9 @@ async function renderPersonaDetalhe(slug) {
   const cerebros = await fetchCerebrosCatalogo();
   const c = cerebros.find(x => x.slug === slug);
   if (!c) return;
+
+  // Mantém subnav sincronizado
+  window.__marcarSubnavAtivo?.(slug);
 
   const page = $('#page-personas');
   page.innerHTML = '';
