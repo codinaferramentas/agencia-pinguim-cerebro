@@ -224,6 +224,49 @@ function drawBackground(ctx, W, H) {
   drawFurniture(ctx);
 }
 
+// Destaca salas ativas com borda pulsante amarela + dim nas inativas
+// mode: 'full' (dim+highlight) | 'dim' (so dim) | 'highlight' (so borda/badge)
+function drawRoomOverlay(ctx, activeRoomIds, frame, mode = 'full') {
+  const activeSet = new Set(activeRoomIds || []);
+  const pulse = 0.55 + Math.sin(frame * 0.08) * 0.25;
+
+  if (mode === 'full' || mode === 'dim') {
+    ROOMS.forEach(r => {
+      if (activeSet.has(r.id)) return;
+      ctx.fillStyle = 'rgba(8, 10, 20, 0.45)';
+      ctx.fillRect(r.x - 3, r.y - 14, r.w + 6, r.h + 17);
+    });
+  }
+
+  if (mode === 'full' || mode === 'highlight') {
+    ROOMS.forEach(r => {
+      if (!activeSet.has(r.id)) return;
+      ctx.save();
+      ctx.shadowColor = 'rgba(251, 191, 36, 0.8)';
+      ctx.shadowBlur = 18;
+      ctx.strokeStyle = `rgba(251, 191, 36, ${pulse})`;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(r.x - 3, r.y - 14, r.w + 6, r.h + 17);
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = `rgba(254, 215, 111, ${pulse * 0.8})`;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(r.x - 1, r.y - 12, r.w + 2, r.h + 13);
+      ctx.restore();
+
+      // Badge "ATIVO" no canto superior direito da sala
+      const badgeX = r.x + r.w - 58;
+      const badgeY = r.y + 4;
+      ctx.fillStyle = `rgba(251, 191, 36, ${pulse})`;
+      ctx.fillRect(badgeX, badgeY, 50, 18);
+      ctx.fillStyle = '#0a0a0a';
+      ctx.font = 'bold 10px -apple-system, "Segoe UI", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('● ATIVO', badgeX + 25, badgeY + 12);
+      ctx.textAlign = 'left';
+    });
+  }
+}
+
 /* ============================== CHARACTER ============================== */
 function drawCharacter(ctx, x, y, agent, state, frame, direction, holdingPaper, isProtagonist) {
   const walkPhase = Math.floor(frame / 6) % 4;
@@ -586,32 +629,74 @@ export function criarEngine(canvas) {
     });
   }
 
+  // Calcula quais salas estao ativas baseado na posicao atual dos protagonistas
+  // (sala de origem + sala onde ele esta agora — cobre handoff no corredor)
+  function salasAtivas() {
+    const ativas = new Set();
+    protagonistSet.forEach(id => {
+      const agent = AGENTS_DEF.find(a => a.id === id);
+      if (agent) ativas.add(agent.roomId);
+      // Detecta sala atual do agente pela posicao
+      const s = agentState[id];
+      const room = ROOMS.find(r => s.x >= r.x && s.x <= r.x + r.w && s.y >= r.y && s.y <= r.y + r.h);
+      if (room) ativas.add(room.id);
+    });
+    return ativas;
+  }
+
   function render() {
     if (destroyed) return;
     frame++;
     drawBackground(ctx, W, H);
     AGENTS_DEF.forEach(a => updateAgent(a.id));
     updateFloatingPapers();
-    drawFloatingPapers();
 
-    // Idle decorativo — agentes nao protagonistas fazem pequenas acoes random
-    // Cada um com cadencia propria pra parecer empresa real (nao sincronizada)
+    // Idle decorativo
     AGENTS_DEF.forEach(a => {
       const s = agentState[a.id];
       if (protagonistSet.has(a.id)) return;
       if (s.idleBusy || s.state === 'walking') return;
       if (frame < s.idleNextAt) return;
       agendarIdleDecorativo(a.id);
-      // Proxima acao entre 1.5s e 4s (60fps): agitado, mas nao frenetico
       s.idleNextAt = frame + 90 + Math.floor(Math.random() * 150);
     });
 
+    const ativas = salasAtivas();
+
+    // 1) Dim nas salas inativas (cobre tudo que vai ser desenhado nelas)
+    drawRoomOverlay(ctx, [...ativas], frame, 'dim');
+
+    drawFloatingPapers();
+
+    // 2) Desenha todos os agentes — os inativos ja estao sob o dim porque
+    //    foram desenhados ANTES (drawBackground -> drawFurniture), e a chamada
+    //    acima aplicou dim em cima da furniture das salas inativas. Agentes
+    //    sao desenhados agora, entao inativos em sala inativa ficarao sem dim
+    //    sobre eles. Pra compensar, aplicamos dim de novo APENAS nos agentes
+    //    nao-protagonistas em salas inativas.
     const sorted = [...AGENTS_DEF].sort((a, b) => agentState[a.id].y - agentState[b.id].y);
     sorted.forEach(a => {
       const s = agentState[a.id];
       drawCharacter(ctx, s.x, s.y, a, s.state, frame, s.direction, s.holdingPaper, s.protagonist);
       if (s.speechTimer > 0 && s.speechBubble) drawSpeechBubble(ctx, s.x, s.y, s.speechBubble);
     });
+
+    // 3) Re-aplica dim nas salas inativas pra "apagar" os agentes inativos
+    //    que foram desenhados ali. Protagonistas ficam em salas ativas entao
+    //    nao sao afetados por esse overlay.
+    drawRoomOverlay(ctx, [...ativas], frame, 'dim');
+
+    // 4) Redesenha SO os protagonistas por cima (sempre visiveis e com halo)
+    sorted.forEach(a => {
+      if (!protagonistSet.has(a.id)) return;
+      const s = agentState[a.id];
+      drawCharacter(ctx, s.x, s.y, a, s.state, frame, s.direction, s.holdingPaper, true);
+      if (s.speechTimer > 0 && s.speechBubble) drawSpeechBubble(ctx, s.x, s.y, s.speechBubble);
+    });
+
+    // 5) Highlight das salas ativas (borda pulsante + badge ATIVO) por cima de tudo
+    drawRoomOverlay(ctx, [...ativas], frame, 'highlight');
+
     rafId = requestAnimationFrame(render);
   }
 
