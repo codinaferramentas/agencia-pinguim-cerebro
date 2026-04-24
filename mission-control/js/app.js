@@ -427,24 +427,21 @@ async function renderPersonaDetalhe(slug) {
 }
 
 async function iniciarGeracao(slug) {
-  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260424a');
+  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260424b');
 
-  // Substitui botões + stub por barra de progresso
-  const actions = $('#page-personas .cerebro-detail-actions');
-  const stub = $('#persona-stub');
-  if (actions) actions.style.pointerEvents = 'none', actions.style.opacity = '0.5';
-
-  const progressoEl = el('div', { class: 'persona-progresso' }, [
-    el('div', { class: 'persona-progresso-label', id: 'pp-label' }, 'Iniciando...'),
-    el('div', { class: 'persona-progresso-bar' }, [
-      el('div', { class: 'persona-progresso-fill', id: 'pp-fill', style: 'width:0%' }),
+  // Overlay modal centralizado — impossivel de nao ver
+  const overlay = el('div', { class: 'persona-progresso-overlay' }, [
+    el('div', { class: 'persona-progresso-modal' }, [
+      el('div', { class: 'persona-progresso-badge' }, 'Gerando persona'),
+      el('div', { class: 'persona-progresso-label', id: 'pp-label' }, 'Iniciando...'),
+      el('div', { class: 'persona-progresso-bar' }, [
+        el('div', { class: 'persona-progresso-fill', id: 'pp-fill', style: 'width:0%' }),
+      ]),
+      el('div', { class: 'persona-progresso-etapa', id: 'pp-etapa' }, '—'),
+      el('div', { class: 'persona-progresso-hint' }, 'Pode levar até 30 segundos. Não feche a aba.'),
     ]),
-    el('div', { class: 'persona-progresso-etapa', id: 'pp-etapa' }, '—'),
   ]);
-
-  const detail = $('#page-personas .cerebro-detail');
-  if (stub) stub.replaceWith(progressoEl);
-  else if (detail) detail.appendChild(progressoEl);
+  document.body.appendChild(overlay);
 
   try {
     await gerarPersonaComProgresso(slug, ({ etapa, total, label }) => {
@@ -453,11 +450,15 @@ async function iniciarGeracao(slug) {
       $('#pp-label').textContent = label;
       $('#pp-etapa').textContent = `Etapa ${etapa} de ${total}`;
     });
-    // Sucesso → re-renderiza tela com persona
+    overlay.remove();
     await renderPersonaDetalhe(slug);
   } catch (e) {
-    progressoEl.innerHTML = `<div style="color:var(--danger);padding:1rem">Falha ao gerar: ${e.message}</div>`;
-    if (actions) actions.style.pointerEvents = '', actions.style.opacity = '';
+    overlay.querySelector('.persona-progresso-modal').innerHTML = `
+      <div class="persona-progresso-badge" style="background:rgba(255,85,85,0.15);color:#FF5555">Falha</div>
+      <div style="color:var(--fg);font-size:0.9375rem;margin:0.5rem 0">Não consegui gerar a persona</div>
+      <div style="color:var(--fg-muted);font-size:0.8125rem;margin-bottom:1rem">${e.message}</div>
+      <button class="btn btn-ghost" onclick="this.closest('.persona-progresso-overlay').remove()">Fechar</button>
+    `;
   }
 }
 
