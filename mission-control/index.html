@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mission Control — Pinguim</title>
-<link rel="stylesheet" href="css/style.css?v=20260424b">
+<link rel="stylesheet" href="css/style.css?v=20260424c">
 </head>
 <body>
 <div class="app">
@@ -33,6 +33,10 @@
     <div class="nav-footer">
       <div id="nav-env-badge">V0 · Carregando…</div>
       <div id="nav-env-hint">mission-control.local</div>
+      <button id="nav-squad-toggle" class="nav-squad-toggle" type="button" title="Liga/desliga a animacao do Squad de agentes ao gerar persona">
+        <span class="squad-toggle-led"></span>
+        <span id="nav-squad-label">Squad · off</span>
+      </button>
       <button id="nav-logout" class="nav-logout" type="button" title="Sair">
         <span>↪</span> Sair
       </button>
@@ -111,11 +115,11 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="module">
-  import { guard, logout } from './js/auth-gate.js?v=20260424b';
+  import { guard, logout } from './js/auth-gate.js?v=20260424c';
   const ok = await guard();
   if (ok) {
-    await import('./js/sb-client.js?v=20260424b');
-    await import('./js/app.js?v=20260424b');
+    await import('./js/sb-client.js?v=20260424c');
+    await import('./js/app.js?v=20260424c');
     const btn = document.getElementById('nav-logout');
     if (btn) btn.addEventListener('click', logout);
   }

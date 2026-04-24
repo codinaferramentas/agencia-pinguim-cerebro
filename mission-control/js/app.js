@@ -426,8 +426,43 @@ async function renderPersonaDetalhe(slug) {
   );
 }
 
+function squadLigado() {
+  return localStorage.getItem('pinguim_squad_animacao') === 'on';
+}
+
 async function iniciarGeracao(slug) {
-  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260424b');
+  // Roteia: squad animado ou barra tradicional (preservada intacta)
+  if (squadLigado()) return iniciarGeracaoComSquad(slug);
+  return iniciarGeracaoComBarra(slug);
+}
+
+async function iniciarGeracaoComSquad(slug) {
+  const cerebros = await fetchCerebrosCatalogo();
+  const c = cerebros.find(x => x.slug === slug);
+  const cerebroNome = c?.nome || slug;
+
+  const { abrirSquadModal } = await import('./squad-modal.js?v=20260424c');
+  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260424c');
+
+  try {
+    // apiCall e resolvida pelo roteiro. Encapsulamos a chamada real numa promise unica.
+    const apiCall = () => gerarPersonaComProgresso(slug, () => {}); // callback de etapa vira no-op no modo squad
+    await abrirSquadModal({
+      roteiro: 'gerarPersona',
+      titulo: 'Atualizando persona',
+      subtitulo: `Cerebro ${cerebroNome}`,
+      cerebroNome,
+      apiCall,
+    });
+    await renderPersonaDetalhe(slug);
+  } catch (e) {
+    // Modal squad ja mostra o erro; so logamos no console
+    console.error('Squad modal erro:', e);
+  }
+}
+
+async function iniciarGeracaoComBarra(slug) {
+  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260424c');
 
   // Overlay modal centralizado — impossivel de nao ver
   const overlay = el('div', { class: 'persona-progresso-overlay' }, [
@@ -460,6 +495,22 @@ async function iniciarGeracao(slug) {
       <button class="btn btn-ghost" onclick="this.closest('.persona-progresso-overlay').remove()">Fechar</button>
     `;
   }
+}
+
+function setupSquadToggle() {
+  const btn = $('#nav-squad-toggle');
+  const label = $('#nav-squad-label');
+  if (!btn) return;
+  const aplicar = (on) => {
+    btn.classList.toggle('on', on);
+    label.textContent = on ? 'Squad · on' : 'Squad · off';
+  };
+  aplicar(squadLigado());
+  btn.addEventListener('click', () => {
+    const novo = !squadLigado();
+    localStorage.setItem('pinguim_squad_animacao', novo ? 'on' : 'off');
+    aplicar(novo);
+  });
 }
 
 async function renderOperacao() {
@@ -822,6 +873,7 @@ function qualiCard(val, lbl, alerta = false) {
 /* -------- Init -------- */
 (async function boot() {
   setupNav();
+  setupSquadToggle();
   initDrawer();
   await atualizarStatusbar();
   // Renderiza Home primeiro (tela default)
