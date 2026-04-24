@@ -192,25 +192,12 @@ serve(async (req) => {
       return jsonResp({ error: 'cerebro sem fontes — alimente primeiro' }, 400);
     }
 
-    // Persona existente (pra versao + preservar campos editados)
+    // Persona existente
     const { data: personaExistente } = await client
       .from('personas')
       .select('*')
       .eq('cerebro_id', cerebroId)
       .maybeSingle();
-
-    // Snapshot antes de sobrescrever
-    if (personaExistente) {
-      await client.from('personas_snapshots').insert({
-        persona_id: personaExistente.id,
-        cerebro_id: cerebroId,
-        versao: personaExistente.versao || 1,
-        snapshot: personaExistente,
-        motivo: 'regenerar',
-        fontes_usadas: personaExistente.fontes_usadas,
-        modelo: personaExistente.modelo,
-      });
-    }
 
     // Chama OpenAI
     const geradaPelaIA = await callOpenAI(fontes, cerebroNome);
@@ -222,7 +209,6 @@ serve(async (req) => {
       fontes_usadas: fontes.length,
       modelo: MODEL,
       atualizado_em: new Date().toISOString(),
-      versao: (personaExistente?.versao || 0) + 1,
       campos_editados,
     };
 
@@ -234,6 +220,37 @@ serve(async (req) => {
       }
     }
 
+    // --- OPCAO B: so cria snapshot+versao se houver mudanca real ---
+    // Compara cada bloco da persona existente com o novo payload.
+    let houveMudanca = true;
+    if (personaExistente) {
+      houveMudanca = CAMPOS_V2.some(campo => {
+        const antes = JSON.stringify(personaExistente[campo] ?? null);
+        const depois = JSON.stringify(payload[campo] ?? null);
+        return antes !== depois;
+      });
+    }
+
+    if (personaExistente && houveMudanca) {
+      // Snapshot antes de sobrescrever
+      await client.from('personas_snapshots').insert({
+        persona_id: personaExistente.id,
+        cerebro_id: cerebroId,
+        versao: personaExistente.versao || 1,
+        snapshot: personaExistente,
+        motivo: 'regenerar',
+        fontes_usadas: personaExistente.fontes_usadas,
+        modelo: personaExistente.modelo,
+      });
+      payload.versao = (personaExistente.versao || 0) + 1;
+    } else if (!personaExistente) {
+      // Primeira geracao — versao 1, sem snapshot anterior
+      payload.versao = 1;
+    } else {
+      // Sem mudanca — mantem versao igual, nao cria snapshot
+      payload.versao = personaExistente.versao;
+    }
+
     // Upsert
     const { error: eUpsert } = await client.from('personas').upsert(payload, { onConflict: 'cerebro_id' });
     if (eUpsert) return jsonResp({ error: eUpsert.message }, 500);
@@ -242,6 +259,8 @@ serve(async (req) => {
       ok: true,
       fontes_usadas: fontes.length,
       campos_preservados: campos_editados,
+      houve_mudanca: houveMudanca,
+      versao: payload.versao,
     });
   } catch (e) {
     return jsonResp({ error: (e as Error).message }, 500);

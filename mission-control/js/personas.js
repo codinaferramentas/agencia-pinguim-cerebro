@@ -68,6 +68,71 @@ export async function gerarPersonaComProgresso(slug, onEtapa) {
   return j;
 }
 
+export async function fetchHistoricoVersoes(personaId) {
+  const sb = getSupabaseClient();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from('personas_snapshots')
+    .select('id, versao, motivo, fontes_usadas, modelo, criado_em')
+    .eq('persona_id', personaId)
+    .order('versao', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function fetchSnapshotCompleto(snapshotId) {
+  const sb = getSupabaseClient();
+  if (!sb) return null;
+  const { data } = await sb.from('personas_snapshots').select('snapshot').eq('id', snapshotId).single();
+  return data?.snapshot || null;
+}
+
+export async function restaurarSnapshot(personaId, snapshotId) {
+  const sb = getSupabaseClient();
+  if (!sb) throw new Error('Supabase nao conectado');
+
+  // 1) Busca persona atual e snapshot a restaurar
+  const [atualRes, snapRes] = await Promise.all([
+    sb.from('personas').select('*').eq('id', personaId).single(),
+    sb.from('personas_snapshots').select('*').eq('id', snapshotId).single(),
+  ]);
+  if (atualRes.error || !atualRes.data) throw new Error('Persona atual nao encontrada');
+  if (snapRes.error || !snapRes.data) throw new Error('Snapshot nao encontrado');
+
+  const atual = atualRes.data;
+  const snap = snapRes.data.snapshot;
+
+  // 2) Cria snapshot da versao atual (pra nao perder se arrepender)
+  await sb.from('personas_snapshots').insert({
+    persona_id: personaId,
+    cerebro_id: atual.cerebro_id,
+    versao: atual.versao,
+    snapshot: atual,
+    motivo: 'antes_de_restaurar',
+    fontes_usadas: atual.fontes_usadas,
+    modelo: atual.modelo,
+  });
+
+  // 3) Promove o snapshot: copia todos os campos v2 + incrementa versao
+  const CAMPOS = [
+    'identidade', 'rotina', 'nivel_consciencia', 'jobs_to_be_done',
+    'vozes_cabeca', 'desejos_reais', 'crencas_limitantes',
+    'dores_latentes', 'objecoes_compra', 'vocabulario', 'onde_vive',
+  ];
+  const payload = {
+    versao: (atual.versao || 0) + 1,
+    atualizado_em: new Date().toISOString(),
+    campos_editados: snap.campos_editados || [],
+    fontes_usadas: snap.fontes_usadas,
+    modelo: snap.modelo,
+  };
+  CAMPOS.forEach(c => { payload[c] = snap[c] ?? null; });
+
+  const { error } = await sb.from('personas').update(payload).eq('id', personaId);
+  if (error) throw error;
+  return { ok: true, versao: payload.versao };
+}
+
 export async function salvarEdicaoCampo(personaId, campo, novoValor) {
   const sb = getSupabaseClient();
   const { data: atual } = await sb.from('personas').select('campos_editados').eq('id', personaId).single();
@@ -365,4 +430,147 @@ function formatoDica(key) {
     return 'Um campo por linha no formato: chave: valor';
   }
   return '';
+}
+
+/* ================= UI: Historico de versoes ================= */
+export async function abrirHistoricoVersoes(persona, cerebroNome) {
+  const historico = await fetchHistoricoVersoes(persona.id);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'persona-editor-overlay';
+  overlay.innerHTML = `
+    <div class="persona-historico">
+      <div class="persona-historico-header">
+        <div>
+          <h3>Histórico de versões</h3>
+          <div class="persona-historico-hint">Persona ${escapeHTML(cerebroNome)} · versão atual: v${persona.versao || 1}</div>
+        </div>
+        <button class="persona-editor-close" type="button">×</button>
+      </div>
+      <div class="persona-historico-body">
+        ${historico.length === 0
+          ? '<div class="persona-historico-vazio">Ainda não tem versões anteriores. Cada vez que você regenerar com mudanças reais, uma versão é salva aqui.</div>'
+          : `
+            <div class="persona-historico-linha persona-historico-atual">
+              <div class="persona-historico-tag">Atual</div>
+              <div class="persona-historico-dados">
+                <div class="persona-historico-versao">v${persona.versao || 1}</div>
+                <div class="persona-historico-meta">
+                  <span>${escapeHTML(persona.modelo || '—')}</span>
+                  <span>${persona.fontes_usadas || '?'} fontes</span>
+                  <span>${new Date(persona.atualizado_em).toLocaleString('pt-BR')}</span>
+                </div>
+              </div>
+            </div>
+            ${historico.map(h => `
+              <div class="persona-historico-linha" data-id="${h.id}" data-versao="${h.versao}">
+                <div class="persona-historico-tag persona-historico-tag-old">v${h.versao}</div>
+                <div class="persona-historico-dados">
+                  <div class="persona-historico-motivo">${motivoLegivel(h.motivo)}</div>
+                  <div class="persona-historico-meta">
+                    <span>${escapeHTML(h.modelo || '—')}</span>
+                    <span>${h.fontes_usadas || '?'} fontes</span>
+                    <span>${new Date(h.criado_em).toLocaleString('pt-BR')}</span>
+                  </div>
+                </div>
+                <div class="persona-historico-acoes">
+                  <button class="btn btn-ghost" data-acao="comparar" data-id="${h.id}">Comparar</button>
+                  <button class="btn" data-acao="restaurar" data-id="${h.id}">Restaurar</button>
+                </div>
+              </div>
+            `).join('')}
+          `
+        }
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const fechar = () => overlay.remove();
+  overlay.querySelector('.persona-editor-close').addEventListener('click', fechar);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) fechar(); });
+
+  overlay.querySelectorAll('[data-acao="comparar"]').forEach(btn => {
+    btn.addEventListener('click', () => abrirComparacao(persona, btn.dataset.id));
+  });
+  overlay.querySelectorAll('[data-acao="restaurar"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm(`Restaurar v${btn.closest('[data-versao]').dataset.versao}? A versão atual será salva como snapshot antes.`)) return;
+      btn.disabled = true; btn.textContent = 'Restaurando...';
+      try {
+        await restaurarSnapshot(persona.id, btn.dataset.id);
+        fechar();
+        window.dispatchEvent(new CustomEvent('persona:reload'));
+      } catch (e) {
+        alert('Falha ao restaurar: ' + e.message);
+        btn.disabled = false; btn.textContent = 'Restaurar';
+      }
+    });
+  });
+}
+
+function motivoLegivel(motivo) {
+  if (motivo === 'regenerar') return 'Snapshot antes de regenerar';
+  if (motivo === 'antes_de_restaurar') return 'Snapshot antes de restaurar outra versão';
+  if (motivo === 'editar') return 'Snapshot antes de edição manual';
+  return motivo || 'Snapshot automático';
+}
+
+async function abrirComparacao(personaAtual, snapshotId) {
+  const snap = await fetchSnapshotCompleto(snapshotId);
+  if (!snap) return alert('Snapshot não encontrado');
+
+  const CAMPOS = [
+    { key: 'identidade', titulo: 'Identidade' },
+    { key: 'rotina', titulo: 'Rotina' },
+    { key: 'nivel_consciencia', titulo: 'Nível de consciência' },
+    { key: 'jobs_to_be_done', titulo: 'Jobs to be Done' },
+    { key: 'vozes_cabeca', titulo: 'Vozes da cabeça' },
+    { key: 'desejos_reais', titulo: 'Desejos reais' },
+    { key: 'crencas_limitantes', titulo: 'Crenças limitantes' },
+    { key: 'dores_latentes', titulo: 'Dores latentes' },
+    { key: 'objecoes_compra', titulo: 'Objeções de compra' },
+    { key: 'vocabulario', titulo: 'Vocabulário' },
+    { key: 'onde_vive', titulo: 'Onde vive' },
+  ];
+
+  const overlay = document.createElement('div');
+  overlay.className = 'persona-editor-overlay';
+  overlay.innerHTML = `
+    <div class="persona-comparacao">
+      <div class="persona-historico-header">
+        <div>
+          <h3>Comparação — v${snap.versao || '?'} vs Atual (v${personaAtual.versao || 1})</h3>
+          <div class="persona-historico-hint">Campos com diferença aparecem destacados</div>
+        </div>
+        <button class="persona-editor-close" type="button">×</button>
+      </div>
+      <div class="persona-comparacao-body">
+        ${CAMPOS.map(c => {
+          const antes = JSON.stringify(snap[c.key] ?? null);
+          const depois = JSON.stringify(personaAtual[c.key] ?? null);
+          const diferente = antes !== depois;
+          return `
+            <div class="persona-comparacao-bloco ${diferente ? 'diferente' : 'igual'}">
+              <div class="persona-comparacao-titulo">${c.titulo} ${diferente ? '<span class="persona-comparacao-tag">diferente</span>' : '<span class="persona-comparacao-tag-igual">igual</span>'}</div>
+              <div class="persona-comparacao-lado-a-lado">
+                <div class="persona-comparacao-coluna">
+                  <div class="persona-comparacao-coluna-titulo">v${snap.versao || '?'} (antiga)</div>
+                  <div class="persona-comparacao-valor">${renderValorHTML(c.key, snap[c.key])}</div>
+                </div>
+                <div class="persona-comparacao-coluna">
+                  <div class="persona-comparacao-coluna-titulo">Atual (v${personaAtual.versao || 1})</div>
+                  <div class="persona-comparacao-valor">${renderValorHTML(c.key, personaAtual[c.key])}</div>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const fechar = () => overlay.remove();
+  overlay.querySelector('.persona-editor-close').addEventListener('click', fechar);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) fechar(); });
 }

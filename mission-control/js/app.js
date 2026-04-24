@@ -359,7 +359,7 @@ async function renderPersonaDetalhe(slug) {
   const total = c.total_fontes || 0;
   const temDados = total > 0;
 
-  const { fetchPersonaCompleta, gerarPersonaComProgresso, renderBlocoNoPainel, exportarPDF } = await import('./personas.js?v=20260424a');
+  const { fetchPersonaCompleta, gerarPersonaComProgresso, renderBlocoNoPainel, exportarPDF, abrirHistoricoVersoes } = await import('./personas.js?v=20260424h');
   const persona = temDados ? await fetchPersonaCompleta(slug) : null;
 
   const ultimaSintese = persona
@@ -381,6 +381,11 @@ async function renderPersonaDetalhe(slug) {
           ].filter(Boolean)),
         ]),
         el('div', { class: 'cerebro-detail-actions' }, [
+          persona ? el('button', {
+            class: 'btn',
+            onclick: () => abrirHistoricoVersoes(persona, c.nome),
+            title: 'Ver versões anteriores e restaurar',
+          }, '📜 Histórico') : null,
           persona ? el('button', {
             class: 'btn',
             onclick: () => exportarPDF(persona, c.nome),
@@ -441,8 +446,8 @@ async function iniciarGeracaoComSquad(slug) {
   const c = cerebros.find(x => x.slug === slug);
   const cerebroNome = c?.nome || slug;
 
-  const { abrirSquadModal } = await import('./squad-modal.js?v=20260424g');
-  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260424g');
+  const { abrirSquadModal } = await import('./squad-modal.js?v=20260424h');
+  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260424h');
 
   try {
     // apiCall e resolvida pelo roteiro. Encapsulamos a chamada real numa promise unica.
@@ -462,7 +467,7 @@ async function iniciarGeracaoComSquad(slug) {
 }
 
 async function iniciarGeracaoComBarra(slug) {
-  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260424g');
+  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260424h');
 
   // Overlay modal centralizado — impossivel de nao ver
   const overlay = el('div', { class: 'persona-progresso-overlay' }, [

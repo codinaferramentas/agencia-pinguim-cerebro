@@ -3,8 +3,8 @@
    instancia a engine, roda o roteiro escolhido e retorna a promise final.
 */
 
-import { criarEngine, SQUAD_AGENTS } from './squad-animation.js?v=20260424g';
-import { ROTEIROS } from './squad-roteiros.js?v=20260424g';
+import { criarEngine, SQUAD_AGENTS } from './squad-animation.js?v=20260424h';
+import { ROTEIROS } from './squad-roteiros.js?v=20260424h';
 
 export async function abrirSquadModal({ roteiro, apiCall, titulo, subtitulo, cerebroNome }) {
   const roteiroFn = ROTEIROS[roteiro];
