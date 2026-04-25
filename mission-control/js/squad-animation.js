@@ -563,7 +563,7 @@ export function criarEngine(canvas) {
     // Diretoria Pinguim — board, falam de decisao/estrategia/audiencia
     luiz:    ['Numero bate?', '📊', 'Aprovado', 'Meta?', 'CAC tá ok', 'Caixa firme', '✅', 'Bora dobrar'],
     pedro:   ['Estrategia', '♟', 'Tese forte', 'Funil...', 'Campanha?', 'Timing certo', 'Vai dar', '🎯'],
-    micha:   ['Audiencia!', '✨', 'Reels viral', 'Cliente novo', '📱', 'Posiciona', 'Marca', 'Vitrine'],
+    micha:   ['Lo-fi!', '📱', 'Reels viral', 'Stories hoje', '✨', 'Bio nova', 'Audiencia!', 'Postagem', 'Conteudo lo-fi', 'Viralizou', 'Salvamentos', 'Carrossel', '🎬', 'Engajamento', 'Tem que postar'],
     // Marketing
     aurora:  ['Persona...', '💡', 'Copy nova!', 'Testa isso', '✍', 'Hmm...', '📝', 'Qual dor?'],
     codina:  ['Automatiza', '🤖', 'Roda IA', 'Deploy ok', '⚙', 'Otimiza CAC', 'Stack nova', 'Edge function'],
@@ -576,15 +576,20 @@ export function criarEngine(canvas) {
 
   // Conversa de reuniao na Diretoria — quando 2+ socios estao idle juntos
   // Sequencia de falas curtas trocadas em ordem (Luiz, Pedro, Micha)
+  // Micha SEMPRE puxa pro contexto dele: Instagram, conteudo lo-fi, audiencia, stories, reels, bio, viral
   const CONVERSAS_DIRETORIA = [
-    ['Bora analisar', 'Tese ok', 'Audiencia comprou'],
-    ['Numero ta bom?', 'Vai dar', 'Cliente quente'],
-    ['Campanha?', 'Funil pronto', 'Reels viral'],
-    ['CAC subiu', 'Estuda criativo', 'Refaz vitrine'],
-    ['Meta do mes', 'Tese bate', 'Tracao boa'],
-    ['Aprova oferta?', 'Testa pequeno', 'Lanca pra base'],
+    ['Bora analisar', 'Tese ok', 'Reels viralizou'],
+    ['Numero ta bom?', 'Vai dar', 'Stories bombando'],
+    ['Campanha?', 'Funil pronto', 'Conteudo lo-fi'],
+    ['CAC subiu', 'Estuda criativo', 'Posta mais lo-fi'],
+    ['Meta do mes', 'Tese bate', 'Engajamento alto'],
+    ['Aprova oferta?', 'Testa pequeno', 'Lanca no Stories'],
     ['Caixa firme', 'Investe mais', 'Compra audiencia'],
-    ['Novo produto?', 'Posiciona bem', 'Marca cresce'],
+    ['Novo produto?', 'Posiciona bem', 'Bio atualizada'],
+    ['Faturamento ok', 'Tracao boa', 'Salvamentos subindo'],
+    ['Reuniao da semana', 'Foco no funil', 'Carrossel novo'],
+    ['Concorrente?', 'A gente cresce', 'Lo-fi vence sempre'],
+    ['Vai escalar?', 'Estrutura ok', 'Audiencia firme'],
   ];
 
   // Sorteia uma acao idle variada na casa do agente pra dar vida ao cenario
