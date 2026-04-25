@@ -4,7 +4,7 @@
 
 import { dataMode, fetchOperacaoData, fetchRoadmapData, fetchCerebrosCatalogo } from './sb-client.js?v=20260421p';
 import { renderHome } from './home.js?v=20260421p';
-import { renderCerebros, initDrawer } from './cerebros.js?v=20260421p';
+import { renderCerebros, initDrawer, abrirCerebroDetalhe } from './cerebros.js?v=20260421p';
 import { renderCrons } from './crons.js?v=20260421p';
 import { renderSkills } from './skills.js?v=20260421p';
 import { renderStub } from './stubs.js?v=20260421p';
@@ -109,47 +109,57 @@ function setupMobileMenu() {
 
 function setupNav() {
   $$('.nav-item').forEach(item => {
-    item.addEventListener('click', () => {
+    item.addEventListener('click', async () => {
       const pageSlug = item.dataset.page;
       if (item.classList.contains('has-sub')) {
-        abrirSubnav(pageSlug);
-        // No mobile, mantem menu aberto pro subnav cobrir por cima
+        // Navega + carrega subnav em paralelo, mas espera AMBOS terminarem
+        await Promise.all([navegar(pageSlug), abrirSubnav(pageSlug)]);
       } else {
         fecharSubnav();
         if (isMobile()) fecharMobileMenu();
+        await navegar(pageSlug);
       }
-      navegar(pageSlug);
     });
   });
 
   // Seta "Voltar" do subnav: limpa detalhe e volta pra listagem da página
   // que está aberta no subnav (Cérebros ou Personas).
-  $('#subnav-back')?.addEventListener('click', () => {
+  $('#subnav-back')?.addEventListener('click', async () => {
     const page = subnavPageAtual || paginaAtual;
     fecharSubnav();
-    if (page) navegar(page);
-    // No mobile, fecha o menu completo apos voltar
+    if (page) await navegar(page);
     if (isMobile()) fecharMobileMenu();
   });
 
-  // Quando usuário seleciona cérebro/persona no subnav, já garante que
-  // a página certa está visível + renderizada antes de abrir o detalhe.
-  // (se nunca foi renderizada, os handlers do detalhe nao estao no DOM)
+  // ---- Roteamento canonico de detalhe (Cerebro / Persona / Squad) ----
+  // Fluxo unico: subnav clica -> dispara evento -> aqui SEMPRE garante
+  // navegar+renderizar a pagina ANTES de abrir o detalhe. Sem race.
   window.addEventListener('cerebro:select', async (ev) => {
     const slug = ev.detail?.slug;
     if (!slug) return;
-    if (paginaAtual !== 'cerebros') {
-      // Renderiza primeiro pra garantir que listeners internos estao ativos
-      await navegar('cerebros');
-    }
+    await irParaDetalhe('cerebros', slug);
   });
   window.addEventListener('persona:select', async (ev) => {
     const slug = ev.detail?.slug;
     if (!slug) return;
-    if (paginaAtual !== 'personas') {
-      await navegar('personas');
-    }
+    await irParaDetalhe('personas', slug);
   });
+}
+
+// Garante: pagina ativa+renderizada -> abre detalhe especifico.
+// Sem essa serializacao acontecia race (clique rapido na sidebar abria
+// detalhe na pagina errada porque o listener interno ainda nao existia).
+async function irParaDetalhe(pagina, slug) {
+  // 1. Navega ate a pagina (await garante render completo)
+  if (paginaAtual !== pagina) {
+    await navegar(pagina);
+  }
+  // 2. Abre detalhe — funcao explicita ao inves de listener interno
+  if (pagina === 'cerebros') {
+    await abrirCerebroDetalhe(slug);
+  } else if (pagina === 'personas') {
+    await renderPersonaDetalhe(slug);
+  }
 }
 
 /* -------- Sub-sidebar contextual (drill-down estilo Vercel) -------- */
@@ -356,17 +366,10 @@ async function atualizarStatusbar() {
 
 /* -------- Telas migradas do V0 antigo -------- */
 
-/* Personas — output gerado a partir do Cérebro. Editável com aviso. */
-let personasListenerReady = false;
+/* Personas — output gerado a partir do Cérebro. Editável com aviso.
+   Listener de persona:select vive em setupNav() (roteamento canonico),
+   nao aqui — pra evitar race condition de "clica antes do render". */
 async function renderPersonas(slugPreSelecionado) {
-  if (!personasListenerReady) {
-    personasListenerReady = true;
-    window.addEventListener('persona:select', (ev) => {
-      const slug = ev.detail?.slug;
-      if (slug) renderPersonaDetalhe(slug);
-    });
-  }
-
   const page = $('#page-personas');
   page.innerHTML = '';
 

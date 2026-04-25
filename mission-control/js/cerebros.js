@@ -18,17 +18,8 @@ const el = (tag, attrs = {}, children = []) => {
 };
 
 let cerebrosCache = [];
-let cerebrosListenerReady = false;
 
 export async function renderCerebros() {
-  if (!cerebrosListenerReady) {
-    cerebrosListenerReady = true;
-    window.addEventListener('cerebro:select', (ev) => {
-      const slug = ev.detail?.slug;
-      if (slug) abrirCerebroDetalhe(slug);
-    });
-  }
-
   const page = document.getElementById('page-cerebros');
   page.innerHTML = '';
   page.append(el('div', { html: '<div style="padding:3rem;color:var(--fg-muted);text-align:center">Carregando cérebros…</div>' }));
@@ -246,7 +237,7 @@ let pecasCache = [];
 let cerebroAtual = null;
 let viewModoAtual = 'kanban';
 
-async function abrirCerebroDetalhe(slug) {
+export async function abrirCerebroDetalhe(slug) {
   cerebroAtual = cerebrosCache.find(c => c.slug === slug);
   if (!cerebroAtual) return;
 
