@@ -1892,9 +1892,44 @@ function renderStepAvulso() {
         });
 
         if ((prep.total_pendentes || 0) === 0) {
-          squad.sinalizarConclusao({ ok: true, vazio: true });
-          status.innerHTML = '<strong>⚠ Arquivo já existia</strong> (dedup por sha256) ou não tinha texto extraível.';
+          // Descobre o motivo real consultando o status do arquivo recém-uploadado
+          const { data: arqInfo } = await sb.from('ingest_arquivos')
+            .select('status, motivo_erro, nome_original')
+            .eq('lote_id', lote.id).limit(1).single();
+
           progressoBar.style.width = '100%';
+          progressoBar.style.background = 'var(--warning, #f59e0b)';
+          squad.sinalizarConclusao({ ok: false, vazio: true });
+
+          const ehDuplicado = (prep.duplicados_historico || 0) > 0;
+          const ehQuarentena = arqInfo?.status === 'quarentena';
+
+          if (ehDuplicado) {
+            status.innerHTML = '<strong style="color:var(--warning,#f59e0b)">⚠ Arquivo já estava no Cérebro</strong>';
+            areaProgresso.append(el('div', {
+              style: 'margin-top:1rem;padding:1rem;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:6px;font-size:.875rem;line-height:1.5;color:var(--fg-muted)'
+            }, 'O sistema detectou (via hash do conteúdo) que este arquivo já foi adicionado anteriormente. Nada foi alterado.'));
+          } else if (ehQuarentena) {
+            status.innerHTML = '<strong style="color:var(--warning,#f59e0b)">⚠ Em quarentena</strong>';
+            areaProgresso.append(el('div', {
+              style: 'margin-top:1rem;padding:1rem;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:6px;font-size:.875rem;line-height:1.5'
+            }, [
+              el('div', { style: 'color:var(--warning,#f59e0b);font-weight:600;margin-bottom:.5rem' }, 'Arquivo não foi adicionado ao Cérebro'),
+              el('div', { style: 'color:var(--fg-muted);margin-bottom:.5rem' }, [
+                'Motivo: ',
+                el('strong', { style: 'color:var(--fg)' }, arqInfo?.motivo_erro || 'sem texto extraível'),
+              ]),
+              el('div', { style: 'color:var(--fg-muted);font-size:.8125rem' },
+                'Arquivos com texto em camada de imagem (PDFs escaneados, páginas com layout gráfico, screenshots) não geram conteúdo indexável. Soluções: (1) cole o texto manualmente como tipo "Página de venda" ou "Aula", ou (2) salve como .txt/.md/.docx com texto selecionável.'
+              ),
+            ]));
+          } else {
+            status.innerHTML = '<strong style="color:var(--warning,#f59e0b)">⚠ Nada a processar</strong>';
+            areaProgresso.append(el('div', {
+              style: 'margin-top:1rem;padding:1rem;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:6px;font-size:.875rem;line-height:1.5;color:var(--fg-muted)'
+            }, 'O arquivo não gerou conteúdo indexável. Verifique se ele tem texto selecionável e tente novamente, ou cole o conteúdo manualmente.'));
+          }
+
           areaProgresso.append(el('div', { class: 'progresso-footer' }, [
             el('button', { class: 'btn btn-primary', onclick: () => { fecharModal(); abrirCerebroDetalhe(cerebroAtual.slug); } }, 'Fechar'),
           ]));
@@ -1920,22 +1955,49 @@ function renderStepAvulso() {
         }
 
         progressoBar.style.width = '100%';
-        status.innerHTML = '<strong>✅ Concluído</strong>';
-        squad.sinalizarConclusao({ ok: true });
-        // Refresca cache + subnav (total de fontes mudou)
+
+        // Verifica se o arquivo foi pra quarentena (PDF escaneado, binario sem texto, etc)
+        const { data: loteFinal } = await sb.from('ingest_lotes')
+          .select('log_md, fontes_criadas, chunks_criados, em_quarentena')
+          .eq('id', lote.id).single();
+        const { data: arqInfo } = await sb.from('ingest_arquivos')
+          .select('status, motivo_erro, nome_original')
+          .eq('lote_id', lote.id).limit(1).single();
+
+        const foiQuarentena = arqInfo?.status === 'quarentena' || (loteFinal?.em_quarentena || 0) > 0;
+
+        if (foiQuarentena) {
+          progressoBar.style.background = 'var(--warning, #f59e0b)';
+          status.innerHTML = `<strong style="color:var(--warning,#f59e0b)">⚠ Em quarentena</strong>`;
+          squad.sinalizarConclusao({ ok: false, mensagem: 'Arquivo em quarentena' });
+          areaProgresso.append(el('div', {
+            style: 'margin-top:1rem;padding:1rem;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:6px;font-size:.875rem;line-height:1.5'
+          }, [
+            el('div', { style: 'color:var(--warning,#f59e0b);font-weight:600;margin-bottom:.5rem' }, 'Arquivo não foi adicionado ao Cérebro'),
+            el('div', { style: 'color:var(--fg-muted);margin-bottom:.5rem' }, [
+              'Motivo: ',
+              el('strong', { style: 'color:var(--fg)' }, arqInfo?.motivo_erro || 'sem texto extraível'),
+            ]),
+            el('div', { style: 'color:var(--fg-muted);font-size:.8125rem' },
+              'Arquivos com texto em camada de imagem (PDFs escaneados, páginas com layout gráfico, screenshots) não geram conteúdo indexável. Soluções: (1) cole o texto manualmente como tipo "Página de venda" ou "Aula", ou (2) salve como .txt/.md/.docx com texto selecionável.'
+            ),
+          ]));
+        } else {
+          status.innerHTML = '<strong>✅ Concluído</strong>';
+          squad.sinalizarConclusao({ ok: true });
+        }
+
+        // Refresca cache + subnav (total de fontes mudou — só se não foi quarentena, mas refresca pra garantir)
         cerebrosCache = await fetchCerebrosCatalogo();
         window.dispatchEvent(new CustomEvent('dados:atualizado', { detail: { tipo: 'cerebro_alimentado', slug: cerebroAtual?.slug } }));
 
-        const { data: loteFinal } = await sb.from('ingest_lotes')
-          .select('log_md, fontes_criadas, chunks_criados')
-          .eq('id', lote.id).single();
         if (loteFinal?.log_md) {
           const relatorioEl = el('pre', { class: 'progresso-relatorio' }, loteFinal.log_md);
           areaProgresso.append(relatorioEl);
           requestAnimationFrame(() => relatorioEl.scrollIntoView({ behavior: 'smooth', block: 'start' }));
         }
         areaProgresso.append(el('div', { class: 'progresso-footer' }, [
-          el('button', { class: 'btn btn-primary', onclick: () => { fecharModal(); abrirCerebroDetalhe(cerebroAtual.slug); } }, 'Fechar e ver fontes'),
+          el('button', { class: 'btn btn-primary', onclick: () => { fecharModal(); abrirCerebroDetalhe(cerebroAtual.slug); } }, foiQuarentena ? 'Fechar' : 'Fechar e ver fontes'),
         ]));
 
       } catch (e) {
