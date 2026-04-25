@@ -1018,6 +1018,116 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   font-weight: 600;
 }
 
+.home-card-custo {
+  background: linear-gradient(135deg, rgba(232,92,0,0.06), var(--surface-2));
+  border-color: rgba(232,92,0,0.25);
+}
+.home-card-custo .big { color: var(--pc); }
+
+.home-painel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 1.25rem;
+  box-shadow: var(--elev-1);
+}
+.home-painel h3 {
+  margin-bottom: 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--fg-title);
+}
+.home-top-lista, .home-ativ-lista, .home-sug-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+.home-top-item {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.625rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.home-top-item:last-child { border-bottom: 0; }
+.home-top-pos {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--fg-muted);
+  font-weight: 700;
+  width: 28px;
+}
+.home-top-nome {
+  font-weight: 600;
+  color: var(--fg-title);
+  font-size: 0.875rem;
+}
+.home-top-meta {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  margin-top: 2px;
+}
+.home-top-bar-wrap {
+  width: 80px;
+  height: 4px;
+  background: var(--bg-base);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.home-top-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--pc), #ff8a3d);
+}
+.home-ativ-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.home-ativ-item:last-child { border-bottom: 0; }
+.home-ativ-tipo {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  background: var(--bg-base);
+  display: grid; place-items: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.home-ativ-titulo {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--fg-title);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home-ativ-meta {
+  font-size: 0.6875rem;
+  color: var(--fg-muted);
+  margin-top: 2px;
+}
+.home-sug-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.875rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.home-sug-item:hover {
+  border-color: var(--pc);
+  transform: translateX(2px);
+}
+.home-sug-icone { font-size: 1.125rem; }
+.home-sug-seta {
+  font-size: 1.25rem;
+  color: var(--fg-muted);
+}
+
 /* =====================================================================
    CÉREBROS
    ===================================================================== */
