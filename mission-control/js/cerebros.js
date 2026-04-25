@@ -161,29 +161,10 @@ async function abrirModalNovoProduto() {
       el('button', { class: 'modal-close', onclick: fechar }, '×'),
     ]),
     el('div', { class: 'modal-body' }, [
-      // Caminho A — produto já cadastrado
-      pendentes.length > 0
-        ? el('div', { class: 'novo-cerebro-secao' }, [
-            el('div', { class: 'novo-cerebro-label' }, '📦 Produto já cadastrado'),
-            el('div', { class: 'novo-cerebro-help' }, 'Estes produtos já existem no sistema. Clique pra começar a alimentar.'),
-            el('div', { class: 'novo-cerebro-lista' }, pendentes.map(p => el('button', {
-              class: 'novo-cerebro-item',
-              onclick: async () => { fechar(); await cerebrosCache; cerebrosCache = await fetchCerebrosCatalogo(); abrirCerebroDetalhe(p.slug); },
-            }, [
-              el('span', { class: 'novo-cerebro-emoji' }, p.emoji || '📦'),
-              el('div', { style: 'flex:1;text-align:left' }, [
-                el('div', { style: 'font-weight:600' }, p.nome),
-                el('div', { style: 'font-size:.75rem;color:var(--fg-muted)' }, p.descricao || '—'),
-              ]),
-              el('span', { style: 'font-size:.75rem;color:var(--accent)' }, 'Alimentar →'),
-            ]))),
-          ])
-        : null,
-
-      // Caminho B — produto novo
+      // Caminho A — produto novo (em destaque agora — é o caso principal)
       el('div', { class: 'novo-cerebro-secao' }, [
-        el('div', { class: 'novo-cerebro-label' }, '➕ Produto novo'),
-        el('div', { class: 'novo-cerebro-help' }, 'Cadastra o produto e cria o Cérebro dele.'),
+        el('div', { class: 'novo-cerebro-label' }, '➕ Cadastrar produto novo'),
+        el('div', { class: 'novo-cerebro-help' }, 'Cria um Cérebro novo. Pode alimentar agora ou depois — fica disponível na lista.'),
         el('form', {
           class: 'novo-cerebro-form',
           onsubmit: async (ev) => {
@@ -225,6 +206,31 @@ async function abrirModalNovoProduto() {
           el('button', { type: 'submit', class: 'btn btn-primary' }, 'Cadastrar + Alimentar'),
         ]),
       ]),
+
+      // Atalho opcional — abrir Cérebros já existentes que ainda estão sem fontes
+      pendentes.length > 0
+        ? el('div', {
+            class: 'novo-cerebro-secao',
+            style: 'border-top:1px solid var(--border-subtle);padding-top:1.25rem;margin-top:1.25rem',
+          }, [
+            el('div', {
+              style: 'font-size:.75rem;color:var(--fg-muted);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:0.08em;font-family:var(--font-mono)',
+            }, 'Atalho · Cérebros existentes sem fontes'),
+            el('div', { style: 'font-size:.8125rem;color:var(--fg-muted);margin-bottom:.625rem' },
+              'Já cadastrados — clique pra abrir e começar a alimentar quando quiser:'),
+            el('div', { class: 'novo-cerebro-lista' }, pendentes.map(p => el('button', {
+              class: 'novo-cerebro-item',
+              onclick: async () => { fechar(); await cerebrosCache; cerebrosCache = await fetchCerebrosCatalogo(); abrirCerebroDetalhe(p.slug); },
+            }, [
+              el('span', { class: 'novo-cerebro-emoji' }, p.emoji || '📦'),
+              el('div', { style: 'flex:1;text-align:left' }, [
+                el('div', { style: 'font-weight:600' }, p.nome),
+                el('div', { style: 'font-size:.75rem;color:var(--fg-muted)' }, p.descricao || '—'),
+              ]),
+              el('span', { style: 'font-size:.75rem;color:var(--fg-muted)' }, 'Abrir →'),
+            ]))),
+          ])
+        : null,
     ]),
   );
 

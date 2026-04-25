@@ -30,7 +30,7 @@ const ICONES = {
 
 const DESCRICOES = {
   openai: 'Modelos de IA (Vision, Whisper, GPT, Embeddings). Configurada via variável de ambiente da Edge Function.',
-  apify: 'Um token só, todos os atores. Cole sua chave Apify e o sistema escolhe o ator certo conforme a URL: Reels do Instagram (com transcrição do áudio), TikTok, YouTube, e mais. Conta em apify.com com US$ 5 grátis por mês.',
+  apify: 'Um token só, todos os atores. Cole sua chave Apify e o sistema escolhe o ator certo conforme a URL: Reels do Instagram (com transcrição do áudio), TikTok, YouTube (fallback), site qualquer (página de vendas, blog), Biblioteca de Anúncios do Meta (espiar concorrente). Conta em apify.com com US$ 5 grátis por mês.',
   'youtube-legendas': 'Extrai legendas geradas automaticamente pelo YouTube. Sem chave, sem custo. Funciona em ~95% dos vídeos. Quando não funciona, o sistema cai pra Apify (se configurado).',
   supabase: 'Banco, Storage e Auth do sistema. Configurado via variáveis de ambiente.',
 };

@@ -56,13 +56,18 @@ async function requireAuth(req: Request): Promise<boolean> {
 }
 
 // ---------- URL parsing ----------
-function detectarTipoUrl(url: string): 'youtube' | 'instagram' | 'tiktok' | 'desconhecido' {
+type TipoUrl = 'youtube' | 'instagram' | 'tiktok' | 'meta-ads' | 'site' | 'desconhecido';
+
+function detectarTipoUrl(url: string): TipoUrl {
   try {
     const u = new URL(url);
     const h = u.hostname.replace(/^www\./, '');
     if (h === 'youtube.com' || h === 'youtu.be' || h === 'm.youtube.com') return 'youtube';
     if (h === 'instagram.com') return 'instagram';
     if (h === 'tiktok.com' || h === 'vm.tiktok.com') return 'tiktok';
+    if ((h === 'facebook.com' || h === 'm.facebook.com') && u.pathname.startsWith('/ads/library')) return 'meta-ads';
+    // Qualquer URL http(s) cai como "site" (pagina de vendas, blog, artigo, etc)
+    if (u.protocol === 'http:' || u.protocol === 'https:') return 'site';
     return 'desconhecido';
   } catch { return 'desconhecido'; }
 }
@@ -184,9 +189,33 @@ const APIFY_ATORES: Record<string, { actor: string; buildInput: (url: string) =>
     }),
     custoEstimado: 0.005,
   },
+  site: {
+    // Web scraper genérico — pega texto de qualquer URL (página de vendas, blog, artigo)
+    actor: 'apify~website-content-crawler',
+    buildInput: (url: string) => ({
+      startUrls: [{ url }],
+      maxCrawlPages: 1,           // só a página em questão (sem seguir links)
+      maxCrawlDepth: 0,
+      crawlerType: 'cheerio',     // mais rápido e barato que browser
+      saveHtml: false,
+      saveMarkdown: true,
+      removeCookieWarnings: true,
+      maxRequestRetries: 2,
+    }),
+    custoEstimado: 0.002,
+  },
+  'meta-ads': {
+    // Meta Ad Library — espia anúncios de concorrente
+    actor: 'curious_coder~facebook-ads-library-scraper',
+    buildInput: (url: string) => ({
+      urls: [{ url }],
+      count: 50,                  // até 50 anúncios da query
+    }),
+    custoEstimado: 0.01,
+  },
 };
 
-async function tentarApify(url: string, tipo: 'instagram' | 'tiktok' | 'youtube'): Promise<{ titulo: string; texto: string; custo_usd: number; metodo: string } | null> {
+async function tentarApify(url: string, tipo: 'instagram' | 'tiktok' | 'youtube' | 'site' | 'meta-ads'): Promise<{ titulo: string; texto: string; custo_usd: number; metodo: string } | null> {
   const sb = sbAdmin();
   const { data: integ } = await sb.from('integracoes')
     .select('chave_secreta, status')
@@ -224,63 +253,89 @@ async function tentarApify(url: string, tipo: 'instagram' | 'tiktok' | 'youtube'
     const partes: string[] = [];
     let titulo = '';
 
-    items.forEach((post: any, idx: number) => {
-      const linhas: string[] = [];
+    // ----- Tratamento por tipo (cada ator retorna estrutura diferente) -----
+    if (tipo === 'site') {
+      // website-content-crawler: { url, title, text, markdown, metadata }
+      items.forEach((page: any, idx: number) => {
+        if (idx === 0) titulo = page.title || page.metadata?.title || `Página ${url.slice(-40)}`;
+        const conteudo = page.markdown || page.text || page.content || '';
+        if (conteudo) partes.push(conteudo.trim());
+      });
+    } else if (tipo === 'meta-ads') {
+      // Ad Library: cada item é um anúncio com adText, snapshot, etc
+      titulo = `Biblioteca de Anúncios · ${url.slice(-50)}`;
+      partes.push(`URL pesquisada: ${url}\n\nTotal de anúncios capturados: ${items.length}\n`);
+      items.forEach((ad: any, idx: number) => {
+        const linhas: string[] = [`--- Anúncio ${idx + 1} ---`];
+        if (ad.pageName) linhas.push(`Página: ${ad.pageName}`);
+        const texto = ad.adText || ad.snapshot?.body?.text || ad.body || '';
+        if (texto) linhas.push(texto.trim());
+        if (ad.snapshot?.title) linhas.push(`Headline: ${ad.snapshot.title}`);
+        if (ad.snapshot?.cta_text) linhas.push(`CTA: ${ad.snapshot.cta_text}`);
+        if (ad.startDate) linhas.push(`Veiculação desde: ${ad.startDate}`);
+        if (ad.publisherPlatforms?.length) linhas.push(`Plataformas: ${ad.publisherPlatforms.join(', ')}`);
+        partes.push(linhas.join('\n'));
+      });
+    } else {
+      // Instagram / TikTok / YouTube — caminho original
+      items.forEach((post: any, idx: number) => {
+        const linhas: string[] = [];
 
-      // Titulo do primeiro item vira o titulo da fonte
-      if (idx === 0) {
-        titulo = post.title || post.caption?.slice(0, 80) || post.text?.slice(0, 80) || `${tipo} ${url.slice(-30)}`;
-      }
+        // Titulo do primeiro item vira o titulo da fonte
+        if (idx === 0) {
+          titulo = post.title || post.caption?.slice(0, 80) || post.text?.slice(0, 80) || `${tipo} ${url.slice(-30)}`;
+        }
 
-      // Header do item (se for multi)
-      if (items.length > 1) linhas.push(`--- Item ${idx + 1} ---`);
+        // Header do item (se for multi)
+        if (items.length > 1) linhas.push(`--- Item ${idx + 1} ---`);
 
-      // Caption / texto
-      const caption = post.caption || post.text || post.title || '';
-      if (caption) linhas.push(caption.trim());
+        // Caption / texto
+        const caption = post.caption || post.text || post.title || '';
+        if (caption) linhas.push(caption.trim());
 
-      // Transcript (Reel scraper retorna isso direto, TikTok via subtitle, YouTube via subtitle)
-      const transcript = post.transcript || post.subtitles || post.subtitle || post.captionText;
-      if (transcript && typeof transcript === 'string' && transcript.trim()) {
-        linhas.push('\n[Transcrição do áudio]');
-        linhas.push(transcript.trim());
-      }
+        // Transcript (Reel scraper retorna isso direto, TikTok via subtitle, YouTube via subtitle)
+        const transcript = post.transcript || post.subtitles || post.subtitle || post.captionText;
+        if (transcript && typeof transcript === 'string' && transcript.trim()) {
+          linhas.push('\n[Transcrição do áudio]');
+          linhas.push(transcript.trim());
+        }
 
-      // Hashtags
-      if (Array.isArray(post.hashtags) && post.hashtags.length) {
-        linhas.push(`Hashtags: ${post.hashtags.map((h: string) => h.startsWith('#') ? h : '#' + h).join(' ')}`);
-      }
+        // Hashtags
+        if (Array.isArray(post.hashtags) && post.hashtags.length) {
+          linhas.push(`Hashtags: ${post.hashtags.map((h: string) => h.startsWith('#') ? h : '#' + h).join(' ')}`);
+        }
 
-      // Musica
-      if (post.musicInfo?.song_name || post.musicMeta?.musicName) {
-        linhas.push(`Som: ${post.musicInfo?.song_name || post.musicMeta?.musicName}`);
-      }
+        // Musica
+        if (post.musicInfo?.song_name || post.musicMeta?.musicName) {
+          linhas.push(`Som: ${post.musicInfo?.song_name || post.musicMeta?.musicName}`);
+        }
 
-      // Metricas (sinaliza viralidade)
-      const metricas: string[] = [];
-      if (post.likesCount != null) metricas.push(`${post.likesCount} curtidas`);
-      if (post.diggCount != null) metricas.push(`${post.diggCount} curtidas`);
-      if (post.viewsCount != null) metricas.push(`${post.viewsCount} views`);
-      if (post.playsCount != null) metricas.push(`${post.playsCount} plays`);
-      if (post.commentsCount != null) metricas.push(`${post.commentsCount} comentários`);
-      if (post.commentCount != null) metricas.push(`${post.commentCount} comentários`);
-      if (post.shareCount != null) metricas.push(`${post.shareCount} compart.`);
-      if (post.viewCount != null) metricas.push(`${post.viewCount} views`);
-      if (metricas.length) linhas.push(`Métricas: ${metricas.join(' · ')}`);
+        // Metricas (sinaliza viralidade)
+        const metricas: string[] = [];
+        if (post.likesCount != null) metricas.push(`${post.likesCount} curtidas`);
+        if (post.diggCount != null) metricas.push(`${post.diggCount} curtidas`);
+        if (post.viewsCount != null) metricas.push(`${post.viewsCount} views`);
+        if (post.playsCount != null) metricas.push(`${post.playsCount} plays`);
+        if (post.commentsCount != null) metricas.push(`${post.commentsCount} comentários`);
+        if (post.commentCount != null) metricas.push(`${post.commentCount} comentários`);
+        if (post.shareCount != null) metricas.push(`${post.shareCount} compart.`);
+        if (post.viewCount != null) metricas.push(`${post.viewCount} views`);
+        if (metricas.length) linhas.push(`Métricas: ${metricas.join(' · ')}`);
 
-      // Comentarios recentes (se tiver — vira sinal de objeção/depoimento)
-      const comments = post.latestComments || post.comments || [];
-      if (Array.isArray(comments) && comments.length) {
-        linhas.push('\n[Comentários recentes]');
-        comments.slice(0, 10).forEach((c: any) => {
-          const txt = c.text || c.content || '';
-          const autor = c.ownerUsername || c.user || c.uniqueId || '';
-          if (txt) linhas.push(`@${autor}: ${txt}`);
-        });
-      }
+        // Comentarios recentes (se tiver — vira sinal de objeção/depoimento)
+        const comments = post.latestComments || post.comments || [];
+        if (Array.isArray(comments) && comments.length) {
+          linhas.push('\n[Comentários recentes]');
+          comments.slice(0, 10).forEach((c: any) => {
+            const txt = c.text || c.content || '';
+            const autor = c.ownerUsername || c.user || c.uniqueId || '';
+            if (txt) linhas.push(`@${autor}: ${txt}`);
+          });
+        }
 
-      partes.push(linhas.join('\n'));
-    });
+        partes.push(linhas.join('\n'));
+      });
+    }
 
     const texto = partes.join('\n\n').trim();
     if (!texto || texto.length < 30) return null;
@@ -372,7 +427,7 @@ async function embed(textos: string[]): Promise<number[][]> {
 // ---------- Handler principal ----------
 async function processarUrl(url: string, cerebro_id: string) {
   const tipo = detectarTipoUrl(url);
-  if (tipo === 'desconhecido') throw new Error('URL nao reconhecida. Suportado: YouTube, Instagram, TikTok.');
+  if (tipo === 'desconhecido') throw new Error('URL inválida.');
 
   let resultado: { titulo: string; texto: string; custo_usd?: number; metodo: string } | null = null;
   let custo_total_usd = 0;
@@ -395,13 +450,19 @@ async function processarUrl(url: string, cerebro_id: string) {
         throw new Error('Vídeo sem legendas oficiais. Pra rodar fallback, configure Apify em "Integrações" no menu lateral.');
       }
     }
-  } else if (tipo === 'instagram' || tipo === 'tiktok') {
+  } else if (tipo === 'instagram' || tipo === 'tiktok' || tipo === 'site' || tipo === 'meta-ads') {
     const apify = await tentarApify(url, tipo);
     if (apify) {
       resultado = apify;
       custo_total_usd += apify.custo_usd;
     } else {
-      throw new Error(`Integracao Apify nao configurada. Configure em "Integrações" no menu lateral pra processar links de ${tipo}.`);
+      const labelTipo = {
+        instagram: 'Instagram',
+        tiktok: 'TikTok',
+        site: 'site (página de vendas, blog, artigo)',
+        'meta-ads': 'Biblioteca de Anúncios do Meta',
+      }[tipo];
+      throw new Error(`Integração Apify não configurada. Configure em "Integrações" no menu lateral pra processar links de ${labelTipo}.`);
     }
   }
 
