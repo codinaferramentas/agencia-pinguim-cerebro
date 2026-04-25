@@ -54,13 +54,24 @@ export async function gerar() {
         id: 'como-alimentar',
         titulo: 'Como o Cérebro é alimentado',
         html: `
-          <p>Existem três caminhos pra alimentar um Cérebro, e o sistema é desenhado pra que <strong>nenhum conhecimento se perca</strong>:</p>
+          <p>O sistema é onívoro: aceita praticamente qualquer formato de conteúdo, e usa IA quando precisa pra ler:</p>
+          <ul class="docs-list">
+            <li><strong>Texto</strong> (TXT, MD, CSV, JSON, HTML) — caminho rápido, custo zero</li>
+            <li><strong>PDF com texto selecionável</strong> — extrai direto, custo zero</li>
+            <li><strong>PDF gráfico ou escaneado</strong> — IA Vision lê automaticamente, ~R$ 0,15 por arquivo</li>
+            <li><strong>Imagem</strong> (PNG, JPG, screenshot, foto de quadro) — OCR via IA Vision, ~R$ 0,02</li>
+            <li><strong>Áudio</strong> (MP3, áudio do WhatsApp, OGG, M4A) — Whisper transcreve, ~R$ 0,03 por minuto</li>
+            <li><strong>URL do YouTube</strong> — primeiro tenta legendas oficiais (grátis), depois RapidAPI (~R$ 0,15)</li>
+            <li><strong>URL do Instagram/TikTok</strong> — extrai legenda + hashtags + métricas via Apify</li>
+          </ul>
+
+          <p>Existem três modos de entrada:</p>
           <ol>
-            <li><strong>Avulso</strong> — alguém da equipe sobe um arquivo único pelo painel. Ideal pra depoimento solto, sacada nova, página atualizada.</li>
-            <li><strong>Pacote ZIP</strong> — sobe vários arquivos de uma vez (ex: pasta com todas as aulas do produto). O sistema processa em ondas, sem travar.</li>
+            <li><strong>Avulso</strong> — sobe um arquivo único OU cola uma URL. Ideal pra depoimento solto, sacada nova, vídeo do YouTube específico.</li>
+            <li><strong>Pacote ZIP</strong> — sobe vários arquivos de uma vez (ex: pasta com todas as aulas do produto). Processa em ondas, sem travar.</li>
             <li><strong>Automático</strong> (em construção) — agentes monitorando Discord, WhatsApp, formulários. Quando aparece conteúdo novo, vai pro Cérebro certo sem ninguém precisar mexer.</li>
           </ol>
-          <p>Em todos os casos, cada peça que entra é processada pela IA: extraída, resumida, vetorizada e indexada. O custo de IA é minimizado por design — veja a doc de RAG e tokens pra entender como.</p>
+          <p>Em todos os casos, o sistema decide sozinho o melhor método. Se o custo de IA estimado passar de R$ 0,05, mostra um aviso antes — abaixo disso, processa silenciosamente.</p>
         `,
       },
       {

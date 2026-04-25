@@ -58,6 +58,13 @@ export const DOCS_CATALOGO = [
     meta: '5 min · módulo principal',
     secao: 'Módulos',
   },
+  {
+    slug: 'integracoes',
+    titulo: 'Integrações',
+    descricao: 'Serviços externos plugáveis (RapidAPI, Apify) pra captar conteúdo de YouTube, Instagram, TikTok. Configure uma vez, sistema usa quando precisar.',
+    meta: '3 min · captação',
+    secao: 'Engenharia',
+  },
 ];
 
 export function buscarDoc(slug) {

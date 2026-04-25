@@ -4,6 +4,7 @@ import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-clie
 import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421p';
 import { iniciarSquadParalelo } from './squad-modal.js?v=20260425e';
 import { iconeNode } from './icone.js?v=20260425g';
+import { processarUrl } from './integracoes.js?v=20260425n';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -1804,6 +1805,77 @@ function trocarStep(newStep) {
   card.append(newStep);
 }
 
+// Bloco "Cole uma URL" — reaproveitado pelo Avulso. Dispara processamento via Edge Function ingest-url.
+function blocoUrl(cerebroAtualRef) {
+  const wrap = el('div', { class: 'avulso-url-bloco' });
+  const inputUrl = el('input', {
+    type: 'url',
+    class: 'form-input',
+    placeholder: 'https://youtube.com/watch?v=… · https://instagram.com/p/… · https://tiktok.com/...',
+    style: 'width:100%',
+  });
+  const btnTranscrever = el('button', { class: 'btn btn-primary', type: 'button', style: 'margin-top:.5rem' }, '⬇ Trazer pro Cérebro');
+  const status = el('div', { class: 'avulso-url-status', style: 'display:none;margin-top:.75rem' });
+
+  btnTranscrever.addEventListener('click', async () => {
+    const url = inputUrl.value.trim();
+    if (!url) { status.style.display = ''; status.innerHTML = '<span style="color:var(--warning,#f59e0b)">Cole uma URL.</span>'; return; }
+
+    btnTranscrever.disabled = true;
+    btnTranscrever.innerHTML = '<span class="btn-spinner"></span> Processando…';
+    status.style.display = '';
+    status.innerHTML = '<span style="color:var(--fg-muted)">Buscando conteúdo da URL…</span>';
+
+    try {
+      const sb = getSupabase();
+      const { data: prod } = await sb.from('produtos').select('id').eq('slug', cerebroAtualRef.slug).single();
+      const { data: cer } = await sb.from('cerebros').select('id').eq('produto_id', prod.id).single();
+      if (!cer) throw new Error('Cérebro não encontrado.');
+
+      const r = await processarUrl(url, cer.id);
+      if (r.error) throw new Error(r.error);
+
+      const custoBrl = (Number(r.custo_usd || 0) * 5.5).toFixed(2);
+      const metodoLabel = r.metodo === 'youtube-legendas' ? 'Legendas oficiais (grátis)'
+        : r.metodo === 'youtube-rapidapi' ? 'RapidAPI'
+        : r.metodo?.startsWith('apify-') ? 'Apify'
+        : r.metodo;
+      status.innerHTML = `
+        <div style="padding:.75rem;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);border-radius:6px">
+          <div style="color:#10b981;font-weight:600;margin-bottom:.25rem">✓ Indexado no Cérebro</div>
+          <div style="font-size:.8125rem;color:var(--fg-muted);line-height:1.5">
+            <strong>${r.titulo || 'sem título'}</strong> · classificado como <strong>${r.tipo}</strong><br>
+            ${r.chunks} chunk${r.chunks === 1 ? '' : 's'} · método ${metodoLabel} · custo R$ ${custoBrl}
+          </div>
+        </div>
+      `;
+      inputUrl.value = '';
+      btnTranscrever.disabled = false;
+      btnTranscrever.innerHTML = '⬇ Trazer outra URL';
+
+      // Refresca cache global e notifica subnav
+      cerebrosCache = await fetchCerebrosCatalogo();
+      window.dispatchEvent(new CustomEvent('dados:atualizado', { detail: { tipo: 'cerebro_alimentado', slug: cerebroAtualRef.slug } }));
+    } catch (e) {
+      status.innerHTML = `
+        <div style="padding:.75rem;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:var(--danger);font-size:.875rem;line-height:1.5">
+          ${e.message || String(e)}
+        </div>
+      `;
+      btnTranscrever.disabled = false;
+      btnTranscrever.innerHTML = '⬇ Tentar de novo';
+    }
+  });
+
+  wrap.append(
+    el('label', {}, '🔗 URL (YouTube, Instagram, TikTok)'),
+    inputUrl,
+    btnTranscrever,
+    status,
+  );
+  return wrap;
+}
+
 /* --- PASSO 2A: Avulso (1 arquivo, mesmo motor do Pacote) ---
  * Estratégia: cria zip de 1 arquivo no browser (via JSZip CDN) e passa
  * pelo mesmo fluxo preparar → processar-onda. Garante que a classificação
@@ -2185,15 +2257,19 @@ function renderStepAvulso() {
     el('div', { class: 'modal-body' }, [
       el('div', { class: 'cron-infobox' }, [
         el('strong', {}, `📄 Avulso do ${cerebroAtual?.nome || ''}`),
-        el('p', {}, 'Sobe 1 arquivo por vez. Passa pelo mesmo motor do Pacote: extrai texto, classifica o tipo com IA (aula, página, depoimento…), e vetoriza pra busca semântica. Formatos: .pdf, .txt, .md, .csv, .html, .json.'),
+        el('p', {}, 'Sobe 1 arquivo OU cola uma URL (YouTube, Instagram, TikTok). O sistema lê o conteúdo e classifica automaticamente.'),
       ]),
       el('div', { class: 'field' }, [
-        el('label', {}, `Arquivo (limite: ${MAX_UPLOAD_MB}MB)`),
+        el('label', {}, `📎 Arquivo (limite: ${MAX_UPLOAD_MB}MB) — texto, PDF, imagem, áudio`),
         btnEscolher,
         inputArquivo,
         infoArquivo,
         avisoLimite,
       ]),
+      el('div', { class: 'avulso-ou' }, [
+        el('span', {}, 'OU'),
+      ]),
+      blocoUrl(cerebroAtual),
       areaProgresso,
     ]),
     el('div', { class: 'modal-foot' }, [

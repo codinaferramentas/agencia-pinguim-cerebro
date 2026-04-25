@@ -10,6 +10,7 @@ import { renderSkills } from './skills.js?v=20260421p';
 import { renderStub } from './stubs.js?v=20260421p';
 import { iconeNode } from './icone.js?v=20260425g';
 import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260425k';
+import { renderIntegracoes } from './integracoes.js?v=20260425n';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
@@ -67,6 +68,7 @@ async function navegar(pageSlug, { forcarRender = true } = {}) {
       case 'cerebros':  await renderCerebros(); break;
       case 'personas':  await renderPersonas(); break;
       case 'docs':      await renderDocs(); break;
+      case 'integracoes': await renderIntegracoes(); break;
       case 'operacao':  await renderOperacao(); break;
       case 'agentes':   await renderAgentes(); break;
       case 'squads':    await renderSquadsPage(); break;
