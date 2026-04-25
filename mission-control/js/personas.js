@@ -272,7 +272,7 @@ function gerarHTMLPDF(persona, cerebroNome) {
   ${BLOCOS.map(blocoHTML).join('')}
 
   <footer class="fim">
-    Pinguim · Mission Control · ${new Date().getFullYear()}
+    Pinguim OS · ${new Date().getFullYear()}
   </footer>
 
   <script>window.addEventListener('afterprint', () => window.close());</script>

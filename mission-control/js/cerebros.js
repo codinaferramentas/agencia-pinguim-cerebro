@@ -2,7 +2,7 @@
 
 import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421p';
 import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421p';
-import { iniciarSquadParalelo } from './squad-modal.js?v=20260425d';
+import { iniciarSquadParalelo } from './squad-modal.js?v=20260425e';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);

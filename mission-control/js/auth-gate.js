@@ -16,11 +16,8 @@ function renderLogin(errorMsg) {
     <div class="authgate">
       <form class="authgate-card" id="authform">
         <div class="authgate-brand">
-          <div class="authgate-brand-icon">P</div>
-          <div>
-            <div class="authgate-brand-title">Pinguim</div>
-            <div class="authgate-brand-sub">Mission Control</div>
-          </div>
+          <img class="authgate-logo" src="img/logo-pinguim.svg" alt="Grupo Pinguim">
+          <div class="authgate-brand-sub">Pinguim OS</div>
         </div>
         <div class="authgate-title">Entrar</div>
         <label>Email
@@ -37,10 +34,9 @@ function renderLogin(errorMsg) {
       body { margin:0; background:#0A0A0A; color:#EDEDED; font-family:'Inter',system-ui,sans-serif; }
       .authgate { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
       .authgate-card { width:100%; max-width:360px; background:#121212; border:1px solid #1F1F1F; border-radius:12px; padding:32px; display:flex; flex-direction:column; gap:16px; }
-      .authgate-brand { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
-      .authgate-brand-icon { width:36px; height:36px; background:#E85C00; color:#fff; border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:700; }
-      .authgate-brand-title { font-weight:600; font-size:14px; }
-      .authgate-brand-sub { font-size:12px; color:#7E7E7E; }
+      .authgate-brand { display:flex; flex-direction:column; align-items:center; gap:10px; margin-bottom:16px; }
+      .authgate-logo { width:140px; height:auto; color:#E85C00; }
+      .authgate-brand-sub { font-size:11px; color:#7E7E7E; letter-spacing:0.16em; text-transform:uppercase; font-family:'JetBrains Mono',ui-monospace,monospace; }
       .authgate-title { font-size:18px; font-weight:600; margin-top:4px; }
       .authgate label { display:flex; flex-direction:column; gap:6px; font-size:12px; color:#B4B4B4; }
       .authgate input { background:#0A0A0A; border:1px solid #1F1F1F; border-radius:6px; padding:10px 12px; color:#EDEDED; font-size:14px; font-family:inherit; }
