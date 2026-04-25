@@ -90,14 +90,18 @@ export async function gerar() {
       },
       {
         id: 'editar',
-        titulo: 'Editar e zerar',
+        titulo: 'Editar e gerenciar fontes',
         html: `
           <p>Cérebro não é caixa preta. A qualquer momento dá pra:</p>
           <ul class="docs-list">
-            <li><strong>Editar</strong> nome, ícone, emoji, descrição (botão ✎ no header do Cérebro)</li>
+            <li><strong>Editar o Cérebro</strong> — nome, ícone, emoji, descrição (botão ✎ no header)</li>
+            <li><strong>Editar fonte individual</strong> — clica em qualquer fonte (Kanban, Lista ou Timeline) e o painel lateral abre com botões "✎ Editar", "🏷 Reclassificar", "🗑 Excluir"</li>
+            <li><strong>Editar conteúdo</strong> — quando você muda o texto de uma fonte, o sistema apaga os vetores antigos e revetoriza automaticamente (custa frações de centavo)</li>
             <li><strong>Ver histórico</strong> de cargas (saber quando cada peça entrou e por quem)</li>
+            <li><strong>Quarentena</strong> — arquivos que falharam ficam num bucket separado, gerenciáveis (excluir libera reupload)</li>
             <li><strong>Zerar</strong> — apagar todas as fontes pra recomeçar (operação destrutiva, com confirmação)</li>
           </ul>
+          <p>Edição manual fica registrada no metadata (<code>editado_manualmente</code>) — auditoria sem fricção.</p>
         `,
       },
     ],

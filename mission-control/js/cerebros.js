@@ -1017,19 +1017,223 @@ function abrirDrawer(peca) {
   const title = document.getElementById('drawer-title');
   const body = document.getElementById('drawer-body');
   title.textContent = peca.titulo;
-  body.innerHTML = `
-    <div class="drawer-meta">
-      <b>Tipo</b><span style="color:${coresTipo()[peca.tipo]||'#71717A'};font-weight:600">${labelTipo(peca.tipo)}</span>
-      <b>Origem</b><span>${peca.origem || '—'}</span>
-      <b>Autor</b><span>${peca.autor || '—'}</span>
-      <b>Data</b><span>${new Date(peca.criado_em).toLocaleString('pt-BR')}</span>
-      <b>Peso</b><span>${peca.peso || '—'}</span>
-      <b>Tags</b><span>${(peca.tags || []).map(t => `<span class="task-tag" style="margin-right:.25rem">${t}</span>`).join('') || '—'}</span>
-      ${peca.fonte_url ? `<b>URL</b><span><a href="${peca.fonte_url}" target="_blank">${peca.fonte_url}</a></span>` : ''}
-    </div>
-    ${peca.conteudo_md ? `<pre>${escapeHtml(peca.conteudo_md.slice(0, 2000))}${peca.conteudo_md.length > 2000 ? '\n\n…(conteúdo truncado, abra no repositório)' : ''}</pre>` : '<em style="color:var(--fg-muted)">Sem conteúdo — fonte sem texto extraível (ex: URL externa).</em>'}
+  body.innerHTML = '';
+
+  // Acoes no topo do drawer
+  const acoes = el('div', { class: 'drawer-actions', style: 'display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid var(--border-subtle)' }, [
+    el('button', {
+      class: 'btn btn-primary',
+      style: 'font-size:.8125rem',
+      onclick: () => editarFonte(peca),
+    }, '✎ Editar'),
+    el('button', {
+      class: 'btn',
+      style: 'font-size:.8125rem',
+      onclick: () => reclassificarFonte(peca),
+    }, '🏷 Reclassificar'),
+    el('button', {
+      class: 'btn btn-ghost',
+      style: 'font-size:.8125rem;color:var(--danger);margin-left:auto',
+      onclick: async () => {
+        await excluirFonte(peca.id);
+        // Fecha drawer se a fonte foi removida
+        if (!pecasCache.find(p => p.id === peca.id)) {
+          d.classList.remove('open');
+        }
+      },
+    }, '🗑 Excluir'),
+  ]);
+  body.appendChild(acoes);
+
+  // Meta + conteudo
+  const meta = el('div', { class: 'drawer-meta' });
+  meta.innerHTML = `
+    <b>Tipo</b><span style="color:${coresTipo()[peca.tipo]||'#71717A'};font-weight:600">${labelTipo(peca.tipo)}</span>
+    <b>Origem</b><span>${peca.origem || '—'}</span>
+    <b>Autor</b><span>${peca.autor || '—'}</span>
+    <b>Data</b><span>${new Date(peca.criado_em).toLocaleString('pt-BR')}</span>
+    <b>Peso</b><span>${peca.peso || '—'}</span>
+    <b>Tags</b><span>${(peca.tags || []).map(t => `<span class="task-tag" style="margin-right:.25rem">${t}</span>`).join('') || '—'}</span>
+    ${peca.url || peca.fonte_url ? `<b>URL</b><span><a href="${peca.url || peca.fonte_url}" target="_blank">${peca.url || peca.fonte_url}</a></span>` : ''}
   `;
+  body.appendChild(meta);
+
+  const pre = document.createElement('div');
+  pre.innerHTML = peca.conteudo_md
+    ? `<pre style="white-space:pre-wrap;word-wrap:break-word">${escapeHtml(peca.conteudo_md.slice(0, 4000))}${peca.conteudo_md.length > 4000 ? '\n\n…(conteúdo truncado, edite pra ver completo)' : ''}</pre>`
+    : '<em style="color:var(--fg-muted)">Sem conteúdo — fonte sem texto extraível.</em>';
+  body.appendChild(pre);
+
   d.classList.add('open');
+}
+
+async function editarFonte(peca) {
+  const sb = getSupabase();
+  if (!sb) { await alertarDark({ titulo: 'Sem conexão', mensagem: 'Supabase não conectado.', tipo: 'erro' }); return; }
+
+  const back = el('div', {
+    class: 'modal-backdrop',
+    style: 'z-index:10000',
+    onclick: (e) => { if (e.target === back) fechar(); }
+  });
+  const card = el('div', { class: 'modal-card', style: 'max-width:720px;max-height:90vh;display:flex;flex-direction:column' });
+  function fechar() { back.classList.remove('open'); setTimeout(() => back.remove(), 180); }
+
+  const TIPOS = [
+    'aula','pagina_venda','depoimento','objecao','sacada','pesquisa',
+    'chat_export','pitch','faq','externo','csv','outro',
+  ];
+
+  const inputTitulo = el('input', { name: 'titulo', class: 'form-input', value: peca.titulo || '', required: 'true' });
+  const selectTipo = el('select', { name: 'tipo', class: 'form-input' });
+  TIPOS.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t;
+    opt.textContent = labelTipo(t);
+    if (t === peca.tipo) opt.selected = true;
+    selectTipo.appendChild(opt);
+  });
+  const inputAutor = el('input', { name: 'autor', class: 'form-input', value: peca.autor || '', placeholder: 'Quem disse / criou (opcional)' });
+  const inputTags = el('input', { name: 'tags', class: 'form-input', value: (peca.tags || []).join(', '), placeholder: 'palavra-chave, outra-tag (separadas por vírgula)' });
+  const inputUrl = el('input', { name: 'url', class: 'form-input', value: peca.url || peca.fonte_url || '', placeholder: 'https://… (opcional)' });
+  const textareaConteudo = el('textarea', {
+    name: 'conteudo',
+    class: 'form-input',
+    style: 'min-height:280px;max-height:50vh;font-family:var(--font-mono),monospace;font-size:.8125rem;line-height:1.55;resize:vertical',
+  });
+  textareaConteudo.value = peca.conteudo_md || '';
+
+  const aviso = el('div', {
+    style: 'padding:.75rem 1rem;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.25);border-radius:6px;font-size:.8125rem;color:var(--fg-muted);line-height:1.5;margin-bottom:1rem',
+  }, [
+    el('strong', { style: 'color:var(--fg)' }, 'Editar conteúdo regenera os vetores. '),
+    'Se você mudar o texto, o sistema vai apagar os chunks antigos e revetorizar (custa frações de centavo). Mudanças só de título/autor/tags não tocam nos vetores.',
+  ]);
+
+  const erroEl = el('div', { style: 'display:none;color:var(--danger);font-size:.875rem;margin-top:.5rem' });
+
+  card.append(
+    el('div', { class: 'modal-head' }, [
+      el('h2', {}, 'Editar fonte'),
+      el('div', { class: 'modal-sub' }, `Cérebro ${cerebroAtual?.nome || ''} — alterar título, tipo, conteúdo, etc.`),
+      el('button', { class: 'modal-close', onclick: fechar }, '×'),
+    ]),
+    el('div', { class: 'modal-body', style: 'overflow-y:auto;flex:1' }, [
+      aviso,
+      el('form', {
+        id: 'form-editar-fonte',
+        onsubmit: async (ev) => {
+          ev.preventDefault();
+          const titulo = inputTitulo.value.trim();
+          const tipo = selectTipo.value;
+          const autor = inputAutor.value.trim() || null;
+          const url = inputUrl.value.trim() || null;
+          const tagsArr = inputTags.value.split(',').map(t => t.trim()).filter(Boolean);
+          const conteudo = textareaConteudo.value;
+
+          if (!titulo) { erroEl.style.display = ''; erroEl.textContent = 'Título obrigatório.'; return; }
+
+          const conteudoMudou = conteudo !== (peca.conteudo_md || '');
+
+          const btn = ev.submitter;
+          btn.disabled = true;
+          btn.textContent = conteudoMudou ? 'Salvando + revetorizando…' : 'Salvando…';
+          erroEl.style.display = 'none';
+
+          try {
+            // 1. Update na tabela
+            const { error: errUp } = await sb.from('cerebro_fontes').update({
+              titulo, tipo, autor, url, tags: tagsArr.length ? tagsArr : null,
+              conteudo_md: conteudo, tamanho_bytes: conteudo.length,
+              metadata: {
+                ...(peca.metadata || {}),
+                editado_manualmente: new Date().toISOString(),
+              },
+            }).eq('id', peca.id);
+            if (errUp) throw new Error(errUp.message);
+
+            // 2. Se conteudo mudou, revetoriza (apaga chunks + chama Edge Function pra rechunkar)
+            if (conteudoMudou) {
+              // Apaga chunks antigos
+              await sb.from('cerebro_fontes_chunks').delete().eq('fonte_id', peca.id);
+
+              // Chama Edge Function pra rechunkar + revetorizar
+              btn.textContent = 'Revetorizando…';
+              const { data: { session } } = await sb.auth.getSession();
+              const fnUrl = `${window.__ENV__.SUPABASE_URL}/functions/v1/revetorizar-fonte`;
+              const resp = await fetch(fnUrl, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${session.access_token}`,
+                  'apikey': window.__ENV__.SUPABASE_ANON_KEY,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ fonte_id: peca.id }),
+              });
+              if (!resp.ok) {
+                const errBody = await resp.json().catch(() => ({}));
+                throw new Error(`Revetorização falhou: ${errBody.error || resp.status}`);
+              }
+            }
+
+            // Atualiza cache local
+            const idx = pecasCache.findIndex(p => p.id === peca.id);
+            if (idx >= 0) {
+              pecasCache[idx] = {
+                ...pecasCache[idx],
+                titulo, tipo, autor, url, tags: tagsArr,
+                conteudo_md: conteudo,
+              };
+            }
+
+            fechar();
+            // Re-renderiza view e drawer
+            const cur = pecasCache.find(p => p.id === peca.id);
+            if (cur) abrirDrawer(cur);
+            if (typeof renderView === 'function') renderView();
+          } catch (e) {
+            erroEl.style.display = '';
+            erroEl.textContent = e.message;
+            btn.disabled = false;
+            btn.textContent = 'Salvar';
+          }
+        },
+      }, [
+        el('label', { class: 'novo-cerebro-label' }, 'Título'),
+        inputTitulo,
+
+        el('div', { style: 'display:flex;gap:.75rem;margin-top:.75rem' }, [
+          el('div', { style: 'flex:1' }, [
+            el('label', { class: 'novo-cerebro-label' }, 'Tipo'),
+            selectTipo,
+          ]),
+          el('div', { style: 'flex:1' }, [
+            el('label', { class: 'novo-cerebro-label' }, 'Autor'),
+            inputAutor,
+          ]),
+        ]),
+
+        el('label', { class: 'novo-cerebro-label', style: 'margin-top:.75rem' }, 'Tags (separadas por vírgula)'),
+        inputTags,
+
+        el('label', { class: 'novo-cerebro-label', style: 'margin-top:.75rem' }, 'URL (opcional)'),
+        inputUrl,
+
+        el('label', { class: 'novo-cerebro-label', style: 'margin-top:.75rem' }, 'Conteúdo'),
+        textareaConteudo,
+        erroEl,
+
+        el('div', { style: 'display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem' }, [
+          el('button', { type: 'button', class: 'btn btn-ghost', onclick: fechar }, 'Cancelar'),
+          el('button', { type: 'submit', class: 'btn btn-primary' }, 'Salvar'),
+        ]),
+      ]),
+    ]),
+  );
+
+  back.append(card);
+  document.body.append(back);
+  requestAnimationFrame(() => back.classList.add('open'));
 }
 
 function escapeHtml(s) {
