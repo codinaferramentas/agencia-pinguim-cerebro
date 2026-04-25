@@ -262,16 +262,24 @@ async function extrairTexto(nome: string, buffer: Uint8Array): Promise<ExtracaoR
 }
 
 // ----- Vision (OCR + leitura de imagem) -----
+// Para imagem (PNG/JPG/WEBP/GIF) usa chat/completions com image_url (data URL).
+// Para PDF usa Files API + Responses API (que aceita input_file de PDF nativo).
 async function extrairViaVision(nome: string, buffer: Uint8Array, mime: string): Promise<ExtracaoResultado> {
-  // Converte buffer pra base64 data URL
+  if (mime === 'application/pdf') {
+    return await extrairPdfViaResponsesAPI(nome, buffer);
+  }
+  return await extrairImagemViaChat(nome, buffer, mime);
+}
+
+const PROMPT_EXTRACAO = `Extraia TODO o texto visivel deste arquivo. Inclua titulos, paragrafos, listas, legendas, numeros, dialogos, depoimentos, qualquer escrita visivel. Preserve a ordem e quebras de paragrafo.
+
+Formato: texto corrido. Sem comentarios meus, so o conteudo extraido. Se houver dialogos ou chat, preserve estrutura indicando quem fala.
+
+Se nao houver texto algum (foto pura sem palavras), descreva brevemente em 1-2 frases o que mostra.`;
+
+async function extrairImagemViaChat(nome: string, buffer: Uint8Array, mime: string): Promise<ExtracaoResultado> {
   const base64 = uint8ToBase64(buffer);
   const dataUrl = `data:${mime};base64,${base64}`;
-
-  const prompt = `Extraia TODO o texto visivel desta imagem ou PDF. Inclua titulos, paragrafos, listas, legendas, numeros, dialogos, depoimentos, qualquer escrita visivel.
-
-Formato: texto corrido, preservando quebras de paragrafo. Sem comentarios meus, so o conteudo extraido. Se houver dialogos (chat, mensagens), preserve a estrutura indicando quem fala.
-
-Se a imagem nao tiver texto algum (foto pura sem palavras), descreva brevemente o que mostra em 1-2 frases.`;
 
   const resp = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -284,7 +292,7 @@ Se a imagem nao tiver texto algum (foto pura sem palavras), descreva brevemente 
       messages: [{
         role: 'user',
         content: [
-          { type: 'text', text: prompt },
+          { type: 'text', text: PROMPT_EXTRACAO },
           { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } },
         ],
       }],
@@ -294,17 +302,93 @@ Se a imagem nao tiver texto algum (foto pura sem palavras), descreva brevemente 
 
   if (!resp.ok) {
     const errBody = await resp.text();
-    console.error(`Vision erro ${resp.status}: ${errBody.slice(0, 300)}`);
+    console.error(`Vision (imagem) erro ${resp.status}: ${errBody.slice(0, 400)}`);
     throw new Error(`Vision falhou: ${resp.status}`);
   }
 
   const data = await resp.json();
   const texto = (data.choices?.[0]?.message?.content || '').trim();
-  // Custo gpt-4o-mini: input $0.15/1M, output $0.60/1M. Imagem ~ 1500-3000 input tokens dependendo do tamanho.
   const inTok = data.usage?.prompt_tokens || 2000;
   const outTok = data.usage?.completion_tokens || 500;
   const custo = (inTok / 1_000_000) * 0.15 + (outTok / 1_000_000) * 0.60;
-  return { texto, custo_usd: custo, metodo: 'vision' };
+  return { texto, custo_usd: custo, metodo: 'vision-imagem' };
+}
+
+// PDF via Files API + Responses API — modelo le PDF nativo, multi-pagina ok
+async function extrairPdfViaResponsesAPI(nome: string, buffer: Uint8Array): Promise<ExtracaoResultado> {
+  // 1. Upload pro Files API
+  const form = new FormData();
+  form.append('file', new Blob([buffer], { type: 'application/pdf' }), nome);
+  form.append('purpose', 'user_data'); // 'user_data' eh aceito pra inputs em Responses API
+
+  const upResp = await fetch('https://api.openai.com/v1/files', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+    body: form,
+  });
+  if (!upResp.ok) {
+    const errBody = await upResp.text();
+    console.error(`OpenAI Files upload erro ${upResp.status}: ${errBody.slice(0, 400)}`);
+    throw new Error(`Files upload falhou: ${upResp.status}`);
+  }
+  const file = await upResp.json();
+
+  try {
+    // 2. Responses API com input_file
+    const resp = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: VISION_MODEL,
+        input: [{
+          role: 'user',
+          content: [
+            { type: 'input_text', text: PROMPT_EXTRACAO },
+            { type: 'input_file', file_id: file.id },
+          ],
+        }],
+        max_output_tokens: 8000,
+      }),
+    });
+
+    if (!resp.ok) {
+      const errBody = await resp.text();
+      console.error(`Responses API erro ${resp.status}: ${errBody.slice(0, 400)}`);
+      throw new Error(`Responses falhou: ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    // Estrutura da Responses API: output[].content[].text  OU  output_text (helper)
+    let texto = '';
+    if (typeof data.output_text === 'string') {
+      texto = data.output_text;
+    } else if (Array.isArray(data.output)) {
+      for (const item of data.output) {
+        if (item.type === 'message' && Array.isArray(item.content)) {
+          for (const c of item.content) {
+            if (c.type === 'output_text' && typeof c.text === 'string') texto += c.text + '\n';
+          }
+        }
+      }
+    }
+    texto = texto.trim();
+
+    const inTok = data.usage?.input_tokens || 0;
+    const outTok = data.usage?.output_tokens || 0;
+    const custo = (inTok / 1_000_000) * 0.15 + (outTok / 1_000_000) * 0.60;
+    return { texto, custo_usd: custo, metodo: 'vision-pdf' };
+  } finally {
+    // 3. Limpa o arquivo no OpenAI (sempre, mesmo em caso de erro acima)
+    try {
+      await fetch(`https://api.openai.com/v1/files/${file.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+      });
+    } catch (e) { console.warn('falha ao limpar file OpenAI:', e); }
+  }
 }
 
 // ----- Whisper (audio → texto) -----
