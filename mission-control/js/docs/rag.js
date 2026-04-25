@@ -59,6 +59,21 @@ export async function gerar() {
         `,
       },
       {
+        id: 'busca-visivel',
+        titulo: 'Busca semântica visível no painel',
+        html: `
+          <p>O motor RAG normalmente fica invisível — agentes consultam, geram resposta, e o usuário só vê o resultado final. Pra demonstrar que <strong>o conhecimento existe</strong> e responde de verdade, o painel oferece busca semântica direta.</p>
+          <p>No header de qualquer Cérebro com fontes, aparece a barra <strong>"Buscar no Cérebro…"</strong>. Cole uma pergunta tipo <em>"qual a maior dor do aluno?"</em>, <em>"objeções de preço"</em> ou <em>"depoimentos sobre transformação"</em> — o sistema:</p>
+          <ol>
+            <li>Converte a pergunta em vetor numérico (significado, não palavra)</li>
+            <li>Compara com todos os chunks vetorizados do Cérebro</li>
+            <li>Retorna os 8-12 mais próximos no espaço semântico, ordenados</li>
+            <li>Mostra cada um com barra de similaridade (% de relevância)</li>
+          </ol>
+          <p>Custo: frações de centavo por busca. Tempo: 1-2 segundos. <strong>É a mesma operação que os agentes fazem internamente</strong> antes de gerar copy ou persona — agora visível pra todo mundo.</p>
+        `,
+      },
+      {
         id: 'consumo-real',
         titulo: 'Consumo real esperado',
         html: `

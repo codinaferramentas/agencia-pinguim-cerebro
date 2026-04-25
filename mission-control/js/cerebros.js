@@ -332,11 +332,133 @@ export async function abrirCerebroDetalhe(slug) {
     el('button', { class: viewModoAtual === 'timeline' ? 'active' : '', onclick: () => { viewModoAtual = 'timeline'; renderView(); } }, '⌚ Timeline'),
   ]);
 
+  const buscaSemantica = pecasCache.length > 0 ? blocoBuscaSemantica() : null;
+
   const viewArea = el('div', { id: 'cerebro-view-area' });
 
-  page.append(el('div', { class: 'cerebro-detail' }, [header, toggle, viewArea]));
+  page.append(el('div', { class: 'cerebro-detail' }, [
+    header,
+    buscaSemantica,
+    toggle,
+    viewArea,
+  ].filter(Boolean)));
 
   renderView();
+}
+
+/* ================================================================
+   BUSCA SEMÂNTICA — campo de busca + modal de resultados
+   ================================================================ */
+function blocoBuscaSemantica() {
+  const wrap = el('div', { class: 'busca-semantica-wrap' });
+  const input = el('input', {
+    type: 'search',
+    class: 'busca-semantica-input',
+    placeholder: 'Buscar no Cérebro… ex: "qual a maior dor do aluno?", "objeções de preço", "depoimentos sobre transformação"',
+  });
+  const btn = el('button', { class: 'btn btn-primary busca-semantica-btn' }, '🔍 Buscar');
+
+  async function executar() {
+    const q = input.value.trim();
+    if (q.length < 3) return;
+    btn.disabled = true; btn.textContent = 'Buscando…';
+    try {
+      const sb = getSupabase();
+      const { data: prod } = await sb.from('produtos').select('id').eq('slug', cerebroAtual.slug).single();
+      const { data: cer } = await sb.from('cerebros').select('id').eq('produto_id', prod.id).single();
+
+      const { data: { session } } = await sb.auth.getSession();
+      const fnUrl = `${window.__ENV__.SUPABASE_URL}/functions/v1/buscar-cerebro`;
+      const resp = await fetch(fnUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': window.__ENV__.SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ cerebro_id: cer.id, query: q, top_k: 12, min_similarity: 0.25 }),
+      });
+      const r = await resp.json();
+      if (r.error) throw new Error(r.error);
+      mostrarResultadosBusca(q, r);
+    } catch (e) {
+      await alertarDark({ titulo: 'Falha na busca', mensagem: e.message, tipo: 'erro' });
+    } finally {
+      btn.disabled = false; btn.textContent = '🔍 Buscar';
+    }
+  }
+
+  btn.addEventListener('click', executar);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') executar(); });
+
+  wrap.append(input, btn);
+  return wrap;
+}
+
+function mostrarResultadosBusca(query, resp) {
+  const back = el('div', { class: 'modal-backdrop', onclick: (e) => { if (e.target === back) fechar(); } });
+  const card = el('div', { class: 'modal-card', style: 'max-width:820px;max-height:90vh;display:flex;flex-direction:column' });
+  function fechar() { back.classList.remove('open'); setTimeout(() => back.remove(), 180); }
+
+  const total = resp.total || 0;
+  const custoBrl = (Number(resp.custo_usd || 0) * 5.5).toFixed(4);
+
+  card.append(
+    el('div', { class: 'modal-head' }, [
+      el('h2', {}, '🔍 Resultados da busca'),
+      el('div', { class: 'modal-sub' }, [
+        el('span', {}, `Buscando "`),
+        el('strong', { style: 'color:var(--fg)' }, query),
+        el('span', {}, `" no Cérebro ${cerebroAtual?.nome} · ${total} chunk${total === 1 ? '' : 's'} relevante${total === 1 ? '' : 's'} · custo R$ ${custoBrl}`),
+      ]),
+      el('button', { class: 'modal-close', onclick: fechar }, '×'),
+    ]),
+    el('div', { class: 'modal-body', style: 'overflow-y:auto;flex:1' }, [
+      total === 0
+        ? el('div', { style: 'padding:2rem;text-align:center;color:var(--fg-muted)' }, [
+            el('div', { style: 'font-size:2rem;margin-bottom:.5rem' }, '🤷'),
+            el('div', {}, 'Nenhum chunk com similaridade suficiente. Tenta reformular a pergunta — ou alimenta mais o Cérebro.'),
+          ])
+        : el('div', { class: 'busca-resultados' }, resp.resultados.map((r, idx) => {
+            const sim = (r.similarity * 100).toFixed(0);
+            const corBarra = r.similarity > 0.5 ? '#10b981' : r.similarity > 0.35 ? '#f59e0b' : '#71717a';
+            return el('div', { class: 'busca-resultado' }, [
+              el('div', { class: 'busca-resultado-head' }, [
+                el('span', { class: 'busca-resultado-num' }, `#${idx + 1}`),
+                el('span', { class: 'busca-resultado-titulo' }, r.titulo),
+                el('span', {
+                  class: 'busca-resultado-tipo',
+                  style: `color:${coresTipo()[r.tipo] || '#71717A'}`,
+                }, labelTipo(r.tipo)),
+                el('div', { class: 'busca-resultado-sim' }, [
+                  el('div', { class: 'busca-sim-bar', style: `width:${sim}%;background:${corBarra}` }),
+                  el('span', { class: 'busca-sim-label' }, `${sim}%`),
+                ]),
+              ]),
+              el('div', { class: 'busca-resultado-conteudo' }, r.conteudo),
+              el('button', {
+                class: 'btn btn-ghost',
+                style: 'font-size:.75rem;margin-top:.5rem',
+                onclick: () => {
+                  const fonte = pecasCache.find(p => p.id === r.fonte_id);
+                  if (fonte) { fechar(); abrirDrawer(fonte); }
+                },
+              }, '→ Ver fonte completa'),
+            ]);
+          })),
+      el('div', { style: 'margin-top:1rem;padding:.75rem 1rem;background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.25);border-radius:6px;font-size:.8125rem;color:var(--fg-muted);line-height:1.5' }, [
+        el('strong', { style: 'color:var(--fg)' }, 'Como funciona: '),
+        'Sua pergunta é convertida em vetor numérico (significado, não palavra) e comparada com os chunks do Cérebro via cosine similarity. Os mais próximos no espaço semântico aparecem primeiro. Custa frações de centavo por busca — base do RAG que alimenta os agentes.',
+      ]),
+    ]),
+    el('div', { class: 'modal-footer' }, [
+      el('button', { class: 'btn btn-primary', onclick: fechar }, 'Fechar'),
+    ]),
+  );
+
+  back.append(card);
+  document.body.append(back);
+  requestAnimationFrame(() => back.classList.add('open'));
 }
 
 /* ================================================================
