@@ -357,17 +357,43 @@ export async function abrirCerebroDetalhe(slug) {
    ================================================================ */
 function blocoBuscaSemantica() {
   const wrap = el('div', { class: 'busca-semantica-wrap' });
+  const linha = el('div', { class: 'busca-semantica-linha' });
   const input = el('input', {
-    type: 'search',
+    type: 'text',
     class: 'busca-semantica-input',
     placeholder: 'Buscar no Cérebro… ex: "qual a maior dor do aluno?", "objeções de preço", "depoimentos sobre transformação"',
+    autocomplete: 'off',
   });
   const btn = el('button', { class: 'btn btn-primary busca-semantica-btn' }, '🔍 Buscar');
+  // Barra de progresso/status logo abaixo do campo
+  const statusBar = el('div', { class: 'busca-semantica-status' });
+
+  function setStatus(tipo, texto) {
+    statusBar.className = 'busca-semantica-status' + (tipo ? ` is-${tipo}` : '');
+    statusBar.innerHTML = '';
+    if (!texto) { statusBar.style.display = 'none'; return; }
+    statusBar.style.display = '';
+    if (tipo === 'loading') {
+      statusBar.append(
+        el('div', { class: 'busca-semantica-bar' }, [el('div', { class: 'busca-semantica-bar-fill' })]),
+        el('div', { class: 'busca-semantica-status-texto' }, texto),
+      );
+    } else {
+      statusBar.append(el('div', { class: 'busca-semantica-status-texto' }, texto));
+    }
+  }
 
   async function executar() {
     const q = input.value.trim();
-    if (q.length < 3) return;
-    btn.disabled = true; btn.textContent = 'Buscando…';
+    if (q.length < 3) {
+      setStatus('aviso', 'Digite pelo menos 3 caracteres pra buscar.');
+      input.focus();
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Buscando…';
+    setStatus('loading', `Buscando "${q}" no Cérebro ${cerebroAtual?.nome || ''}…`);
+
     try {
       const sb = getSupabase();
       const { data: prod } = await sb.from('produtos').select('id').eq('slug', cerebroAtual.slug).single();
@@ -386,18 +412,27 @@ function blocoBuscaSemantica() {
       });
       const r = await resp.json();
       if (r.error) throw new Error(r.error);
+      setStatus(null, '');
       mostrarResultadosBusca(q, r);
     } catch (e) {
-      await alertarDark({ titulo: 'Falha na busca', mensagem: e.message, tipo: 'erro' });
+      setStatus('erro', e.message || String(e));
     } finally {
-      btn.disabled = false; btn.textContent = '🔍 Buscar';
+      btn.disabled = false;
+      btn.textContent = '🔍 Buscar';
     }
   }
 
   btn.addEventListener('click', executar);
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') executar(); });
+  // Enter aciona busca (preventDefault evita comportamento de form se houver)
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      executar();
+    }
+  });
 
-  wrap.append(input, btn);
+  linha.append(input, btn);
+  wrap.append(linha, statusBar);
   return wrap;
 }
 
