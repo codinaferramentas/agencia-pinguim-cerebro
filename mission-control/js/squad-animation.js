@@ -232,8 +232,85 @@ function drawBackground(ctx, W, H) {
     ctx.fillRect(x, 284, 20, 32);
   }
   ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(0, 284, W, 1); ctx.fillRect(0, 315, W, 1);
+
+  // Headline institucional no topo do cenario
+  drawHeadline(ctx, W);
+
   ROOMS.forEach(r => { drawFloor(ctx, r); drawWalls(ctx, r); });
   drawFurniture(ctx);
+
+  // Quadro do Pinguim na parede da Diretoria
+  drawDiretoriaPainel(ctx);
+}
+
+function drawHeadline(ctx, W) {
+  ctx.save();
+  ctx.font = 'bold 11px -apple-system, "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const text = 'AGÊNCIA PINGUIM · IA';
+  ctx.fillStyle = 'rgba(232, 92, 0, 0.85)';
+  // letterspacing manual
+  const chars = text.split('');
+  const spacing = 1.5;
+  const total = chars.reduce((s, c) => s + ctx.measureText(c).width + spacing, -spacing);
+  let x = W / 2 - total / 2;
+  const y = 14;
+  chars.forEach(c => {
+    const w = ctx.measureText(c).width;
+    ctx.fillText(c, x + w / 2, y);
+    x += w + spacing;
+  });
+  ctx.restore();
+}
+
+// Imagem do pinguim (carregada uma vez, reutilizada em todo frame)
+let _pinguimImg = null;
+let _pinguimReady = false;
+function getPinguimImg() {
+  if (_pinguimImg) return _pinguimImg;
+  _pinguimImg = new Image();
+  _pinguimImg.onload = () => { _pinguimReady = true; };
+  // SVG inline pra evitar CORS no canvas — pinguim branco
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="180 0 700 880">
+    <path d="M180 631.739L180.401 779.881L225.57 726.828L249.482 763.965L329.191 663.166L369.045 827.627L451.41 692.344L605.514 875.374L666.624 803.754L730.39 875.374C741.851 770.066 747.145 722.655 743.675 652.555C740.205 582.456 661.31 514.62 610.828 411.168L565.659 395.252L517.701 442.269L483.338 437.253L454.067 517.272C406.196 531.028 366 575.211 350.446 618.071L246.825 532.022L180 631.739Z" fill="#ffffff"/>
+    <path d="M180 606.184C265.66 223.443 351.616 65.5948 610.828 143.254L820.727 132.644C640.285 232.762 586.139 294.369 608.218 395.252L565.659 381.233L515.177 429.736L477.98 424.431L446.46 504.978C396.911 526.453 374.103 544.107 347.789 594.198L246.825 506.662L180 606.184Z" fill="#ffffff"/>
+  </svg>`;
+  _pinguimImg.src = 'data:image/svg+xml;base64,' + btoa(svg);
+  return _pinguimImg;
+}
+
+function drawDiretoriaPainel(ctx) {
+  // Quadro decorativo na parede da Diretoria (room x=340, y=40, w=280)
+  // Centralizado entre as duas estantes (que ficam em x=360 e x=570)
+  const cx = 480; // centro horizontal da parede
+  const cy = 75;  // altura na parede (entre topo da sala y=40 e y=110)
+  const w = 56;
+  const h = 64;
+
+  // Moldura escura
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(cx - w/2, cy - h/2, w, h);
+  ctx.strokeStyle = '#3a3a3a';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cx - w/2, cy - h/2, w, h);
+
+  // Highlight superior (luz na moldura)
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fillRect(cx - w/2 + 2, cy - h/2 + 2, w - 4, 2);
+
+  // Pinguim dentro do quadro
+  const img = getPinguimImg();
+  if (_pinguimReady) {
+    const pad = 6;
+    ctx.drawImage(img, cx - w/2 + pad, cy - h/2 + pad, w - pad*2, h - pad*2);
+  } else {
+    // Placeholder enquanto carrega — circulo branco
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 14, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 // Destaca salas ativas com borda pulsante amarela + dim nas inativas
@@ -440,6 +517,9 @@ export function criarEngine(canvas) {
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
   const W = canvas.width, H = canvas.height;
+
+  // Pre-carrega imagem do pinguim pra evitar flicker no 1o frame
+  getPinguimImg();
 
   const agentState = {};
   AGENTS_DEF.forEach((a, i) => {
