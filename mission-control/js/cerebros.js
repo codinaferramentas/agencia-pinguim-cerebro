@@ -257,9 +257,36 @@ export async function abrirCerebroDetalhe(slug) {
   }
   pecasCache = fontesServidor;
 
+  // Conta arquivos em quarentena (UX: botão so aparece se há)
+  let qtdQuarentena = 0;
+  try {
+    const sb = getSupabase();
+    if (sb) {
+      const { data: prod } = await sb.from('produtos').select('id').eq('slug', slug).single();
+      if (prod) {
+        const { data: cer } = await sb.from('cerebros').select('id').eq('produto_id', prod.id).single();
+        if (cer) {
+          const { count } = await sb.from('ingest_arquivos')
+            .select('id', { count: 'exact', head: true })
+            .eq('cerebro_id', cer.id)
+            .eq('status', 'quarentena');
+          qtdQuarentena = count || 0;
+        }
+      }
+    }
+  } catch (e) { console.warn('Erro contando quarentena:', e); }
+
   page.innerHTML = '';
   const acoes = el('div', { class: 'cerebro-detail-actions' }, [
     el('button', { class: 'btn btn-primary', onclick: () => abrirModalAlimentar() }, '+ Alimentar'),
+    qtdQuarentena > 0
+      ? el('button', {
+          class: 'btn',
+          style: 'color:var(--warning,#f59e0b);border-color:rgba(245,158,11,0.4)',
+          onclick: () => abrirQuarentena(),
+          title: 'Arquivos que não foram indexados — gerencie aqui',
+        }, `⚠ Quarentena (${qtdQuarentena})`)
+      : null,
     pecasCache.length > 0
       ? el('button', {
           class: 'btn',
@@ -550,6 +577,94 @@ async function abrirEditarCerebro() {
   );
   back.append(card);
   refreshPreview();
+  document.body.append(back);
+  requestAnimationFrame(() => back.classList.add('open'));
+}
+
+/* --- Modal Quarentena: lista, exclui, ou pede pra reprocessar --- */
+async function abrirQuarentena() {
+  const sb = getSupabase();
+  if (!sb || !cerebroAtual) return;
+
+  const { data: prod } = await sb.from('produtos').select('id').eq('slug', cerebroAtual.slug).single();
+  if (!prod) return;
+  const { data: cer } = await sb.from('cerebros').select('id').eq('produto_id', prod.id).single();
+  if (!cer) return;
+
+  const { data: arquivos } = await sb.from('ingest_arquivos')
+    .select('id, nome_original, tamanho_bytes, motivo_erro, status, criado_em')
+    .eq('cerebro_id', cer.id)
+    .eq('status', 'quarentena')
+    .order('criado_em', { ascending: false });
+
+  const back = el('div', { class: 'modal-backdrop', onclick: (e) => { if (e.target === back) fechar(); } });
+  const card = el('div', { class: 'modal-card', style: 'max-width:720px' });
+  function fechar() { back.classList.remove('open'); setTimeout(() => back.remove(), 180); }
+
+  function formatarBytes(b) {
+    if (b == null) return '—';
+    if (b < 1024) return b + ' B';
+    if (b < 1024 * 1024) return (b / 1024).toFixed(0) + ' KB';
+    return (b / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  async function excluir(id, nome) {
+    const ok = await confirmarDark({
+      titulo: 'Excluir da quarentena',
+      mensagem: `Remover "${nome}"? O sistema esquece o hash desse arquivo (você poderá tentar subir de novo se quiser).`,
+      confirmar: 'Excluir',
+      perigoso: true,
+    });
+    if (!ok) return;
+    const { error } = await sb.from('ingest_arquivos').delete().eq('id', id);
+    if (error) {
+      await alertarDark({ titulo: 'Falha', mensagem: error.message, tipo: 'erro' });
+      return;
+    }
+    fechar();
+    abrirCerebroDetalhe(cerebroAtual.slug);
+  }
+
+  card.append(
+    el('div', { class: 'modal-head' }, [
+      el('h2', {}, '⚠ Quarentena'),
+      el('div', { class: 'modal-sub' }, `${(arquivos || []).length} arquivo${(arquivos || []).length === 1 ? '' : 's'} não indexado${(arquivos || []).length === 1 ? '' : 's'} no Cérebro ${cerebroAtual.nome}`),
+      el('button', { class: 'modal-close', onclick: fechar }, '×'),
+    ]),
+    el('div', { class: 'modal-body' }, [
+      (arquivos || []).length === 0
+        ? el('div', { style: 'padding:2rem;text-align:center;color:var(--fg-muted)' }, 'Nada na quarentena.')
+        : el('div', { class: 'arquivos-lista' }, arquivos.map(a => el('div', {
+            style: 'padding:.75rem;border:1px solid var(--border);border-radius:6px;margin-bottom:.5rem;background:var(--bg-elevated)',
+          }, [
+            el('div', { style: 'display:flex;align-items:center;gap:.5rem;margin-bottom:.25rem' }, [
+              el('span', { style: 'font-size:1rem' }, '📄'),
+              el('span', { style: 'flex:1;font-weight:600;color:var(--fg)' }, a.nome_original || '(sem nome)'),
+              el('span', { style: 'font-size:.75rem;color:var(--fg-muted)' }, formatarBytes(a.tamanho_bytes)),
+            ]),
+            el('div', { style: 'font-size:.8125rem;color:var(--fg-muted);margin-bottom:.5rem;line-height:1.5' }, [
+              el('strong', { style: 'color:var(--warning,#f59e0b)' }, 'Motivo: '),
+              a.motivo_erro || 'sem motivo registrado',
+            ]),
+            el('div', { style: 'display:flex;gap:.5rem;justify-content:flex-end' }, [
+              el('button', {
+                class: 'btn btn-ghost',
+                style: 'font-size:.8125rem;color:var(--danger)',
+                onclick: () => excluir(a.id, a.nome_original),
+              }, '🗑 Excluir'),
+            ]),
+          ]))),
+      el('div', { style: 'margin-top:1rem;padding:.75rem 1rem;background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.25);border-radius:6px;font-size:.8125rem;color:var(--fg-muted);line-height:1.5' }, [
+        el('strong', { style: 'color:var(--fg)' }, 'O que fazer? '),
+        'Arquivos aqui não foram indexados (texto em imagem, formato não suportado, ou erro de extração). Excluir libera o sistema pra você tentar subir o conteúdo de outra forma — por exemplo, salvando como .txt/.md, exportando o áudio em outro formato, ou colando o texto manualmente como tipo "Página de venda" ou "Aula".',
+      ]),
+    ]),
+    el('div', { class: 'modal-footer' }, [
+      el('button', { class: 'btn btn-primary', onclick: fechar }, 'Fechar'),
+    ]),
+  );
+
+  back.append(card);
   document.body.append(back);
   requestAnimationFrame(() => back.classList.add('open'));
 }
@@ -1203,7 +1318,7 @@ function renderStepModo() {
         }, [
           el('div', { class: 'modo-icon' }, '📤'),
           el('div', { class: 'modo-title' }, 'Avulso'),
-          el('div', { class: 'modo-desc' }, 'Upload de 1 arquivo (.md, .txt, .pdf, .csv). Passa pelo mesmo motor do Pacote — classifica e vetoriza.'),
+          el('div', { class: 'modo-desc' }, 'Upload de 1 arquivo. Aceita texto, PDF, imagem (print, foto), áudio (incluindo áudio de WhatsApp). O sistema lê via IA quando precisa.'),
         ]),
         el('button', {
           class: 'modo-card',
@@ -1709,7 +1824,7 @@ function renderStepAvulso() {
     if (!arquivoSelecionado) return;
     const mb = arquivoSelecionado.size / 1024 / 1024;
     infoArquivo.append(el('div', { class: 'arquivo-row' }, [
-      el('span', { class: 'arquivo-icon' }, '📄'),
+      el('span', { class: 'arquivo-icon' }, iconePorExtensao(arquivoSelecionado.name)),
       el('span', { class: 'arquivo-nome' }, arquivoSelecionado.name),
       el('span', { class: 'arquivo-size' }, `${mb.toFixed(1)} MB`),
       el('button', { class: 'arquivo-remove', onclick: () => { arquivoSelecionado = null; inputArquivo.value = ''; renderArquivo(); atualizarBotao(); } }, '×'),
@@ -1717,7 +1832,53 @@ function renderStepAvulso() {
     if (mb > MAX_UPLOAD_MB) {
       avisoLimite.style.display = '';
       avisoLimite.innerHTML = `<div class="cron-infobox"><strong>Arquivo muito grande</strong><p>Limite é ${MAX_UPLOAD_MB}MB.</p></div>`;
+      return;
     }
+    // Aviso de custo (apenas se passar de R$0,05 — silencioso abaixo disso)
+    const estimativa = estimarCustoIA(arquivoSelecionado);
+    if (estimativa.custo_brl > 0.05) {
+      avisoLimite.style.display = '';
+      avisoLimite.innerHTML = `<div class="cron-infobox" style="border-color:rgba(245,158,11,0.4);background:rgba(245,158,11,0.06)">
+        <strong style="color:var(--warning,#f59e0b)">Aviso de custo · ${estimativa.metodo}</strong>
+        <p>Este arquivo será processado por IA (custo estimado <strong>R$ ${estimativa.custo_brl.toFixed(2)}</strong>). Pra arquivos menores ou texto puro o custo é zero.</p>
+      </div>`;
+    }
+  }
+
+  function iconePorExtensao(nome) {
+    const ext = (nome.toLowerCase().split('.').pop() || '');
+    if (['png','jpg','jpeg','webp','gif'].includes(ext)) return '🖼';
+    if (['mp3','ogg','opus','m4a','wav','webm','aac'].includes(ext)) return '🎙';
+    if (ext === 'pdf') return '📕';
+    return '📄';
+  }
+
+  // Estima custo de IA pre-upload. Cota R$/USD ~5,5. Custos OpenAI:
+  //   - Vision (gpt-4o-mini): ~$0.001-0.005 por imagem
+  //   - Whisper: $0.006/minuto (~ MB/min em mp3 128kbps)
+  //   - Texto/PDF nativo: zero
+  function estimarCustoIA(file) {
+    const ext = (file.name.toLowerCase().split('.').pop() || '');
+    const mb = file.size / 1024 / 1024;
+    const USD_BRL = 5.5;
+    if (['png','jpg','jpeg','webp','gif'].includes(ext)) {
+      const custoUsd = 0.003; // imagem unica
+      return { metodo: 'OCR via IA Vision', custo_brl: custoUsd * USD_BRL };
+    }
+    if (['mp3','ogg','opus','m4a','wav','webm','aac'].includes(ext)) {
+      const minutos = Math.max(0.1, mb / 1.0); // heuristica conservadora
+      const custoUsd = minutos * 0.006;
+      return { metodo: 'Transcrição via Whisper', custo_brl: custoUsd * USD_BRL };
+    }
+    if (ext === 'pdf') {
+      // PDF pode cair em Vision se for escaneado — assume melhor caso (texto nativo)
+      // mas pra PDFs grandes (>5MB) provavelmente eh imagem
+      if (mb > 3) {
+        const custoUsd = 0.01 * Math.min(20, mb); // estimativa conservadora pra paginas
+        return { metodo: 'PDF possivelmente OCR', custo_brl: custoUsd * USD_BRL };
+      }
+    }
+    return { metodo: 'texto', custo_brl: 0 };
   }
 
   function atualizarBotao() {
@@ -1729,7 +1890,7 @@ function renderStepAvulso() {
 
   const inputArquivo = el('input', {
     type: 'file',
-    accept: '.md,.txt,.pdf,.csv,.html,.json',
+    accept: '.md,.txt,.pdf,.csv,.html,.json,.png,.jpg,.jpeg,.webp,.gif,.mp3,.ogg,.opus,.m4a,.wav,.webm,.aac',
     style: 'display:none',
     onchange: (e) => {
       arquivoSelecionado = e.target.files[0] || null;

@@ -30,12 +30,18 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')!;
 
 const CLASSIFIER_MODEL = 'gpt-4o-mini';
+const VISION_MODEL = 'gpt-4o-mini';      // OCR + leitura de imagem (custo-benefício)
+const TRANSCRIPTION_MODEL = 'whisper-1'; // Audio → texto
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 const CHUNK_SIZE_CHARS = 2000;
 const CHUNK_OVERLAP_CHARS = 200;
 const CONFIANCA_MINIMA = 0.65;
 const ONDA_TAMANHO = 5;            // arquivos processados por onda
 const EMBED_BATCH = 50;            // chunks por chamada OpenAI
+
+// Extensoes aceitas por categoria
+const EXT_IMAGEM = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+const EXT_AUDIO = ['mp3', 'ogg', 'opus', 'm4a', 'wav', 'webm', 'aac'];
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -163,55 +169,84 @@ function decideTipoPorNome(nome: string): string | null {
   return null;
 }
 
-async function extrairTexto(nome: string, buffer: Uint8Array): Promise<string> {
-  const ext = nome.toLowerCase().split('.').pop();
+// Retorna { texto, custo_usd, metodo } — metodo serve pra log no banco
+type ExtracaoResultado = { texto: string; custo_usd: number; metodo: string };
 
+async function extrairTexto(nome: string, buffer: Uint8Array): Promise<ExtracaoResultado> {
+  const ext = (nome.toLowerCase().split('.').pop() || '');
+
+  // Texto simples
   if (ext === 'txt' || ext === 'md' || ext === 'markdown') {
-    return new TextDecoder('utf-8').decode(buffer);
+    return { texto: new TextDecoder('utf-8').decode(buffer), custo_usd: 0, metodo: 'texto' };
   }
 
   if (ext === 'csv') {
     const raw = new TextDecoder('utf-8').decode(buffer);
     const linhas = raw.split('\n').filter(l => l.trim());
-    if (linhas.length === 0) return '';
+    if (linhas.length === 0) return { texto: '', custo_usd: 0, metodo: 'csv' };
     const header = linhas[0];
     const preview = linhas.slice(1, 11).join('\n');
     const extra = linhas.length > 11 ? `\n\n... +${linhas.length - 11} linhas adicionais` : '';
-    return `${header}\n---\n${preview}${extra}`;
+    return { texto: `${header}\n---\n${preview}${extra}`, custo_usd: 0, metodo: 'csv' };
   }
 
   if (ext === 'json') {
     try {
       const obj = JSON.parse(new TextDecoder('utf-8').decode(buffer));
-      return JSON.stringify(obj, null, 2);
+      return { texto: JSON.stringify(obj, null, 2), custo_usd: 0, metodo: 'json' };
     } catch {
-      return new TextDecoder('utf-8').decode(buffer);
+      return { texto: new TextDecoder('utf-8').decode(buffer), custo_usd: 0, metodo: 'json' };
     }
   }
 
   if (ext === 'html' || ext === 'htm') {
     const raw = new TextDecoder('utf-8').decode(buffer);
-    return raw
+    const texto = raw
       .replace(/<script[\s\S]*?<\/script>/gi, '')
       .replace(/<style[\s\S]*?<\/style>/gi, '')
       .replace(/<[^>]+>/g, ' ')
       .replace(/&nbsp;/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
+    return { texto, custo_usd: 0, metodo: 'html' };
   }
 
+  // PDF: tenta texto nativo. Se vier vazio, fallback OCR via Vision (paginas como imagem)
   if (ext === 'pdf') {
     try {
       const pdf = await getDocumentProxy(buffer);
       const { text } = await pdfExtractText(pdf, { mergePages: true });
-      return (typeof text === 'string' ? text : text.join('\n')).trim();
+      const textoNativo = (typeof text === 'string' ? text : text.join('\n')).trim();
+      if (textoNativo.length >= 80) {
+        // Texto nativo suficiente — caminho rapido e gratis
+        return { texto: textoNativo, custo_usd: 0, metodo: 'pdf-nativo' };
+      }
+      // Fallback: PDF eh imagem renderizada (pagina de vendas, escaneado)
+      console.log(`PDF sem texto nativo, OCR via Vision: ${nome}`);
+      return await extrairViaVision(nome, buffer, 'application/pdf');
     } catch (e) {
       console.error('PDF extract erro:', nome, e);
-      return '';
+      // Ultima tentativa: Vision
+      try {
+        return await extrairViaVision(nome, buffer, 'application/pdf');
+      } catch {
+        return { texto: '', custo_usd: 0, metodo: 'pdf-falhou' };
+      }
     }
   }
 
-  if (ext === 'docx' || ext === 'doc') return '';
+  // Imagem: OCR direto via Vision
+  if (EXT_IMAGEM.includes(ext)) {
+    const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+    return await extrairViaVision(nome, buffer, mime);
+  }
+
+  // Audio: transcricao via Whisper
+  if (EXT_AUDIO.includes(ext)) {
+    return await transcreverAudio(nome, buffer, ext);
+  }
+
+  if (ext === 'docx' || ext === 'doc') return { texto: '', custo_usd: 0, metodo: 'docx-nao-suportado' };
 
   try {
     const texto = new TextDecoder('utf-8').decode(buffer);
@@ -219,11 +254,95 @@ async function extrairTexto(nome: string, buffer: Uint8Array): Promise<string> {
       const code = c.charCodeAt(0);
       return code < 32 && code !== 9 && code !== 10 && code !== 13;
     }).length;
-    if (naoImprimivel > texto.length * 0.05) return '';
-    return texto;
+    if (naoImprimivel > texto.length * 0.05) return { texto: '', custo_usd: 0, metodo: 'binario' };
+    return { texto, custo_usd: 0, metodo: 'texto-cru' };
   } catch {
-    return '';
+    return { texto: '', custo_usd: 0, metodo: 'erro' };
   }
+}
+
+// ----- Vision (OCR + leitura de imagem) -----
+async function extrairViaVision(nome: string, buffer: Uint8Array, mime: string): Promise<ExtracaoResultado> {
+  // Converte buffer pra base64 data URL
+  const base64 = uint8ToBase64(buffer);
+  const dataUrl = `data:${mime};base64,${base64}`;
+
+  const prompt = `Extraia TODO o texto visivel desta imagem ou PDF. Inclua titulos, paragrafos, listas, legendas, numeros, dialogos, depoimentos, qualquer escrita visivel.
+
+Formato: texto corrido, preservando quebras de paragrafo. Sem comentarios meus, so o conteudo extraido. Se houver dialogos (chat, mensagens), preserve a estrutura indicando quem fala.
+
+Se a imagem nao tiver texto algum (foto pura sem palavras), descreva brevemente o que mostra em 1-2 frases.`;
+
+  const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: VISION_MODEL,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } },
+        ],
+      }],
+      max_tokens: 4000,
+    }),
+  });
+
+  if (!resp.ok) {
+    const errBody = await resp.text();
+    console.error(`Vision erro ${resp.status}: ${errBody.slice(0, 300)}`);
+    throw new Error(`Vision falhou: ${resp.status}`);
+  }
+
+  const data = await resp.json();
+  const texto = (data.choices?.[0]?.message?.content || '').trim();
+  // Custo gpt-4o-mini: input $0.15/1M, output $0.60/1M. Imagem ~ 1500-3000 input tokens dependendo do tamanho.
+  const inTok = data.usage?.prompt_tokens || 2000;
+  const outTok = data.usage?.completion_tokens || 500;
+  const custo = (inTok / 1_000_000) * 0.15 + (outTok / 1_000_000) * 0.60;
+  return { texto, custo_usd: custo, metodo: 'vision' };
+}
+
+// ----- Whisper (audio → texto) -----
+async function transcreverAudio(nome: string, buffer: Uint8Array, ext: string): Promise<ExtracaoResultado> {
+  const form = new FormData();
+  const blob = new Blob([buffer], { type: `audio/${ext === 'opus' ? 'ogg' : ext}` });
+  form.append('file', blob, nome);
+  form.append('model', TRANSCRIPTION_MODEL);
+  form.append('response_format', 'text');
+  // Idioma deixado em auto-detect (Whisper detecta sozinho)
+
+  const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+    body: form,
+  });
+
+  if (!resp.ok) {
+    const errBody = await resp.text();
+    console.error(`Whisper erro ${resp.status}: ${errBody.slice(0, 300)}`);
+    throw new Error(`Whisper falhou: ${resp.status}`);
+  }
+
+  const texto = (await resp.text()).trim();
+  // Whisper-1: $0.006/minuto. Estimo duracao via tamanho de buffer (heuristica: ~120kbps mp3 = 1MB/min)
+  const minutosEstimados = Math.max(0.1, buffer.length / (1024 * 1024) / 1.0);
+  const custo = minutosEstimados * 0.006;
+  return { texto, custo_usd: custo, metodo: 'whisper' };
+}
+
+// Helper: Uint8Array → base64 string (sem ocupar memoria gigante)
+function uint8ToBase64(buf: Uint8Array): string {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < buf.length; i += chunk) {
+    binary += String.fromCharCode(...buf.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 }
 
 function excluir(nome: string): boolean {
@@ -397,11 +516,25 @@ async function processarOnda(lote_id: string, storage_path: string, cerebro_id: 
         continue;
       }
 
-      const texto = await extrairTexto(entry.nome, entry.buffer);
+      let extracao: ExtracaoResultado;
+      try {
+        extracao = await extrairTexto(entry.nome, entry.buffer);
+      } catch (e) {
+        console.error('extrairTexto erro:', entry.nome, e);
+        extracao = { texto: '', custo_usd: 0, metodo: 'erro' };
+      }
+      const texto = extracao.texto;
+      stats.custo_usd += extracao.custo_usd; // Vision/Whisper soma aqui
+
       if (!texto || !texto.trim()) {
+        const motivo = extracao.metodo === 'docx-nao-suportado'
+          ? 'formato DOCX/DOC ainda não é suportado — salve como PDF, TXT ou MD'
+          : extracao.metodo === 'pdf-falhou'
+          ? 'não foi possível extrair texto do PDF (nem com OCR via IA)'
+          : 'sem texto extraído';
         await client.from('ingest_arquivos').update({
           status: 'quarentena',
-          motivo_erro: 'sem texto extraído (PDF escaneado, DOCX ou binário)',
+          motivo_erro: motivo,
           processado_em: new Date().toISOString(),
         }).eq('id', arq.id);
         stats.em_quarentena++;
@@ -416,6 +549,9 @@ async function processarOnda(lote_id: string, storage_path: string, cerebro_id: 
         classif = await classificar(entry.nome, texto);
         stats.custo_usd += (classif.tokens_in / 1_000_000) * 0.15 + (classif.tokens_out / 1_000_000) * 0.60;
       }
+      // Anota metodo de extracao na classificacao pra ficar visivel no painel
+      (classif as any).extracao_metodo = extracao.metodo;
+      (classif as any).extracao_custo_usd = extracao.custo_usd;
 
       const emQuarentena = classif.confianca < CONFIANCA_MINIMA;
 
