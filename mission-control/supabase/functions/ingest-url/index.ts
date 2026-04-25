@@ -151,21 +151,17 @@ function decodeHtml(s: string): string {
 // Mapa: tipo de URL -> ator Apify oficial recomendado + builder de input
 const APIFY_ATORES: Record<string, { actor: string; buildInput: (url: string) => any; custoEstimado: number }> = {
   instagram: {
-    // Instagram Reel Scraper — retorna caption + transcript + metricas
-    actor: 'apify~instagram-reel-scraper',
+    // Instagram Scraper (general) — aceita URLs diretas de reel/post/perfil sem campo username obrigatorio
+    actor: 'apify~instagram-scraper',
     buildInput: (url: string) => {
-      // Aceita URLs de reel diretas OU usernames (nesse caso vira "username")
-      if (/instagram\.com\/(p|reel|tv)\//.test(url)) {
-        return { directUrls: [url], resultsLimit: 1 };
+      const isPostOuReel = /instagram\.com\/(p|reel|tv)\//.test(url);
+      if (isPostOuReel) {
+        return { directUrls: [url], resultsType: 'posts', resultsLimit: 1, addParentData: false };
       }
-      // URL de perfil — extrai username
-      const m = url.match(/instagram\.com\/([^/?]+)/);
-      const username = m ? m[1] : null;
-      return username
-        ? { username: [username], resultsLimit: 5 }
-        : { directUrls: [url], resultsLimit: 1 };
+      // URL de perfil — pega ultimos 5 posts/reels
+      return { directUrls: [url], resultsType: 'posts', resultsLimit: 5, addParentData: false };
     },
-    custoEstimado: 0.005, // ~$1/1000 reels
+    custoEstimado: 0.003,
   },
   tiktok: {
     actor: 'clockworks~free-tiktok-scraper',
@@ -248,6 +244,14 @@ async function tentarApify(url: string, tipo: 'instagram' | 'tiktok' | 'youtube'
 
     const items = await resp.json();
     if (!Array.isArray(items) || items.length === 0) return null;
+
+    // Detecta erro retornado dentro do item (acesso restrito, perfil privado, etc)
+    if (items.length === 1 && items[0].error) {
+      const e = items[0];
+      console.error('Apify item error:', e);
+      const erroMsg = e.errorDescription || e.error;
+      throw new Error(`Apify retornou erro: ${erroMsg}. Pode ser perfil privado, conteúdo bloqueado regionalmente, ou URL inválida.`);
+    }
 
     // Consolida items em texto unico
     const partes: string[] = [];
