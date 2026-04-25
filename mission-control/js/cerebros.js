@@ -3,6 +3,7 @@
 import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421p';
 import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421p';
 import { iniciarSquadParalelo } from './squad-modal.js?v=20260425e';
+import { iconeNode } from './icone.js?v=20260425g';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -90,7 +91,7 @@ function renderCerebroCard(c) {
     onclick: () => abrirCerebroDetalhe(c.slug)
   }, [
     el('div', { class: 'cerebro-card-top' }, [
-      el('div', { class: 'cerebro-emoji' }, c.emoji || '📦'),
+      iconeNode({ icone_url: c.icone_url, emoji: c.emoji, nome: c.nome }, { size: 'lg', className: 'cerebro-emoji' }),
       el('div', { style: 'flex:1;min-width:0' }, [
         el('div', { class: 'cerebro-nome' }, c.nome),
         el('div', { class: 'cerebro-desc' }, c.descricao || '—'),
@@ -287,7 +288,7 @@ async function abrirCerebroDetalhe(slug) {
   ]);
 
   const header = el('div', { class: 'cerebro-detail-header' }, [
-    el('div', { class: 'cerebro-emoji' }, cerebroAtual.emoji || '📦'),
+    iconeNode({ icone_url: cerebroAtual.icone_url, emoji: cerebroAtual.emoji, nome: cerebroAtual.nome }, { size: 'xl', className: 'cerebro-emoji' }),
     el('div', { style: 'flex:1' }, [
       el('div', { style: 'display:flex;align-items:center;gap:.5rem' }, [
         el('div', { class: 'cerebro-nome' }, `Cérebro ${cerebroAtual.nome}`),
@@ -388,11 +389,16 @@ async function zerarCerebro() {
   abrirCerebroDetalhe(cerebroAtual.slug);
 }
 
-/* --- Editar nome/emoji/descricao do produto associado --- */
+/* --- Editar nome/icone/emoji/descricao do produto associado --- */
 async function abrirEditarCerebro() {
   if (!cerebroAtual) return;
   const sb = getSupabase();
   if (!sb) { await alertarDark({ titulo: 'Sem conexão', mensagem: 'Supabase não conectado.', tipo: 'erro' }); return; }
+
+  // Estado do uploader (icone)
+  let iconeUrlAtual = cerebroAtual.icone_url || null;
+  let arquivoNovo = null;       // File selecionado pelo usuario, ainda nao subido
+  let removerSinalizado = false; // Usuario clicou em "Remover" — vai gravar null no save
 
   const back = el('div', {
     class: 'modal-backdrop',
@@ -401,10 +407,70 @@ async function abrirEditarCerebro() {
   const card = el('div', { class: 'modal-card', style: 'max-width:520px' });
   function fechar() { back.classList.remove('open'); setTimeout(() => back.remove(), 180); }
 
+  // ----- Preview do icone (atualiza ao escolher/remover) -----
+  const previewBox = el('div', { class: 'icone-uploader-preview' }, []);
+  function refreshPreview() {
+    previewBox.innerHTML = '';
+    if (arquivoNovo) {
+      const img = el('img', { src: URL.createObjectURL(arquivoNovo), alt: '' });
+      previewBox.appendChild(img);
+      return;
+    }
+    if (!removerSinalizado && iconeUrlAtual) {
+      const img = el('img', { src: iconeUrlAtual, alt: '' });
+      previewBox.appendChild(img);
+      return;
+    }
+    // Sem icone: mostra emoji ou inicial
+    const emoji = (document.querySelector('input[name="emoji"]')?.value || cerebroAtual.emoji || '').trim();
+    const span = el('span', { style: 'font-size:28px;line-height:1' }, emoji || (cerebroAtual.nome || '?')[0].toUpperCase());
+    previewBox.appendChild(span);
+  }
+
+  // ----- Botoes do uploader -----
+  const inputFile = el('input', { type: 'file', accept: 'image/png,image/svg+xml,image/jpeg,image/webp' });
+  inputFile.addEventListener('change', (ev) => {
+    const f = ev.target.files?.[0];
+    if (!f) return;
+    if (f.size > 2 * 1024 * 1024) {
+      alertarDark({ titulo: 'Arquivo grande', mensagem: 'Máximo 2MB. Reduza o ícone antes de subir.', tipo: 'erro' });
+      ev.target.value = '';
+      return;
+    }
+    arquivoNovo = f;
+    removerSinalizado = false;
+    refreshPreview();
+    btnRemover.style.display = '';
+  });
+
+  const btnEscolher = el('button', { type: 'button', class: 'btn btn-ghost', onclick: () => inputFile.click() }, '📷 Escolher ícone');
+  const btnRemover = el('button', {
+    type: 'button',
+    class: 'btn btn-ghost',
+    style: 'color:var(--danger)' + ((iconeUrlAtual || arquivoNovo) ? '' : ';display:none'),
+    onclick: () => {
+      arquivoNovo = null;
+      removerSinalizado = !!iconeUrlAtual; // Só sinaliza remover se tinha icone salvo no banco
+      iconeUrlAtual = removerSinalizado ? iconeUrlAtual : null;
+      inputFile.value = '';
+      refreshPreview();
+      btnRemover.style.display = 'none';
+    }
+  }, 'Remover');
+
+  const uploaderBox = el('div', { class: 'icone-uploader' }, [
+    previewBox,
+    el('div', { class: 'icone-uploader-actions' }, [
+      el('div', { style: 'display:flex;gap:.5rem;flex-wrap:wrap' }, [btnEscolher, btnRemover]),
+      el('div', { class: 'icone-uploader-hint' }, 'PNG, SVG, JPG ou WEBP · até 2MB · de preferência quadrado'),
+    ]),
+    inputFile,
+  ]);
+
   card.append(
     el('div', { class: 'modal-head' }, [
       el('h2', {}, 'Editar Cérebro'),
-      el('div', { class: 'modal-sub' }, 'Atualiza o nome, emoji ou descrição. O slug (identificador interno) não muda.'),
+      el('div', { class: 'modal-sub' }, 'Atualiza o nome, ícone, emoji ou descrição. O slug (identificador interno) não muda.'),
       el('button', { class: 'modal-close', onclick: fechar }, '×'),
     ]),
     el('div', { class: 'modal-body' }, [
@@ -418,6 +484,7 @@ async function abrirEditarCerebro() {
           if (!nome) return;
           const btn = ev.submitter;
           btn.disabled = true; btn.textContent = 'Salvando...';
+
           // Busca produto ID
           const { data: prod, error: eP } = await sb.from('produtos').select('id').eq('slug', cerebroAtual.slug).single();
           if (eP || !prod) {
@@ -425,7 +492,33 @@ async function abrirEditarCerebro() {
             await alertarDark({ titulo: 'Falha', mensagem: 'Produto não encontrado.', tipo: 'erro' });
             return;
           }
-          const { error } = await sb.from('produtos').update({ nome, emoji, descricao }).eq('id', prod.id);
+
+          // 1) Upload do icone se ha arquivo novo
+          let icone_url = cerebroAtual.icone_url || null;
+          if (arquivoNovo) {
+            btn.textContent = 'Subindo ícone...';
+            const ext = (arquivoNovo.name.split('.').pop() || 'png').toLowerCase();
+            const path = `${cerebroAtual.slug}-${Date.now()}.${ext}`;
+            const { error: errUp } = await sb.storage.from('pinguim-icones').upload(path, arquivoNovo, {
+              cacheControl: '3600',
+              upsert: false,
+              contentType: arquivoNovo.type,
+            });
+            if (errUp) {
+              btn.disabled = false; btn.textContent = 'Salvar';
+              await alertarDark({ titulo: 'Falha no upload', mensagem: errUp.message, tipo: 'erro' });
+              return;
+            }
+            const { data: pub } = sb.storage.from('pinguim-icones').getPublicUrl(path);
+            icone_url = pub?.publicUrl || null;
+          } else if (removerSinalizado) {
+            icone_url = null;
+            // (Nao apaga o arquivo no storage por simplicidade — fica orfao mas nao quebra)
+          }
+
+          // 2) Update no produtos
+          btn.textContent = 'Salvando...';
+          const { error } = await sb.from('produtos').update({ nome, emoji, descricao, icone_url }).eq('id', prod.id);
           if (error) {
             btn.disabled = false; btn.textContent = 'Salvar';
             await alertarDark({ titulo: 'Falha ao salvar', mensagem: error.message, tipo: 'erro' });
@@ -440,10 +533,17 @@ async function abrirEditarCerebro() {
       }, [
         el('label', { class: 'novo-cerebro-label' }, 'Nome do produto'),
         el('input', { name: 'nome', class: 'form-input', required: 'true', value: cerebroAtual.nome || '' }),
+
+        el('label', { class: 'novo-cerebro-label', style: 'margin-top:.875rem' }, 'Ícone'),
+        uploaderBox,
+
         el('div', { style: 'display:flex;gap:.5rem;margin-top:.75rem' }, [
           el('div', { style: 'flex:0 0 90px' }, [
-            el('label', { class: 'novo-cerebro-label' }, 'Emoji'),
-            el('input', { name: 'emoji', class: 'form-input', maxlength: 4, value: cerebroAtual.emoji || '📦' }),
+            el('label', { class: 'novo-cerebro-label' }, 'Emoji (fallback)'),
+            el('input', {
+              name: 'emoji', class: 'form-input', maxlength: 4, value: cerebroAtual.emoji || '📦',
+              oninput: () => refreshPreview(),
+            }),
           ]),
           el('div', { style: 'flex:1' }, [
             el('label', { class: 'novo-cerebro-label' }, 'Descrição'),
@@ -458,6 +558,7 @@ async function abrirEditarCerebro() {
     ]),
   );
   back.append(card);
+  refreshPreview();
   document.body.append(back);
   requestAnimationFrame(() => back.classList.add('open'));
 }

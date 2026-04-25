@@ -3705,3 +3705,74 @@ body.mobile-menu-open .mobile-overlay {
   border-color: var(--accent);
 }
 .form-input::placeholder { color: var(--fg-muted); }
+
+/* =====================================================================
+   ICONE — cascata icone_url / emoji / inicial pra Cerebros e similares
+   ===================================================================== */
+.icone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  overflow: hidden;
+  line-height: 1;
+}
+.icone img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.icone.icone-img {
+  background: transparent;
+}
+.icone-emoji {
+  line-height: 1;
+}
+.icone-inicial {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  color: var(--pc);
+  letter-spacing: -0.02em;
+}
+
+/* Form upload de icone (modal de editar Cerebro) */
+.icone-uploader {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.75rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  margin-top: 0.5rem;
+}
+.icone-uploader-preview {
+  width: 56px; height: 56px;
+  border-radius: var(--r-md);
+  background: var(--bg-base);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.icone-uploader-preview img {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.icone-uploader-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+}
+.icone-uploader-actions .btn {
+  align-self: flex-start;
+}
+.icone-uploader-hint {
+  font-size: 0.6875rem;
+  color: var(--fg-muted);
+}
+.icone-uploader input[type="file"] {
+  display: none;
+}

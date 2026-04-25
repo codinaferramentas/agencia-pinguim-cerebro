@@ -367,6 +367,7 @@ select
   p.slug                          as slug,
   p.nome                          as nome,
   p.emoji                         as emoji,
+  p.icone_url                     as icone_url,
   p.descricao                     as descricao,
   p.status                        as status,
   c.ultima_alimentacao            as ultima_alimentacao,

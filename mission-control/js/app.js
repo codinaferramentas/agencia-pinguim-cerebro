@@ -8,6 +8,7 @@ import { renderCerebros, initDrawer } from './cerebros.js?v=20260421p';
 import { renderCrons } from './crons.js?v=20260421p';
 import { renderSkills } from './skills.js?v=20260421p';
 import { renderStub } from './stubs.js?v=20260421p';
+import { iconeNode } from './icone.js?v=20260425g';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
@@ -165,6 +166,8 @@ const SUBNAV_CONFIG = {
           label: c.nome,
           meta: (c.total_fontes ?? 0) + ' fontes',
           emoji: c.emoji || '⚛',
+          icone_url: c.icone_url,
+          nome: c.nome,
         }));
     },
     onSelect: (id) => {
@@ -183,6 +186,8 @@ const SUBNAV_CONFIG = {
           label: c.nome,
           meta: 'auto',
           emoji: c.emoji || '👤',
+          icone_url: c.icone_url,
+          nome: c.nome,
         }));
     },
     onSelect: (id) => {
@@ -236,7 +241,7 @@ async function abrirSubnav(pageSlug) {
 
     items.forEach(it => {
       const row = el('div', { class: 'subnav-item', data: { id: it.id } }, [
-        el('span', { class: 'nav-icon', style: 'font-size:0.9rem' }, it.emoji || '•'),
+        iconeNode({ icone_url: it.icone_url, emoji: it.emoji, nome: it.nome || it.label }, { size: 'sm', className: 'subnav-icone' }),
         el('span', { class: 'subnav-label' }, it.label),
         it.meta ? el('span', { class: 'subnav-meta' }, it.meta) : null,
       ]);
@@ -272,7 +277,7 @@ async function refrescarSubnavAtual() {
     }
     items.forEach(it => {
       const row = el('div', { class: 'subnav-item', data: { id: it.id } }, [
-        el('span', { class: 'nav-icon', style: 'font-size:0.9rem' }, it.emoji || '•'),
+        iconeNode({ icone_url: it.icone_url, emoji: it.emoji, nome: it.nome || it.label }, { size: 'sm', className: 'subnav-icone' }),
         el('span', { class: 'subnav-label' }, it.label),
         it.meta ? el('span', { class: 'subnav-meta' }, it.meta) : null,
       ]);
@@ -393,7 +398,7 @@ async function renderPersonas(slugPreSelecionado) {
             onclick: () => renderPersonaDetalhe(c.slug)
           }, [
             el('div', { class: 'cerebro-card-top' }, [
-              el('div', { class: 'cerebro-emoji' }, c.emoji || '👤'),
+              iconeNode({ icone_url: c.icone_url, emoji: c.emoji || '👤', nome: c.nome }, { size: 'lg', className: 'cerebro-emoji' }),
               el('div', { style: 'flex:1;min-width:0' }, [
                 el('div', { class: 'cerebro-nome' }, 'Persona ' + c.nome),
                 el('div', { class: 'cerebro-desc' }, 'Derivada do Cérebro ' + c.nome),
@@ -446,7 +451,7 @@ async function renderPersonaDetalhe(slug) {
   page.append(
     el('div', { class: 'cerebro-detail' }, [
       el('div', { class: 'cerebro-detail-header' }, [
-        el('div', { class: 'cerebro-emoji' }, c.emoji || '👤'),
+        iconeNode({ icone_url: c.icone_url, emoji: c.emoji || '👤', nome: c.nome }, { size: 'xl', className: 'cerebro-emoji' }),
         el('div', { style: 'flex:1' }, [
           el('div', { class: 'cerebro-nome' }, 'Persona ' + c.nome),
           el('div', { class: 'cerebro-desc' }, 'Dossiê derivado do Cérebro ' + c.nome),
