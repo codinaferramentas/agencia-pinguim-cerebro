@@ -2,7 +2,7 @@
 
 import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421p';
 import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421p';
-import { iniciarSquadParalelo } from './squad-modal.js?v=20260425c';
+import { iniciarSquadParalelo } from './squad-modal.js?v=20260425d';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -219,6 +219,8 @@ async function abrirModalNovoProduto() {
 
             fechar();
             cerebrosCache = await fetchCerebrosCatalogo();
+            // Sinaliza pro app refrescar subnav e qualquer dependente
+            window.dispatchEvent(new CustomEvent('dados:atualizado', { detail: { tipo: 'cerebro_criado', slug } }));
             abrirCerebroDetalhe(slug);
           },
         }, [
@@ -287,7 +289,14 @@ async function abrirCerebroDetalhe(slug) {
   const header = el('div', { class: 'cerebro-detail-header' }, [
     el('div', { class: 'cerebro-emoji' }, cerebroAtual.emoji || '📦'),
     el('div', { style: 'flex:1' }, [
-      el('div', { class: 'cerebro-nome' }, `Cérebro ${cerebroAtual.nome}`),
+      el('div', { style: 'display:flex;align-items:center;gap:.5rem' }, [
+        el('div', { class: 'cerebro-nome' }, `Cérebro ${cerebroAtual.nome}`),
+        el('button', {
+          class: 'btn-icon-edit',
+          title: 'Editar nome, emoji e descrição',
+          onclick: () => abrirEditarCerebro(),
+        }, '✎'),
+      ]),
       el('div', { class: 'cerebro-desc' }, cerebroAtual.descricao || '—'),
       el('div', { style: 'display:flex;gap:.75rem;margin-top:.5rem;font-size:.75rem;color:var(--fg-muted)' }, [
         el('span', { class: 'cerebro-detalhe-header-count' }, `${pecasCache.length} font${pecasCache.length === 1 ? 'e' : 'es'}`),
@@ -373,9 +382,84 @@ async function zerarCerebro() {
 
   await alertarDark({ titulo: 'Cérebro zerado', mensagem: `${cerebroAtual.nome} voltou ao estado inicial. Pronto pra nova carga.`, tipo: 'info' });
 
-  // Recarrega catálogo + tela
+  // Recarrega catálogo + tela + subnav
   cerebrosCache = await fetchCerebrosCatalogo();
+  window.dispatchEvent(new CustomEvent('dados:atualizado', { detail: { tipo: 'cerebro_zerado', slug: cerebroAtual.slug } }));
   abrirCerebroDetalhe(cerebroAtual.slug);
+}
+
+/* --- Editar nome/emoji/descricao do produto associado --- */
+async function abrirEditarCerebro() {
+  if (!cerebroAtual) return;
+  const sb = getSupabase();
+  if (!sb) { await alertarDark({ titulo: 'Sem conexão', mensagem: 'Supabase não conectado.', tipo: 'erro' }); return; }
+
+  const back = el('div', {
+    class: 'modal-backdrop',
+    onclick: (e) => { if (e.target === back) fechar(); }
+  });
+  const card = el('div', { class: 'modal-card', style: 'max-width:520px' });
+  function fechar() { back.classList.remove('open'); setTimeout(() => back.remove(), 180); }
+
+  card.append(
+    el('div', { class: 'modal-head' }, [
+      el('h2', {}, 'Editar Cérebro'),
+      el('div', { class: 'modal-sub' }, 'Atualiza o nome, emoji ou descrição. O slug (identificador interno) não muda.'),
+      el('button', { class: 'modal-close', onclick: fechar }, '×'),
+    ]),
+    el('div', { class: 'modal-body' }, [
+      el('form', {
+        class: 'novo-cerebro-form',
+        onsubmit: async (ev) => {
+          ev.preventDefault();
+          const nome = ev.target.nome.value.trim();
+          const emoji = ev.target.emoji.value.trim() || cerebroAtual.emoji || '📦';
+          const descricao = ev.target.descricao.value.trim() || null;
+          if (!nome) return;
+          const btn = ev.submitter;
+          btn.disabled = true; btn.textContent = 'Salvando...';
+          // Busca produto ID
+          const { data: prod, error: eP } = await sb.from('produtos').select('id').eq('slug', cerebroAtual.slug).single();
+          if (eP || !prod) {
+            btn.disabled = false; btn.textContent = 'Salvar';
+            await alertarDark({ titulo: 'Falha', mensagem: 'Produto não encontrado.', tipo: 'erro' });
+            return;
+          }
+          const { error } = await sb.from('produtos').update({ nome, emoji, descricao }).eq('id', prod.id);
+          if (error) {
+            btn.disabled = false; btn.textContent = 'Salvar';
+            await alertarDark({ titulo: 'Falha ao salvar', mensagem: error.message, tipo: 'erro' });
+            return;
+          }
+          fechar();
+          // Atualiza cache local + dispara refresh global
+          cerebrosCache = await fetchCerebrosCatalogo();
+          window.dispatchEvent(new CustomEvent('dados:atualizado', { detail: { tipo: 'cerebro_editado', slug: cerebroAtual.slug } }));
+          abrirCerebroDetalhe(cerebroAtual.slug);
+        },
+      }, [
+        el('label', { class: 'novo-cerebro-label' }, 'Nome do produto'),
+        el('input', { name: 'nome', class: 'form-input', required: 'true', value: cerebroAtual.nome || '' }),
+        el('div', { style: 'display:flex;gap:.5rem;margin-top:.75rem' }, [
+          el('div', { style: 'flex:0 0 90px' }, [
+            el('label', { class: 'novo-cerebro-label' }, 'Emoji'),
+            el('input', { name: 'emoji', class: 'form-input', maxlength: 4, value: cerebroAtual.emoji || '📦' }),
+          ]),
+          el('div', { style: 'flex:1' }, [
+            el('label', { class: 'novo-cerebro-label' }, 'Descrição'),
+            el('input', { name: 'descricao', class: 'form-input', value: cerebroAtual.descricao || '' }),
+          ]),
+        ]),
+        el('div', { style: 'display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem' }, [
+          el('button', { type: 'button', class: 'btn btn-ghost', onclick: fechar }, 'Cancelar'),
+          el('button', { type: 'submit', class: 'btn btn-primary' }, 'Salvar'),
+        ]),
+      ]),
+    ]),
+  );
+  back.append(card);
+  document.body.append(back);
+  requestAnimationFrame(() => back.classList.add('open'));
 }
 
 async function abrirHistoricoLotes() {
@@ -1435,6 +1519,9 @@ function renderStepPacote() {
 
         // Sinaliza animacao squad pra acelerar/fechar
         squad.sinalizarConclusao({ fontes: ondaInfo.fontes, chunks: ondaInfo.chunks });
+        // Refresca cache + subnav (total de fontes mudou)
+        cerebrosCache = await fetchCerebrosCatalogo();
+        window.dispatchEvent(new CustomEvent('dados:atualizado', { detail: { tipo: 'cerebro_alimentado', slug: cerebroSlug } }));
 
         // Lê relatório final
         const { data: loteFinal } = await sb.from('ingest_lotes')
@@ -1743,6 +1830,9 @@ function renderStepAvulso() {
         progressoBar.style.width = '100%';
         status.innerHTML = '<strong>✅ Concluído</strong>';
         squad.sinalizarConclusao({ ok: true });
+        // Refresca cache + subnav (total de fontes mudou)
+        cerebrosCache = await fetchCerebrosCatalogo();
+        window.dispatchEvent(new CustomEvent('dados:atualizado', { detail: { tipo: 'cerebro_alimentado', slug: cerebroAtual?.slug } }));
 
         const { data: loteFinal } = await sb.from('ingest_lotes')
           .select('log_md, fontes_criadas, chunks_criados')

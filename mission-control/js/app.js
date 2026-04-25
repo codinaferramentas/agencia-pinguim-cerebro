@@ -253,6 +253,51 @@ async function abrirSubnav(pageSlug) {
   }
 }
 
+// Recarrega o subnav atualmente aberto (sem fechar nem mudar pagina).
+// Chamado apos criacao/exclusao/edicao que muda lista de cerebros/personas.
+async function refrescarSubnavAtual() {
+  if (!subnavPageAtual) return;
+  const cfg = SUBNAV_CONFIG[subnavPageAtual];
+  if (!cfg) return;
+  const body = $('#subnav-body');
+  if (!body) return;
+  // Mantem item ativo atual pra restaurar destaque depois
+  const ativo = body.querySelector('.subnav-item.active')?.dataset.id;
+  try {
+    const items = await cfg.loader();
+    body.innerHTML = '';
+    if (items.length === 0) {
+      body.innerHTML = '<div class="subnav-section">Nenhum item</div>';
+      return;
+    }
+    items.forEach(it => {
+      const row = el('div', { class: 'subnav-item', data: { id: it.id } }, [
+        el('span', { class: 'nav-icon', style: 'font-size:0.9rem' }, it.emoji || '•'),
+        el('span', { class: 'subnav-label' }, it.label),
+        it.meta ? el('span', { class: 'subnav-meta' }, it.meta) : null,
+      ]);
+      if (it.id === ativo) row.classList.add('active');
+      row.addEventListener('click', () => {
+        $$('.subnav-item').forEach(s => s.classList.remove('active'));
+        row.classList.add('active');
+        cfg.onSelect?.(it.id);
+        if (isMobile()) fecharMobileMenu();
+      });
+      body.appendChild(row);
+    });
+  } catch (err) {
+    console.error('refrescarSubnavAtual', err);
+  }
+}
+// Expoe pra outros modulos
+window.__refrescarSubnav = refrescarSubnavAtual;
+
+// Listener global: qualquer parte do app pode disparar
+// window.dispatchEvent(new CustomEvent('dados:atualizado', { detail: { tipo: 'cerebro' } }))
+window.addEventListener('dados:atualizado', () => {
+  refrescarSubnavAtual();
+});
+
 // Marca item do subnav como ativo com base no id (slug). Chamado quando
 // usuário abre detalhe por outros caminhos (card, evento), pra manter
 // sidebar sincronizada.
@@ -391,7 +436,7 @@ async function renderPersonaDetalhe(slug) {
   const total = c.total_fontes || 0;
   const temDados = total > 0;
 
-  const { fetchPersonaCompleta, gerarPersonaComProgresso, renderBlocoNoPainel, exportarPDF, abrirHistoricoVersoes } = await import('./personas.js?v=20260425c');
+  const { fetchPersonaCompleta, gerarPersonaComProgresso, renderBlocoNoPainel, exportarPDF, abrirHistoricoVersoes } = await import('./personas.js?v=20260425d');
   const persona = temDados ? await fetchPersonaCompleta(slug) : null;
 
   const ultimaSintese = persona
@@ -478,8 +523,8 @@ async function iniciarGeracaoComSquad(slug) {
   const c = cerebros.find(x => x.slug === slug);
   const cerebroNome = c?.nome || slug;
 
-  const { abrirSquadModal } = await import('./squad-modal.js?v=20260425c');
-  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260425c');
+  const { abrirSquadModal } = await import('./squad-modal.js?v=20260425d');
+  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260425d');
 
   try {
     // apiCall e resolvida pelo roteiro. Encapsulamos a chamada real numa promise unica.
@@ -499,7 +544,7 @@ async function iniciarGeracaoComSquad(slug) {
 }
 
 async function iniciarGeracaoComBarra(slug) {
-  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260425c');
+  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260425d');
 
   // Overlay modal centralizado — impossivel de nao ver
   const overlay = el('div', { class: 'persona-progresso-overlay' }, [
@@ -523,6 +568,7 @@ async function iniciarGeracaoComBarra(slug) {
       $('#pp-etapa').textContent = `Etapa ${etapa} de ${total}`;
     });
     overlay.remove();
+    window.dispatchEvent(new CustomEvent('dados:atualizado', { detail: { tipo: 'persona_atualizada', slug } }));
     await renderPersonaDetalhe(slug);
   } catch (e) {
     overlay.querySelector('.persona-progresso-modal').innerHTML = `
