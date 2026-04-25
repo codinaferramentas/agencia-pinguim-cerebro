@@ -1608,7 +1608,12 @@ function gerarFontesMockadas(cerebro) {
    Quando Supabase estiver conectado, esse blob vira bulk insert.
    ================================================================ */
 
+// Flag de sessao do modal: true se houve qualquer indexacao bem-sucedida.
+// Se true ao fechar, o Cerebro detalhe e recarregado pra refletir as fontes novas.
+let modalAlimentouAlgo = false;
+
 function abrirModalAlimentar() {
+  modalAlimentouAlgo = false; // reset a cada abertura
   const backdrop = el('div', { class: 'modal-backdrop', onclick: (e) => {
     if (e.target === backdrop) fecharModal();
   }});
@@ -1624,6 +1629,13 @@ function fecharModal() {
   if (!b) return;
   b.classList.remove('open');
   setTimeout(() => b.remove(), 180);
+
+  // Se algo foi indexado durante esta sessao do modal, recarrega o detalhe
+  // do Cerebro pra mostrar fontes novas no Kanban/Lista/Timeline.
+  if (modalAlimentouAlgo && cerebroAtual?.slug) {
+    abrirCerebroDetalhe(cerebroAtual.slug);
+  }
+  modalAlimentouAlgo = false;
 }
 
 /* --- PASSO 1: escolher modo (manual vs automático) --- */
@@ -2057,6 +2069,9 @@ function renderStepPacote() {
         progressoBar.style.width = '100%';
         status.innerHTML = `<strong>✅ Concluído</strong> · ${ondaInfo.fontes} fontes · ${ondaInfo.chunks} chunks · ${ondaInfo.quarentena} em quarentena`;
 
+        // Marca que algo foi alimentado nesta sessao do modal
+        if ((ondaInfo.fontes || 0) > 0) modalAlimentouAlgo = true;
+
         // Sinaliza animacao squad pra acelerar/fechar
         squad.sinalizarConclusao({ fontes: ondaInfo.fontes, chunks: ondaInfo.chunks });
         // Refresca cache + subnav (total de fontes mudou)
@@ -2223,6 +2238,9 @@ function blocoUrl(cerebroAtualRef, onIndexado) {
       inputUrl.value = '';
       btnTranscrever.disabled = true; // desabilitado ate usuario clicar "+ Trazer outra URL"
       btnTranscrever.innerHTML = '✓ Indexado';
+
+      // Marca que algo foi alimentado nesta sessao do modal
+      modalAlimentouAlgo = true;
 
       // Sinaliza pro Squad concluir animacao
       squad.sinalizarConclusao({ ok: true, fontes: 1, chunks: r.chunks });
@@ -2597,6 +2615,8 @@ function renderStepAvulso() {
         } else {
           status.innerHTML = '<strong>✅ Concluído</strong>';
           squad.sinalizarConclusao({ ok: true });
+          // Marca que algo foi alimentado nesta sessao do modal
+          modalAlimentouAlgo = true;
         }
 
         // Refresca cache + subnav (total de fontes mudou — só se não foi quarentena, mas refresca pra garantir)
