@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pinguim OS</title>
-<link rel="stylesheet" href="css/style.css?v=20260425e">
+<link rel="stylesheet" href="css/style.css?v=20260425f">
 </head>
 <body>
 <!-- Botao hamburger (so mobile) -->
@@ -19,12 +19,10 @@
   <!-- Sidebar de navegação (flat, estilo Vercel) -->
   <nav class="nav">
     <div class="nav-brand">
-      <div class="nav-brand-icon">
-        <img src="img/pinguim-icon.svg" alt="" width="20" height="24">
-      </div>
-      <div>
-        <div class="nav-brand-title">Pinguim</div>
-        <div class="nav-brand-subtitle">OS</div>
+      <img class="nav-brand-icon" src="img/pinguim-icon.svg" alt="">
+      <div class="nav-brand-wordmark">
+        <span class="nav-brand-name">Pinguim</span>
+        <span class="nav-brand-os">OS</span>
       </div>
     </div>
 
@@ -55,12 +53,10 @@
   <!-- Sub-sidebar contextual — SUBSTITUI a nav principal (não empilha) -->
   <aside class="subnav" id="subnav" aria-hidden="true">
     <div class="nav-brand">
-      <div class="nav-brand-icon">
-        <img src="img/pinguim-icon.svg" alt="" width="20" height="24">
-      </div>
-      <div>
-        <div class="nav-brand-title">Pinguim</div>
-        <div class="nav-brand-subtitle">OS</div>
+      <img class="nav-brand-icon" src="img/pinguim-icon.svg" alt="">
+      <div class="nav-brand-wordmark">
+        <span class="nav-brand-name">Pinguim</span>
+        <span class="nav-brand-os">OS</span>
       </div>
     </div>
     <button class="subnav-back-row" id="subnav-back" aria-label="Voltar">
@@ -126,11 +122,11 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="module">
-  import { guard, logout } from './js/auth-gate.js?v=20260425e';
+  import { guard, logout } from './js/auth-gate.js?v=20260425f';
   const ok = await guard();
   if (ok) {
-    await import('./js/sb-client.js?v=20260425e');
-    await import('./js/app.js?v=20260425e');
+    await import('./js/sb-client.js?v=20260425f');
+    await import('./js/app.js?v=20260425f');
     const btn = document.getElementById('nav-logout');
     if (btn) btn.addEventListener('click', logout);
   }
