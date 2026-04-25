@@ -23,32 +23,25 @@ const el = (tag, attrs = {}, children = []) => {
 
 const ICONES = {
   openai: '🤖',
-  'rapidapi-youtube': '▶',
-  'apify-instagram': '📸',
+  apify: '🕷',
   'youtube-legendas': '📝',
   supabase: '🗄',
 };
 
 const DESCRICOES = {
   openai: 'Modelos de IA (Vision, Whisper, GPT, Embeddings). Configurada via variável de ambiente da Edge Function.',
-  'rapidapi-youtube': 'Transcreve vídeos do YouTube quando não há legendas oficiais. Conta em rapidapi.com, plano básico ~$5/mês cobre centenas de vídeos.',
-  'apify-instagram': 'Extrai legendas, hashtags e métricas de posts do Instagram e TikTok via URL. Conta em apify.com com créditos iniciais grátis.',
-  'youtube-legendas': 'Extrai legendas geradas automaticamente pelo YouTube. Sem chave, sem custo. Funciona em ~95% dos vídeos.',
+  apify: 'Um token só, todos os atores. Cole sua chave Apify e o sistema escolhe o ator certo conforme a URL: Reels do Instagram (com transcrição do áudio), TikTok, YouTube, e mais. Conta em apify.com com US$ 5 grátis por mês.',
+  'youtube-legendas': 'Extrai legendas geradas automaticamente pelo YouTube. Sem chave, sem custo. Funciona em ~95% dos vídeos. Quando não funciona, o sistema cai pra Apify (se configurado).',
   supabase: 'Banco, Storage e Auth do sistema. Configurado via variáveis de ambiente.',
 };
 
 const COMO_CONFIGURAR = {
-  'rapidapi-youtube': [
-    'Acesse rapidapi.com e crie uma conta (se ainda não tiver).',
-    'Procure "YouTube Transcriber" e assine o plano básico (~$5/mês).',
-    'Vá em "My Apps" → copie a chave em "X-RapidAPI-Key".',
-    'Cole no campo abaixo.',
-  ],
-  'apify-instagram': [
-    'Acesse apify.com e crie uma conta (créditos grátis pra começar).',
-    'No console, vá em Settings → Integrations → API tokens.',
-    'Crie um token com permissões padrão.',
-    'Cole no campo abaixo.',
+  apify: [
+    'Acesse apify.com e crie uma conta (US$ 5 grátis por mês — cobre milhares de Reels).',
+    'No console, abra Settings → Integrations → API tokens.',
+    'Clique "Create new token" (deixe permissões padrão).',
+    'Copie o token completo (começa com "apify_api_…") e cole abaixo.',
+    'Pronto — uma chave só, o sistema usa em qualquer URL (Instagram, TikTok, YouTube).',
   ],
 };
 

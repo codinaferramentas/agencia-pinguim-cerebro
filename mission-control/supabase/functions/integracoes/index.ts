@@ -89,20 +89,14 @@ async function testarChave(slug: string) {
     .single();
   if (!integ?.chave_secreta) return { ok: false, erro: 'Chave nao configurada' };
 
-  if (slug === 'rapidapi-youtube') {
-    // Testa pingando o host
-    const resp = await fetch('https://youtube-transcriber-api.p.rapidapi.com/api/transcript?videoId=dQw4w9WgXcQ', {
-      headers: {
-        'x-rapidapi-key': integ.chave_secreta,
-        'x-rapidapi-host': 'youtube-transcriber-api.p.rapidapi.com',
-      },
+  if (slug === 'apify') {
+    // Lista atores acessiveis pela conta — valida o token
+    const resp = await fetch(`https://api.apify.com/v2/users/me`, {
+      headers: { 'Authorization': `Bearer ${integ.chave_secreta}` },
     });
-    return { ok: resp.ok, status: resp.status };
-  }
-
-  if (slug === 'apify-instagram') {
-    const resp = await fetch(`https://api.apify.com/v2/acts?token=${integ.chave_secreta}&limit=1`);
-    return { ok: resp.ok, status: resp.status };
+    if (!resp.ok) return { ok: false, status: resp.status, erro: 'Token Apify rejeitado' };
+    const data = await resp.json();
+    return { ok: true, status: 200, obs: `Conta: ${data.data?.username || 'ok'}` };
   }
 
   return { ok: true, obs: 'Sem teste especifico, chave salva.' };

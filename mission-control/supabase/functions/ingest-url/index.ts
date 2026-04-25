@@ -142,71 +142,155 @@ function decodeHtml(s: string): string {
     .replace(/&#x([0-9a-fA-F]+);/g, (_, n) => String.fromCharCode(parseInt(n, 16)));
 }
 
-// ---------- YouTube: RapidAPI fallback ----------
-async function tentarRapidApiYoutube(videoId: string): Promise<{ titulo: string; texto: string; custo_usd: number } | null> {
-  // Busca chave da integracao
+// ---------- Apify: token unico, escolhe ator pelo dominio da URL ----------
+// Mapa: tipo de URL -> ator Apify oficial recomendado + builder de input
+const APIFY_ATORES: Record<string, { actor: string; buildInput: (url: string) => any; custoEstimado: number }> = {
+  instagram: {
+    // Instagram Reel Scraper — retorna caption + transcript + metricas
+    actor: 'apify~instagram-reel-scraper',
+    buildInput: (url: string) => {
+      // Aceita URLs de reel diretas OU usernames (nesse caso vira "username")
+      if (/instagram\.com\/(p|reel|tv)\//.test(url)) {
+        return { directUrls: [url], resultsLimit: 1 };
+      }
+      // URL de perfil — extrai username
+      const m = url.match(/instagram\.com\/([^/?]+)/);
+      const username = m ? m[1] : null;
+      return username
+        ? { username: [username], resultsLimit: 5 }
+        : { directUrls: [url], resultsLimit: 1 };
+    },
+    custoEstimado: 0.005, // ~$1/1000 reels
+  },
+  tiktok: {
+    actor: 'clockworks~free-tiktok-scraper',
+    buildInput: (url: string) => ({
+      postURLs: [url],
+      resultsPerPage: 1,
+      shouldDownloadVideos: false,
+      shouldDownloadCovers: false,
+      shouldDownloadSubtitles: true, // pega legenda do video se tiver
+    }),
+    custoEstimado: 0.003,
+  },
+  youtube: {
+    actor: 'streamers~youtube-scraper',
+    buildInput: (url: string) => ({
+      startUrls: [{ url }],
+      maxResults: 1,
+      subtitlesLanguage: 'any',
+      subtitlesFormat: 'plaintext',
+      saveSubsToKVS: false,
+    }),
+    custoEstimado: 0.005,
+  },
+};
+
+async function tentarApify(url: string, tipo: 'instagram' | 'tiktok' | 'youtube'): Promise<{ titulo: string; texto: string; custo_usd: number; metodo: string } | null> {
   const sb = sbAdmin();
   const { data: integ } = await sb.from('integracoes')
     .select('chave_secreta, status')
-    .eq('slug', 'rapidapi-youtube')
+    .eq('slug', 'apify')
     .single();
   if (!integ?.chave_secreta || integ.status !== 'ativa') return null;
 
-  try {
-    const resp = await fetch(`https://youtube-transcriber-api.p.rapidapi.com/api/transcript?videoId=${videoId}`, {
-      headers: {
-        'x-rapidapi-key': integ.chave_secreta,
-        'x-rapidapi-host': 'youtube-transcriber-api.p.rapidapi.com',
-      },
-    });
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    const texto = Array.isArray(data) ? data.map((s: any) => s.text || '').join(' ') : (data.transcript || data.text || '');
-    if (!texto || texto.length < 100) return null;
-    return { titulo: `YouTube ${videoId}`, texto: texto.trim(), custo_usd: 0.025 }; // estimativa
-  } catch (e) {
-    console.error('RapidAPI erro:', e);
-    return null;
-  }
-}
-
-// ---------- Apify: Instagram/TikTok ----------
-async function tentarApify(url: string, tipo: 'instagram' | 'tiktok'): Promise<{ titulo: string; texto: string; custo_usd: number } | null> {
-  const sb = sbAdmin();
-  const { data: integ } = await sb.from('integracoes')
-    .select('chave_secreta, status')
-    .eq('slug', 'apify-instagram')
-    .single();
-  if (!integ?.chave_secreta || integ.status !== 'ativa') return null;
-
-  // Apify Instagram Post Scraper / TikTok Scraper publicos
-  const actorId = tipo === 'instagram' ? 'apify~instagram-post-scraper' : 'clockworks~tiktok-scraper';
+  const config = APIFY_ATORES[tipo];
+  if (!config) return null;
 
   try {
-    const resp = await fetch(`https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${integ.chave_secreta}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(tipo === 'instagram' ? { directUrls: [url] } : { postURLs: [url] }),
-    });
+    const input = config.buildInput(url);
+    const resp = await fetch(
+      `https://api.apify.com/v2/acts/${config.actor}/run-sync-get-dataset-items?timeout=120`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${integ.chave_secreta}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(input),
+      }
+    );
+
     if (!resp.ok) {
-      console.error(`Apify HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
+      const errBody = await resp.text();
+      console.error(`Apify ${config.actor} HTTP ${resp.status}: ${errBody.slice(0, 300)}`);
       return null;
     }
+
     const items = await resp.json();
     if (!Array.isArray(items) || items.length === 0) return null;
-    const post = items[0];
 
-    // Monta texto consolidado: caption + hashtags + transcricao se houver
+    // Consolida items em texto unico
     const partes: string[] = [];
-    if (post.caption || post.text) partes.push((post.caption || post.text).trim());
-    if (Array.isArray(post.hashtags)) partes.push('Hashtags: ' + post.hashtags.join(' '));
-    if (post.musicMeta?.musicName) partes.push(`Som: ${post.musicMeta.musicName}`);
-    if (post.diggCount != null) partes.push(`${post.diggCount} curtidas`);
+    let titulo = '';
 
-    const titulo = post.caption?.slice(0, 80) || post.title || `${tipo} post`;
-    const texto = partes.join('\n\n');
+    items.forEach((post: any, idx: number) => {
+      const linhas: string[] = [];
+
+      // Titulo do primeiro item vira o titulo da fonte
+      if (idx === 0) {
+        titulo = post.title || post.caption?.slice(0, 80) || post.text?.slice(0, 80) || `${tipo} ${url.slice(-30)}`;
+      }
+
+      // Header do item (se for multi)
+      if (items.length > 1) linhas.push(`--- Item ${idx + 1} ---`);
+
+      // Caption / texto
+      const caption = post.caption || post.text || post.title || '';
+      if (caption) linhas.push(caption.trim());
+
+      // Transcript (Reel scraper retorna isso direto, TikTok via subtitle, YouTube via subtitle)
+      const transcript = post.transcript || post.subtitles || post.subtitle || post.captionText;
+      if (transcript && typeof transcript === 'string' && transcript.trim()) {
+        linhas.push('\n[Transcrição do áudio]');
+        linhas.push(transcript.trim());
+      }
+
+      // Hashtags
+      if (Array.isArray(post.hashtags) && post.hashtags.length) {
+        linhas.push(`Hashtags: ${post.hashtags.map((h: string) => h.startsWith('#') ? h : '#' + h).join(' ')}`);
+      }
+
+      // Musica
+      if (post.musicInfo?.song_name || post.musicMeta?.musicName) {
+        linhas.push(`Som: ${post.musicInfo?.song_name || post.musicMeta?.musicName}`);
+      }
+
+      // Metricas (sinaliza viralidade)
+      const metricas: string[] = [];
+      if (post.likesCount != null) metricas.push(`${post.likesCount} curtidas`);
+      if (post.diggCount != null) metricas.push(`${post.diggCount} curtidas`);
+      if (post.viewsCount != null) metricas.push(`${post.viewsCount} views`);
+      if (post.playsCount != null) metricas.push(`${post.playsCount} plays`);
+      if (post.commentsCount != null) metricas.push(`${post.commentsCount} comentários`);
+      if (post.commentCount != null) metricas.push(`${post.commentCount} comentários`);
+      if (post.shareCount != null) metricas.push(`${post.shareCount} compart.`);
+      if (post.viewCount != null) metricas.push(`${post.viewCount} views`);
+      if (metricas.length) linhas.push(`Métricas: ${metricas.join(' · ')}`);
+
+      // Comentarios recentes (se tiver — vira sinal de objeção/depoimento)
+      const comments = post.latestComments || post.comments || [];
+      if (Array.isArray(comments) && comments.length) {
+        linhas.push('\n[Comentários recentes]');
+        comments.slice(0, 10).forEach((c: any) => {
+          const txt = c.text || c.content || '';
+          const autor = c.ownerUsername || c.user || c.uniqueId || '';
+          if (txt) linhas.push(`@${autor}: ${txt}`);
+        });
+      }
+
+      partes.push(linhas.join('\n'));
+    });
+
+    const texto = partes.join('\n\n').trim();
     if (!texto || texto.length < 30) return null;
-    return { titulo, texto, custo_usd: 0.015 };
+
+    return {
+      titulo: titulo || `${tipo} post`,
+      texto,
+      custo_usd: config.custoEstimado * items.length,
+      metodo: `apify-${tipo}`,
+    };
   } catch (e) {
     console.error('Apify erro:', e);
     return null;
@@ -297,22 +381,24 @@ async function processarUrl(url: string, cerebro_id: string) {
     const videoId = extrairVideoIdYoutube(url);
     if (!videoId) throw new Error('Video do YouTube nao identificado na URL.');
 
-    // 1. Legendas oficiais (gratis)
+    // 1. Legendas oficiais (gratis, ~95% dos videos)
     const legendas = await tentarLegendasYoutube(videoId);
     if (legendas) {
       resultado = { ...legendas, custo_usd: 0, metodo: 'youtube-legendas' };
     } else {
-      // 2. RapidAPI fallback
-      const rapid = await tentarRapidApiYoutube(videoId);
-      if (rapid) {
-        resultado = { ...rapid, metodo: 'youtube-rapidapi' };
-        custo_total_usd += rapid.custo_usd;
+      // 2. Apify YouTube Scraper (fallback se Apify configurado)
+      const apify = await tentarApify(url, 'youtube');
+      if (apify) {
+        resultado = apify;
+        custo_total_usd += apify.custo_usd;
+      } else {
+        throw new Error('Vídeo sem legendas oficiais. Pra rodar fallback, configure Apify em "Integrações" no menu lateral.');
       }
     }
   } else if (tipo === 'instagram' || tipo === 'tiktok') {
     const apify = await tentarApify(url, tipo);
     if (apify) {
-      resultado = { ...apify, metodo: `apify-${tipo}` };
+      resultado = apify;
       custo_total_usd += apify.custo_usd;
     } else {
       throw new Error(`Integracao Apify nao configurada. Configure em "Integrações" no menu lateral pra processar links de ${tipo}.`);
@@ -375,8 +461,7 @@ async function processarUrl(url: string, cerebro_id: string) {
 
   // Contabiliza uso na integracao
   const slugInteg = resultado.metodo === 'youtube-legendas' ? 'youtube-legendas'
-    : resultado.metodo === 'youtube-rapidapi' ? 'rapidapi-youtube'
-    : resultado.metodo.startsWith('apify-') ? 'apify-instagram'
+    : resultado.metodo.startsWith('apify-') ? 'apify'
     : null;
   if (slugInteg) {
     const { data: cur } = await sb.from('integracoes').select('total_chamadas, custo_acumulado_usd').eq('slug', slugInteg).single();

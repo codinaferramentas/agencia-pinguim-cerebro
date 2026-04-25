@@ -25,9 +25,9 @@ export async function gerar() {
           <h3>Captação de Conteúdo</h3>
           <ul class="docs-list">
             <li><strong>YouTube · legendas oficiais</strong> — extrai legendas geradas automaticamente pelo YouTube. Sem chave, sem custo. Funciona em ~95% dos vídeos.</li>
-            <li><strong>RapidAPI · YouTube Transcriber</strong> — fallback quando o vídeo não tem legendas. Conta em rapidapi.com, plano básico ~$5/mês cobre centenas de vídeos. Custo por uso ~R$ 0,15 por vídeo de 10 min.</li>
-            <li><strong>Apify · Instagram & TikTok</strong> — extrai legenda, hashtags, métricas e detalhes de posts e Reels via URL. Conta em apify.com com créditos iniciais grátis. Ideal pra capturar conteúdo viral do Micha pro Cérebro Lo-fi.</li>
+            <li><strong>Apify (Instagram, TikTok, YouTube)</strong> — um token só, todos os atores. O sistema escolhe automaticamente o ator certo conforme o domínio da URL: Reels do Instagram (com transcrição do áudio do vídeo), TikTok, YouTube (fallback quando não tem legenda). Conta em apify.com com US$ 5 grátis por mês — cobre milhares de Reels.</li>
           </ul>
+          <p style="font-size:0.875em;color:var(--fg-muted)">Por trás dos panos: quando você cola uma URL, o sistema detecta o domínio (instagram.com, tiktok.com, youtube.com) e dispara o ator Apify correto: <code>apify/instagram-reel-scraper</code>, <code>clockworks/free-tiktok-scraper</code> ou <code>streamers/youtube-scraper</code>. Você só precisa ter <strong>um</strong> token configurado — o resto o sistema resolve.</p>
 
           <h3>Infraestrutura</h3>
           <ul class="docs-list">
@@ -50,11 +50,12 @@ export async function gerar() {
         html: `
           <p>Você não precisa pensar nisso — o sistema decide sozinho:</p>
           <ul class="docs-list">
-            <li>Cola URL do YouTube no Avulso → tenta legendas oficiais (grátis); se não tiver, usa RapidAPI; se não tiver chave, mostra aviso explicando como configurar.</li>
-            <li>Cola URL do Instagram/TikTok → usa Apify direto.</li>
-            <li>Sobe imagem ou áudio → usa OpenAI Vision/Whisper automaticamente.</li>
+            <li>Cola URL do YouTube → tenta legendas oficiais (grátis); se não tiver, usa Apify YouTube Scraper.</li>
+            <li>Cola URL do Instagram (Reel ou perfil) → Apify Instagram Reel Scraper. Retorna caption + transcrição do áudio + métricas + comentários recentes.</li>
+            <li>Cola URL do TikTok → Apify TikTok Scraper. Retorna caption + legendas + métricas.</li>
+            <li>Sobe imagem ou áudio direto → OpenAI Vision/Whisper.</li>
           </ul>
-          <p>Cada chamada é contabilizada por integração. No card de cada uma, você vê o número de usos e o custo acumulado em reais — transparência total.</p>
+          <p>Cada chamada é contabilizada por integração. No card, você vê o número de usos e o custo acumulado em reais — transparência total.</p>
         `,
       },
       {
