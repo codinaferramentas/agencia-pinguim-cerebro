@@ -81,14 +81,41 @@ async function navegar(pageSlug, { forcarRender = true } = {}) {
   }
 }
 
+function isMobile() {
+  return window.matchMedia('(max-width: 768px)').matches;
+}
+
+function fecharMobileMenu() {
+  document.body.classList.remove('mobile-menu-open');
+}
+function abrirMobileMenu() {
+  document.body.classList.add('mobile-menu-open');
+}
+
+function setupMobileMenu() {
+  const btn = $('#mobile-menu-btn');
+  const overlay = $('#mobile-overlay');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    document.body.classList.toggle('mobile-menu-open');
+  });
+  overlay?.addEventListener('click', fecharMobileMenu);
+  // Fecha menu ao redimensionar pra desktop
+  window.addEventListener('resize', () => {
+    if (!isMobile()) fecharMobileMenu();
+  });
+}
+
 function setupNav() {
   $$('.nav-item').forEach(item => {
     item.addEventListener('click', () => {
       const pageSlug = item.dataset.page;
       if (item.classList.contains('has-sub')) {
         abrirSubnav(pageSlug);
+        // No mobile, mantem menu aberto pro subnav cobrir por cima
       } else {
         fecharSubnav();
+        if (isMobile()) fecharMobileMenu();
       }
       navegar(pageSlug);
     });
@@ -100,22 +127,26 @@ function setupNav() {
     const page = subnavPageAtual || paginaAtual;
     fecharSubnav();
     if (page) navegar(page);
+    // No mobile, fecha o menu completo apos voltar
+    if (isMobile()) fecharMobileMenu();
   });
 
   // Quando usuário seleciona cérebro/persona no subnav, já garante que
-  // a página certa está visível + ativa antes de abrir o detalhe.
+  // a página certa está visível + renderizada antes de abrir o detalhe.
+  // (se nunca foi renderizada, os handlers do detalhe nao estao no DOM)
   window.addEventListener('cerebro:select', async (ev) => {
     const slug = ev.detail?.slug;
     if (!slug) return;
     if (paginaAtual !== 'cerebros') {
-      await navegar('cerebros', { forcarRender: false });
+      // Renderiza primeiro pra garantir que listeners internos estao ativos
+      await navegar('cerebros');
     }
   });
   window.addEventListener('persona:select', async (ev) => {
     const slug = ev.detail?.slug;
     if (!slug) return;
     if (paginaAtual !== 'personas') {
-      await navegar('personas', { forcarRender: false });
+      await navegar('personas');
     }
   });
 }
@@ -213,6 +244,7 @@ async function abrirSubnav(pageSlug) {
         $$('.subnav-item').forEach(s => s.classList.remove('active'));
         row.classList.add('active');
         cfg.onSelect?.(it.id);
+        if (isMobile()) fecharMobileMenu();
       });
       body.appendChild(row);
     });
@@ -359,7 +391,7 @@ async function renderPersonaDetalhe(slug) {
   const total = c.total_fontes || 0;
   const temDados = total > 0;
 
-  const { fetchPersonaCompleta, gerarPersonaComProgresso, renderBlocoNoPainel, exportarPDF, abrirHistoricoVersoes } = await import('./personas.js?v=20260424h');
+  const { fetchPersonaCompleta, gerarPersonaComProgresso, renderBlocoNoPainel, exportarPDF, abrirHistoricoVersoes } = await import('./personas.js?v=20260425a');
   const persona = temDados ? await fetchPersonaCompleta(slug) : null;
 
   const ultimaSintese = persona
@@ -446,8 +478,8 @@ async function iniciarGeracaoComSquad(slug) {
   const c = cerebros.find(x => x.slug === slug);
   const cerebroNome = c?.nome || slug;
 
-  const { abrirSquadModal } = await import('./squad-modal.js?v=20260424h');
-  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260424h');
+  const { abrirSquadModal } = await import('./squad-modal.js?v=20260425a');
+  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260425a');
 
   try {
     // apiCall e resolvida pelo roteiro. Encapsulamos a chamada real numa promise unica.
@@ -467,7 +499,7 @@ async function iniciarGeracaoComSquad(slug) {
 }
 
 async function iniciarGeracaoComBarra(slug) {
-  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260424h');
+  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260425a');
 
   // Overlay modal centralizado — impossivel de nao ver
   const overlay = el('div', { class: 'persona-progresso-overlay' }, [
@@ -878,6 +910,7 @@ function qualiCard(val, lbl, alerta = false) {
 /* -------- Init -------- */
 (async function boot() {
   setupNav();
+  setupMobileMenu();
   setupSquadToggle();
   initDrawer();
   await atualizarStatusbar();

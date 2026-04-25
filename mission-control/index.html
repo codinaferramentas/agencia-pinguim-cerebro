@@ -4,9 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mission Control — Pinguim</title>
-<link rel="stylesheet" href="css/style.css?v=20260424h">
+<link rel="stylesheet" href="css/style.css?v=20260425a">
 </head>
 <body>
+<!-- Botao hamburger (so mobile) -->
+<button id="mobile-menu-btn" class="mobile-menu-btn" type="button" aria-label="Abrir menu">
+  <span></span><span></span><span></span>
+</button>
+<!-- Overlay do drawer mobile -->
+<div id="mobile-overlay" class="mobile-overlay"></div>
+
 <div class="app">
 
   <!-- Sidebar de navegação (flat, estilo Vercel) -->
@@ -115,11 +122,11 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="module">
-  import { guard, logout } from './js/auth-gate.js?v=20260424h';
+  import { guard, logout } from './js/auth-gate.js?v=20260425a';
   const ok = await guard();
   if (ok) {
-    await import('./js/sb-client.js?v=20260424h');
-    await import('./js/app.js?v=20260424h');
+    await import('./js/sb-client.js?v=20260425a');
+    await import('./js/app.js?v=20260425a');
     const btn = document.getElementById('nav-logout');
     if (btn) btn.addEventListener('click', logout);
   }

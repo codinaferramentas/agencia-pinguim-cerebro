@@ -3479,22 +3479,147 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   .tipos-mini { grid-template-columns: repeat(3, 1fr); }
 }
 
+/* =====================================================================
+   MOBILE — menu hamburger + drawer lateral
+   ===================================================================== */
+
+.mobile-menu-btn {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 150;
+  width: 40px;
+  height: 40px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 10px 9px;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 0;
+}
+.mobile-menu-btn span {
+  display: block;
+  width: 100%;
+  height: 2px;
+  background: var(--fg);
+  border-radius: 2px;
+  transition: transform .2s, opacity .2s;
+}
+body.mobile-menu-open .mobile-menu-btn span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+body.mobile-menu-open .mobile-menu-btn span:nth-child(2) { opacity: 0; }
+body.mobile-menu-open .mobile-menu-btn span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(3px);
+  z-index: 140;
+  opacity: 0;
+  transition: opacity .25s;
+}
+body.mobile-menu-open .mobile-overlay {
+  opacity: 1;
+}
+
+/* ---- Tablet (<= 960px) — colunas empilham ---- */
 @media (max-width: 960px) {
-  .app { grid-template-columns: 1fr; }
-  .nav { position: relative; height: auto; flex-direction: row; overflow-x: auto; padding: 0.625rem; }
-  .nav-brand, .nav-section, .nav-footer { display: none; }
   .op-layout { grid-template-columns: 1fr; }
   .agents-sidebar, .feed { max-height: 320px; }
   .pipeline, .quali-grid, .crons-grid { grid-template-columns: 1fr; }
   .main { padding: 1rem; }
 }
 
+/* ---- Mobile (<= 768px) — sidebar vira drawer ---- */
 @media (max-width: 768px) {
+  .mobile-menu-btn { display: flex; }
+  .mobile-overlay { display: block; pointer-events: none; }
+  body.mobile-menu-open .mobile-overlay { pointer-events: auto; }
+
+  .app { grid-template-columns: 1fr; padding-bottom: 40px; }
+
+  /* Sidebar principal — off-canvas drawer */
+  .nav {
+    position: fixed;
+    top: 0;
+    left: -280px;
+    width: 260px;
+    height: 100vh;
+    z-index: 160;
+    transition: left .25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    flex-direction: column;
+    padding-top: 60px;
+    box-shadow: 6px 0 20px rgba(0,0,0,0.4);
+  }
+  body.mobile-menu-open .nav { left: 0; }
+  .nav-brand, .nav-section, .nav-footer { display: flex; }
+  .nav-footer { display: block; }
+
+  /* Subnav contextual — tambem como drawer off-canvas, por cima */
+  .subnav {
+    position: fixed;
+    top: 0;
+    left: -280px;
+    width: 260px;
+    height: 100vh;
+    z-index: 165;
+    transition: left .25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    padding-top: 60px;
+    box-shadow: 6px 0 20px rgba(0,0,0,0.4);
+  }
+  .app.with-subnav .nav { display: flex; }  /* mantem nav existente, subnav cobre por cima */
+  .app.with-subnav .subnav { left: 0; }
+
+  /* Main ocupa tela toda */
+  .main { padding: 60px 0.875rem 1rem; }
+
+  /* Ajustes de conteudo */
   .cron-row { grid-template-columns: auto 1fr; }
   .cron-row > :nth-child(n+3) { display: none; }
   .drawer { width: 100%; }
   .cerebro-detail-header { flex-direction: column; align-items: flex-start; }
-  .cerebro-detail-actions { margin-left: 0; }
+  .cerebro-detail-actions { margin-left: 0; flex-wrap: wrap; }
+
+  /* Persona: blocos em coluna unica, bem legivel */
+  .persona-blocos { grid-template-columns: 1fr; }
+  .persona-historico-linha { grid-template-columns: 50px 1fr; }
+  .persona-historico-acoes { grid-column: 1 / -1; justify-content: flex-end; padding-top: 0.5rem; }
+
+  /* Statusbar simplificada no mobile */
+  .statusbar { flex-wrap: wrap; padding: 6px 10px; font-size: 10px; gap: 0.5rem; }
+  .sb-item { gap: 0.25rem; }
+
+  /* Squad modal ocupa tela cheia */
+  .squad-overlay { padding: 0.5rem; }
+  .squad-modal { max-height: 100vh; border-radius: 8px; }
+  .squad-header { padding: 0.75rem 0.875rem; }
+  .squad-title { font-size: 0.9375rem; }
+  .squad-body { grid-template-columns: 1fr; }
+  .squad-panel { border-left: 0; border-top: 1px solid #1f2937; max-height: 40vh; }
+  .squad-canvas-wrap { padding: 8px; }
+
+  /* Progresso modal no mobile */
+  .persona-progresso-modal { padding: 1.5rem 1.25rem; }
+  .persona-progresso-overlay { padding: 0.75rem; }
+
+  /* Editor/historico/comparacao modais — tela cheia */
+  .persona-editor,
+  .persona-historico,
+  .persona-comparacao {
+    max-height: 95vh;
+    border-radius: 8px;
+  }
+  .persona-editor-overlay { padding: 0.5rem; }
+
+  /* Toques mais confortaveis */
+  .btn { min-height: 38px; }
+  .nav-item { min-height: 42px; }
+  .subnav-item { min-height: 42px; }
 }
 
 /* =====================================================================
