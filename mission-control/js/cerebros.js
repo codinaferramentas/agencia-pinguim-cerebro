@@ -2138,7 +2138,7 @@ function trocarStep(newStep) {
 }
 
 // Bloco "Cole uma URL" — reaproveitado pelo Avulso. Dispara processamento via Edge Function ingest-url.
-function blocoUrl(cerebroAtualRef) {
+function blocoUrl(cerebroAtualRef, onIndexado) {
   const wrap = el('div', { class: 'avulso-url-bloco' });
   const inputUrl = el('input', {
     type: 'url',
@@ -2169,21 +2169,53 @@ function blocoUrl(cerebroAtualRef) {
 
       const custoBrl = (Number(r.custo_usd || 0) * 5.5).toFixed(2);
       const metodoLabel = r.metodo === 'youtube-legendas' ? 'Legendas oficiais (grátis)'
-        : r.metodo === 'youtube-rapidapi' ? 'RapidAPI'
         : r.metodo?.startsWith('apify-') ? 'Apify'
         : r.metodo;
-      status.innerHTML = `
-        <div style="padding:.75rem;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);border-radius:6px">
-          <div style="color:#10b981;font-weight:600;margin-bottom:.25rem">✓ Indexado no Cérebro</div>
-          <div style="font-size:.8125rem;color:var(--fg-muted);line-height:1.5">
-            <strong>${r.titulo || 'sem título'}</strong> · classificado como <strong>${r.tipo}</strong><br>
-            ${r.chunks} chunk${r.chunks === 1 ? '' : 's'} · método ${metodoLabel} · custo R$ ${custoBrl}
-          </div>
-        </div>
-      `;
+
+      // Mensagem de sucesso GRANDE e clara — usuario nao precisa mais clicar em nada
+      status.innerHTML = '';
+      status.appendChild(el('div', {
+        style: 'padding:1rem 1.125rem;background:linear-gradient(135deg,rgba(16,185,129,0.12),rgba(16,185,129,0.04));border:1px solid rgba(16,185,129,0.4);border-radius:8px',
+      }, [
+        el('div', {
+          style: 'color:#10b981;font-weight:700;font-size:1rem;margin-bottom:.5rem;display:flex;align-items:center;gap:.5rem',
+        }, [
+          el('span', {}, '✓'),
+          el('span', {}, 'Pronto! Conteúdo já está no Cérebro'),
+        ]),
+        el('div', { style: 'font-size:.8125rem;color:var(--fg-muted);line-height:1.55;margin-bottom:.875rem' }, [
+          el('strong', { style: 'color:var(--fg)' }, r.titulo || 'sem título'),
+          el('br'),
+          `Classificado como ${r.tipo} · ${r.chunks} chunk${r.chunks === 1 ? '' : 's'} · ${metodoLabel} · R$ ${custoBrl}`,
+        ]),
+        el('div', { style: 'display:flex;gap:.5rem;flex-wrap:wrap' }, [
+          el('button', {
+            class: 'btn btn-primary',
+            type: 'button',
+            style: 'font-size:.8125rem',
+            onclick: () => {
+              if (typeof onIndexado === 'function') onIndexado();
+            },
+          }, '→ Ver no Cérebro'),
+          el('button', {
+            class: 'btn btn-ghost',
+            type: 'button',
+            style: 'font-size:.8125rem',
+            onclick: () => {
+              status.style.display = 'none';
+              status.innerHTML = '';
+              inputUrl.value = '';
+              inputUrl.focus();
+              btnTranscrever.disabled = false;
+              btnTranscrever.innerHTML = '⬇ Trazer pro Cérebro';
+            },
+          }, '+ Trazer outra URL'),
+        ]),
+      ]));
+
       inputUrl.value = '';
-      btnTranscrever.disabled = false;
-      btnTranscrever.innerHTML = '⬇ Trazer outra URL';
+      btnTranscrever.disabled = true; // desabilitado ate usuario clicar "+ Trazer outra URL"
+      btnTranscrever.innerHTML = '✓ Indexado';
 
       // Refresca cache global e notifica subnav
       cerebrosCache = await fetchCerebrosCatalogo();
@@ -2200,7 +2232,7 @@ function blocoUrl(cerebroAtualRef) {
   });
 
   wrap.append(
-    el('label', {}, '🔗 URL (YouTube, Instagram, TikTok)'),
+    el('label', {}, '🔗 URL (YouTube, Instagram, TikTok, site, biblioteca de anúncios do Meta)'),
     inputUrl,
     btnTranscrever,
     status,
@@ -2286,10 +2318,13 @@ function renderStepAvulso() {
   }
 
   function atualizarBotao() {
-    const ok = arquivoSelecionado && (arquivoSelecionado.size / 1024 / 1024) <= MAX_UPLOAD_MB;
+    const temArquivo = !!arquivoSelecionado;
+    const ok = temArquivo && (arquivoSelecionado.size / 1024 / 1024) <= MAX_UPLOAD_MB;
     btnProcessar.disabled = !ok;
     btnProcessar.style.opacity = ok ? '1' : '0.5';
     btnProcessar.style.cursor = ok ? 'pointer' : 'not-allowed';
+    // Sem arquivo, some o botao "Alimentar" do rodape — URL tem botao proprio.
+    btnProcessar.style.display = temArquivo ? '' : 'none';
   }
 
   const inputArquivo = el('input', {
@@ -2315,7 +2350,8 @@ function renderStepAvulso() {
   const btnProcessar = el('button', {
     class: 'btn btn-primary',
     disabled: true,
-    style: 'opacity:0.5',
+    // Comeca escondido: so aparece quando o usuario seleciona arquivo
+    style: 'opacity:0.5;display:none',
     onclick: async () => {
       if (processandoAgora || !arquivoSelecionado) return;
 
@@ -2601,11 +2637,14 @@ function renderStepAvulso() {
       el('div', { class: 'avulso-ou' }, [
         el('span', {}, 'OU'),
       ]),
-      blocoUrl(cerebroAtual),
+      blocoUrl(cerebroAtual, () => {
+        fecharModal();
+        abrirCerebroDetalhe(cerebroAtual.slug);
+      }),
       areaProgresso,
     ]),
     el('div', { class: 'modal-foot' }, [
-      el('button', { class: 'btn btn-ghost', onclick: fecharModal }, 'Cancelar'),
+      el('button', { class: 'btn btn-ghost', onclick: fecharModal }, 'Fechar'),
       btnProcessar,
     ]),
   );
