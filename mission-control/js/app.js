@@ -9,6 +9,7 @@ import { renderCrons } from './crons.js?v=20260421p';
 import { renderSkills } from './skills.js?v=20260421p';
 import { renderStub } from './stubs.js?v=20260421p';
 import { iconeNode } from './icone.js?v=20260425g';
+import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260425k';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
@@ -65,6 +66,7 @@ async function navegar(pageSlug, { forcarRender = true } = {}) {
       case 'home':      await renderHome(); break;
       case 'cerebros':  await renderCerebros(); break;
       case 'personas':  await renderPersonas(); break;
+      case 'docs':      await renderDocs(); break;
       case 'operacao':  await renderOperacao(); break;
       case 'agentes':   await renderAgentes(); break;
       case 'squads':    await renderSquadsPage(); break;
@@ -144,6 +146,14 @@ function setupNav() {
     if (!slug) return;
     await irParaDetalhe('personas', slug);
   });
+  window.addEventListener('docs:select', async (ev) => {
+    const slug = ev.detail?.slug;
+    if (!slug) return;
+    await irParaDetalhe('docs', slug);
+  });
+  window.addEventListener('docs:back', async () => {
+    await navegar('docs');
+  });
 }
 
 // Garante: pagina ativa+renderizada -> abre detalhe especifico.
@@ -159,6 +169,8 @@ async function irParaDetalhe(pagina, slug) {
     await abrirCerebroDetalhe(slug);
   } else if (pagina === 'personas') {
     await renderPersonaDetalhe(slug);
+  } else if (pagina === 'docs') {
+    await renderDocDetalhe(slug);
   }
 }
 
@@ -218,6 +230,21 @@ const SUBNAV_CONFIG = {
     },
     onSelect: (id) => {
       window.dispatchEvent(new CustomEvent('squad:select', { detail: { slug: id } }));
+    }
+  },
+  docs: {
+    title: 'Documentação',
+    loader: async () => {
+      return DOCS_CATALOGO.map(d => ({
+        id: d.slug,
+        label: d.titulo,
+        meta: d.meta?.split('·')[0]?.trim() || '',
+        emoji: '📄',
+        nome: d.titulo,
+      }));
+    },
+    onSelect: (id) => {
+      window.dispatchEvent(new CustomEvent('docs:select', { detail: { slug: id } }));
     }
   },
 };

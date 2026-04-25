@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pinguim OS</title>
-<link rel="stylesheet" href="css/style.css?v=20260425k">
+<link rel="stylesheet" href="css/style.css?v=20260425l">
 </head>
 <body>
 <!-- Botao hamburger (so mobile) -->
@@ -33,6 +33,10 @@
       </div>
       <div class="nav-item has-sub" data-page="personas">
         <span class="nav-icon">👤</span><span>Personas</span>
+        <span class="nav-caret">›</span>
+      </div>
+      <div class="nav-item has-sub" data-page="docs">
+        <span class="nav-icon">📖</span><span>Documentação</span>
         <span class="nav-caret">›</span>
       </div>
     </div>
@@ -71,6 +75,7 @@
     <section class="page active" id="page-home"></section>
     <section class="page" id="page-cerebros"></section>
     <section class="page" id="page-personas"></section>
+    <section class="page" id="page-docs"></section>
     <section class="page" id="page-agentes"></section>
     <section class="page" id="page-squads"></section>
     <section class="page" id="page-operacao"></section>
@@ -122,11 +127,11 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="module">
-  import { guard, logout } from './js/auth-gate.js?v=20260425k';
+  import { guard, logout } from './js/auth-gate.js?v=20260425l';
   const ok = await guard();
   if (ok) {
-    await import('./js/sb-client.js?v=20260425k');
-    await import('./js/app.js?v=20260425k');
+    await import('./js/sb-client.js?v=20260425l');
+    await import('./js/app.js?v=20260425l');
     const btn = document.getElementById('nav-logout');
     if (btn) btn.addEventListener('click', logout);
   }
