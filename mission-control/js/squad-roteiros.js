@@ -23,38 +23,38 @@ async function esperarApiComLoop(apiPromise, loopFn, intervaloMs, sig) {
 }
 
 /* ============================== GERAR PERSONA ==============================
-   Protagonistas: Finn (Diretoria) + Aurora (Marketing).
+   Protagonistas: Luiz (Diretoria) + Aurora (Marketing).
    Fluxo:
-     1. Finn recebe o pedido na Diretoria
-     2. Finn caminha ate a Diretoria-Marketing (corredor), chama Aurora
+     1. Luiz recebe o pedido na Diretoria
+     2. Luiz caminha ate a Diretoria-Marketing (corredor), chama Aurora
      3. Aurora vai ate a estante (Cerebro) e consulta
      4. Aurora senta e sintetiza (API OpenAI rodando em paralelo)
-     5. Aurora leva o dossie pra Finn
-     6. Finn "entrega" ao cliente (passo final)
+     5. Aurora leva o dossie pra Luiz
+     6. Luiz "entrega" ao cliente (passo final)
 */
 export async function roteiroGerarPersona({ engine, log, setStatus, apiCall, cerebroNome }) {
   const { walkTo, say, throwPaper, setHolding, setState, setProtagonists } = engine;
 
   // Marca protagonistas — halo + para idle decorativo
-  setProtagonists(['finn', 'aurora']);
+  setProtagonists(['luiz', 'aurora']);
 
-  setStatus('🎯 Finn (Diretoria) recebeu o pedido');
+  setStatus('🎯 Luiz (Diretoria) recebeu o pedido');
   log('Sistema', `Atualizar persona do Cerebro ${cerebroNome}`, 'info');
   await delay(500);
 
   // --- FINN vai ate AURORA (Marketing) ---
-  setStatus('🎯 Finn desce pra Marketing chamar Aurora');
-  setHolding('finn', true);
-  say('finn', 'Aurora, preciso de voce!', 110);
-  await walkTo('finn', 100, 220, 'idle');
-  log('Finn', 'Atualiza a persona deste Cerebro, por favor.', 'handoff');
+  setStatus('🎯 Luiz desce pra Marketing chamar Aurora');
+  setHolding('luiz', true);
+  say('luiz', 'Aurora, preciso de voce!', 110);
+  await walkTo('luiz', 100, 220, 'idle');
+  log('Luiz', 'Atualiza a persona deste Cerebro, por favor.', 'handoff');
   await delay(500);
-  setHolding('finn', false);
-  throwPaper('finn', 'aurora');
+  setHolding('luiz', false);
+  throwPaper('luiz', 'aurora');
   await delay(500);
   setHolding('aurora', true);
-  // Finn volta pra Diretoria
-  walkTo('finn', 440, 230, 'idle');
+  // Luiz volta pra Diretoria
+  walkTo('luiz', 440, 230, 'idle');
 
   // --- AURORA vai ate a estante (Cerebro) ---
   setStatus('✍ Aurora consulta o Cerebro (estante de fontes)');
@@ -92,57 +92,57 @@ export async function roteiroGerarPersona({ engine, log, setStatus, apiCall, cer
   await delay(500);
 
   // --- AURORA leva pro FINN ---
-  setStatus('✍ Aurora leva o dossie pra Finn');
+  setStatus('✍ Aurora leva o dossie pra Luiz');
   setHolding('aurora', true);
   setState('aurora', 'idle');
   await walkTo('aurora', 440, 220, 'idle');
   say('aurora', 'Persona pronta!', 110);
-  log('Aurora → Finn', 'Dossie de persona finalizado.', 'handoff');
+  log('Aurora → Luiz', 'Dossie de persona finalizado.', 'handoff');
   await delay(500);
   setHolding('aurora', false);
-  throwPaper('aurora', 'finn');
+  throwPaper('aurora', 'luiz');
   await delay(500);
-  setHolding('finn', true);
+  setHolding('luiz', true);
   walkTo('aurora', 100, 230, 'idle');
 
   // --- FINN entrega ao cliente ---
-  setStatus('🎯 Finn faz a entrega final');
-  await walkTo('finn', 440, 200, 'working');
-  setHolding('finn', false);
-  say('finn', 'Entregue!', 120);
-  log('Finn', 'Persona entregue com sucesso.', 'final');
+  setStatus('🎯 Luiz faz a entrega final');
+  await walkTo('luiz', 440, 200, 'working');
+  setHolding('luiz', false);
+  say('luiz', 'Entregue!', 120);
+  log('Luiz', 'Persona entregue com sucesso.', 'final');
   await delay(900);
 
   return result;
 }
 
 /* ============================== ALIMENTAR CEREBRO — AVULSO ===========================
-   Protagonistas: Finn (Diretoria) + Aurora (Marketing).
-   1 arquivo unico chega -> Finn passa pra Aurora -> Aurora le na estante,
+   Protagonistas: Luiz (Diretoria) + Aurora (Marketing).
+   1 arquivo unico chega -> Luiz passa pra Aurora -> Aurora le na estante,
    processa, devolve confirmando.
    Tempo tipico: 10-40s
 */
 export async function roteiroAlimentarAvulso({ engine, log, setStatus, apiCall, cerebroNome, arquivoNome }) {
   const { walkTo, say, throwPaper, setHolding, setState, setProtagonists } = engine;
-  setProtagonists(['finn', 'aurora']);
+  setProtagonists(['luiz', 'aurora']);
 
-  setStatus('🎯 Finn recebeu um arquivo novo pro Cerebro');
+  setStatus('🎯 Luiz recebeu um arquivo novo pro Cerebro');
   log('Sistema', `Alimentar Cerebro ${cerebroNome} com 1 arquivo`, 'info');
   if (arquivoNome) log('Cliente', `Arquivo: ${arquivoNome}`, 'info');
   await delay(400);
 
-  // Finn vai ate Aurora
-  setStatus('🎯 Finn leva o arquivo pra Aurora');
-  setHolding('finn', true);
-  say('finn', 'Aurora, novo material!', 110);
-  await walkTo('finn', 100, 220, 'idle');
-  log('Finn', 'Mais conteudo pro Cerebro. Indexa pra mim.', 'handoff');
+  // Luiz vai ate Aurora
+  setStatus('🎯 Luiz leva o arquivo pra Aurora');
+  setHolding('luiz', true);
+  say('luiz', 'Aurora, novo material!', 110);
+  await walkTo('luiz', 100, 220, 'idle');
+  log('Luiz', 'Mais conteudo pro Cerebro. Indexa pra mim.', 'handoff');
   await delay(400);
-  setHolding('finn', false);
-  throwPaper('finn', 'aurora');
+  setHolding('luiz', false);
+  throwPaper('luiz', 'aurora');
   await delay(500);
   setHolding('aurora', true);
-  walkTo('finn', 440, 230, 'idle');
+  walkTo('luiz', 440, 230, 'idle');
 
   // Aurora vai ate a estante
   setStatus('✍ Aurora leva o material pra estante (Cerebro)');
@@ -169,56 +169,56 @@ export async function roteiroAlimentarAvulso({ engine, log, setStatus, apiCall, 
   log('Aurora', 'Arquivo indexado com sucesso.', 'done');
   await delay(400);
 
-  // Aurora volta com confirmacao pra Finn
-  setStatus('✍ Aurora confirma a indexacao pra Finn');
+  // Aurora volta com confirmacao pra Luiz
+  setStatus('✍ Aurora confirma a indexacao pra Luiz');
   setHolding('aurora', true);
   setState('aurora', 'idle');
   await walkTo('aurora', 440, 220, 'idle');
   say('aurora', 'Adicionado ao Cerebro!', 110);
-  log('Aurora → Finn', 'Fonte indexada e disponivel.', 'handoff');
+  log('Aurora → Luiz', 'Fonte indexada e disponivel.', 'handoff');
   await delay(400);
   setHolding('aurora', false);
-  throwPaper('aurora', 'finn');
+  throwPaper('aurora', 'luiz');
   await delay(500);
-  setHolding('finn', true);
+  setHolding('luiz', true);
   walkTo('aurora', 100, 230, 'idle');
 
   setStatus('🎯 Cerebro atualizado');
-  await walkTo('finn', 440, 200, 'working');
-  setHolding('finn', false);
-  say('finn', 'Cerebro mais forte!', 120);
-  log('Finn', 'Cerebro alimentado.', 'final');
+  await walkTo('luiz', 440, 200, 'working');
+  setHolding('luiz', false);
+  say('luiz', 'Cerebro mais forte!', 120);
+  log('Luiz', 'Cerebro alimentado.', 'final');
   await delay(700);
   return result;
 }
 
 /* ============================== ALIMENTAR CEREBRO — PACOTE (ZIP) ===========================
-   Protagonistas: Finn (Diretoria) + Aurora (Marketing) + Dipsy (RH como revisora).
-   Pacote com varios arquivos -> Finn entrega pra Aurora -> Aurora processa em
+   Protagonistas: Luiz (Diretoria) + Aurora (Marketing) + Dipsy (RH como revisora).
+   Pacote com varios arquivos -> Luiz entrega pra Aurora -> Aurora processa em
    ondas (vai a estante repetidamente) -> Dipsy revisa qualidade -> entrega.
    Tempo tipico: 30s a 5min
 */
 export async function roteiroAlimentarPacote({ engine, log, setStatus, apiCall, cerebroNome, totalArquivos }) {
   const { walkTo, say, throwPaper, setHolding, setState, setProtagonists } = engine;
-  setProtagonists(['finn', 'aurora', 'dipsy']);
+  setProtagonists(['luiz', 'aurora', 'dipsy']);
 
-  setStatus('🎯 Finn recebeu um pacote inteiro pro Cerebro');
+  setStatus('🎯 Luiz recebeu um pacote inteiro pro Cerebro');
   log('Sistema', `Alimentar Cerebro ${cerebroNome} com pacote ZIP`, 'info');
   if (totalArquivos) log('Cliente', `Pacote contem ${totalArquivos} arquivos`, 'info');
   await delay(500);
 
-  // Finn entrega o pacote pra Aurora
-  setStatus('🎯 Finn entrega o pacote pra Aurora');
-  setHolding('finn', true);
-  say('finn', 'Pacote grande chegou!', 110);
-  await walkTo('finn', 100, 220, 'idle');
-  log('Finn', `Pacote inteiro pro Cerebro ${cerebroNome}. Processa em lotes.`, 'handoff');
+  // Luiz entrega o pacote pra Aurora
+  setStatus('🎯 Luiz entrega o pacote pra Aurora');
+  setHolding('luiz', true);
+  say('luiz', 'Pacote grande chegou!', 110);
+  await walkTo('luiz', 100, 220, 'idle');
+  log('Luiz', `Pacote inteiro pro Cerebro ${cerebroNome}. Processa em lotes.`, 'handoff');
   await delay(400);
-  setHolding('finn', false);
-  throwPaper('finn', 'aurora');
+  setHolding('luiz', false);
+  throwPaper('luiz', 'aurora');
   await delay(500);
   setHolding('aurora', true);
-  walkTo('finn', 440, 230, 'idle');
+  walkTo('luiz', 440, 230, 'idle');
 
   // Aurora abre o pacote na estante
   setStatus('✍ Aurora abre o pacote e organiza na estante');
@@ -273,25 +273,25 @@ export async function roteiroAlimentarPacote({ engine, log, setStatus, apiCall, 
   await delay(1800);
   log('Dipsy', 'Tudo OK. Pacote validado.', 'done');
 
-  // Dipsy entrega pra Finn
-  setStatus('👥 Dipsy entrega o relatorio pra Finn');
+  // Dipsy entrega pra Luiz
+  setStatus('👥 Dipsy entrega o relatorio pra Luiz');
   setHolding('dipsy', true);
   setState('dipsy', 'idle');
   await walkTo('dipsy', 440, 220, 'idle');
   say('dipsy', 'Pacote aprovado!', 110);
-  log('Dipsy → Finn', 'Pacote validado e disponivel no Cerebro.', 'handoff');
+  log('Dipsy → Luiz', 'Pacote validado e disponivel no Cerebro.', 'handoff');
   await delay(400);
   setHolding('dipsy', false);
-  throwPaper('dipsy', 'finn');
+  throwPaper('dipsy', 'luiz');
   await delay(500);
-  setHolding('finn', true);
+  setHolding('luiz', true);
   walkTo('dipsy', 160, 470, 'idle');
 
   setStatus('🎯 Pacote integrado ao Cerebro');
-  await walkTo('finn', 440, 200, 'working');
-  setHolding('finn', false);
-  say('finn', 'Cerebro reforcado!', 120);
-  log('Finn', 'Pacote inteiro integrado ao Cerebro.', 'final');
+  await walkTo('luiz', 440, 200, 'working');
+  setHolding('luiz', false);
+  say('luiz', 'Cerebro reforcado!', 120);
+  log('Luiz', 'Pacote inteiro integrado ao Cerebro.', 'final');
   await delay(800);
   return result;
 }

@@ -22,25 +22,37 @@ const ROOMS = [
   { id: 'atendimento', name: 'ATENDIMENTO',  x: 640, y: 320, w: 300, h: 260, floor: 'carpet', color: '#fb923c' },
 ];
 
-// Finn (Diretoria) e Aurora (Marketing) sao os protagonistas do roteiro de Persona.
-// Os outros ficam em idle decorativo nas suas casas, dando vida ao escritorio.
+// Diretoria tem os 3 socios da Pinguim (Luiz CEO, Pedro Estrategia, Micha Inovacao).
+// Quando nao estao em acao, conversam entre si.
+// Marketing tem Aurora (especialista) + Codina (apoio em campanhas e IA dentro da Pinguim).
 const AGENTS_DEF = [
-  { id: 'finn',    name: 'Finn',    role: 'Diretoria',    emoji: '🎯', roomId: 'diretoria',
+  // ---- DIRETORIA (board Pinguim) ----
+  { id: 'luiz',    name: 'Luiz',    role: 'CEO · Diretoria',          emoji: '🎯', roomId: 'diretoria',
     skin: '#fcd7b6', shirt: '#a78bfa', pants: '#1f2937', hair: '#3a1f0a',
     desk: { x: 440, y: 170 }, chair: { x: 440, y: 200 }, home: { x: 440, y: 230 } },
-  { id: 'aurora',  name: 'Aurora',  role: 'Marketing',    emoji: '✍',  roomId: 'marketing',
+  { id: 'pedro',   name: 'Pedro',   role: 'Estrategia · Diretoria',   emoji: '♟', roomId: 'diretoria',
+    skin: '#e8b48a', shirt: '#7c3aed', pants: '#1f2937', hair: '#1a0f08',
+    desk: { x: 380, y: 240 }, chair: { x: 380, y: 250 }, home: { x: 380, y: 250 } },
+  { id: 'micha',   name: 'Micha',   role: 'Inovacao · Diretoria',     emoji: '✨', roomId: 'diretoria',
+    skin: '#d4a07a', shirt: '#c084fc', pants: '#1f2937', hair: '#4a2a0a',
+    desk: { x: 500, y: 240 }, chair: { x: 500, y: 250 }, home: { x: 500, y: 250 } },
+  // ---- DEPARTAMENTOS OPERACIONAIS ----
+  { id: 'aurora',  name: 'Aurora',  role: 'Marketing',                emoji: '✍',  roomId: 'marketing',
     skin: '#fcd7b6', shirt: '#60a5fa', pants: '#1f2937', hair: '#c05050',
     desk: { x: 100, y: 170 }, chair: { x: 100, y: 200 }, home: { x: 100, y: 230 } },
-  { id: 'zezinho', name: 'Zezinho', role: 'Comercial',    emoji: '📞', roomId: 'comercial',
+  { id: 'codina',  name: 'Codina',  role: 'Marketing · IA',           emoji: '🤖', roomId: 'marketing',
+    skin: '#fcd7b6', shirt: '#3b82f6', pants: '#1f2937', hair: '#2a1a0a',
+    desk: { x: 200, y: 240 }, chair: { x: 200, y: 250 }, home: { x: 200, y: 250 } },
+  { id: 'zezinho', name: 'Zezinho', role: 'Comercial',                emoji: '📞', roomId: 'comercial',
     skin: '#d4a07a', shirt: '#f472b6', pants: '#2a3040', hair: '#2a1a0a',
     desk: { x: 780, y: 170 }, chair: { x: 780, y: 200 }, home: { x: 780, y: 230 } },
-  { id: 'dipsy',   name: 'Dipsy',   role: 'RH',           emoji: '👥', roomId: 'rh',
+  { id: 'dipsy',   name: 'Dipsy',   role: 'RH',                       emoji: '👥', roomId: 'rh',
     skin: '#fcd7b6', shirt: '#10b981', pants: '#1f2937', hair: '#6a4a2a',
     desk: { x: 160, y: 410 }, chair: { x: 160, y: 440 }, home: { x: 160, y: 470 } },
-  { id: 'aranha',  name: 'Aranha',  role: 'Financeiro',   emoji: '💼', roomId: 'financeiro',
+  { id: 'aranha',  name: 'Aranha',  role: 'Financeiro',               emoji: '💼', roomId: 'financeiro',
     skin: '#e8b48a', shirt: '#fbbf24', pants: '#2a3040', hair: '#0a0a0a',
     desk: { x: 470, y: 450 }, chair: { x: 470, y: 480 }, home: { x: 470, y: 510 } },
-  { id: 'byte',    name: 'Byte',    role: 'Atendimento',  emoji: '💬', roomId: 'atendimento',
+  { id: 'luizinho',name: 'Luizinho',role: 'Atendimento',              emoji: '💬', roomId: 'atendimento',
     skin: '#e8b48a', shirt: '#fb923c', pants: '#2a3040', hair: '#0a0a0a',
     desk: { x: 800, y: 450 }, chair: { x: 800, y: 480 }, home: { x: 800, y: 510 } },
 ];
@@ -445,6 +457,8 @@ export function criarEngine(canvas) {
   });
 
   const protagonistSet = new Set();
+  const SOCIOS_DIRETORIA = ['luiz', 'pedro', 'micha'];
+  let proximaReuniao = 360 + Math.floor(Math.random() * 240); // 6-10s apos boot
   let frame = 0;
   let floatingPapers = [];
   let rafId = null;
@@ -464,15 +478,34 @@ export function criarEngine(canvas) {
     };
   }
 
-  // Banco de falas decorativas por agente (contextual ao departamento)
+  // Banco de falas decorativas por agente (contextual ao papel)
   const FALAS_IDLE = {
-    finn:    ['Hmm...', '📊', 'Vamos crescer!', 'Meta batida?', '💭', 'Revisando...', '👍', 'Proxima semana...'],
+    // Diretoria Pinguim — board, falam de decisao/estrategia/audiencia
+    luiz:    ['Numero bate?', '📊', 'Aprovado', 'Meta?', 'CAC tá ok', 'Caixa firme', '✅', 'Bora dobrar'],
+    pedro:   ['Estrategia', '♟', 'Tese forte', 'Funil...', 'Campanha?', 'Timing certo', 'Vai dar', '🎯'],
+    micha:   ['Audiencia!', '✨', 'Reels viral', 'Cliente novo', '📱', 'Posiciona', 'Marca', 'Vitrine'],
+    // Marketing
     aurora:  ['Persona...', '💡', 'Copy nova!', 'Testa isso', '✍', 'Hmm...', '📝', 'Qual dor?'],
+    codina:  ['Automatiza', '🤖', 'Roda IA', 'Deploy ok', '⚙', 'Otimiza CAC', 'Stack nova', 'Edge function'],
+    // Outros operacionais
     zezinho: ['Fechou!', '📞', 'Alo?', 'Proposta...', '💼', 'Pipeline', '🎯', 'Ligando...'],
     dipsy:   ['Contrato...', '👥', 'Entrevista', 'Avaliacao', '📋', 'Cultura!', 'Hmm...', '✅'],
     aranha:  ['Caixa ok', '💰', 'Boleto...', 'Nota fiscal', '📑', 'Orcamento', 'Aprovado!', '💼'],
-    byte:    ['Respondendo', '💬', 'Tudo ok!', 'Anotado', '🙂', 'Ticket...', 'Processando', '📩'],
+    luizinho:['Respondendo', '💬', 'Tudo ok!', 'Anotado', '🙂', 'Ticket...', 'Processando', '📩'],
   };
+
+  // Conversa de reuniao na Diretoria — quando 2+ socios estao idle juntos
+  // Sequencia de falas curtas trocadas em ordem (Luiz, Pedro, Micha)
+  const CONVERSAS_DIRETORIA = [
+    ['Bora analisar', 'Tese ok', 'Audiencia comprou'],
+    ['Numero ta bom?', 'Vai dar', 'Cliente quente'],
+    ['Campanha?', 'Funil pronto', 'Reels viral'],
+    ['CAC subiu', 'Estuda criativo', 'Refaz vitrine'],
+    ['Meta do mes', 'Tese bate', 'Tracao boa'],
+    ['Aprova oferta?', 'Testa pequeno', 'Lanca pra base'],
+    ['Caixa firme', 'Investe mais', 'Compra audiencia'],
+    ['Novo produto?', 'Posiciona bem', 'Marca cresce'],
+  ];
 
   // Sorteia uma acao idle variada na casa do agente pra dar vida ao cenario
   function agendarIdleDecorativo(id) {
@@ -660,6 +693,30 @@ export function criarEngine(canvas) {
       agendarIdleDecorativo(a.id);
       s.idleNextAt = frame + 90 + Math.floor(Math.random() * 150);
     });
+
+    // Conversa de reuniao da Diretoria — dispara periodicamente
+    // Se 2+ socios estao idle (nao protagonistas, nao andando), trocam falas em sequencia
+    if (frame >= proximaReuniao) {
+      const sociosIdle = SOCIOS_DIRETORIA.filter(id => {
+        const s = agentState[id];
+        return !protagonistSet.has(id) && s.state !== 'walking' && !s.idleBusy;
+      });
+      if (sociosIdle.length >= 2) {
+        const conversa = CONVERSAS_DIRETORIA[Math.floor(Math.random() * CONVERSAS_DIRETORIA.length)];
+        sociosIdle.slice(0, 3).forEach((id, i) => {
+          const fala = conversa[i] || conversa[conversa.length - 1];
+          const s = agentState[id];
+          // Cada socio fala em sequencia, espacado ~1.4s
+          setTimeout(() => {
+            if (destroyed) return;
+            if (protagonistSet.has(id)) return;
+            s.speechBubble = fala;
+            s.speechTimer = 110;
+          }, i * 1400);
+        });
+      }
+      proximaReuniao = frame + 540 + Math.floor(Math.random() * 360); // proxima em 9-15s
+    }
 
     const ativas = salasAtivas();
 
