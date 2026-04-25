@@ -4034,6 +4034,25 @@ body.mobile-menu-open .mobile-overlay {
   border: 1px solid var(--border);
   border-radius: 10px;
 }
+.busca-semantica-titulo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--fg);
+  font-family: var(--font-heading);
+  letter-spacing: -0.01em;
+}
+.busca-semantica-titulo-icone {
+  font-size: 1rem;
+}
+.busca-semantica-dica {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  line-height: 1.55;
+  max-width: 78ch;
+}
 .busca-semantica-linha {
   display: flex;
   gap: 0.5rem;

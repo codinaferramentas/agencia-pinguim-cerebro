@@ -357,14 +357,21 @@ export async function abrirCerebroDetalhe(slug) {
    ================================================================ */
 function blocoBuscaSemantica() {
   const wrap = el('div', { class: 'busca-semantica-wrap' });
+  const titulo = el('div', { class: 'busca-semantica-titulo' }, [
+    el('span', { class: 'busca-semantica-titulo-icone' }, '🔍'),
+    el('span', {}, 'Verificar se o conteúdo existe no Cérebro'),
+  ]);
+  const dica = el('div', { class: 'busca-semantica-dica' },
+    'Digite um assunto, tópico ou palavra-chave. O sistema mostra os blocos de fonte mais próximos do que você procurou — bom pra saber se você já tem material sobre o tema antes de criar conteúdo novo. Pra respostas trabalhadas e prontas pra usar, isso é trabalho de agente.'
+  );
   const linha = el('div', { class: 'busca-semantica-linha' });
   const input = el('input', {
     type: 'text',
     class: 'busca-semantica-input',
-    placeholder: 'Buscar no Cérebro… ex: "qual a maior dor do aluno?", "objeções de preço", "depoimentos sobre transformação"',
+    placeholder: 'ex: "objeções de preço", "depoimento de mãe", "reels lo-fi viral", "promessa do produto"',
     autocomplete: 'off',
   });
-  const btn = el('button', { class: 'btn btn-primary busca-semantica-btn' }, '🔍 Buscar');
+  const btn = el('button', { class: 'btn btn-primary busca-semantica-btn' }, '🔍 Verificar');
   // Barra de progresso/status logo abaixo do campo
   const statusBar = el('div', { class: 'busca-semantica-status' });
 
@@ -391,8 +398,8 @@ function blocoBuscaSemantica() {
       return;
     }
     btn.disabled = true;
-    btn.textContent = 'Buscando…';
-    setStatus('loading', `Buscando "${q}" no Cérebro ${cerebroAtual?.nome || ''}…`);
+    btn.textContent = 'Verificando…';
+    setStatus('loading', `Procurando "${q}" no Cérebro ${cerebroAtual?.nome || ''}…`);
 
     try {
       const sb = getSupabase();
@@ -418,7 +425,7 @@ function blocoBuscaSemantica() {
       setStatus('erro', e.message || String(e));
     } finally {
       btn.disabled = false;
-      btn.textContent = '🔍 Buscar';
+      btn.textContent = '🔍 Verificar';
     }
   }
 
@@ -432,7 +439,7 @@ function blocoBuscaSemantica() {
   });
 
   linha.append(input, btn);
-  wrap.append(linha, statusBar);
+  wrap.append(titulo, dica, linha, statusBar);
   return wrap;
 }
 
@@ -446,19 +453,21 @@ function mostrarResultadosBusca(query, resp) {
 
   card.append(
     el('div', { class: 'modal-head' }, [
-      el('h2', {}, '🔍 Resultados da busca'),
+      el('h2', {}, total === 0 ? '🤷 Não tem material sobre isso ainda' : `✓ Conteúdo encontrado · ${total} bloco${total === 1 ? '' : 's'}`),
       el('div', { class: 'modal-sub' }, [
-        el('span', {}, `Buscando "`),
+        el('span', {}, `Procurando "`),
         el('strong', { style: 'color:var(--fg)' }, query),
-        el('span', {}, `" no Cérebro ${cerebroAtual?.nome} · ${total} chunk${total === 1 ? '' : 's'} relevante${total === 1 ? '' : 's'} · custo R$ ${custoBrl}`),
+        el('span', {}, `" no Cérebro ${cerebroAtual?.nome} · custo R$ ${custoBrl}`),
       ]),
       el('button', { class: 'modal-close', onclick: fechar }, '×'),
     ]),
     el('div', { class: 'modal-body', style: 'overflow-y:auto;flex:1' }, [
       total === 0
-        ? el('div', { style: 'padding:2rem;text-align:center;color:var(--fg-muted)' }, [
-            el('div', { style: 'font-size:2rem;margin-bottom:.5rem' }, '🤷'),
-            el('div', {}, 'Nenhum chunk com similaridade suficiente. Tenta reformular a pergunta — ou alimenta mais o Cérebro.'),
+        ? el('div', { style: 'padding:2rem 1rem;text-align:center' }, [
+            el('div', { style: 'font-size:2.5rem;margin-bottom:.75rem' }, '🤷'),
+            el('div', { style: 'font-weight:600;color:var(--fg);margin-bottom:.5rem;font-size:1rem' }, 'Nenhum bloco relevante no Cérebro'),
+            el('div', { style: 'color:var(--fg-muted);font-size:.875rem;line-height:1.55;max-width:480px;margin:0 auto' },
+              'Significa que ainda não há fontes que falem sobre esse assunto. Você pode: (1) reformular usando outras palavras, (2) alimentar o Cérebro com material novo sobre o tópico, ou (3) verificar se tá no Cérebro certo (cada produto tem o seu).'),
           ])
         : el('div', { class: 'busca-resultados' }, resp.resultados.map((r, idx) => {
             const sim = (r.similarity * 100).toFixed(0);
@@ -487,9 +496,11 @@ function mostrarResultadosBusca(query, resp) {
               }, '→ Ver fonte completa'),
             ]);
           })),
-      el('div', { style: 'margin-top:1rem;padding:.75rem 1rem;background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.25);border-radius:6px;font-size:.8125rem;color:var(--fg-muted);line-height:1.5' }, [
-        el('strong', { style: 'color:var(--fg)' }, 'Como funciona: '),
-        'Sua pergunta é convertida em vetor numérico (significado, não palavra) e comparada com os chunks do Cérebro via cosine similarity. Os mais próximos no espaço semântico aparecem primeiro. Custa frações de centavo por busca — base do RAG que alimenta os agentes.',
+      el('div', { style: 'margin-top:1rem;padding:.75rem 1rem;background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.25);border-radius:6px;font-size:.8125rem;color:var(--fg-muted);line-height:1.55' }, [
+        el('div', { style: 'color:var(--fg);font-weight:600;margin-bottom:.25rem' }, 'Esta consulta encontra material — não dá resposta'),
+        'A função aqui é descobrir se o assunto existe nas suas fontes (e em quais blocos). Pra ',
+        el('strong', { style: 'color:var(--fg)' }, 'resposta trabalhada'),
+        ' (texto pronto pra usar com cliente, copy escrita com voz da marca, script de venda baseado nas objeções), o trabalho é de um agente IA. Agentes pegam esses mesmos blocos e geram resposta natural usando GPT.',
       ]),
     ]),
     el('div', { class: 'modal-footer' }, [
