@@ -391,7 +391,7 @@ async function renderPersonaDetalhe(slug) {
   const total = c.total_fontes || 0;
   const temDados = total > 0;
 
-  const { fetchPersonaCompleta, gerarPersonaComProgresso, renderBlocoNoPainel, exportarPDF, abrirHistoricoVersoes } = await import('./personas.js?v=20260425a');
+  const { fetchPersonaCompleta, gerarPersonaComProgresso, renderBlocoNoPainel, exportarPDF, abrirHistoricoVersoes } = await import('./personas.js?v=20260425b');
   const persona = temDados ? await fetchPersonaCompleta(slug) : null;
 
   const ultimaSintese = persona
@@ -478,8 +478,8 @@ async function iniciarGeracaoComSquad(slug) {
   const c = cerebros.find(x => x.slug === slug);
   const cerebroNome = c?.nome || slug;
 
-  const { abrirSquadModal } = await import('./squad-modal.js?v=20260425a');
-  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260425a');
+  const { abrirSquadModal } = await import('./squad-modal.js?v=20260425b');
+  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260425b');
 
   try {
     // apiCall e resolvida pelo roteiro. Encapsulamos a chamada real numa promise unica.
@@ -499,7 +499,7 @@ async function iniciarGeracaoComSquad(slug) {
 }
 
 async function iniciarGeracaoComBarra(slug) {
-  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260425a');
+  const { gerarPersonaComProgresso } = await import('./personas.js?v=20260425b');
 
   // Overlay modal centralizado — impossivel de nao ver
   const overlay = el('div', { class: 'persona-progresso-overlay' }, [

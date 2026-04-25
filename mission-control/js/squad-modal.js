@@ -3,10 +3,10 @@
    instancia a engine, roda o roteiro escolhido e retorna a promise final.
 */
 
-import { criarEngine, SQUAD_AGENTS } from './squad-animation.js?v=20260425a';
-import { ROTEIROS } from './squad-roteiros.js?v=20260425a';
+import { criarEngine, SQUAD_AGENTS } from './squad-animation.js?v=20260425b';
+import { ROTEIROS } from './squad-roteiros.js?v=20260425b';
 
-export async function abrirSquadModal({ roteiro, apiCall, titulo, subtitulo, cerebroNome }) {
+export async function abrirSquadModal({ roteiro, apiCall, titulo, subtitulo, cerebroNome, contexto }) {
   const roteiroFn = ROTEIROS[roteiro];
   if (!roteiroFn) throw new Error(`Roteiro ${roteiro} nao encontrado`);
 
@@ -117,8 +117,7 @@ export async function abrirSquadModal({ roteiro, apiCall, titulo, subtitulo, cer
   }
 
   try {
-    const result = await roteiroFn({ engine, log, setStatus, apiCall, cerebroNome });
-    // Finalizacao suave
+    const result = await roteiroFn({ engine, log, setStatus, apiCall, cerebroNome, ...(contexto || {}) });
     setStatus('<span style="color:#10b981">✅ Entrega concluida!</span>');
     await new Promise(r => setTimeout(r, 800));
     clearInterval(elapsedTimer);
@@ -131,7 +130,6 @@ export async function abrirSquadModal({ roteiro, apiCall, titulo, subtitulo, cer
     clearInterval(elapsedTimer);
     statusbar.innerHTML = `<span style="color:#FF5555">Falha: ${escapeHTML(e.message || String(e))}</span>`;
     log('Sistema', `Erro: ${e.message || e}`, 'final');
-    // Adiciona botao pra fechar em caso de erro
     const closeBtn = document.createElement('button');
     closeBtn.className = 'btn btn-ghost squad-error-close';
     closeBtn.textContent = 'Fechar';
@@ -139,6 +137,38 @@ export async function abrirSquadModal({ roteiro, apiCall, titulo, subtitulo, cer
     overlay.querySelector('.squad-header').appendChild(closeBtn);
     throw e;
   }
+}
+
+/* ============================================================
+   API publica: dispara animacao squad em PARALELO ao processo real.
+   Uso pelo fluxo Alimentar (avulso/pacote). NAO bloqueia o fluxo:
+   - dispara animacao
+   - retorna { sinalizarConclusao: () => void, sinalizarErro: (e) => void }
+   - chamador roda seu fluxo normal (com barra dele) e ao final
+     chama sinalizarConclusao() pra animacao acelerar e fechar
+   - se squad off, retorna no-ops (chamador nao precisa de if)
+   ============================================================ */
+export function iniciarSquadParalelo(roteiroId, contexto) {
+  const squadOn = localStorage.getItem('pinguim_squad_animacao') === 'on';
+  if (!squadOn) return { sinalizarConclusao: () => {}, sinalizarErro: () => {} };
+
+  let resolveExt; let rejectExt;
+  const promiseExt = new Promise((res, rej) => { resolveExt = res; rejectExt = rej; });
+
+  // Dispara modal sem aguardar
+  abrirSquadModal({
+    roteiro: roteiroId,
+    titulo: contexto?.titulo || 'Processando',
+    subtitulo: contexto?.subtitulo || '',
+    cerebroNome: contexto?.cerebroNome,
+    apiCall: () => promiseExt,
+    contexto,
+  }).catch(() => { /* erro do squad nao bloqueia chamador */ });
+
+  return {
+    sinalizarConclusao: (resultado) => resolveExt(resultado || { ok: true }),
+    sinalizarErro: (e) => rejectExt(e),
+  };
 }
 
 function escapeHTML(s) {

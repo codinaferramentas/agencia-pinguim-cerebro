@@ -2,6 +2,7 @@
 
 import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421p';
 import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421p';
+import { iniciarSquadParalelo } from './squad-modal.js?v=20260425b';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -1261,6 +1262,14 @@ function renderStepPacote() {
       uploadBarWrap.append(uploadBar);
       areaProgresso.append(uploadStatus, uploadBarWrap);
 
+      // Squad paralelo (so anima se toggle on; no-op caso contrario)
+      const squad = iniciarSquadParalelo('alimentarPacote', {
+        titulo: 'Alimentando Cerebro com pacote',
+        subtitulo: `Cerebro ${cerebroNome}`,
+        cerebroNome,
+        totalArquivos: null, // descoberto na fase preparar
+      });
+
       try {
         // 1. Busca produto
         const { data: prod, error: eProd } = await sb.from('produtos').select('id').eq('slug', cerebroSlug).single();
@@ -1377,6 +1386,7 @@ function renderStepPacote() {
         const totalArquivos = prep.total_pendentes || 0;
         if (totalArquivos === 0) {
           clearInterval(pollInterval); pollInterval = null;
+          squad.sinalizarConclusao({ fontes: 0 });
           progressoBar.style.width = '100%';
           const msg = prep.duplicados_historico > 0
             ? `Todos os ${prep.duplicados_historico} arquivos já existiam no Cérebro (dedup por sha256). Nada a processar.`
@@ -1423,6 +1433,9 @@ function renderStepPacote() {
         progressoBar.style.width = '100%';
         status.innerHTML = `<strong>✅ Concluído</strong> · ${ondaInfo.fontes} fontes · ${ondaInfo.chunks} chunks · ${ondaInfo.quarentena} em quarentena`;
 
+        // Sinaliza animacao squad pra acelerar/fechar
+        squad.sinalizarConclusao({ fontes: ondaInfo.fontes, chunks: ondaInfo.chunks });
+
         // Lê relatório final
         const { data: loteFinal } = await sb.from('ingest_lotes')
           .select('log_md, erro_detalhes, status')
@@ -1446,6 +1459,7 @@ function renderStepPacote() {
 
       } catch (e) {
         if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+        squad.sinalizarErro(e);
         processandoAgora = false;
         await alertarDark({ titulo: 'Falha no processamento', mensagem: e.message, tipo: 'erro' });
         btnProcessar.disabled = false;
@@ -1577,6 +1591,14 @@ function renderStepAvulso() {
       uploadBarWrap.append(uploadBar);
       areaProgresso.append(uploadStatus, uploadBarWrap);
 
+      // Squad paralelo (so anima se toggle on; no-op caso contrario)
+      const squad = iniciarSquadParalelo('alimentarAvulso', {
+        titulo: 'Alimentando Cerebro com 1 arquivo',
+        subtitulo: `Cerebro ${cerebroAtual?.nome || ''}`,
+        cerebroNome: cerebroAtual?.nome,
+        arquivoNome: arquivoSelecionado?.name,
+      });
+
       try {
         // Garante JSZip carregado
         if (typeof window.JSZip === 'undefined') {
@@ -1691,6 +1713,7 @@ function renderStepAvulso() {
         });
 
         if ((prep.total_pendentes || 0) === 0) {
+          squad.sinalizarConclusao({ ok: true, vazio: true });
           status.innerHTML = '<strong>⚠ Arquivo já existia</strong> (dedup por sha256) ou não tinha texto extraível.';
           progressoBar.style.width = '100%';
           areaProgresso.append(el('div', { class: 'progresso-footer' }, [
@@ -1719,6 +1742,7 @@ function renderStepAvulso() {
 
         progressoBar.style.width = '100%';
         status.innerHTML = '<strong>✅ Concluído</strong>';
+        squad.sinalizarConclusao({ ok: true });
 
         const { data: loteFinal } = await sb.from('ingest_lotes')
           .select('log_md, fontes_criadas, chunks_criados')
@@ -1733,6 +1757,7 @@ function renderStepAvulso() {
         ]));
 
       } catch (e) {
+        squad.sinalizarErro(e);
         processandoAgora = false;
         await alertarDark({ titulo: 'Falha', mensagem: e.message, tipo: 'erro' });
         btnProcessar.disabled = false;
