@@ -2158,6 +2158,13 @@ function blocoUrl(cerebroAtualRef, onIndexado) {
     status.style.display = '';
     status.innerHTML = '<span style="color:var(--fg-muted)">Buscando conteúdo da URL…</span>';
 
+    // Squad animado em paralelo (so anima se toggle on; no-op caso contrario)
+    const squad = iniciarSquadParalelo('alimentarAvulso', {
+      titulo: 'Trazendo conteúdo da URL',
+      subtitulo: `Cérebro ${cerebroAtualRef.nome}`,
+      cerebroNome: cerebroAtualRef.nome,
+    });
+
     try {
       const sb = getSupabase();
       const { data: prod } = await sb.from('produtos').select('id').eq('slug', cerebroAtualRef.slug).single();
@@ -2217,10 +2224,14 @@ function blocoUrl(cerebroAtualRef, onIndexado) {
       btnTranscrever.disabled = true; // desabilitado ate usuario clicar "+ Trazer outra URL"
       btnTranscrever.innerHTML = '✓ Indexado';
 
+      // Sinaliza pro Squad concluir animacao
+      squad.sinalizarConclusao({ ok: true, fontes: 1, chunks: r.chunks });
+
       // Refresca cache global e notifica subnav
       cerebrosCache = await fetchCerebrosCatalogo();
       window.dispatchEvent(new CustomEvent('dados:atualizado', { detail: { tipo: 'cerebro_alimentado', slug: cerebroAtualRef.slug } }));
     } catch (e) {
+      squad.sinalizarErro(e);
       status.innerHTML = `
         <div style="padding:.75rem;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:var(--danger);font-size:.875rem;line-height:1.5">
           ${e.message || String(e)}
