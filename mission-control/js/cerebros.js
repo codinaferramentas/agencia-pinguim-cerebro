@@ -415,7 +415,7 @@ function blocoBuscaSemantica() {
           'apikey': window.__ENV__.SUPABASE_ANON_KEY,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ cerebro_id: cer.id, query: q, top_k: 12, min_similarity: 0.25 }),
+        body: JSON.stringify({ cerebro_id: cer.id, query: q, top_k: 12, min_similarity: 0.35 }),
       });
       const r = await resp.json();
       if (r.error) throw new Error(r.error);
@@ -441,6 +441,75 @@ function blocoBuscaSemantica() {
   linha.append(input, btn);
   wrap.append(titulo, dica, linha, statusBar);
   return wrap;
+}
+
+// Pega o trecho de ~280 chars mais denso de palavras da query.
+// Faz a similaridade entre busca e bloco "fazer sentido visual" — usuario entende
+// imediatamente por que aquele bloco apareceu.
+function destacarTrechoRelevante(conteudo, query) {
+  const STOPWORDS = new Set(['o','a','os','as','um','uma','de','do','da','dos','das','em','no','na','nos','nas','para','pra','por','com','sem','que','é','e','ou','se','meu','minha','seu','sua','isso','este','esta','isto']);
+  const palavrasQuery = String(query).toLowerCase()
+    .replace(/[^\w\sáéíóúâêîôûãõàç]/gi, ' ')
+    .split(/\s+/)
+    .filter(p => p.length >= 3 && !STOPWORDS.has(p));
+
+  const conteudoLower = conteudo.toLowerCase();
+  const JANELA = 280;
+  let melhorPos = 0;
+  let melhorScore = 0;
+
+  // Varre a cada 60 chars uma janela e conta hits
+  for (let i = 0; i < conteudo.length; i += 60) {
+    const janela = conteudoLower.slice(i, i + JANELA);
+    let score = 0;
+    for (const p of palavrasQuery) {
+      if (janela.includes(p)) score += 1;
+      // bonus se for plural/derivado simples (conteudo, conteúdos, conteudista...)
+      else if (janela.includes(p.slice(0, Math.max(4, p.length - 2)))) score += 0.4;
+    }
+    if (score > melhorScore) { melhorScore = score; melhorPos = i; }
+  }
+
+  // Se nada bateu nominalmente, pega o comeco (semantica pura)
+  if (melhorScore === 0) {
+    const trecho = conteudo.slice(0, JANELA).trim();
+    return el('div', { class: 'busca-resultado-conteudo' },
+      conteudo.length > JANELA ? trecho + '…' : trecho
+    );
+  }
+
+  // Recorta janela. Tenta comecar/terminar em quebra de paragrafo ou frase
+  let inicio = melhorPos;
+  let fim = Math.min(conteudo.length, melhorPos + JANELA);
+
+  // Recua ate inicio de frase (.!? ou \n)
+  for (let i = inicio; i > Math.max(0, inicio - 80); i--) {
+    if (/[.!?\n]/.test(conteudo[i - 1])) { inicio = i; break; }
+  }
+  // Avanca ate fim de frase
+  for (let i = fim; i < Math.min(conteudo.length, fim + 80); i++) {
+    if (/[.!?\n]/.test(conteudo[i])) { fim = i + 1; break; }
+  }
+
+  let trecho = conteudo.slice(inicio, fim).trim();
+  if (inicio > 0) trecho = '…' + trecho;
+  if (fim < conteudo.length) trecho = trecho + '…';
+
+  // Highlight das palavras da query (HTML escaped + <mark>)
+  const escapado = trecho
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  let html = escapado;
+  palavrasQuery.forEach(p => {
+    if (p.length < 3) return;
+    const re = new RegExp(`(${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    html = html.replace(re, '<mark class="busca-mark">$1</mark>');
+  });
+
+  const div = el('div', { class: 'busca-resultado-conteudo' });
+  div.innerHTML = html;
+  return div;
 }
 
 function mostrarResultadosBusca(query, resp) {
@@ -480,12 +549,16 @@ function mostrarResultadosBusca(query, resp) {
                   class: 'busca-resultado-tipo',
                   style: `color:${coresTipo()[r.tipo] || '#71717A'}`,
                 }, labelTipo(r.tipo)),
-                el('div', { class: 'busca-resultado-sim' }, [
+                el('div', {
+                  class: 'busca-resultado-sim',
+                  title: `${sim}% de proximidade semântica. Mede significado, não palavra exata. Acima de 50% é match forte; 35-50% é tangencial mas relacionado.`,
+                }, [
                   el('div', { class: 'busca-sim-bar', style: `width:${sim}%;background:${corBarra}` }),
                   el('span', { class: 'busca-sim-label' }, `${sim}%`),
                 ]),
               ]),
-              el('div', { class: 'busca-resultado-conteudo' }, r.conteudo),
+              el('div', { class: 'busca-resultado-trecho-label' }, 'Trecho mais relevante:'),
+              destacarTrechoRelevante(r.conteudo, query),
               el('button', {
                 class: 'btn btn-ghost',
                 style: 'font-size:.75rem;margin-top:.5rem',
@@ -493,7 +566,7 @@ function mostrarResultadosBusca(query, resp) {
                   const fonte = pecasCache.find(p => p.id === r.fonte_id);
                   if (fonte) { fechar(); abrirDrawer(fonte); }
                 },
-              }, '→ Ver fonte completa'),
+              }, '→ Ver bloco completo'),
             ]);
           })),
       el('div', { style: 'margin-top:1rem;padding:.75rem 1rem;background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.25);border-radius:6px;font-size:.8125rem;color:var(--fg-muted);line-height:1.55' }, [
