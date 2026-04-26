@@ -66,20 +66,38 @@ export async function fetchCerebrosCatalogo() {
 // `conteudo_md` é puxado sob demanda quando o drawer abre (fetchFonteConteudo).
 const COLUNAS_FONTE_LEVE = 'id, cerebro_id, tipo, titulo, autor, origem, url, criado_em, atualizado_em, ingest_status, ingest_lote_id, mime, tamanho_bytes, arquivo_nome, metadata';
 
+// Versão otimizada: recebe cerebro_id direto (a view vw_cerebros_catalogo já tem).
+// Economiza 2 round-trips antes da query principal.
+export async function fetchFontesByCerebroId(cerebroId) {
+  if (mode !== 'supabase' || !cerebroId) return [];
+  const { data, error } = await sb.from('cerebro_fontes').select(COLUNAS_FONTE_LEVE)
+    .eq('cerebro_id', cerebroId)
+    .eq('ingest_status', 'ok')
+    .order('criado_em', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+// Mantida pra compat: se algum chamador só tem o slug, ainda funciona.
 export async function fetchCerebroFontes(cerebroSlug) {
   if (mode === 'supabase') {
     const { data: produto } = await sb.from('produtos').select('id').eq('slug', cerebroSlug).single();
     if (!produto) return [];
     const { data: cerebro } = await sb.from('cerebros').select('id').eq('produto_id', produto.id).single();
     if (!cerebro) return [];
-    const { data, error } = await sb.from('cerebro_fontes').select(COLUNAS_FONTE_LEVE)
-      .eq('cerebro_id', cerebro.id)
-      .eq('ingest_status', 'ok')
-      .order('criado_em', { ascending: false });
-    if (error) throw error;
-    return data || [];
+    return fetchFontesByCerebroId(cerebro.id);
   }
   return [];
+}
+
+// Conta arquivos em quarentena (pra UX do botao). Usa cerebro_id direto.
+export async function fetchQuarentenaCount(cerebroId) {
+  if (mode !== 'supabase' || !cerebroId) return 0;
+  const { count } = await sb.from('ingest_arquivos')
+    .select('id', { count: 'exact', head: true })
+    .eq('cerebro_id', cerebroId)
+    .eq('status', 'quarentena');
+  return count || 0;
 }
 
 // Busca conteudo_md de uma fonte só quando precisa (drawer aberto).

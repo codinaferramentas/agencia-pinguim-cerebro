@@ -1,6 +1,6 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas, fetchFonteConteudo, getSupabase } from './sb-client.js?v=20260426a';
+import { fetchCerebrosCatalogo, fetchCerebroPecas, fetchFontesByCerebroId, fetchFonteConteudo, fetchQuarentenaCount, getSupabase } from './sb-client.js?v=20260426b';
 import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421p';
 import { iniciarSquadParalelo } from './squad-modal.js?v=20260425e';
 import { iconeNode } from './icone.js?v=20260425g';
@@ -251,66 +251,50 @@ export async function abrirCerebroDetalhe(slug) {
   // Mantém subnav sincronizado (destaca o cérebro ativo na sidebar)
   window.__marcarSubnavAtivo?.(slug);
 
+  // RENDER INSTANTANEO: usa dados ja em memoria (cerebrosCache) pra montar a tela
+  // sem esperar nenhum round-trip. Fontes carregam em paralelo e populam depois.
   const page = document.getElementById('page-cerebros');
   page.innerHTML = '';
-  page.append(el('div', { html: `<div style="padding:3rem;color:var(--fg-muted);text-align:center">Carregando fontes do Cérebro ${cerebroAtual.nome}…</div>` }));
+  pecasCache = [];  // limpa antes de carregar pra nao misturar de outro Cerebro
 
-  let fontesServidor = [];
-  try {
-    fontesServidor = await fetchCerebroPecas(slug);
-  } catch (err) {
-    console.error('Erro ao carregar fontes do Supabase:', err);
-    fontesServidor = [];
+  // Estimativa de quantas fontes esperar (usa total da view de catalogo)
+  const totalEstimado = cerebroAtual.total_fontes || 0;
+
+  const acoesContainer = el('div', { class: 'cerebro-detail-actions' });
+  function renderAcoes(qtdQuarentena, temFontes) {
+    acoesContainer.innerHTML = '';
+    acoesContainer.append(...[
+      el('button', { class: 'btn btn-primary', onclick: () => abrirModalAlimentar() }, '+ Alimentar'),
+      qtdQuarentena > 0
+        ? el('button', {
+            class: 'btn',
+            style: 'color:var(--warning,#f59e0b);border-color:rgba(245,158,11,0.4)',
+            onclick: () => abrirQuarentena(),
+            title: 'Arquivos que não foram indexados — gerencie aqui',
+          }, `⚠ Quarentena (${qtdQuarentena})`)
+        : null,
+      temFontes
+        ? el('button', {
+            class: 'btn',
+            onclick: () => abrirHistoricoLotes(),
+            title: 'Ver e gerenciar cargas anteriores',
+          }, '📜 Histórico')
+        : null,
+      temFontes
+        ? el('button', {
+            class: 'btn btn-ghost',
+            style: 'color:var(--danger)',
+            onclick: () => zerarCerebro(),
+            title: 'Apaga TODAS as fontes deste Cérebro',
+          }, '🗑 Zerar')
+        : null,
+      el('button', { class: 'btn btn-ghost', onclick: () => renderCerebros() }, '← Voltar'),
+    ].filter(Boolean));
   }
-  pecasCache = fontesServidor;
+  renderAcoes(0, totalEstimado > 0);
 
-  // Conta arquivos em quarentena (UX: botão so aparece se há)
-  let qtdQuarentena = 0;
-  try {
-    const sb = getSupabase();
-    if (sb) {
-      const { data: prod } = await sb.from('produtos').select('id').eq('slug', slug).single();
-      if (prod) {
-        const { data: cer } = await sb.from('cerebros').select('id').eq('produto_id', prod.id).single();
-        if (cer) {
-          const { count } = await sb.from('ingest_arquivos')
-            .select('id', { count: 'exact', head: true })
-            .eq('cerebro_id', cer.id)
-            .eq('status', 'quarentena');
-          qtdQuarentena = count || 0;
-        }
-      }
-    }
-  } catch (e) { console.warn('Erro contando quarentena:', e); }
-
-  page.innerHTML = '';
-  const acoes = el('div', { class: 'cerebro-detail-actions' }, [
-    el('button', { class: 'btn btn-primary', onclick: () => abrirModalAlimentar() }, '+ Alimentar'),
-    qtdQuarentena > 0
-      ? el('button', {
-          class: 'btn',
-          style: 'color:var(--warning,#f59e0b);border-color:rgba(245,158,11,0.4)',
-          onclick: () => abrirQuarentena(),
-          title: 'Arquivos que não foram indexados — gerencie aqui',
-        }, `⚠ Quarentena (${qtdQuarentena})`)
-      : null,
-    pecasCache.length > 0
-      ? el('button', {
-          class: 'btn',
-          onclick: () => abrirHistoricoLotes(),
-          title: 'Ver e gerenciar cargas anteriores',
-        }, '📜 Histórico')
-      : null,
-    pecasCache.length > 0
-      ? el('button', {
-          class: 'btn btn-ghost',
-          style: 'color:var(--danger)',
-          onclick: () => zerarCerebro(),
-          title: 'Apaga TODAS as fontes deste Cérebro',
-        }, '🗑 Zerar')
-      : null,
-    el('button', { class: 'btn btn-ghost', onclick: () => renderCerebros() }, '← Voltar'),
-  ]);
+  const contadorEl = el('span', { class: 'cerebro-detalhe-header-count' },
+    totalEstimado > 0 ? `${totalEstimado} font${totalEstimado === 1 ? 'e' : 'es'}` : 'Carregando…');
 
   const header = el('div', { class: 'cerebro-detail-header' }, [
     iconeNode({ icone_url: cerebroAtual.icone_url, emoji: cerebroAtual.emoji, nome: cerebroAtual.nome }, { size: 'xl', className: 'cerebro-emoji' }),
@@ -325,11 +309,11 @@ export async function abrirCerebroDetalhe(slug) {
       ]),
       el('div', { class: 'cerebro-desc' }, cerebroAtual.descricao || '—'),
       el('div', { style: 'display:flex;gap:.75rem;margin-top:.5rem;font-size:.75rem;color:var(--fg-muted)' }, [
-        el('span', { class: 'cerebro-detalhe-header-count' }, `${pecasCache.length} font${pecasCache.length === 1 ? 'e' : 'es'}`),
+        contadorEl,
         el('span', {}, formatarAtualizacao(cerebroAtual.ultima_alimentacao).texto),
       ]),
     ]),
-    acoes,
+    acoesContainer,
   ]);
 
   const toggle = el('div', { class: 'view-toggle' }, [
@@ -338,16 +322,40 @@ export async function abrirCerebroDetalhe(slug) {
     el('button', { class: viewModoAtual === 'timeline' ? 'active' : '', onclick: () => { viewModoAtual = 'timeline'; renderView(); } }, '⌚ Timeline'),
   ]);
 
-  const buscaSemantica = pecasCache.length > 0 ? blocoBuscaSemantica() : null;
-
+  // Busca semantica e a viewArea ja entram no DOM, mas vazias ate fontes chegarem
+  const buscaSlot = el('div', { id: 'cerebro-busca-slot' });
   const viewArea = el('div', { id: 'cerebro-view-area' });
+  if (totalEstimado > 0) {
+    viewArea.innerHTML = '<div style="padding:3rem;color:var(--fg-muted);text-align:center">Carregando fontes…</div>';
+  }
 
   page.append(el('div', { class: 'cerebro-detail' }, [
     header,
-    buscaSemantica,
+    buscaSlot,
     toggle,
     viewArea,
-  ].filter(Boolean)));
+  ]));
+
+  // CARREGAMENTO PARALELO: fontes + quarentena disparados juntos, usando IDs ja em cache
+  const cerebroId = cerebroAtual.cerebro_id;
+  const [fontesResult, quarentenaResult] = await Promise.allSettled([
+    fetchFontesByCerebroId(cerebroId),
+    fetchQuarentenaCount(cerebroId),
+  ]);
+
+  const fontesServidor = fontesResult.status === 'fulfilled' ? fontesResult.value : [];
+  const qtdQuarentena = quarentenaResult.status === 'fulfilled' ? quarentenaResult.value : 0;
+  if (fontesResult.status === 'rejected') console.error('Erro ao carregar fontes:', fontesResult.reason);
+
+  pecasCache = fontesServidor;
+
+  // Atualiza header e botoes com dados reais
+  contadorEl.textContent = `${pecasCache.length} font${pecasCache.length === 1 ? 'e' : 'es'}`;
+  renderAcoes(qtdQuarentena, pecasCache.length > 0);
+
+  // Renderiza busca semantica se houver fontes
+  buscaSlot.innerHTML = '';
+  if (pecasCache.length > 0) buscaSlot.append(blocoBuscaSemantica());
 
   renderView();
 }
