@@ -143,7 +143,7 @@ export async function renderDocDetalhe(slug) {
   page.innerHTML = '<div style="padding:3rem;color:var(--fg-muted);text-align:center">Carregando…</div>';
 
   // Importa modulo da doc dinamicamente (lazy)
-  const mod = await import(`./docs/${slug}.js?v=20260426d`);
+  const mod = await import(`./docs/${slug}.js?v=20260426e`);
   const conteudo = await mod.gerar();
 
   const wrap = el('div', { class: 'docs-detail' });

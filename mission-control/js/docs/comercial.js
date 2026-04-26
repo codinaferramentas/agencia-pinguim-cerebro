@@ -40,14 +40,18 @@ export async function gerar() {
         titulo: 'Switch de metodologia · O diferencial vendável',
         html: `
           <p>Cada Cérebro de Metodologia tem uma <strong>chave de ativação</strong>. Em qualquer momento, o gestor escolhe quais metodologias estão ativas pros agentes comerciais usarem.</p>
-          <p>Aplicações:</p>
+          <p>Aplicações no MVP (todas viáveis com os 5 Cérebros já alimentados):</p>
           <ul>
-            <li><strong>Teste A/B real:</strong> semana com SPIN ativo, semana com Challenger ativo. Compara conversão.</li>
             <li><strong>Por produto:</strong> Taurus (low-ticket) usa SPIN simplificado; Elo (high-ticket) usa Sandler completo + Voss pra objeção.</li>
             <li><strong>Por vendedor:</strong> a vendedora consultiva opera melhor com Sandler; a assertiva opera melhor com Challenger.</li>
             <li><strong>Por momento de mercado:</strong> época de cliente mais resistente, ativa Voss; época de mercado aquecido, ativa SPIN.</li>
           </ul>
           <p>Esse switch é vendável amanhã para qualquer cliente da Dolphin. Outras agências não têm isso.</p>
+
+          <h3>A/B test rotativo · evolução prevista, não promessa de hoje</h3>
+          <p>No futuro, o switch evolui pra <strong>rodízio automático por interação</strong>: o sistema usa SPIN num lead, Challenger no próximo, Voss no terceiro, e mede conversão real por metodologia.</p>
+          <p>Em vez de esperar uma semana inteira pra comparar, o sistema gera 10-20 micro-testes por dia. Detectação de padrão fica muito mais rápida.</p>
+          <p style="font-size:0.875em;color:var(--fg-muted)"><strong>Status:</strong> em construção · <strong>Quando entra:</strong> dentro da Fase 2 (Co-piloto), depois que o agente estiver gerando dados de execução suficientes pra rodar um round-robin com sentido. Requer tabela <code>agente_execucoes</code> populada.</p>
         `,
       },
       {
@@ -60,27 +64,28 @@ export async function gerar() {
           <p><strong>Missão:</strong> qualificar todo lead novo antes de chegar pra vendedora. Decide quente / morno / frio + dor + próximo passo + roteamento de produto.</p>
           <p><strong>Por que primeiro:</strong> sem lead bom, nada do resto importa. Vendedora com tempo livre é vendedora produtiva.</p>
           <p><strong>Entrada:</strong> dados do Clint (formulário, quiz, primeira mensagem). <strong>Saída:</strong> briefing de 1 página com perfil + dor + recomendação.</p>
-          <p><strong>Tipo:</strong> agente LLM (gpt-4o-mini pra qualificação rápida + Sonnet pra briefing final). <strong>Custo estimado:</strong> ~R$ 0,30 por lead qualificado.</p>
+          <p><strong>Tipo:</strong> agente LLM (OpenAI gpt-4o-mini, qualificação rápida). <strong>Custo estimado:</strong> ~R$ 0,01 por lead qualificado.</p>
 
           <h3>Agente 2 — Co-piloto · Apoio em tempo real</h3>
           <p><strong>Missão:</strong> vendedora cola pergunta/objeção do aluno e recebe resposta no tom Pinguim, com case real, pronta pra copiar e colar no Clint/WhatsApp.</p>
           <p><strong>Entrada:</strong> texto da conversa. <strong>Saída:</strong> resposta com prova social embutida (link do print, nome do aluno-case, frase autêntica).</p>
-          <p><strong>Tipo:</strong> agente LLM (Sonnet, resposta cuidadosa). <strong>Custo:</strong> ~R$ 0,15 por consulta.</p>
+          <p><strong>Tipo:</strong> agente LLM (OpenAI gpt-4o-mini com Vision quando há print pra ler). <strong>Custo:</strong> ~R$ 0,03 por consulta.</p>
 
           <h3>Agente 3 — Analista de Call · Aprendizado pós-venda</h3>
           <p><strong>Missão:</strong> vendedora sobe áudio/transcrição da call (Whisper transcreve), agente analisa pela metodologia ativa, dá nota por etapa, aponta onde perdeu, sugere o que faltou perguntar.</p>
-          <p><strong>Entrada:</strong> áudio ou texto da call. <strong>Saída:</strong> relatório PDF com nota por etapa SPIN/Sandler/etc + sugestão concreta.</p>
-          <p><strong>Tipo:</strong> agente LLM (Opus pra análise profunda + Whisper pra transcrição). <strong>Custo:</strong> ~R$ 1,50 por call analisada.</p>
+          <p><strong>Entrada:</strong> áudio ou texto da call. <strong>Saída:</strong> relatório com nota por etapa SPIN/Sandler/etc + sugestão concreta.</p>
+          <p><strong>Tipo:</strong> Whisper-1 (transcrição) + gpt-4o (análise profunda — único agente que merece o modelo grande, porque corre 1× por call e gera aprendizado caro). <strong>Custo:</strong> ~R$ 0,80 por call de 10 minutos analisada.</p>
 
           <h3>Agente 4 — Coach · Inteligência de padrão</h3>
           <p><strong>Missão:</strong> observa SDR + Co-piloto + Analista por 30+ dias e detecta padrões. "Vocês perdem em fechamento sempre que o cliente cita orçamento". "Lead de confeitaria converte 3x mais que de fitness". "Metodologia X bate Metodologia Y pro produto Z."</p>
           <p><strong>Entrada:</strong> histórico acumulado dos outros agentes. <strong>Saída:</strong> relatório semanal automático com 3 insights acionáveis + sugestão de calibragem dos outros agentes.</p>
-          <p><strong>Tipo:</strong> cron semanal Sonnet. <strong>Custo:</strong> ~R$ 5,00 por relatório semanal.</p>
+          <p><strong>Tipo:</strong> cron semanal OpenAI gpt-4o-mini sobre histórico agregado. <strong>Custo:</strong> ~R$ 0,10 por relatório semanal.</p>
 
           <h3>Agente 5 — Cliente Oculto · Treino sem cliente real</h3>
           <p><strong>Missão:</strong> simular aluno com 4 perfis de dificuldade (receptivo, questionador, resistente, hostil). Vendedora "vende" pra ele, recebe nota, pratica sem queimar lead real.</p>
           <p><strong>Por que último:</strong> faz sentido depois que time já está usando os outros 4. Treino sem ferramenta no dia a dia não vai ser usado.</p>
-          <p><strong>Tipo:</strong> agente conversacional Sonnet. <strong>Custo:</strong> ~R$ 2,00 por sessão de treino.</p>
+          <p><strong>Tipo:</strong> agente conversacional OpenAI gpt-4o-mini (~20 turnos por sessão). <strong>Custo:</strong> ~R$ 0,20 por sessão de treino.</p>
+          <p style="font-size:0.875em;color:var(--fg-muted)"><strong>Princípio do sistema:</strong> tudo é OpenAI. Não usamos Claude/Anthropic em produção comercial. gpt-4o-mini cobre a maior parte por custo/benefício; gpt-4o entra só onde análise profunda compensa.</p>
         `,
       },
       {
@@ -153,17 +158,18 @@ export async function gerar() {
         id: 'custo',
         titulo: 'Custo total estimado',
         html: `
-          <p>Cálculo de custo mensal de IA, projetado pra <strong>volume Pinguim atual</strong> (estimativa conservadora):</p>
+          <p>Cálculo de custo mensal de IA <strong>via OpenAI</strong>, projetado pra volume Pinguim atual (estimativa conservadora):</p>
           <ul>
-            <li><strong>SDR:</strong> 200 leads/mês × R$ 0,30 = R$ 60</li>
-            <li><strong>Co-piloto:</strong> 300 consultas/mês × R$ 0,15 = R$ 45</li>
-            <li><strong>Analista:</strong> 60 calls/mês × R$ 1,50 = R$ 90</li>
-            <li><strong>Coach:</strong> 4 relatórios/mês × R$ 5,00 = R$ 20</li>
-            <li><strong>Cliente Oculto:</strong> 30 sessões/mês × R$ 2,00 = R$ 60</li>
-            <li><strong>Embeddings + busca semântica:</strong> ~R$ 5,00</li>
+            <li><strong>SDR:</strong> 200 leads/mês × R$ 0,01 = R$ 2</li>
+            <li><strong>Co-piloto:</strong> 300 consultas/mês × R$ 0,03 = R$ 9</li>
+            <li><strong>Analista:</strong> 60 calls/mês × R$ 0,80 = R$ 48</li>
+            <li><strong>Coach:</strong> 4 relatórios/mês × R$ 0,10 = R$ 0,40</li>
+            <li><strong>Cliente Oculto:</strong> 30 sessões/mês × R$ 0,20 = R$ 6</li>
+            <li><strong>Embeddings + busca semântica:</strong> ~R$ 5</li>
           </ul>
-          <p><strong>Total: ~R$ 280/mês</strong> em IA, pra um time comercial inteiro aumentado.</p>
-          <p>Pra contexto: um único almoço de equipe custa mais. Um curso de vendas tradicional custa 5-10× isso por vendedor. Esse plano cobre <strong>os dois vendedores</strong> da Pinguim com inteligência IA contínua, ininterrupta, melhorando com o tempo.</p>
+          <p><strong>Total: ~R$ 70/mês</strong> em IA, pra um time comercial inteiro aumentado.</p>
+          <p>Pra contexto: um único almoço de equipe custa mais. Um curso de vendas tradicional custa 50-100× isso por vendedor. Esse plano cobre <strong>os dois vendedores</strong> da Pinguim com inteligência IA contínua, ininterrupta, melhorando com o tempo.</p>
+          <p style="font-size:0.875em;color:var(--fg-muted)">Os números são <strong>tetos conservadores</strong> baseados em preços OpenAI atuais (gpt-4o-mini: $0.15/M input, $0.60/M output; gpt-4o pra Analista: $2.50/M input). Volume real pode ficar abaixo. À medida que o sistema escalar pra outros clientes da Dolphin, custos por cliente caem (chunks compartilhados, metodologias compartilhadas, embeddings reutilizados).</p>
         `,
       },
       {

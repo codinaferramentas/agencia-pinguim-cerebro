@@ -143,6 +143,16 @@ function setupNav() {
     if (!slug) return;
     await irParaDetalhe('cerebros', slug);
   });
+  // Disparado pelo botao "+" do header de cada familia no subnav
+  window.addEventListener('cerebro:novo-na-familia', async (ev) => {
+    const cat = ev.detail?.categoria || 'interno';
+    if (paginaAtual !== 'cerebros') {
+      // Garante que estamos na tela Cérebros antes de abrir modal
+      await navegar('cerebros');
+    }
+    // O handler real vive em cerebros.js e e exposto via window.__abrirNovoCerebro
+    window.__abrirNovoCerebro?.(cat);
+  });
   window.addEventListener('persona:select', async (ev) => {
     const slug = ev.detail?.slug;
     if (!slug) return;
@@ -182,17 +192,40 @@ const SUBNAV_CONFIG = {
     title: 'Cérebros',
     loader: async () => {
       const cerebros = await fetchCerebrosCatalogo();
-      // Filtra: só cérebros com produto real, sem Pinguim Empresa (foco em cérebros de produto)
-      return cerebros
-        .filter(c => c.slug !== 'pinguim')
-        .map(c => ({
-          id: c.slug || c.id,
-          label: c.nome,
-          meta: (c.total_fontes ?? 0) + ' fontes',
-          emoji: c.emoji || '⚛',
-          icone_url: c.icone_url,
-          nome: c.nome,
-        }));
+      // Ordem das familias no sidebar (visual + UX)
+      const ordemFamilias = ['interno', 'externo', 'metodologia', 'clone'];
+      const labelFamilia = {
+        interno: '📦 Internos',
+        externo: '🔍 Externos',
+        metodologia: '📚 Metodologias',
+        clone: '👤 Clones',
+      };
+      // Filtra Pinguim Empresa
+      const filtrados = cerebros.filter(c => c.slug !== 'pinguim');
+      const items = [];
+      ordemFamilias.forEach(cat => {
+        const doGrupo = filtrados
+          .filter(c => (c.categoria || 'interno') === cat)
+          .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+        // Sempre mostra a familia (mesmo vazia) com botao "+" pra criar
+        items.push({ _grupo: labelFamilia[cat], _grupoCategoria: cat, _grupoAcao: 'novo-cerebro' });
+        if (doGrupo.length === 0) {
+          items.push({ _placeholder: true, _categoria: cat, label: 'Nenhum ainda · clique no + acima' });
+          return;
+        }
+        doGrupo.forEach(c => {
+          items.push({
+            id: c.slug || c.id,
+            label: c.nome,
+            meta: (c.total_fontes ?? 0) + ' fontes',
+            emoji: c.emoji || '⚛',
+            icone_url: c.icone_url,
+            nome: c.nome,
+            _categoria: cat,
+          });
+        });
+      });
+      return items;
     },
     onSelect: (id) => {
       window.dispatchEvent(new CustomEvent('cerebro:select', { detail: { slug: id } }));
@@ -278,23 +311,59 @@ async function abrirSubnav(pageSlug) {
       return;
     }
 
-    items.forEach(it => {
-      const row = el('div', { class: 'subnav-item', data: { id: it.id } }, [
-        iconeNode({ icone_url: it.icone_url, emoji: it.emoji, nome: it.nome || it.label }, { size: 'sm', className: 'subnav-icone' }),
-        el('span', { class: 'subnav-label' }, it.label),
-        it.meta ? el('span', { class: 'subnav-meta' }, it.meta) : null,
-      ]);
-      row.addEventListener('click', () => {
-        $$('.subnav-item').forEach(s => s.classList.remove('active'));
-        row.classList.add('active');
-        cfg.onSelect?.(it.id);
-        if (isMobile()) fecharMobileMenu();
-      });
-      body.appendChild(row);
-    });
+    renderSubnavItems(body, items, cfg);
   } catch (err) {
     body.innerHTML = `<div class="subnav-section" style="color:var(--danger)">Erro: ${err.message}</div>`;
   }
+}
+
+// Helper compartilhado: renderiza items do subnav, suportando _grupo (header de seção) e _placeholder (item desabilitado)
+function renderSubnavItems(body, items, cfg, ativoId = null) {
+  body.innerHTML = '';
+  items.forEach(it => {
+    if (it._grupo) {
+      const header = el('div', {
+        class: 'subnav-section',
+        style: 'display:flex;align-items:center;justify-content:space-between;gap:.5rem',
+      }, [
+        el('span', {}, it._grupo),
+      ]);
+      // Botao "+" criar dentro da familia, sem perguntar categoria depois
+      if (it._grupoAcao === 'novo-cerebro' && it._grupoCategoria) {
+        const btnNovo = el('button', {
+          title: `Novo Cérebro nesta família (${it._grupoCategoria})`,
+          style: 'background:transparent;border:1px solid var(--border-subtle);color:var(--fg-muted);width:20px;height:20px;border-radius:4px;font-size:.875rem;line-height:1;cursor:pointer;padding:0',
+          onclick: (e) => {
+            e.stopPropagation();
+            window.dispatchEvent(new CustomEvent('cerebro:novo-na-familia', { detail: { categoria: it._grupoCategoria } }));
+          },
+        }, '+');
+        header.appendChild(btnNovo);
+      }
+      body.appendChild(header);
+      return;
+    }
+    if (it._placeholder) {
+      body.appendChild(el('div', {
+        class: 'subnav-item',
+        style: 'opacity:.45;cursor:default;font-style:italic;font-size:.75rem',
+      }, [el('span', { class: 'subnav-label' }, it.label)]));
+      return;
+    }
+    const row = el('div', { class: 'subnav-item', data: { id: it.id } }, [
+      iconeNode({ icone_url: it.icone_url, emoji: it.emoji, nome: it.nome || it.label }, { size: 'sm', className: 'subnav-icone' }),
+      el('span', { class: 'subnav-label' }, it.label),
+      it.meta ? el('span', { class: 'subnav-meta' }, it.meta) : null,
+    ]);
+    if (ativoId && it.id === ativoId) row.classList.add('active');
+    row.addEventListener('click', () => {
+      $$('.subnav-item').forEach(s => s.classList.remove('active'));
+      row.classList.add('active');
+      cfg.onSelect?.(it.id);
+      if (isMobile()) fecharMobileMenu();
+    });
+    body.appendChild(row);
+  });
 }
 
 // Recarrega o subnav atualmente aberto (sem fechar nem mudar pagina).
@@ -309,26 +378,11 @@ async function refrescarSubnavAtual() {
   const ativo = body.querySelector('.subnav-item.active')?.dataset.id;
   try {
     const items = await cfg.loader();
-    body.innerHTML = '';
     if (items.length === 0) {
       body.innerHTML = '<div class="subnav-section">Nenhum item</div>';
       return;
     }
-    items.forEach(it => {
-      const row = el('div', { class: 'subnav-item', data: { id: it.id } }, [
-        iconeNode({ icone_url: it.icone_url, emoji: it.emoji, nome: it.nome || it.label }, { size: 'sm', className: 'subnav-icone' }),
-        el('span', { class: 'subnav-label' }, it.label),
-        it.meta ? el('span', { class: 'subnav-meta' }, it.meta) : null,
-      ]);
-      if (it.id === ativo) row.classList.add('active');
-      row.addEventListener('click', () => {
-        $$('.subnav-item').forEach(s => s.classList.remove('active'));
-        row.classList.add('active');
-        cfg.onSelect?.(it.id);
-        if (isMobile()) fecharMobileMenu();
-      });
-      body.appendChild(row);
-    });
+    renderSubnavItems(body, items, cfg, ativo);
   } catch (err) {
     console.error('refrescarSubnavAtual', err);
   }

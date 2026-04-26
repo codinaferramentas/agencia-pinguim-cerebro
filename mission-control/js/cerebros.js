@@ -135,14 +135,23 @@ function formatarAtualizacao(iso) {
   return { texto: `há ${Math.floor(dias / 30)} meses`, recente: false };
 }
 
-async function abrirModalNovoProduto() {
+async function abrirModalNovoProduto(categoria = 'interno') {
   const sb = getSupabase();
   if (!sb) { await alertarDark({ titulo: 'Sem conexão', mensagem: 'Supabase não conectado.', tipo: 'erro' }); return; }
 
-  // Busca produtos cadastrados que ainda não têm fonte
+  // Labels visuais por familia
+  const labelFamilia = {
+    interno: { titulo: 'Novo Cérebro Interno', sub: 'Produto da Pinguim (Elo, ProAlt, etc).', emoji: '📦', placeholder: 'Nome do produto (ex: Protocolo Venda Viral)' },
+    externo: { titulo: 'Novo Cérebro Externo', sub: 'Concorrente — produto que você quer mapear.', emoji: '🔍', placeholder: 'Nome do concorrente' },
+    metodologia: { titulo: 'Nova Metodologia', sub: 'Biblioteca de técnica de venda.', emoji: '📚', placeholder: 'Nome da metodologia (ex: Cialdini, Hormozi)' },
+    clone: { titulo: 'Novo Clone', sub: 'Pessoa — sócio interno ou conselheiro.', emoji: '👤', placeholder: 'Nome da pessoa' },
+  };
+  const familia = labelFamilia[categoria] || labelFamilia.interno;
+
+  // Busca produtos cadastrados que ainda não têm fonte (filtra por categoria pra atalho fazer sentido)
   const [{ data: prods }, { data: cats }] = await Promise.all([
-    sb.from('produtos').select('id, slug, nome, emoji, descricao').order('nome'),
-    sb.from('vw_cerebros_catalogo').select('slug, total_fontes'),
+    sb.from('produtos').select('id, slug, nome, emoji, descricao, categoria').eq('categoria', categoria).order('nome'),
+    sb.from('vw_cerebros_catalogo').select('slug, total_fontes').eq('categoria', categoria),
   ]);
   const semFonte = new Set((cats || []).filter(c => (c.total_fontes || 0) === 0).map(c => c.slug));
   const pendentes = (prods || []).filter(p => semFonte.has(p.slug));
@@ -156,28 +165,28 @@ async function abrirModalNovoProduto() {
 
   card.append(
     el('div', { class: 'modal-head' }, [
-      el('h2', {}, 'Novo Cérebro'),
-      el('div', { class: 'modal-sub' }, 'Como você quer criar este Cérebro?'),
+      el('h2', {}, familia.titulo),
+      el('div', { class: 'modal-sub' }, familia.sub),
       el('button', { class: 'modal-close', onclick: fechar }, '×'),
     ]),
     el('div', { class: 'modal-body' }, [
       // Caminho A — produto novo (em destaque agora — é o caso principal)
       el('div', { class: 'novo-cerebro-secao' }, [
-        el('div', { class: 'novo-cerebro-label' }, '➕ Cadastrar produto novo'),
+        el('div', { class: 'novo-cerebro-label' }, '➕ Cadastrar novo'),
         el('div', { class: 'novo-cerebro-help' }, 'Cria um Cérebro novo. Pode alimentar agora ou depois — fica disponível na lista.'),
         el('form', {
           class: 'novo-cerebro-form',
           onsubmit: async (ev) => {
             ev.preventDefault();
             const nome = ev.target.nome.value.trim();
-            const emoji = ev.target.emoji.value.trim() || '📦';
+            const emoji = ev.target.emoji.value.trim() || familia.emoji;
             const descricao = ev.target.descricao.value.trim() || null;
             if (!nome) return;
             const slug = nome.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-            // Cria produto
+            // Cria produto com categoria correta
             const { data: prod, error: eProd } = await sb.from('produtos').insert({
-              slug, nome, emoji, descricao, status: 'em_construcao',
+              slug, nome, emoji, descricao, status: 'em_construcao', categoria,
             }).select('id').single();
             if (eProd) {
               await alertarDark({ titulo: 'Falha ao cadastrar', mensagem: eProd.message, tipo: 'erro' });
@@ -198,9 +207,9 @@ async function abrirModalNovoProduto() {
             abrirCerebroDetalhe(slug);
           },
         }, [
-          el('input', { name: 'nome', placeholder: 'Nome do produto (ex: Protocolo Venda Viral)', required: 'true', class: 'form-input' }),
+          el('input', { name: 'nome', placeholder: familia.placeholder, required: 'true', class: 'form-input' }),
           el('div', { style: 'display:flex;gap:.5rem' }, [
-            el('input', { name: 'emoji', placeholder: '📦', maxlength: 4, style: 'width:80px', class: 'form-input' }),
+            el('input', { name: 'emoji', placeholder: familia.emoji, maxlength: 4, style: 'width:80px', class: 'form-input' }),
             el('input', { name: 'descricao', placeholder: 'Descrição curta (opcional)', class: 'form-input', style: 'flex:1' }),
           ]),
           el('button', { type: 'submit', class: 'btn btn-primary' }, 'Cadastrar + Alimentar'),
@@ -237,6 +246,11 @@ async function abrirModalNovoProduto() {
   back.append(card);
   document.body.append(back);
   requestAnimationFrame(() => back.classList.add('open'));
+}
+
+// Expoe pra app.js poder abrir o modal com categoria especifica vinda do subnav
+if (typeof window !== 'undefined') {
+  window.__abrirNovoCerebro = abrirModalNovoProduto;
 }
 
 /* ----- Tela detalhada de 1 cérebro ----- */
