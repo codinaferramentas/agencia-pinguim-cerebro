@@ -211,6 +211,104 @@ const APIFY_ATORES: Record<string, { actor: string; buildInput: (url: string) =>
   },
 };
 
+// ---------- Scrap direto (sem Apify) — pra HTML estatico ----------
+// Tenta um simples fetch + parse de HTML. Resolve a maioria das paginas
+// de venda, blog, artigo. Se der erro ou texto curto demais, devolve null
+// e o caller cai pro Apify (paywall, SPA, Cloudflare, etc).
+async function tentarScrapDireto(url: string): Promise<{ titulo: string; texto: string; custo_usd: number; metodo: string } | null> {
+  try {
+    const resp = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+      },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!resp.ok) {
+      console.log(`scrap-direto ${url}: HTTP ${resp.status}`);
+      return null;
+    }
+
+    const ct = resp.headers.get('content-type') || '';
+    if (!ct.includes('text/html') && !ct.includes('application/xhtml')) {
+      console.log(`scrap-direto ${url}: content-type nao HTML (${ct})`);
+      return null;
+    }
+
+    const html = await resp.text();
+    if (!html || html.length < 200) return null;
+
+    // Extrai titulo: <title> ou <meta og:title>
+    let titulo = '';
+    const mTitle = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    if (mTitle) titulo = mTitle[1].trim();
+    if (!titulo) {
+      const mOg = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
+      if (mOg) titulo = mOg[1].trim();
+    }
+    if (!titulo) titulo = `Página ${new URL(url).hostname}`;
+    titulo = decodeHtmlEntities(titulo).slice(0, 200);
+
+    // Remove tags de script/style/nav/footer/aside/header/iframe/noscript/svg
+    let limpo = html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+      .replace(/<iframe[\s\S]*?<\/iframe>/gi, ' ')
+      .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
+      .replace(/<nav[\s\S]*?<\/nav>/gi, ' ')
+      .replace(/<footer[\s\S]*?<\/footer>/gi, ' ')
+      .replace(/<aside[\s\S]*?<\/aside>/gi, ' ')
+      .replace(/<header[\s\S]*?<\/header>/gi, ' ');
+
+    // Tenta isolar <main> ou <article> primeiro (menos ruido)
+    const mMain = limpo.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+    if (mMain && mMain[1].length > 500) {
+      limpo = mMain[1];
+    } else {
+      const mArt = limpo.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
+      if (mArt && mArt[1].length > 500) limpo = mArt[1];
+    }
+
+    // Texto puro
+    let texto = limpo
+      .replace(/<[^>]+>/g, ' ')          // tags
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    texto = decodeHtmlEntities(texto);
+
+    // Critério de sucesso: texto util com >= 300 chars
+    if (texto.length < 300) {
+      console.log(`scrap-direto ${url}: texto curto (${texto.length} chars), provavelmente SPA`);
+      return null;
+    }
+
+    // Trunca se gigante (paginas de venda longas)
+    if (texto.length > 50000) texto = texto.slice(0, 50000) + '\n\n…(conteudo truncado em 50k chars)';
+
+    return { titulo, texto, custo_usd: 0, metodo: 'scrap-direto-html' };
+  } catch (e) {
+    console.log(`scrap-direto ${url}: erro ${(e as any)?.message || e}`);
+    return null;
+  }
+}
+
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, n) => String.fromCharCode(parseInt(n, 16)));
+}
+
 async function tentarApify(url: string, tipo: 'instagram' | 'tiktok' | 'youtube' | 'site' | 'meta-ads'): Promise<{ titulo: string; texto: string; custo_usd: number; metodo: string } | null> {
   const sb = sbAdmin();
   const { data: integ } = await sb.from('integracoes')
@@ -454,7 +552,22 @@ async function processarUrl(url: string, cerebro_id: string) {
         throw new Error('Vídeo sem legendas oficiais. Pra rodar fallback, configure Apify em "Integrações" no menu lateral.');
       }
     }
-  } else if (tipo === 'instagram' || tipo === 'tiktok' || tipo === 'site' || tipo === 'meta-ads') {
+  } else if (tipo === 'site') {
+    // Pra paginas estaticas (HTML simples) tenta fetch + parse direto — gratis.
+    // Se a pagina for SPA, bloquear bot, ou retornar texto curto, cai pro Apify.
+    const direto = await tentarScrapDireto(url);
+    if (direto) {
+      resultado = direto;
+    } else {
+      const apify = await tentarApify(url, tipo);
+      if (apify) {
+        resultado = apify;
+        custo_total_usd += apify.custo_usd;
+      } else {
+        throw new Error('Não foi possível extrair conteúdo da página. Tentamos leitura direta primeiro (grátis), e o fallback Apify não está configurado. Configure em "Integrações" no menu lateral pra processar páginas mais complexas.');
+      }
+    }
+  } else if (tipo === 'instagram' || tipo === 'tiktok' || tipo === 'meta-ads') {
     const apify = await tentarApify(url, tipo);
     if (apify) {
       resultado = apify;
@@ -463,7 +576,6 @@ async function processarUrl(url: string, cerebro_id: string) {
       const labelTipo = {
         instagram: 'Instagram',
         tiktok: 'TikTok',
-        site: 'site (página de vendas, blog, artigo)',
         'meta-ads': 'Biblioteca de Anúncios do Meta',
       }[tipo];
       throw new Error(`Integração Apify não configurada. Configure em "Integrações" no menu lateral pra processar links de ${labelTipo}.`);

@@ -2406,7 +2406,7 @@ function blocoUrl(cerebroAtualRef, onIndexado) {
   });
 
   wrap.append(
-    el('label', {}, '🔗 URL (YouTube, Instagram, TikTok, site, biblioteca de anúncios do Meta)'),
+    el('label', {}, '🔗 URL (página de venda, blog, YouTube, Instagram, TikTok, biblioteca de anúncios do Meta)'),
     inputUrl,
     btnTranscrever,
     status,
