@@ -25,9 +25,10 @@ export async function gerar() {
           <h3>Captação de Conteúdo</h3>
           <ul class="docs-list">
             <li><strong>YouTube · legendas oficiais</strong> — extrai legendas geradas automaticamente pelo YouTube. Sem chave, sem custo. Funciona em ~95% dos vídeos.</li>
-            <li><strong>Apify (Instagram, TikTok, YouTube)</strong> — um token só, todos os atores. O sistema escolhe automaticamente o ator certo conforme o domínio da URL: Reels do Instagram (com transcrição do áudio do vídeo), TikTok, YouTube (fallback quando não tem legenda). Conta em apify.com com US$ 5 grátis por mês — cobre milhares de Reels.</li>
+            <li><strong>Leitura direta de página HTML</strong> — pra páginas de venda, blog, artigo. Sem chave, sem custo. Funciona em ~95% das páginas tradicionais (Hotmart, Eduzz, Kiwify, landing pages, blogs).</li>
+            <li><strong>Apify (Instagram, TikTok, YouTube, Site SPA, Meta Ads Library)</strong> — um token só, todos os atores. O sistema escolhe automaticamente o ator certo conforme o domínio da URL. Conta em apify.com com US$ 5 grátis por mês — cobre milhares de Reels.</li>
           </ul>
-          <p style="font-size:0.875em;color:var(--fg-muted)">Por trás dos panos: quando você cola uma URL, o sistema detecta o domínio (instagram.com, tiktok.com, youtube.com) e dispara o ator Apify correto: <code>apify/instagram-reel-scraper</code>, <code>clockworks/free-tiktok-scraper</code> ou <code>streamers/youtube-scraper</code>. Você só precisa ter <strong>um</strong> token configurado — o resto o sistema resolve.</p>
+          <p style="font-size:0.875em;color:var(--fg-muted)">Cascata inteligente: pra URL "site genérico" o sistema tenta primeiro leitura direta de HTML (grátis). Só cai pro Apify <code>website-content-crawler</code> se a página for SPA (React/Vue), bloquear bot ou retornar texto vazio. Pra Reels do Instagram, usa <code>apify/instagram-scraper</code>; TikTok usa <code>clockworks/free-tiktok-scraper</code>; Meta Ads Library usa <code>curious_coder/facebook-ads-library-scraper</code>; YouTube usa <code>streamers/youtube-scraper</code> só como fallback de legendas. Você só precisa ter <strong>um</strong> token configurado — o resto o sistema resolve.</p>
 
           <h3>Infraestrutura</h3>
           <ul class="docs-list">
@@ -51,8 +52,10 @@ export async function gerar() {
           <p>Você não precisa pensar nisso — o sistema decide sozinho:</p>
           <ul class="docs-list">
             <li>Cola URL do YouTube → tenta legendas oficiais (grátis); se não tiver, usa Apify YouTube Scraper.</li>
-            <li>Cola URL do Instagram (Reel ou perfil) → Apify Instagram Reel Scraper. Retorna caption + transcrição do áudio + métricas + comentários recentes.</li>
+            <li>Cola URL do Instagram (Reel ou perfil) → Apify Instagram Scraper. Retorna caption + transcrição do áudio + métricas + comentários recentes.</li>
             <li>Cola URL do TikTok → Apify TikTok Scraper. Retorna caption + legendas + métricas.</li>
+            <li>Cola URL de página de venda, blog ou artigo → tenta leitura direta de HTML (grátis); só cai pro Apify se a página for SPA ou bloquear bot.</li>
+            <li>Cola URL da Biblioteca de Anúncios do Meta → Apify Facebook Ads Library Scraper. Espia anúncios ativos do concorrente.</li>
             <li>Sobe imagem ou áudio direto → OpenAI Vision/Whisper.</li>
           </ul>
           <p>Cada chamada é contabilizada por integração. No card, você vê o número de usos e o custo acumulado em reais — transparência total.</p>

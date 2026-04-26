@@ -65,6 +65,13 @@ export const DOCS_CATALOGO = [
     meta: '3 min · captação',
     secao: 'Engenharia',
   },
+  {
+    slug: 'comercial',
+    titulo: 'Plano Comercial',
+    descricao: 'Time de apoio ao comercial Pinguim — fundação 4 famílias de Cérebro, 5 metodologias prontas, roadmap dos 5 agentes (SDR, Co-piloto, Analista, Coach, Cliente Oculto). Proposta a ser aprovada antes de codar.',
+    meta: '8 min · proposta',
+    secao: 'Propostas',
+  },
 ];
 
 export function buscarDoc(slug) {
@@ -136,7 +143,7 @@ export async function renderDocDetalhe(slug) {
   page.innerHTML = '<div style="padding:3rem;color:var(--fg-muted);text-align:center">Carregando…</div>';
 
   // Importa modulo da doc dinamicamente (lazy)
-  const mod = await import(`./docs/${slug}.js?v=20260425k`);
+  const mod = await import(`./docs/${slug}.js?v=20260426d`);
   const conteudo = await mod.gerar();
 
   const wrap = el('div', { class: 'docs-detail' });
