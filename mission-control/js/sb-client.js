@@ -62,13 +62,17 @@ export async function fetchCerebrosCatalogo() {
   ];
 }
 
+// Colunas leves usadas pelo Kanban/Lista/Timeline.
+// `conteudo_md` é puxado sob demanda quando o drawer abre (fetchFonteConteudo).
+const COLUNAS_FONTE_LEVE = 'id, cerebro_id, tipo, titulo, autor, origem, url, criado_em, atualizado_em, ingest_status, ingest_lote_id, mime, tamanho_bytes, arquivo_nome, metadata';
+
 export async function fetchCerebroFontes(cerebroSlug) {
   if (mode === 'supabase') {
     const { data: produto } = await sb.from('produtos').select('id').eq('slug', cerebroSlug).single();
     if (!produto) return [];
     const { data: cerebro } = await sb.from('cerebros').select('id').eq('produto_id', produto.id).single();
     if (!cerebro) return [];
-    const { data, error } = await sb.from('cerebro_fontes').select('*')
+    const { data, error } = await sb.from('cerebro_fontes').select(COLUNAS_FONTE_LEVE)
       .eq('cerebro_id', cerebro.id)
       .eq('ingest_status', 'ok')
       .order('criado_em', { ascending: false });
@@ -76,6 +80,17 @@ export async function fetchCerebroFontes(cerebroSlug) {
     return data || [];
   }
   return [];
+}
+
+// Busca conteudo_md de uma fonte só quando precisa (drawer aberto).
+export async function fetchFonteConteudo(fonteId) {
+  if (mode !== 'supabase') return null;
+  const { data, error } = await sb.from('cerebro_fontes')
+    .select('conteudo_md')
+    .eq('id', fonteId)
+    .single();
+  if (error) return null;
+  return data?.conteudo_md || '';
 }
 
 // Compat: nome antigo continua funcionando

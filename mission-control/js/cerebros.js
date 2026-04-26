@@ -1,6 +1,6 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas, getSupabase } from './sb-client.js?v=20260421p';
+import { fetchCerebrosCatalogo, fetchCerebroPecas, fetchFonteConteudo, getSupabase } from './sb-client.js?v=20260426a';
 import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421p';
 import { iniciarSquadParalelo } from './squad-modal.js?v=20260425e';
 import { iconeNode } from './icone.js?v=20260425g';
@@ -1306,9 +1306,22 @@ function abrirDrawer(peca) {
   body.appendChild(meta);
 
   const pre = document.createElement('div');
-  pre.innerHTML = peca.conteudo_md
-    ? `<pre style="white-space:pre-wrap;word-wrap:break-word">${escapeHtml(peca.conteudo_md.slice(0, 4000))}${peca.conteudo_md.length > 4000 ? '\n\n…(conteúdo truncado, edite pra ver completo)' : ''}</pre>`
-    : '<em style="color:var(--fg-muted)">Sem conteúdo — fonte sem texto extraível.</em>';
+  // Carrega conteudo_md sob demanda (Kanban/Lista nao trazem por padrao pra performance)
+  if (peca.conteudo_md !== undefined) {
+    pre.innerHTML = peca.conteudo_md
+      ? `<pre style="white-space:pre-wrap;word-wrap:break-word">${escapeHtml(peca.conteudo_md.slice(0, 4000))}${peca.conteudo_md.length > 4000 ? '\n\n…(conteúdo truncado, edite pra ver completo)' : ''}</pre>`
+      : '<em style="color:var(--fg-muted)">Sem conteúdo — fonte sem texto extraível.</em>';
+  } else {
+    pre.innerHTML = '<em style="color:var(--fg-muted)">Carregando conteúdo…</em>';
+    fetchFonteConteudo(peca.id).then(conteudo => {
+      peca.conteudo_md = conteudo || '';  // cache pra abrir drawer / editar de novo sem refetch
+      pre.innerHTML = peca.conteudo_md
+        ? `<pre style="white-space:pre-wrap;word-wrap:break-word">${escapeHtml(peca.conteudo_md.slice(0, 4000))}${peca.conteudo_md.length > 4000 ? '\n\n…(conteúdo truncado, edite pra ver completo)' : ''}</pre>`
+        : '<em style="color:var(--fg-muted)">Sem conteúdo — fonte sem texto extraível.</em>';
+    }).catch(() => {
+      pre.innerHTML = '<em style="color:var(--danger)">Erro ao carregar conteúdo.</em>';
+    });
+  }
   body.appendChild(pre);
 
   d.classList.add('open');
@@ -1317,6 +1330,11 @@ function abrirDrawer(peca) {
 async function editarFonte(peca) {
   const sb = getSupabase();
   if (!sb) { await alertarDark({ titulo: 'Sem conexão', mensagem: 'Supabase não conectado.', tipo: 'erro' }); return; }
+
+  // Garante que o conteudo_md esta carregado (Kanban/Lista nao traz por padrao)
+  if (peca.conteudo_md === undefined) {
+    peca.conteudo_md = (await fetchFonteConteudo(peca.id)) || '';
+  }
 
   const back = el('div', {
     class: 'modal-backdrop',
