@@ -813,8 +813,21 @@ async function renderPlaygroundBuscarCerebro(s, corpo) {
     return;
   }
 
-  // Carrega lista de Cerebros pra o select
-  const { data: cerebros } = await sb.from('vw_cerebros_catalogo').select('id, slug, nome, total_fontes').gt('total_fontes', 0).order('nome');
+  // Carrega lista de Cerebros pra o select.
+  // OBS: a view usa 'cerebro_id' (nao 'id') — esse e o uuid que a Edge Function espera.
+  const { data: cerebros, error: errCer } = await sb.from('vw_cerebros_catalogo')
+    .select('cerebro_id, slug, nome, total_fontes')
+    .gt('total_fontes', 0)
+    .order('total_fontes', { ascending: false });
+  if (errCer) {
+    corpo.appendChild(el('div', { style: 'color:var(--danger);padding:1rem' }, 'Erro carregando Cérebros: ' + errCer.message));
+    return;
+  }
+  if (!cerebros || cerebros.length === 0) {
+    corpo.appendChild(el('div', { style: 'color:var(--fg-dim);padding:1rem;font-style:italic' },
+      'Nenhum Cérebro com fontes cadastradas. Cadastre fontes em algum Cérebro antes de testar a busca.'));
+    return;
+  }
 
   const wrap = el('div', { style: 'display:flex;flex-direction:column;gap:1rem' });
 
@@ -825,7 +838,7 @@ async function renderPlaygroundBuscarCerebro(s, corpo) {
       el('select', {
         id: 'pg-cerebro',
         style: 'width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:.5rem .625rem;color:var(--fg);font-size:.8125rem',
-      }, (cerebros || []).map(c => el('option', { value: c.id }, `${c.nome} (${c.total_fontes} fontes)`))),
+      }, cerebros.map(c => el('option', { value: c.cerebro_id }, `${c.nome} · ${c.total_fontes} fontes`))),
     ]),
     el('div', {}, [
       el('label', { style: 'display:block;font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Top K'),
