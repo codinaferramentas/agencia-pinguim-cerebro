@@ -50,18 +50,29 @@ export async function gerar() {
 
           <h3>🧰 Universais</h3>
           <p>Skills que qualquer agente pode usar — independente do produto, área ou função. São as ferramentas básicas do canivete suíço.</p>
-          <p><em>Exemplos:</em> ler arquivo do Google Drive, criar evento no Calendar, enviar mensagem no Discord, fazer scraping de página pública, buscar conhecimento em Cérebro.</p>
           ${listaSkills(universais)}
 
           <h3>🎯 Por Área</h3>
-          <p>Skills compartilhadas entre agentes da mesma especialidade. Um agente comercial vai usar Skills comerciais; um de marketing vai usar Skills de marketing.</p>
-          <p><em>Exemplos:</em> qualificar lead com BANT (comercial), gerar roteiro de Reels (marketing), classificar ticket de suporte (CS), gerar relatório de vendas (dados).</p>
+          <p>Skills compartilhadas entre agentes da mesma especialidade. Cada Squad real (comercial, conteúdo, suporte…) traz suas Skills Por Área conforme entra em operação.</p>
           ${listaSkills(porArea)}
 
           <h3>🎁 Específicas</h3>
           <p>Skills exclusivas de um agente. São customizações que não vale generalizar — formatos muito específicos, workflows de uma pessoa só, procedimentos hiper-particulares.</p>
           <p><em>Estratégia:</em> começa sempre como Específica e <strong>promove pra Por Área quando o segundo agente precisar do mesmo procedimento</strong>. Evita generalização prematura.</p>
           ${listaSkills(especificas)}
+        `,
+      },
+      {
+        id: 'criterio-de-entrada',
+        titulo: 'Como decidimos o que entra no catálogo',
+        html: `
+          <p>Pinguim OS é um sistema vendável — quando um cliente externo abre Skills, cada item precisa ter razão de ser defendível. Nada de "talvez agente futuro use".</p>
+          <p>Critério único pra criar Skill nova:</p>
+          <ul class="docs-list">
+            <li>Existe <strong>um Squad real</strong> (humano ou em construção) que precisa <strong>hoje</strong> dessa habilidade pra rodar</li>
+            <li>OU é <strong>fundação</strong> que qualquer empresa que adote o framework Pinguim OS vai precisar (ex: <code>buscar-cerebro</code> — entrega a promessa do RAG)</li>
+          </ul>
+          <p>Tudo que cai fora desses dois — fica de fora. Quando o caso de uso aparecer, criamos. Catálogo enxuto é catálogo confiável.</p>
         `,
       },
       {
@@ -139,14 +150,10 @@ export async function gerar() {
         id: 'roadmap',
         titulo: 'Por onde a gente está construindo',
         html: `
-          <p>A primeira Skill universal de verdade do Pinguim OS é <strong>buscar-cerebro</strong> — porque ela é a mais estratégica: praticamente todo agente futuro vai precisar buscar conhecimento em algum momento. É testável isolada (input → output) e ataca o coração da promessa do Pinguim ("agentes que respondem com precisão baseada em conhecimento curado").</p>
-          <p>Próximas em ordem de prioridade:</p>
-          <ol class="docs-list">
-            <li><strong>scraping-pagina-publica</strong> — já existe ferramenta em ferramentas/scrap-pagina/, falta envelopar como Skill</li>
-            <li><strong>enviar-mensagem-discord</strong> — bot Discord já roda, falta o procedimento formal</li>
-            <li><strong>google-drive-ler</strong> — testável isolada, alta reutilização futura</li>
-          </ol>
-          <p>Skills <em>Por Área</em> e <em>Específicas</em> nascem conforme primeiros agentes do framework comercial entrarem em operação — não vamos especular antes da hora.</p>
+          <p>Hoje o catálogo tem <strong>uma única Skill universal real</strong>: <code>buscar-cerebro</code>.</p>
+          <p>Ela foi escolhida porque é fundação — todo agente futuro do Pinguim OS vai precisar consultar conhecimento curado em algum momento. É testável isolada (input → output, sem dependência de agente em produção) e ataca o coração da promessa do Pinguim: <em>"agentes que respondem com precisão baseada em conhecimento da empresa, não em chute do LLM"</em>.</p>
+          <p>Não há outras Skills cadastradas <strong>de propósito</strong>. Toda Skill que entrar no catálogo daqui pra frente vai vir junto com o Squad real que a demanda. O próximo Squad é o <strong>comercial</strong> (apoio ao time de vendas) — quando entrar em construção, ele vai trazer suas próprias Skills, cada uma com caso de uso defendido.</p>
+          <p>Catálogo enxuto = catálogo honesto. Cliente que abrir esta tela vê só o que está em pé. Não tem promessa em forma de card.</p>
         `,
       },
     ],

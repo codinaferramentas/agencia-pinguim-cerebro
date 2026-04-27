@@ -293,20 +293,14 @@ async function renderizarAba(s, corpo) {
   if (abaAtual === 'agentes') return renderAbaAgentes(s, corpo);
 }
 
-// Mapa de skills com playground real (chamam Edge Function existente)
+// Mapa de skills com playground real (chamam Edge Function existente).
+// Politica: skill so entra aqui se tem caso de uso defendido pelo squad
+// real em construcao (hoje: comercial). Nao especular agente futuro.
 const PLAYGROUNDS = {
   'buscar-cerebro': {
     descricao: 'Testa busca semântica em um Cérebro do Pinguim. Faz a mesma chamada que um agente real faria.',
     render: renderPlaygroundBuscarCerebro,
   },
-  'enviar-mensagem-discord': {
-    descricao: 'Envia mensagem real num canal do Discord cadastrado. Usa "canal" → resolve via tabela pinguim.discord_canais.',
-    render: renderPlaygroundDiscord,
-  },
-  // OBS: scraping standalone foi removido (2.3.1). Scraping de URLs continua
-  // existindo dentro da Edge Function ingest-url quando voce sobe URL como
-  // fonte do Cerebro. Quando aparecer caso de uso de "scrap sem cadastrar
-  // fonte", criamos skill nova reaproveitando a logica do ingest-url.
 };
 
 // ----- Aba: Editor -----
@@ -1007,145 +1001,6 @@ async function logarExecucaoSkill(s, { input, output, sucesso, erro, duracao_ms,
   } catch (e) {
     console.warn('log execucao falhou', e);
   }
-}
-
-// =====================================================================
-// PLAYGROUND: enviar-mensagem-discord
-// =====================================================================
-async function renderPlaygroundDiscord(s, corpo) {
-  const sb = getSupabaseClient();
-  const wrap = el('div', { style: 'display:flex;flex-direction:column;gap:1rem' });
-
-  // Carrega canais cadastrados
-  const { data: canais } = sb
-    ? await sb.from('discord_canais').select('*').eq('ativo', true).order('ambiente').order('slug')
-    : { data: [] };
-
-  if (!canais || canais.length === 0) {
-    wrap.appendChild(el('div', {
-      style: 'background:rgba(245,165,36,.08);border:1px solid rgba(245,165,36,.3);border-radius:8px;padding:1rem;font-size:.8125rem;color:#f5a524;line-height:1.55',
-    }, [
-      el('strong', {}, 'Nenhum canal Discord cadastrado.'),
-      el('br', {}),
-      'Vá em ',
-      el('a', {
-        href: '#',
-        style: 'color:inherit;text-decoration:underline;cursor:pointer',
-        onclick: (e) => { e.preventDefault(); window.dispatchEvent(new CustomEvent('navegar:integracoes')); },
-      }, 'Integrações > Canais Discord'),
-      ' e cadastre pelo menos um canal de teste antes de usar o Playground.',
-    ]));
-    corpo.appendChild(wrap);
-    return;
-  }
-
-  wrap.appendChild(el('div', { style: 'background:rgba(245,165,36,.08);border:1px solid rgba(245,165,36,.3);border-radius:8px;padding:.75rem .875rem;font-size:.75rem;color:#f5a524' },
-    '⚠️ A mensagem é REAL — vai pro canal escolhido. Comece pelos canais marcados "teste".'));
-
-  // Modo: select de canal cadastrado OU webhook livre
-  wrap.appendChild(el('div', {}, [
-    el('label', { style: 'display:block;font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Canal'),
-    el('select', {
-      id: 'pg-canal',
-      style: 'width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:.5rem .625rem;color:var(--fg);font-size:.875rem',
-    }, [
-      ...canais.map(c => el('option', { value: c.slug, 'data-amb': c.ambiente }, `${c.ambiente === 'teste' ? '🧪' : '🚀'} ${c.nome} · ${c.slug}`)),
-      el('option', { value: '__custom__' }, '— ou cole webhook ad-hoc —'),
-    ]),
-    el('div', { style: 'font-size:.625rem;color:var(--fg-dim);margin-top:.25rem' },
-      'Cadastre/edite canais em Integrações > Canais Discord.'),
-  ]));
-
-  // Webhook livre (escondido por padrao, mostra se "__custom__")
-  const webhookWrap = el('div', { id: 'pg-webhook-wrap', style: 'display:none' }, [
-    el('label', { style: 'display:block;font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Webhook URL ad-hoc'),
-    el('input', {
-      id: 'pg-webhook', type: 'text',
-      placeholder: 'https://discord.com/api/webhooks/...',
-      style: 'width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:.5rem .625rem;color:var(--fg);font-size:.75rem;font-family:var(--font-mono)',
-    }),
-  ]);
-  wrap.appendChild(webhookWrap);
-
-  // Toggle visibilidade webhook livre
-  const sel = wrap.querySelector('#pg-canal');
-  sel.addEventListener('change', () => {
-    webhookWrap.style.display = sel.value === '__custom__' ? 'block' : 'none';
-  });
-
-  wrap.appendChild(el('div', {}, [
-    el('label', { style: 'display:block;font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Conteúdo da mensagem (max 2000 chars)'),
-    el('textarea', {
-      id: 'pg-conteudo', rows: '5',
-      placeholder: '**[Teste]** Mensagem de teste do Pinguim OS\n\nEnviada via skill enviar-mensagem-discord.\n\n_Origem: Playground · agora_',
-      style: 'width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:.625rem;color:var(--fg);font-size:.875rem;font-family:var(--font-body);resize:vertical',
-    }),
-  ]));
-
-  wrap.appendChild(el('button', {
-    id: 'pg-run',
-    class: 'btn btn-primary',
-    type: 'button',
-    style: 'align-self:flex-start',
-    onclick: () => executarDiscord(s),
-  }, '▶ Enviar mensagem'));
-
-  wrap.appendChild(el('div', { id: 'pg-resultado', style: 'margin-top:.5rem' }));
-  corpo.appendChild(wrap);
-}
-
-async function executarDiscord(s) {
-  const canalSlug = document.getElementById('pg-canal')?.value;
-  const webhookCustom = document.getElementById('pg-webhook')?.value?.trim();
-  const conteudo = document.getElementById('pg-conteudo')?.value?.trim();
-  const resEl = document.getElementById('pg-resultado');
-  const btn = document.getElementById('pg-run');
-
-  if (!conteudo) { alert('Conteúdo obrigatório'); return; }
-
-  let body;
-  if (canalSlug === '__custom__') {
-    if (!webhookCustom) { alert('Cole o webhook URL'); return; }
-    body = { webhook_url: webhookCustom, conteudo };
-  } else {
-    body = { canal: canalSlug, conteudo };
-  }
-
-  btn.disabled = true; btn.textContent = '⏳ Enviando…';
-  resEl.innerHTML = '';
-
-  const t0 = Date.now();
-  let resultado, erroMsg = null, sucesso = true;
-
-  try {
-    resultado = await chamarEdgeFunction('enviar-mensagem-discord', body);
-  } catch (e) {
-    sucesso = false;
-    erroMsg = e.message || String(e);
-  }
-
-  const duracao = Date.now() - t0;
-  btn.disabled = false; btn.textContent = '▶ Enviar mensagem';
-
-  await logarExecucaoSkill(s, {
-    input: { canal: canalSlug !== '__custom__' ? canalSlug : 'webhook_ad_hoc', conteudo_size: conteudo.length },
-    output: resultado || null, sucesso, erro: erroMsg, duracao_ms: duracao,
-  });
-
-  if (!sucesso) {
-    resEl.appendChild(el('div', {
-      style: 'background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:1rem;color:#ef4444;font-size:.8125rem',
-    }, '❌ ' + erroMsg));
-    return;
-  }
-
-  resEl.appendChild(el('div', {
-    style: 'background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:1rem;color:#22c55e;font-size:.8125rem',
-  }, [
-    el('div', { style: 'font-weight:600;margin-bottom:.5rem' }, '✓ Mensagem enviada'),
-    el('div', { style: 'color:var(--fg-muted);font-size:.75rem;font-family:var(--font-mono)' },
-      `${duracao}ms · ${resultado.tamanho_conteudo} chars · enviada em ${new Date(resultado.enviado_em).toLocaleTimeString('pt-BR')}`),
-  ]));
 }
 
 async function criarSkill(overlay) {

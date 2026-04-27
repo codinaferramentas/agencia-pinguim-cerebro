@@ -6,7 +6,7 @@ import { dataMode, fetchOperacaoData, fetchRoadmapData, fetchCerebrosCatalogo } 
 import { renderHome } from './home.js?v=20260421p';
 import { renderCerebros, initDrawer, abrirCerebroDetalhe } from './cerebros.js?v=20260421p';
 import { renderCrons } from './crons.js?v=20260421p';
-import { renderSkills, abrirSkillDetalhe } from './skills.js?v=20260427m';
+import { renderSkills, abrirSkillDetalhe } from './skills.js?v=20260427n';
 import { renderStub } from './stubs.js?v=20260421p';
 import { iconeNode } from './icone.js?v=20260425g';
 import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260425k';
@@ -171,9 +171,6 @@ function setupNav() {
     const slug = ev.detail?.slug;
     if (!slug) return;
     await irParaDetalhe('skills', slug);
-  });
-  window.addEventListener('navegar:integracoes', async () => {
-    await navegar('integracoes');
   });
   window.addEventListener('skill:filtrar-categoria', async (ev) => {
     const cat = ev.detail?.categoria;
