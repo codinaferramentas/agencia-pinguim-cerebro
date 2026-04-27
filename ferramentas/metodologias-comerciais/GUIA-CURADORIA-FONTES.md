@@ -1,10 +1,29 @@
 # Guia de Curadoria — Reforço dos Cérebros de Metodologia
 
-**Objetivo:** Cada Cérebro de metodologia hoje tem 2 fontes (princípios + execução). Isso dá fundamento conceitual mas não basta pra alimentar um agente SDR/Closer real. Precisamos sair de **2 fontes** pra **7-8 fontes por metodologia**, adicionando material prático.
+**Objetivo:** Cada Cérebro de metodologia hoje tem 2 fontes (princípios + execução). Isso dá fundamento conceitual mas não basta pra alimentar um agente SDR/Closer real. Precisamos sair de **2 fontes** pra **7-12 fontes por metodologia**, adicionando material prático.
 
 **Quem cura:** André Codina, Luiz, Micha (qualquer um do time comercial). Eu ajudo na estruturação final, vocês validam o conteúdo.
 
 **Como usar este guia:** Pra cada metodologia, este documento lista (a) os tipos de fonte que faltam, (b) onde buscar cada uma, (c) que checklist a fonte precisa atender pra ser aceita no Cérebro.
+
+---
+
+## Decisão arquitetural
+
+Cada Cérebro de Metodologia mantém nome canônico (SPIN, MEDDIC, etc) — reconhecimento de mercado = credibilidade. Não agrupar nem renomear.
+
+**Princípio importante:** este guia NÃO determina qual metodologia usar pra cada produto. Essa decisão é de quem vai construir o agente comercial (Luiz + time), e pode rotacionar via A/B test rotativo. A biblioteca de metodologias precisa estar **disponível e completa** — uso é decisão posterior.
+
+**Diferença Cérebro de Produto x Cérebro de Metodologia (importante explicar pra diretoria):**
+
+- **Cérebro Interno de Produto** (`lo-fi-desafio`, `proalt`, `taurus`, etc) responde **O QUE é o produto** — aulas, depoimentos, página de venda, garantia oficial. Tem fatos sobre aquele produto específico.
+- **Cérebro de Metodologia** (`low-ticket-digital`, `spin-selling`, etc) responde **COMO vender** — frameworks, scripts genéricos, gatilhos. Não tem fato algum sobre nenhum produto, é técnica pura.
+
+Agente comercial usa **os dois juntos**. Quando aluno hesita em comprar qualquer produto, agente consulta:
+1. Cérebro do produto → fatos, depoimentos reais, ângulo oficial
+2. Cérebro de metodologia (a que estiver ativada pro contexto) → técnica de venda
+
+Resposta = fato do produto + técnica de venda. Sem um, chuta. Sem o outro, fala genérico.
 
 ---
 
@@ -412,11 +431,11 @@ Top 10 objeções comuns de venda B2B + resposta no estilo Voss (sempre começan
 
 **Estimativa de esforço de curadoria:** ~4-6 horas por metodologia se 2 pessoas dividem (uma busca scripts/diálogos, outra busca casos/anti-padrões).
 
-**Ordem REVISADA com André (2026-04-27):**
-1. **SPIN primeiro** — fundamento universal, todo SDR/closer vai usar como base
-2. **CRIAR Cérebro novo `low-ticket-digital` do zero** — Pinguim vive de low ticket (Desafios, ProAlt LT, Mentoria Express). Hoje só tem metodologia high ticket no Cérebro. É buraco gigante. **Detalhamento na seção 6 abaixo.**
-3. **MEDDIC** — high ticket (Elo, programas premium)
-4. **Sandler, Challenger, Voss** — A/B test e complementos
+**Ordem CONSOLIDADA com André (2026-04-27):**
+1. **SPIN primeiro** — ticket médio, base universal pra venda consultiva
+2. **CRIAR `low-ticket-digital` do zero** — Pinguim vive de low ticket. Sem isso, agente comercial chuta a técnica nos produtos que mais vendem. **Detalhamento na seção 6.**
+3. **MEDDIC** — high ticket (Taurus R$ 36K, Orion R$ 100K, Elo). Pinguim tem produtos high ticket reais — não é teoria.
+4. **Sandler, Challenger, Voss** — A/B test e complementos pra situações específicas
 
 ---
 
