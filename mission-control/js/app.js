@@ -6,7 +6,7 @@ import { dataMode, fetchOperacaoData, fetchRoadmapData, fetchCerebrosCatalogo } 
 import { renderHome } from './home.js?v=20260421p';
 import { renderCerebros, initDrawer, abrirCerebroDetalhe } from './cerebros.js?v=20260421p';
 import { renderCrons } from './crons.js?v=20260421p';
-import { renderSkills } from './skills.js?v=20260421p';
+import { renderSkills, abrirSkillDetalhe } from './skills.js?v=20260427g';
 import { renderStub } from './stubs.js?v=20260421p';
 import { iconeNode } from './icone.js?v=20260425g';
 import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260425k';
@@ -167,6 +167,17 @@ function setupNav() {
     if (!slug) return;
     await irParaDetalhe('personas', slug);
   });
+  window.addEventListener('skill:select', async (ev) => {
+    const slug = ev.detail?.slug;
+    if (!slug) return;
+    await irParaDetalhe('skills', slug);
+  });
+  window.addEventListener('skill:filtrar-categoria', async (ev) => {
+    const cat = ev.detail?.categoria;
+    if (paginaAtual !== 'skills') await navegar('skills');
+    if (cat) window.__aplicarFiltroSkillCategoria?.(cat);
+    else window.__limparFiltroSkillCategoria?.();
+  });
   window.addEventListener('docs:select', async (ev) => {
     const slug = ev.detail?.slug;
     if (!slug) return;
@@ -181,18 +192,20 @@ function setupNav() {
 const NAV_OPEN = (() => {
   try {
     const raw = localStorage.getItem('pinguim_nav_open');
-    return raw ? JSON.parse(raw) : { cerebros: false, personas: false, cerebros_cat: {} };
+    return raw ? JSON.parse(raw) : { cerebros: false, skills: false, personas: false, cerebros_cat: {}, skills_cat: {} };
   } catch {
-    return { cerebros: false, personas: false, cerebros_cat: {} };
+    return { cerebros: false, skills: false, personas: false, cerebros_cat: {}, skills_cat: {} };
   }
 })();
 if (!NAV_OPEN.cerebros_cat) NAV_OPEN.cerebros_cat = {};
+if (!NAV_OPEN.skills_cat) NAV_OPEN.skills_cat = {};
 function persistNavOpen() {
   try { localStorage.setItem('pinguim_nav_open', JSON.stringify(NAV_OPEN)); } catch {}
 }
 
 const NAV_PRIMARY = [
   { slug: 'cerebros',    label: 'Cérebros',    icon: '⚛',  tree: true,  treeLoader: () => loadCerebrosTree() },
+  { slug: 'skills',      label: 'Skills',      icon: '🛠', tree: true,  treeLoader: () => loadSkillsTree() },
   { slug: 'personas',    label: 'Personas',    icon: '👤', tree: true,  treeLoader: () => loadPersonasTree() },
   { slug: 'integracoes', label: 'Integrações', icon: '🔌', tree: false },
 ];
@@ -357,6 +370,87 @@ async function loadCerebrosTree() {
   return nodes;
 }
 
+// Loader: arvore de Skills (3 categorias com toggle individual)
+async function loadSkillsTree() {
+  const { fetchSkillsCatalogo } = await import('./sb-client.js');
+  const skills = await fetchSkillsCatalogo();
+  const ordemCategorias = ['universal', 'por_area', 'especifica'];
+  const labelCategoria = {
+    universal: 'Universais', por_area: 'Por Área', especifica: 'Específicas',
+  };
+  const iconCategoria = {
+    universal: '🧰', por_area: '🎯', especifica: '🎁',
+  };
+
+  const nodes = [];
+  ordemCategorias.forEach(cat => {
+    const doGrupo = skills
+      .filter(s => s.categoria === cat)
+      .sort((a, b) => (a.area || '').localeCompare(b.area || '') || (a.nome || '').localeCompare(b.nome || ''));
+
+    const aberto = !!NAV_OPEN.skills_cat[cat];
+    const catWrap = el('div', { class: 'nav-cat-wrap' + (aberto ? ' open' : '') });
+    const catBtn = el('button', {
+      class: 'nav-cat' + (aberto ? ' open' : ''),
+      type: 'button',
+      title: labelCategoria[cat],
+      onclick: async () => {
+        const vaiAbrir = !NAV_OPEN.skills_cat[cat];
+        if (vaiAbrir) {
+          ordemCategorias.forEach(c => { NAV_OPEN.skills_cat[c] = false; });
+          NAV_OPEN.skills_cat[cat] = true;
+        } else {
+          NAV_OPEN.skills_cat[cat] = false;
+        }
+        persistNavOpen();
+        if (paginaAtual !== 'skills') await navegar('skills');
+        window.dispatchEvent(new CustomEvent('skill:filtrar-categoria', {
+          detail: { categoria: vaiAbrir ? cat : null }
+        }));
+        renderNavTree();
+      },
+    }, [
+      el('span', { class: 'nav-cat-icon' }, iconCategoria[cat]),
+      el('span', { class: 'nav-cat-label' }, labelCategoria[cat]),
+      el('span', { class: 'nav-cat-count' }, String(doGrupo.length)),
+      el('span', { class: 'nav-cat-caret' }, '›'),
+    ]);
+    catWrap.appendChild(catBtn);
+
+    if (aberto) {
+      const catSub = el('div', { class: 'nav-cat-sub' });
+      if (doGrupo.length === 0) {
+        catSub.appendChild(el('div', { class: 'nav-empty' }, 'Vazio'));
+      } else {
+        doGrupo.forEach(s => {
+          const ativo = window.__skillAtivoSlug === s.slug;
+          const statusEmoji = s.status === 'ativa' ? '🟢' : s.status === 'em_construcao' ? '🟡' : '⚪';
+          const leaf = el('button', {
+            class: 'nav-leaf' + (ativo ? ' active' : ''),
+            type: 'button',
+            data: { id: s.slug },
+            title: `${s.nome} · ${s.status}`,
+            onclick: () => {
+              window.__skillAtivoSlug = s.slug;
+              window.dispatchEvent(new CustomEvent('skill:select', { detail: { slug: s.slug } }));
+              renderNavTree();
+              if (isMobile()) fecharMobileMenu();
+            },
+          }, [
+            el('span', { class: 'nav-leaf-icon', style: 'font-size:.75rem' }, statusEmoji),
+            el('span', { class: 'nav-leaf-label' }, s.nome),
+            (s.total_agentes > 0) ? el('span', { class: 'nav-leaf-meta' }, `${s.total_agentes}a`) : null,
+          ]);
+          catSub.appendChild(leaf);
+        });
+      }
+      catWrap.appendChild(catSub);
+    }
+    nodes.push(catWrap);
+  });
+  return nodes;
+}
+
 // Loader: arvore de Personas (flat)
 async function loadPersonasTree() {
   const cerebros = await fetchCerebrosCatalogo();
@@ -400,6 +494,8 @@ async function irParaDetalhe(pagina, slug) {
     await renderPersonaDetalhe(slug);
   } else if (pagina === 'docs') {
     await renderDocDetalhe(slug);
+  } else if (pagina === 'skills') {
+    await abrirSkillDetalhe(slug);
   }
 }
 

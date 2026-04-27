@@ -129,6 +129,16 @@ export async function fetchCrons() {
   ];
 }
 
+export async function fetchSkillsCatalogo() {
+  // Catalogo enriquecido (com total_agentes via view).
+  if (mode === 'supabase') {
+    const { data, error } = await sb.from('vw_skills_catalogo').select('*');
+    if (error) throw error;
+    return data || [];
+  }
+  return [];
+}
+
 export async function fetchSkills() {
   if (mode === 'supabase') {
     const { data, error } = await sb.from('skills').select('*').order('nome');

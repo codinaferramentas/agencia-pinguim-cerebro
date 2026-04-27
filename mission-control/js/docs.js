@@ -45,6 +45,13 @@ export const DOCS_CATALOGO = [
     secao: 'Módulos',
   },
   {
+    slug: 'skills',
+    titulo: 'Skills',
+    descricao: 'Receitas em Markdown que os agentes leem e executam. Padrão Anthropic Agent Skills (Dez/2025). 3 categorias: Universais, Por Área, Específicas. Capacidade reutilizável em escala.',
+    meta: '6 min · módulo principal',
+    secao: 'Módulos',
+  },
+  {
     slug: 'rag',
     titulo: 'RAG e consumo de tokens',
     descricao: 'Como o sistema reduz custo de IA usando recuperação contextual. As três portas de entrada e as cinco regras de ouro pra manter o consumo sob controle.',
