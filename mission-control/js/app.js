@@ -112,79 +112,55 @@ function setupMobileMenu() {
 }
 
 function setupNav() {
-  const STORAGE_KEY = 'pinguim_subnav_collapsed';
+  const STORAGE_KEY_COLLAPSED = 'pinguim_nav_collapsed';
   const app = document.querySelector('.app');
 
-  function isCollapsed() {
-    return app.classList.contains('subnav-collapsed');
-  }
+  // ---- Recolhimento da sidebar inteira (botao << do topo + Ctrl+B) ----
+  function isCollapsed() { return app.classList.contains('nav-collapsed'); }
   function setCollapsed(collapsed) {
-    if (collapsed) app.classList.add('subnav-collapsed');
-    else app.classList.remove('subnav-collapsed');
-    try { localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); } catch {}
+    if (collapsed) app.classList.add('nav-collapsed');
+    else app.classList.remove('nav-collapsed');
+    try { localStorage.setItem(STORAGE_KEY_COLLAPSED, collapsed ? '1' : '0'); } catch {}
   }
-  // Restaura estado salvo (mas so vale quando subnav estiver aberto)
   try {
-    if (localStorage.getItem(STORAGE_KEY) === '1') setCollapsed(true);
+    if (localStorage.getItem(STORAGE_KEY_COLLAPSED) === '1') setCollapsed(true);
   } catch {}
 
-  // Header do subnav clicavel: volta pra listagem da pagina (limpa detalhe).
-  $('#subnav-back')?.addEventListener('click', async () => {
-    const page = subnavPageAtual || paginaAtual;
-    if (page) await navegar(page);
-    if (isMobile()) fecharMobileMenu();
-  });
-
-  $$('.nav-item').forEach(item => {
-    item.addEventListener('click', async () => {
-      const pageSlug = item.dataset.page;
-      if (item.classList.contains('has-sub')) {
-        // Toggle: se ja esta nessa pagina E subnav aberto E nao colapsado, recolhe.
-        const mesmaPagina = subnavPageAtual === pageSlug;
-        const subnavAberto = app.classList.contains('with-subnav');
-        if (mesmaPagina && subnavAberto && !isCollapsed()) {
-          setCollapsed(true);
-          return;
-        }
-        // Caso contrario: garante subnav expandido e abre/troca
-        setCollapsed(false);
-        await Promise.all([navegar(pageSlug), abrirSubnav(pageSlug)]);
-      } else {
-        fecharSubnav();
-        if (isMobile()) fecharMobileMenu();
-        await navegar(pageSlug);
-      }
-    });
-  });
-
-  // Atalho Ctrl+B: toggla colapso (so faz sentido com subnav aberto)
+  $('#nav-collapse')?.addEventListener('click', () => setCollapsed(!isCollapsed()));
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
-      if (!app.classList.contains('with-subnav')) return;
       e.preventDefault();
       setCollapsed(!isCollapsed());
     }
   });
 
-  // ---- Roteamento canonico de detalhe (Cerebro / Persona / Squad) ----
-  // Fluxo unico: subnav clica -> dispara evento -> aqui SEMPRE garante
-  // navegar+renderizar a pagina ANTES de abrir o detalhe. Sem race.
+  // ---- Footer items (Documentacao) ----
+  $$('.nav-footer .nav-item').forEach(item => {
+    item.addEventListener('click', async () => {
+      const slug = item.dataset.page;
+      if (slug) {
+        await navegar(slug);
+        if (isMobile()) fecharMobileMenu();
+      }
+    });
+  });
+
+  // ---- Renderiza arvore primaria (Cerebros / Personas / Integracoes) ----
+  renderNavTree();
+
+  // ---- Eventos canonicos de detalhe ----
   window.addEventListener('cerebro:select', async (ev) => {
     const slug = ev.detail?.slug;
     if (!slug) return;
     await irParaDetalhe('cerebros', slug);
   });
-  // Disparado pelo clique no header de familia (filtra cards da pagina Cerebros)
   window.addEventListener('cerebro:filtrar-familia', async (ev) => {
-    const cat = ev.detail?.categoria; // null = limpar filtro
+    const cat = ev.detail?.categoria;
     if (paginaAtual !== 'cerebros') {
       await navegar('cerebros');
     }
-    if (cat) {
-      window.__aplicarFiltroFamilia?.(cat);
-    } else {
-      window.__limparFiltroFamilia?.();
-    }
+    if (cat) window.__aplicarFiltroFamilia?.(cat);
+    else window.__limparFiltroFamilia?.();
   });
   window.addEventListener('persona:select', async (ev) => {
     const slug = ev.detail?.slug;
@@ -198,6 +174,202 @@ function setupNav() {
   });
   window.addEventListener('docs:back', async () => {
     await navegar('docs');
+  });
+}
+
+// ---- Estado da arvore (quem esta aberto) — persistido em localStorage ----
+const NAV_OPEN = (() => {
+  try {
+    const raw = localStorage.getItem('pinguim_nav_open');
+    return raw ? JSON.parse(raw) : { cerebros: false, personas: false, cerebros_cat: {} };
+  } catch {
+    return { cerebros: false, personas: false, cerebros_cat: {} };
+  }
+})();
+if (!NAV_OPEN.cerebros_cat) NAV_OPEN.cerebros_cat = {};
+function persistNavOpen() {
+  try { localStorage.setItem('pinguim_nav_open', JSON.stringify(NAV_OPEN)); } catch {}
+}
+
+const NAV_PRIMARY = [
+  { slug: 'cerebros',    label: 'Cérebros',    icon: '⚛',  tree: true,  treeLoader: () => loadCerebrosTree() },
+  { slug: 'personas',    label: 'Personas',    icon: '👤', tree: true,  treeLoader: () => loadPersonasTree() },
+  { slug: 'integracoes', label: 'Integrações', icon: '🔌', tree: false },
+];
+
+async function renderNavTree() {
+  const list = $('#nav-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  for (const nav of NAV_PRIMARY) {
+    if (!nav.tree) {
+      const item = el('button', {
+        class: 'nav-item' + (paginaAtual === nav.slug ? ' active' : ''),
+        type: 'button',
+        data: { page: nav.slug },
+        title: nav.label,
+        onclick: async () => {
+          await navegar(nav.slug);
+          renderNavTree();
+          if (isMobile()) fecharMobileMenu();
+        },
+      }, [
+        el('span', { class: 'nav-icon' }, nav.icon),
+        el('span', { class: 'nav-label' }, nav.label),
+      ]);
+      list.appendChild(item);
+      continue;
+    }
+
+    // Item com arvore (Cerebros, Personas)
+    const wrap = el('div', { class: 'nav-item-wrap' + (NAV_OPEN[nav.slug] ? ' open' : '') });
+    const head = el('button', {
+      class: 'nav-item has-sub' + (paginaAtual === nav.slug ? ' active' : '') + (NAV_OPEN[nav.slug] ? ' open' : ''),
+      type: 'button',
+      data: { page: nav.slug },
+      title: nav.label,
+      onclick: async () => {
+        const app = document.querySelector('.app');
+        // Sidebar recolhida: clique simples expande sidebar e abre arvore
+        if (app.classList.contains('nav-collapsed')) {
+          app.classList.remove('nav-collapsed');
+          try { localStorage.setItem('pinguim_nav_collapsed', '0'); } catch {}
+          NAV_OPEN[nav.slug] = true;
+        } else {
+          NAV_OPEN[nav.slug] = !NAV_OPEN[nav.slug];
+        }
+        persistNavOpen();
+        await navegar(nav.slug);
+        renderNavTree();
+        if (isMobile()) fecharMobileMenu();
+      },
+    }, [
+      el('span', { class: 'nav-icon' }, nav.icon),
+      el('span', { class: 'nav-label' }, nav.label),
+      el('span', { class: 'nav-caret' }, '›'),
+    ]);
+    wrap.appendChild(head);
+
+    if (NAV_OPEN[nav.slug]) {
+      const sub = el('div', { class: 'nav-sub' });
+      sub.appendChild(el('div', { class: 'nav-loading' }, 'Carregando…'));
+      wrap.appendChild(sub);
+      nav.treeLoader().then(nodes => {
+        sub.innerHTML = '';
+        if (nodes.length === 0) {
+          sub.appendChild(el('div', { class: 'nav-empty' }, 'Vazio'));
+          return;
+        }
+        nodes.forEach(node => sub.appendChild(node));
+      }).catch(err => {
+        sub.innerHTML = '';
+        sub.appendChild(el('div', { class: 'nav-empty', style: 'color:var(--danger)' }, 'Erro'));
+        console.error('nav tree', nav.slug, err);
+      });
+    }
+
+    list.appendChild(wrap);
+  }
+}
+
+// Loader: arvore de Cerebros (4 categorias com toggle individual)
+async function loadCerebrosTree() {
+  const cerebros = await fetchCerebrosCatalogo();
+  const filtrados = cerebros.filter(c => c.slug !== 'pinguim');
+  const ordemFamilias = ['interno', 'externo', 'metodologia', 'clone'];
+  const labelFamilia = {
+    interno: 'Internos', externo: 'Externos',
+    metodologia: 'Metodologias', clone: 'Clones',
+  };
+  const iconFamilia = {
+    interno: '📦', externo: '🔍', metodologia: '📚', clone: '👤',
+  };
+
+  const nodes = [];
+  ordemFamilias.forEach(cat => {
+    const doGrupo = filtrados
+      .filter(c => (c.categoria || 'interno') === cat)
+      .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+
+    const aberto = !!NAV_OPEN.cerebros_cat[cat];
+    const catWrap = el('div', { class: 'nav-cat-wrap' + (aberto ? ' open' : '') });
+    const catBtn = el('button', {
+      class: 'nav-cat' + (aberto ? ' open' : ''),
+      type: 'button',
+      title: labelFamilia[cat],
+      onclick: () => {
+        NAV_OPEN.cerebros_cat[cat] = !NAV_OPEN.cerebros_cat[cat];
+        persistNavOpen();
+        renderNavTree();
+      },
+    }, [
+      el('span', { class: 'nav-cat-icon' }, iconFamilia[cat]),
+      el('span', { class: 'nav-cat-label' }, labelFamilia[cat]),
+      el('span', { class: 'nav-cat-count' }, String(doGrupo.length)),
+      el('span', { class: 'nav-cat-caret' }, '›'),
+    ]);
+    catWrap.appendChild(catBtn);
+
+    if (aberto) {
+      const catSub = el('div', { class: 'nav-cat-sub' });
+      if (doGrupo.length === 0) {
+        catSub.appendChild(el('div', { class: 'nav-empty' }, 'Nenhum ainda'));
+      } else {
+        doGrupo.forEach(c => {
+          const id = c.slug || c.id;
+          const ativo = window.__cerebroAtivoSlug === id;
+          const leaf = el('button', {
+            class: 'nav-leaf' + (ativo ? ' active' : ''),
+            type: 'button',
+            data: { id },
+            title: c.nome,
+            onclick: () => {
+              window.__cerebroAtivoSlug = id;
+              window.dispatchEvent(new CustomEvent('cerebro:select', { detail: { slug: id } }));
+              renderNavTree();
+              if (isMobile()) fecharMobileMenu();
+            },
+          }, [
+            iconeNode({ icone_url: c.icone_url, emoji: c.emoji, nome: c.nome }, { size: 'sm', className: 'nav-leaf-icon' }),
+            el('span', { class: 'nav-leaf-label' }, c.nome),
+            (c.total_fontes != null) ? el('span', { class: 'nav-leaf-meta' }, String(c.total_fontes)) : null,
+          ]);
+          catSub.appendChild(leaf);
+        });
+      }
+      catWrap.appendChild(catSub);
+    }
+    nodes.push(catWrap);
+  });
+  return nodes;
+}
+
+// Loader: arvore de Personas (flat)
+async function loadPersonasTree() {
+  const cerebros = await fetchCerebrosCatalogo();
+  const lista = cerebros
+    .filter(c => (c.total_fontes || 0) > 0)
+    .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+
+  return lista.map(c => {
+    const id = c.slug || c.id;
+    const ativo = window.__personaAtivoSlug === id;
+    return el('button', {
+      class: 'nav-leaf' + (ativo ? ' active' : ''),
+      type: 'button',
+      data: { id },
+      title: c.nome,
+      onclick: () => {
+        window.__personaAtivoSlug = id;
+        window.dispatchEvent(new CustomEvent('persona:select', { detail: { slug: id } }));
+        renderNavTree();
+        if (isMobile()) fecharMobileMenu();
+      },
+    }, [
+      iconeNode({ icone_url: c.icone_url, emoji: c.emoji, nome: c.nome }, { size: 'sm', className: 'nav-leaf-icon' }),
+      el('span', { class: 'nav-leaf-label' }, c.nome),
+    ]);
   });
 }
 
@@ -219,232 +391,28 @@ async function irParaDetalhe(pagina, slug) {
   }
 }
 
-/* -------- Sub-sidebar contextual (drill-down estilo Vercel) -------- */
-const SUBNAV_CONFIG = {
-  cerebros: {
-    title: 'Cérebros',
-    loader: async () => {
-      const cerebros = await fetchCerebrosCatalogo();
-      const ordemFamilias = ['interno', 'externo', 'metodologia', 'clone'];
-      const labelFamilia = {
-        interno: '📦 Internos',
-        externo: '🔍 Externos',
-        metodologia: '📚 Metodologias',
-        clone: '👤 Clones',
-      };
-      const filtrados = cerebros.filter(c => c.slug !== 'pinguim');
-      const items = [];
-      ordemFamilias.forEach(cat => {
-        const doGrupo = filtrados
-          .filter(c => (c.categoria || 'interno') === cat)
-          .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-        // Familia clicavel — filtra cards da pagina principal
-        items.push({ _grupo: labelFamilia[cat], _grupoCategoria: cat, _grupoAcao: 'filtrar' });
-        if (doGrupo.length === 0) {
-          items.push({ _placeholder: true, _categoria: cat, label: 'Nenhum ainda' });
-          return;
-        }
-        doGrupo.forEach(c => {
-          items.push({
-            id: c.slug || c.id,
-            label: c.nome,
-            meta: (c.total_fontes ?? 0) + ' fontes',
-            emoji: c.emoji || '⚛',
-            icone_url: c.icone_url,
-            nome: c.nome,
-            _categoria: cat,
-          });
-        });
-      });
-      return items;
-    },
-    onSelect: (id) => {
-      window.dispatchEvent(new CustomEvent('cerebro:select', { detail: { slug: id } }));
-    }
-  },
-  personas: {
-    title: 'Personas',
-    loader: async () => {
-      const cerebros = await fetchCerebrosCatalogo();
-      // Persona só existe se Cérebro tem fonte (pai existe)
-      return cerebros
-        .filter(c => (c.total_fontes || 0) > 0)
-        .map(c => ({
-          id: c.slug || c.id,
-          label: c.nome,
-          meta: 'auto',
-          emoji: c.emoji || '👤',
-          icone_url: c.icone_url,
-          nome: c.nome,
-        }));
-    },
-    onSelect: (id) => {
-      window.dispatchEvent(new CustomEvent('persona:select', { detail: { slug: id } }));
-    }
-  },
-  squads: {
-    title: 'Squads',
-    loader: async () => {
-      const op = await fetchOperacaoData();
-      const squads = op.squads || [];
-      return squads.map(s => ({
-        id: s.slug || s.id,
-        label: s.nome,
-        meta: (s.agentes?.length || s.count || 0) + '',
-        emoji: s.emoji || '▦',
-      }));
-    },
-    onSelect: (id) => {
-      window.dispatchEvent(new CustomEvent('squad:select', { detail: { slug: id } }));
-    }
-  },
-  docs: {
-    title: 'Documentação',
-    loader: async () => {
-      return DOCS_CATALOGO.map(d => ({
-        id: d.slug,
-        label: d.titulo,
-        meta: d.meta?.split('·')[0]?.trim() || '',
-        emoji: '📄',
-        nome: d.titulo,
-      }));
-    },
-    onSelect: (id) => {
-      window.dispatchEvent(new CustomEvent('docs:select', { detail: { slug: id } }));
-    }
-  },
+/* -------- Compatibilidade com modulos antigos --------
+   Outros modulos (cerebros.js, personas.js, etc) ainda chamam
+   window.__refrescarSubnav e window.__marcarSubnavAtivo. Hoje a "subnav"
+   virou a propria arvore da nav — entao essas funcoes recarregam/marcam
+   na arvore. */
+
+window.__refrescarSubnav = function refrescarSubnavAtual() {
+  // Re-renderiza a arvore inteira (recarrega contadores e listas)
+  renderNavTree();
 };
 
-let subnavPageAtual = null;
+window.__marcarSubnavAtivo = function marcarSubnavAtivo(id) {
+  // Heuristica: se estamos na pagina cerebros, marca cerebro ativo;
+  // se na pagina personas, marca persona ativa.
+  if (paginaAtual === 'cerebros') window.__cerebroAtivoSlug = id;
+  else if (paginaAtual === 'personas') window.__personaAtivoSlug = id;
+  renderNavTree();
+};
 
-async function abrirSubnav(pageSlug) {
-  const cfg = SUBNAV_CONFIG[pageSlug];
-  if (!cfg) { fecharSubnav(); return; }
-
-  subnavPageAtual = pageSlug;
-  document.querySelector('.app').classList.add('with-subnav');
-  $('#subnav').setAttribute('aria-hidden', 'false');
-  $('#subnav-title').textContent = cfg.title;
-
-  $$('.nav-item.has-sub').forEach(i => {
-    i.classList.toggle('open', i.dataset.page === pageSlug);
-  });
-
-  const body = $('#subnav-body');
-  body.innerHTML = '<div class="subnav-section">Carregando…</div>';
-
-  try {
-    const items = await cfg.loader();
-    body.innerHTML = '';
-
-    if (items.length === 0) {
-      body.innerHTML = '<div class="subnav-section">Nenhum item</div>';
-      return;
-    }
-
-    renderSubnavItems(body, items, cfg);
-  } catch (err) {
-    body.innerHTML = `<div class="subnav-section" style="color:var(--danger)">Erro: ${err.message}</div>`;
-  }
-}
-
-// Helper compartilhado: renderiza items do subnav, suportando _grupo (header de seção) e _placeholder (item desabilitado)
-function renderSubnavItems(body, items, cfg, ativoId = null) {
-  body.innerHTML = '';
-  items.forEach(it => {
-    if (it._grupo) {
-      // Header clicavel pra filtrar (categoria de cerebro: interno/externo/metodologia/clone)
-      if (it._grupoAcao === 'filtrar' && it._grupoCategoria) {
-        const header = el('div', {
-          class: 'subnav-section subnav-section-clickable',
-          data: { familia: it._grupoCategoria },
-          onclick: () => {
-            // Toggle: se ja esta filtrado por essa familia, limpa; senao aplica
-            const jaAtivo = header.classList.contains('active');
-            document.querySelectorAll('.subnav-section[data-familia]').forEach(el => el.classList.remove('active'));
-            if (!jaAtivo) {
-              header.classList.add('active');
-              window.dispatchEvent(new CustomEvent('cerebro:filtrar-familia', { detail: { categoria: it._grupoCategoria } }));
-            } else {
-              window.dispatchEvent(new CustomEvent('cerebro:filtrar-familia', { detail: { categoria: null } }));
-            }
-          },
-        }, it._grupo);
-        body.appendChild(header);
-        return;
-      }
-      // Header simples nao-clicavel
-      body.appendChild(el('div', { class: 'subnav-section' }, it._grupo));
-      return;
-    }
-    if (it._placeholder) {
-      body.appendChild(el('div', {
-        class: 'subnav-item',
-        style: 'opacity:.45;cursor:default;font-style:italic;font-size:.75rem',
-      }, [el('span', { class: 'subnav-label' }, it.label)]));
-      return;
-    }
-    const row = el('div', { class: 'subnav-item', data: { id: it.id } }, [
-      iconeNode({ icone_url: it.icone_url, emoji: it.emoji, nome: it.nome || it.label }, { size: 'sm', className: 'subnav-icone' }),
-      el('span', { class: 'subnav-label' }, it.label),
-      it.meta ? el('span', { class: 'subnav-meta' }, it.meta) : null,
-    ]);
-    if (ativoId && it.id === ativoId) row.classList.add('active');
-    row.addEventListener('click', () => {
-      $$('.subnav-item').forEach(s => s.classList.remove('active'));
-      row.classList.add('active');
-      cfg.onSelect?.(it.id);
-      if (isMobile()) fecharMobileMenu();
-    });
-    body.appendChild(row);
-  });
-}
-
-// Recarrega o subnav atualmente aberto (sem fechar nem mudar pagina).
-// Chamado apos criacao/exclusao/edicao que muda lista de cerebros/personas.
-async function refrescarSubnavAtual() {
-  if (!subnavPageAtual) return;
-  const cfg = SUBNAV_CONFIG[subnavPageAtual];
-  if (!cfg) return;
-  const body = $('#subnav-body');
-  if (!body) return;
-  // Mantem item ativo atual pra restaurar destaque depois
-  const ativo = body.querySelector('.subnav-item.active')?.dataset.id;
-  try {
-    const items = await cfg.loader();
-    if (items.length === 0) {
-      body.innerHTML = '<div class="subnav-section">Nenhum item</div>';
-      return;
-    }
-    renderSubnavItems(body, items, cfg, ativo);
-  } catch (err) {
-    console.error('refrescarSubnavAtual', err);
-  }
-}
-// Expoe pra outros modulos
-window.__refrescarSubnav = refrescarSubnavAtual;
-
-// Listener global: qualquer parte do app pode disparar
-// window.dispatchEvent(new CustomEvent('dados:atualizado', { detail: { tipo: 'cerebro' } }))
 window.addEventListener('dados:atualizado', () => {
-  refrescarSubnavAtual();
+  renderNavTree();
 });
-
-// Marca item do subnav como ativo com base no id (slug). Chamado quando
-// usuário abre detalhe por outros caminhos (card, evento), pra manter
-// sidebar sincronizada.
-function marcarSubnavAtivo(id) {
-  $$('.subnav-item').forEach(s => {
-    s.classList.toggle('active', s.dataset.id === id);
-  });
-}
-window.__marcarSubnavAtivo = marcarSubnavAtivo;
-
-function fecharSubnav() {
-  document.querySelector('.app').classList.remove('with-subnav');
-  $('#subnav').setAttribute('aria-hidden', 'true');
-  $$('.nav-item.has-sub').forEach(i => i.classList.remove('open'));
-}
 
 /* -------- Barra de status -------- */
 async function atualizarStatusbar() {
@@ -1091,6 +1059,8 @@ function qualiCard(val, lbl, alerta = false) {
   setupSquadToggle();
   initDrawer();
   await atualizarStatusbar();
-  // Boot: abre Cérebros + subnav ja expandido (modelo dois-colunas)
-  await Promise.all([navegar('cerebros'), abrirSubnav('cerebros')]);
+  // Boot: abre Cérebros (arvore comeca fechada — usuario clica pra expandir)
+  await navegar('cerebros');
+  // Re-render da arvore pra marcar item ativo correto
+  renderNavTree();
 })();

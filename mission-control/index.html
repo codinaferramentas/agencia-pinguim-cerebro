@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pinguim OS</title>
-<link rel="stylesheet" href="css/style.css?v=20260427b">
+<link rel="stylesheet" href="css/style.css?v=20260427c">
 </head>
 <body>
 <!-- Botao hamburger (so mobile) -->
@@ -16,45 +16,39 @@
 
 <div class="app">
 
-  <!-- Rail estreito — sempre visivel, so icones (modelo dois-colunas) -->
+  <!-- Sidebar accordion — uma coluna, com expandir/recolher -->
   <nav class="nav">
-    <div class="nav-brand" title="Pinguim OS">
-      <img class="nav-brand-icon" src="img/pinguim-icon.svg" alt="Pinguim OS">
+    <div class="nav-top">
+      <div class="nav-brand" title="Pinguim OS">
+        <img class="nav-brand-icon" src="img/pinguim-icon.svg" alt="">
+        <div class="nav-brand-wordmark">
+          <span class="nav-brand-name">Pinguim</span>
+          <span class="nav-brand-os">OS</span>
+        </div>
+      </div>
+      <button id="nav-collapse" class="nav-collapse-btn" type="button" title="Recolher (Ctrl+B)" aria-label="Recolher">‹‹</button>
     </div>
 
-    <div class="nav-list">
-      <button class="nav-item has-sub active" data-page="cerebros" type="button" title="Cérebros" aria-label="Cérebros">
-        <span class="nav-icon">⚛</span>
-      </button>
-      <button class="nav-item has-sub" data-page="personas" type="button" title="Personas" aria-label="Personas">
-        <span class="nav-icon">👤</span>
-      </button>
-      <button class="nav-item" data-page="integracoes" type="button" title="Integrações" aria-label="Integrações">
-        <span class="nav-icon">🔌</span>
-      </button>
+    <div class="nav-list" id="nav-list">
+      <!-- Items renderizados pelo JS — cada um pode ter children -->
     </div>
 
     <div class="nav-footer">
-      <button class="nav-item nav-item-footer has-sub" data-page="docs" type="button" title="Documentação" aria-label="Documentação">
+      <button class="nav-item nav-item-footer" data-page="docs" type="button" title="Documentação">
         <span class="nav-icon">📖</span>
+        <span class="nav-label">Documentação</span>
       </button>
-      <button id="nav-squad-toggle" class="nav-squad-toggle" type="button" title="Liga/desliga a animação do Squad ao gerar persona" aria-label="Squad">
+      <button id="nav-squad-toggle" class="nav-squad-toggle" type="button" title="Liga/desliga a animação do Squad ao gerar persona">
         <span class="squad-toggle-led"></span>
+        <span class="nav-label" id="nav-squad-label">Squad · off</span>
       </button>
-      <button id="nav-logout" class="nav-logout" type="button" title="Sair" aria-label="Sair">
-        <span>↪</span>
+      <button id="nav-logout" class="nav-logout" type="button" title="Sair">
+        <span class="nav-icon">↪</span>
+        <span class="nav-label">Sair</span>
       </button>
-      <div id="nav-env-badge" title="Ambiente">V0</div>
+      <div id="nav-env-badge" class="nav-env-badge" title="Ambiente">V0</div>
     </div>
   </nav>
-
-  <!-- Subnav contextual — abre ao lado do rail (nao substitui mais) -->
-  <aside class="subnav" id="subnav" aria-hidden="true">
-    <button class="subnav-header" id="subnav-back" type="button" title="Voltar pra listagem">
-      <span class="subnav-title" id="subnav-title">—</span>
-    </button>
-    <div class="subnav-body" id="subnav-body"></div>
-  </aside>
 
   <!-- Conteúdo -->
   <main class="main">
@@ -114,11 +108,11 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="module">
-  import { guard, logout } from './js/auth-gate.js?v=20260427b';
+  import { guard, logout } from './js/auth-gate.js?v=20260427c';
   const ok = await guard();
   if (ok) {
-    await import('./js/sb-client.js?v=20260427b');
-    await import('./js/app.js?v=20260427b');
+    await import('./js/sb-client.js?v=20260427c');
+    await import('./js/app.js?v=20260427c');
     const btn = document.getElementById('nav-logout');
     if (btn) btn.addEventListener('click', logout);
   }
