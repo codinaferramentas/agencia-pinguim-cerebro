@@ -6,7 +6,7 @@ import { dataMode, fetchOperacaoData, fetchRoadmapData, fetchCerebrosCatalogo } 
 import { renderHome } from './home.js?v=20260421p';
 import { renderCerebros, initDrawer, abrirCerebroDetalhe } from './cerebros.js?v=20260421p';
 import { renderCrons } from './crons.js?v=20260421p';
-import { renderSkills, abrirSkillDetalhe } from './skills.js?v=20260427j';
+import { renderSkills, abrirSkillDetalhe } from './skills.js?v=20260427k';
 import { renderStub } from './stubs.js?v=20260421p';
 import { iconeNode } from './icone.js?v=20260425g';
 import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260425k';

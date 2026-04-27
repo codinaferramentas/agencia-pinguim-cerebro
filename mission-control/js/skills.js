@@ -892,11 +892,23 @@ async function executarBuscarCerebro(s) {
   let resultado, erroMsg = null, sucesso = true;
 
   try {
-    const { data, error } = await sb.functions.invoke('buscar-cerebro', {
-      body: { cerebro_id, query, top_k },
+    // Padrao do projeto: fetch direto com session.access_token (nao usar
+    // sb.functions.invoke aqui — em alguns cenarios ele nao manda JWT
+    // do usuario logado e a Edge Function rejeita com 401).
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session?.access_token) throw new Error('Sessao expirada — faca login novamente');
+    const fnUrl = `${window.__ENV__.SUPABASE_URL}/functions/v1/buscar-cerebro`;
+    const resp = await fetch(fnUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': window.__ENV__.SUPABASE_ANON_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ cerebro_id, query, top_k }),
     });
-    if (error) throw error;
-    if (data?.error) throw new Error(data.error);
+    const data = await resp.json();
+    if (!resp.ok || data?.error) throw new Error(data?.error || `HTTP ${resp.status}`);
     resultado = data;
   } catch (e) {
     sucesso = false;
