@@ -444,18 +444,21 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   color: var(--fg-muted);
 }
 
-/* Submenu (categorias) — aparece dentro do nav-item open */
+/* Submenu (categorias) — aparece dentro do nav-item open.
+   Linha vertical da arvore: a border-left aqui. Folhas/cats puxam um
+   tracinho horizontal pra conectar nelas (estilo arvore do Explorer). */
 .nav-sub {
   display: none;
   flex-direction: column;
   gap: 1px;
-  padding: 0.25rem 0 0.25rem 0.5rem;
-  margin-left: 0.625rem;
+  padding: 0.25rem 0 0.25rem 0.875rem;
+  margin-left: 0.875rem;
   border-left: 1px solid var(--border-subtle);
 }
 .nav-item-wrap.open > .nav-sub { display: flex; }
 
-/* Categoria (Internos, Externos, Metodologias, Clones) */
+/* Categoria (Internos, Externos, Metodologias, Clones).
+   Tracinho horizontal liga a linha do nav-sub ate o icone (arvore). */
 .nav-cat {
   display: flex;
   align-items: center;
@@ -471,6 +474,16 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   min-height: 28px;
   width: 100%;
   text-align: left;
+  position: relative;
+}
+.nav-cat::before {
+  content: '';
+  position: absolute;
+  left: -0.625rem;
+  top: 50%;
+  width: 0.5rem;
+  height: 1px;
+  background: var(--border-subtle);
 }
 .nav-cat:hover { background: var(--surface-3); color: var(--fg); }
 .nav-cat.open {
@@ -505,12 +518,13 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
 }
 .nav-cat.open .nav-cat-caret { transform: rotate(90deg); }
 
-/* Folha (cerebro especifico, persona especifica) */
+/* Folha (cerebro especifico, persona especifica).
+   Tracinho horizontal liga a linha do nav-cat-sub ate o icone. */
 .nav-leaf {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.375rem 0.625rem 0.375rem 1.5rem;
+  padding: 0.375rem 0.625rem 0.375rem 1.25rem;
   border-radius: var(--r-sm);
   font-size: 0.75rem;
   color: var(--fg-muted);
@@ -521,6 +535,16 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   min-height: 26px;
   width: 100%;
   text-align: left;
+  position: relative;
+}
+.nav-leaf::before {
+  content: '';
+  position: absolute;
+  left: -0.625rem;
+  top: 50%;
+  width: 0.625rem;
+  height: 1px;
+  background: var(--border-subtle);
 }
 .nav-leaf:hover { background: var(--surface-3); color: var(--fg); }
 .nav-leaf.active {
@@ -548,12 +572,15 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   color: var(--fg-dim);
 }
 
-/* Submenu de categorias (lvl 2 → folhas) — endenta menos */
+/* Submenu de categorias (lvl 2 → folhas).
+   Linha vertical propria pras folhas se ligarem (segundo nivel da arvore). */
 .nav-cat-sub {
   display: none;
   flex-direction: column;
   gap: 1px;
-  padding: 0.125rem 0 0.25rem;
+  padding: 0.125rem 0 0.25rem 0.625rem;
+  margin-left: 0.5rem;
+  border-left: 1px solid var(--border-subtle);
 }
 .nav-cat-wrap.open > .nav-cat-sub { display: flex; }
 
