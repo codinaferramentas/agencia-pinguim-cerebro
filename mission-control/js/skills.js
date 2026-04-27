@@ -299,6 +299,14 @@ const PLAYGROUNDS = {
     descricao: 'Testa busca semântica em um Cérebro do Pinguim. Faz a mesma chamada que um agente real faria.',
     render: renderPlaygroundBuscarCerebro,
   },
+  'enviar-mensagem-discord': {
+    descricao: 'Envia mensagem real num webhook do Discord. Use webhook de teste (#bot-testes ou similar) pra não spammar canais reais.',
+    render: renderPlaygroundDiscord,
+  },
+  'scraping-pagina-publica': {
+    descricao: 'Pega texto de URL pública (página de venda, blog, artigo). Funciona com HTML tradicional — SPAs falham com erro explícito.',
+    render: renderPlaygroundScraping,
+  },
 };
 
 // ----- Aba: Editor -----
@@ -887,29 +895,11 @@ async function executarBuscarCerebro(s) {
   btn.disabled = true; btn.textContent = '⏳ Executando…';
   resEl.innerHTML = '';
 
-  const sb = getSupabaseClient();
   const t0 = Date.now();
   let resultado, erroMsg = null, sucesso = true;
 
   try {
-    // Padrao do projeto: fetch direto com session.access_token (nao usar
-    // sb.functions.invoke aqui — em alguns cenarios ele nao manda JWT
-    // do usuario logado e a Edge Function rejeita com 401).
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session?.access_token) throw new Error('Sessao expirada — faca login novamente');
-    const fnUrl = `${window.__ENV__.SUPABASE_URL}/functions/v1/buscar-cerebro`;
-    const resp = await fetch(fnUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'apikey': window.__ENV__.SUPABASE_ANON_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ cerebro_id, query, top_k }),
-    });
-    const data = await resp.json();
-    if (!resp.ok || data?.error) throw new Error(data?.error || `HTTP ${resp.status}`);
-    resultado = data;
+    resultado = await chamarEdgeFunction('buscar-cerebro', { cerebro_id, query, top_k });
   } catch (e) {
     sucesso = false;
     erroMsg = e.message || String(e);
@@ -918,28 +908,13 @@ async function executarBuscarCerebro(s) {
   const duracao = Date.now() - t0;
   btn.disabled = false; btn.textContent = '▶ Executar busca';
 
-  // Loga execucao
-  try {
-    await sb.from('skill_execucoes').insert({
-      skill_id: s.id,
-      cerebro_id,
-      input: { query, top_k },
-      output: resultado || null,
-      sucesso,
-      erro: erroMsg,
-      duracao_ms: duracao,
-      custo_usd: resultado?.custo_usd || null,
-    });
-    // Atualiza contador
-    await sb.from('skills').update({
-      total_execucoes: (s.total_execucoes || 0) + 1,
-      ultima_execucao: new Date().toISOString(),
-    }).eq('id', s.id);
-    s.total_execucoes = (s.total_execucoes || 0) + 1;
-    s.ultima_execucao = new Date().toISOString();
-  } catch (e) {
-    console.warn('log execucao falhou', e);
-  }
+  await logarExecucaoSkill(s, {
+    input: { query, top_k },
+    output: resultado, sucesso, erro: erroMsg,
+    duracao_ms: duracao,
+    custo_usd: resultado?.custo_usd,
+    cerebro_id,
+  });
 
   // Render resultado
   if (!sucesso) {
@@ -985,6 +960,245 @@ async function executarBuscarCerebro(s) {
       }, r.conteudo),
     ]));
   });
+}
+
+// Helper generico: chama Edge Function com auth do usuario logado.
+// Padronizado em todo o projeto (cerebros.js, integracoes.js, etc).
+async function chamarEdgeFunction(slug, body) {
+  const sb = getSupabaseClient();
+  if (!sb) throw new Error('Banco offline');
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session?.access_token) throw new Error('Sessao expirada — faca login novamente');
+  const resp = await fetch(`${window.__ENV__.SUPABASE_URL}/functions/v1/${slug}`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`,
+      'apikey': window.__ENV__.SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  if (!resp.ok || data?.error) throw new Error(data?.error || `HTTP ${resp.status}`);
+  return data;
+}
+
+// Loga execucao de qualquer skill (helper compartilhado)
+async function logarExecucaoSkill(s, { input, output, sucesso, erro, duracao_ms, custo_usd, cerebro_id }) {
+  const sb = getSupabaseClient();
+  if (!sb) return;
+  try {
+    await sb.from('skill_execucoes').insert({
+      skill_id: s.id,
+      cerebro_id: cerebro_id || null,
+      input,
+      output: output || null,
+      sucesso,
+      erro: erro || null,
+      duracao_ms,
+      custo_usd: custo_usd || null,
+    });
+    await sb.from('skills').update({
+      total_execucoes: (s.total_execucoes || 0) + 1,
+      ultima_execucao: new Date().toISOString(),
+    }).eq('id', s.id);
+    s.total_execucoes = (s.total_execucoes || 0) + 1;
+    s.ultima_execucao = new Date().toISOString();
+  } catch (e) {
+    console.warn('log execucao falhou', e);
+  }
+}
+
+// =====================================================================
+// PLAYGROUND: enviar-mensagem-discord
+// =====================================================================
+async function renderPlaygroundDiscord(s, corpo) {
+  const wrap = el('div', { style: 'display:flex;flex-direction:column;gap:1rem' });
+
+  wrap.appendChild(el('div', { style: 'background:rgba(245,165,36,.08);border:1px solid rgba(245,165,36,.3);border-radius:8px;padding:.75rem .875rem;font-size:.75rem;color:#f5a524' },
+    '⚠️ Atenção: a mensagem é REAL — vai pro canal Discord apontado pelo webhook. Use webhook de teste pra não spammar canais de produção.'));
+
+  wrap.appendChild(el('div', {}, [
+    el('label', { style: 'display:block;font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Webhook URL (Discord)'),
+    el('input', {
+      id: 'pg-webhook', type: 'text',
+      placeholder: 'https://discord.com/api/webhooks/.../...  (use webhook de teste)',
+      style: 'width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:.5rem .625rem;color:var(--fg);font-size:.75rem;font-family:var(--font-mono)',
+    }),
+    el('div', { style: 'font-size:.625rem;color:var(--fg-dim);margin-top:.25rem' },
+      'Crie um webhook em Discord > Configurações do canal > Integrações > Webhooks. Em produção, isso vira uma secret na Edge Function (DISCORD_WEBHOOK_<NOME>) e o agente passa só "canal":"<nome>".'),
+  ]));
+
+  wrap.appendChild(el('div', {}, [
+    el('label', { style: 'display:block;font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Conteúdo da mensagem (max 2000 chars)'),
+    el('textarea', {
+      id: 'pg-conteudo', rows: '5',
+      placeholder: '**[Teste]** Mensagem de teste do Pinguim OS\n\nEnviada via skill enviar-mensagem-discord.\n\n_Origem: Playground · agora_',
+      style: 'width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:.625rem;color:var(--fg);font-size:.875rem;font-family:var(--font-body);resize:vertical',
+    }),
+  ]));
+
+  wrap.appendChild(el('button', {
+    id: 'pg-run',
+    class: 'btn btn-primary',
+    type: 'button',
+    style: 'align-self:flex-start',
+    onclick: () => executarDiscord(s),
+  }, '▶ Enviar mensagem'));
+
+  wrap.appendChild(el('div', { id: 'pg-resultado', style: 'margin-top:.5rem' }));
+  corpo.appendChild(wrap);
+}
+
+async function executarDiscord(s) {
+  const webhook = document.getElementById('pg-webhook')?.value?.trim();
+  const conteudo = document.getElementById('pg-conteudo')?.value?.trim();
+  const resEl = document.getElementById('pg-resultado');
+  const btn = document.getElementById('pg-run');
+
+  if (!webhook || !conteudo) { alert('Preencha webhook e conteúdo'); return; }
+
+  btn.disabled = true; btn.textContent = '⏳ Enviando…';
+  resEl.innerHTML = '';
+
+  const t0 = Date.now();
+  let resultado, erroMsg = null, sucesso = true;
+
+  try {
+    resultado = await chamarEdgeFunction('enviar-mensagem-discord', {
+      webhook_url: webhook,
+      conteudo,
+    });
+  } catch (e) {
+    sucesso = false;
+    erroMsg = e.message || String(e);
+  }
+
+  const duracao = Date.now() - t0;
+  btn.disabled = false; btn.textContent = '▶ Enviar mensagem';
+
+  await logarExecucaoSkill(s, {
+    input: { webhook_redacted: webhook.slice(0, 60) + '…', conteudo_size: conteudo.length },
+    output: resultado || null, sucesso, erro: erroMsg, duracao_ms: duracao,
+  });
+
+  if (!sucesso) {
+    resEl.appendChild(el('div', {
+      style: 'background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:1rem;color:#ef4444;font-size:.8125rem',
+    }, '❌ ' + erroMsg));
+    return;
+  }
+
+  resEl.appendChild(el('div', {
+    style: 'background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:1rem;color:#22c55e;font-size:.8125rem',
+  }, [
+    el('div', { style: 'font-weight:600;margin-bottom:.5rem' }, '✓ Mensagem enviada'),
+    el('div', { style: 'color:var(--fg-muted);font-size:.75rem;font-family:var(--font-mono)' },
+      `${duracao}ms · ${resultado.tamanho_conteudo} chars · enviada em ${new Date(resultado.enviado_em).toLocaleTimeString('pt-BR')}`),
+  ]));
+}
+
+// =====================================================================
+// PLAYGROUND: scraping-pagina-publica
+// =====================================================================
+async function renderPlaygroundScraping(s, corpo) {
+  const wrap = el('div', { style: 'display:flex;flex-direction:column;gap:1rem' });
+
+  wrap.appendChild(el('div', {}, [
+    el('label', { style: 'display:block;font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'URL pública'),
+    el('input', {
+      id: 'pg-url', type: 'text',
+      placeholder: 'https://exemplo.com/pagina-de-venda',
+      style: 'width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:.5rem .625rem;color:var(--fg);font-size:.875rem;font-family:var(--font-mono)',
+    }),
+    el('div', { style: 'font-size:.625rem;color:var(--fg-dim);margin-top:.25rem' },
+      'Funciona com HTML estático tradicional. SPAs (Notion, Linear, dashboards) retornam erro com explicação.'),
+  ]));
+
+  wrap.appendChild(el('div', {}, [
+    el('label', { style: 'display:block;font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Max chars (default 50000)'),
+    el('input', {
+      id: 'pg-maxchars', type: 'number', min: '500', max: '100000', value: '50000',
+      style: 'width:160px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:.5rem .625rem;color:var(--fg);font-size:.8125rem',
+    }),
+  ]));
+
+  wrap.appendChild(el('button', {
+    id: 'pg-run',
+    class: 'btn btn-primary',
+    type: 'button',
+    style: 'align-self:flex-start',
+    onclick: () => executarScraping(s),
+  }, '▶ Extrair conteúdo'));
+
+  wrap.appendChild(el('div', { id: 'pg-resultado', style: 'margin-top:.5rem' }));
+  corpo.appendChild(wrap);
+}
+
+async function executarScraping(s) {
+  const url = document.getElementById('pg-url')?.value?.trim();
+  const maxChars = Number(document.getElementById('pg-maxchars')?.value) || 50000;
+  const resEl = document.getElementById('pg-resultado');
+  const btn = document.getElementById('pg-run');
+
+  if (!url) { alert('URL obrigatória'); return; }
+
+  btn.disabled = true; btn.textContent = '⏳ Extraindo…';
+  resEl.innerHTML = '';
+
+  const t0 = Date.now();
+  let resultado, erroMsg = null, sucesso = true;
+
+  try {
+    resultado = await chamarEdgeFunction('scraping-pagina-publica', {
+      url, max_chars: maxChars,
+    });
+  } catch (e) {
+    sucesso = false;
+    erroMsg = e.message || String(e);
+  }
+
+  const duracao = Date.now() - t0;
+  btn.disabled = false; btn.textContent = '▶ Extrair conteúdo';
+
+  await logarExecucaoSkill(s, {
+    input: { url, max_chars: maxChars },
+    output: resultado ? { titulo: resultado.titulo, tamanho_chars: resultado.tamanho_chars, metodo: resultado.metodo } : null,
+    sucesso, erro: erroMsg, duracao_ms: duracao,
+  });
+
+  if (!sucesso) {
+    resEl.appendChild(el('div', {
+      style: 'background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:1rem;color:#ef4444;font-size:.8125rem',
+    }, '❌ ' + erroMsg));
+    return;
+  }
+
+  // Header com metricas
+  resEl.appendChild(el('div', {
+    style: 'display:flex;gap:1rem;flex-wrap:wrap;padding:.75rem 1rem;background:var(--surface-2);border:1px solid var(--border-subtle);border-radius:8px;font-family:var(--font-mono);font-size:.6875rem;color:var(--fg-muted);margin-bottom:.75rem',
+  }, [
+    el('span', {}, `✓ ${resultado.tamanho_chars.toLocaleString('pt-BR')} chars`),
+    el('span', {}, `${duracao}ms`),
+    el('span', {}, resultado.metodo),
+    el('span', {}, '$0'),
+  ]));
+
+  // Card com titulo, descricao, texto
+  resEl.appendChild(el('div', {
+    style: 'background:var(--surface-2);border:1px solid var(--border-subtle);border-radius:8px;padding:1rem',
+  }, [
+    el('div', { style: 'font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Título'),
+    el('div', { style: 'font-family:var(--font-heading);font-size:.9375rem;color:var(--fg-title);margin-bottom:.875rem' }, resultado.titulo),
+    resultado.descricao ? el('div', {}, [
+      el('div', { style: 'font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Descrição (meta)'),
+      el('div', { style: 'color:var(--fg-muted);font-size:.8125rem;margin-bottom:.875rem;font-style:italic' }, resultado.descricao),
+    ]) : null,
+    el('div', { style: 'font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Texto extraído'),
+    el('pre', {
+      style: 'background:var(--surface-1);border:1px solid var(--border-subtle);border-radius:6px;padding:.875rem;font-size:.75rem;color:var(--fg-muted);max-height:400px;overflow:auto;white-space:pre-wrap;line-height:1.55;margin:0',
+    }, resultado.texto),
+  ]));
 }
 
 async function criarSkill(overlay) {
