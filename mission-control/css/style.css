@@ -412,6 +412,16 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   letter-spacing: 0.04em;
   color: var(--fg-dim);
 }
+
+/* Documentacao quando vive no rodape — visual discreto, sem hierarquia de feature primaria */
+.nav-item-footer {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  letter-spacing: normal;
+  margin-bottom: 0.625rem;
+  opacity: 0.85;
+}
+.nav-item-footer:hover { opacity: 1; }
 .nav-logout {
   display: flex;
   align-items: center;
@@ -481,6 +491,50 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
 }
 .app.with-subnav .subnav { display: flex; }
 
+/* Recolher subnav (Ctrl+B ou clique no botao << no rodape do subnav) */
+.subnav-collapse-btn {
+  margin-top: auto;
+  align-self: flex-end;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--fg-dim);
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  margin-right: 0.25rem;
+  transition: background .15s, color .15s;
+}
+.subnav-collapse-btn:hover {
+  background: var(--bg-elev-hover, rgba(255,255,255,0.04));
+  color: var(--fg);
+}
+.app.subnav-collapsed .subnav { display: none; }
+
+.subnav-reopen-btn {
+  display: none;
+  position: fixed;
+  top: 0.75rem;
+  left: 244px;  /* nav width 240 + folga */
+  z-index: 50;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.subnav-reopen-btn:hover {
+  background: var(--bg-elev-hover, rgba(255,255,255,0.04));
+  color: var(--fg);
+  border-color: var(--brand, #E85C00);
+}
+.app.with-subnav.subnav-collapsed .subnav-reopen-btn { display: block; }
+
 .subnav-back-row {
   display: flex;
   align-items: center;
@@ -529,6 +583,25 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--fg-dim);
+}
+
+.subnav-section-clickable {
+  cursor: pointer;
+  border-radius: 4px;
+  margin: 0 0.25rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  transition: background .15s, color .15s;
+}
+.subnav-section-clickable:hover {
+  background: var(--bg-elev-hover, rgba(255,255,255,0.04));
+  color: var(--fg-muted);
+}
+.subnav-section-clickable.active {
+  background: rgba(232, 92, 0, 0.12);
+  color: var(--brand, #E85C00);
+  border-left: 2px solid var(--brand, #E85C00);
+  padding-left: calc(0.5rem - 2px);
 }
 
 .subnav-item {

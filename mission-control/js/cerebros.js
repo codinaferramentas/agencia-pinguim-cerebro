@@ -19,6 +19,14 @@ const el = (tag, attrs = {}, children = []) => {
 };
 
 let cerebrosCache = [];
+let filtroFamilia = null;  // null = todas; senao 'interno'|'externo'|'metodologia'|'clone'
+
+const LABEL_FAMILIA = {
+  interno: { titulo: '📦 Cérebros Internos', sub: 'Produtos da Pinguim. Tem persona, prova social, cases.' },
+  externo: { titulo: '🔍 Cérebros Externos', sub: 'Concorrentes mapeados. Mesma estrutura dos Internos.' },
+  metodologia: { titulo: '📚 Metodologias', sub: 'Bibliotecas universais de técnica de venda. SPIN, Sandler, Challenger, Voss, MEDDIC.' },
+  clone: { titulo: '👤 Clones', sub: 'Pessoas — sócios e conselheiros. Voz, manias, tom.' },
+};
 
 export async function renderCerebros() {
   const page = document.getElementById('page-cerebros');
@@ -34,41 +42,85 @@ export async function renderCerebros() {
 
   // "Cérebro é o pai de tudo" — só aparece cérebro com fonte
   // Cérebros cadastrados mas sem fonte ficam acessíveis via modal "+ Novo Cérebro"
-  const cerebrosVisiveis = cerebrosCache.filter(c =>
+  let cerebrosVisiveis = cerebrosCache.filter(c =>
     c.slug !== 'pinguim' && (c.total_fontes || 0) > 0
   );
 
+  // Aplica filtro de familia se ativo
+  if (filtroFamilia) {
+    cerebrosVisiveis = cerebrosVisiveis.filter(c => (c.categoria || 'interno') === filtroFamilia);
+  }
+
+  // Cabecalho dinamico — muda quando ha filtro ativo
+  const titulo = filtroFamilia ? LABEL_FAMILIA[filtroFamilia].titulo : 'Cérebros';
+  const subtitulo = filtroFamilia
+    ? LABEL_FAMILIA[filtroFamilia].sub
+    : 'Um Cérebro por produto — contexto + skills + rotinas. Agentes consultam antes de agir.';
+
+  // Botao "+ Novo" — quando ha filtro ativo, abre modal direto pra essa familia (sem perguntar)
+  const onClickNovo = () => abrirModalNovoProduto(filtroFamilia || null);
+
   page.innerHTML = '';
-  page.append(
-    el('div', { class: 'cerebros-header' }, [
-      el('div', {}, [
-        el('h1', { class: 'page-title' }, 'Cérebros'),
-        el('div', { class: 'page-subtitle' }, 'Um Cérebro por produto — contexto + skills + rotinas. Agentes consultam antes de agir.'),
-      ]),
-      el('button', {
-        class: 'btn btn-primary',
-        onclick: () => abrirModalNovoProduto()
-      }, '+ Novo Cérebro'),
+  const headerKids = [
+    el('div', {}, [
+      el('h1', { class: 'page-title' }, titulo),
+      el('div', { class: 'page-subtitle' }, subtitulo),
     ]),
+  ];
+  if (filtroFamilia) {
+    headerKids.push(el('button', {
+      class: 'btn btn-ghost',
+      style: 'margin-right:.5rem',
+      onclick: () => limparFiltroFamilia(),
+    }, '× Limpar filtro'));
+  }
+  headerKids.push(el('button', {
+    class: 'btn btn-primary',
+    onclick: onClickNovo,
+  }, filtroFamilia
+    ? `+ Novo ${{interno:'Interno',externo:'Externo',metodologia:'Metodologia',clone:'Clone'}[filtroFamilia]}`
+    : '+ Novo Cérebro'));
+
+  page.append(
+    el('div', { class: 'cerebros-header' }, headerKids),
     cerebrosVisiveis.length === 0
       ? el('div', { class: 'stub-screen' }, [
           el('div', { class: 'stub-badge' }, 'vazio'),
-          el('h2', {}, 'Nenhum Cérebro alimentado ainda'),
+          el('h2', {}, filtroFamilia
+            ? `Nenhum Cérebro ${LABEL_FAMILIA[filtroFamilia].titulo.replace(/^[^\s]+\s/, '')} ainda`
+            : 'Nenhum Cérebro alimentado ainda'),
           el('p', {}, 'Cérebros aparecem aqui assim que recebem a primeira fonte. Clique em "+ Novo Cérebro" pra criar ou continuar alimentando um existente.'),
           el('button', {
             class: 'btn btn-primary',
             style: 'margin-top:1rem',
-            onclick: () => abrirModalNovoProduto(),
-          }, '+ Novo Cérebro'),
+            onclick: onClickNovo,
+          }, filtroFamilia
+            ? `+ Novo ${{interno:'Interno',externo:'Externo',metodologia:'Metodologia',clone:'Clone'}[filtroFamilia]}`
+            : '+ Novo Cérebro'),
         ])
       : el('div', { class: 'cerebros-grid' }, [
           ...cerebrosVisiveis.map(renderCerebroCard),
           el('button', {
             class: 'btn-add-produto',
-            onclick: () => abrirModalNovoProduto()
-          }, '+ Novo Cérebro'),
+            onclick: onClickNovo,
+          }, filtroFamilia
+            ? `+ Novo ${{interno:'Interno',externo:'Externo',metodologia:'Metodologia',clone:'Clone'}[filtroFamilia]}`
+            : '+ Novo Cérebro'),
         ]),
   );
+}
+
+function limparFiltroFamilia() {
+  filtroFamilia = null;
+  // Tira destaque de qualquer header de familia ativo no subnav
+  document.querySelectorAll('.subnav-section[data-familia].active').forEach(el => el.classList.remove('active'));
+  renderCerebros();
+}
+
+// Aplicar filtro vindo do clique no header de familia no subnav
+export function aplicarFiltroFamilia(cat) {
+  filtroFamilia = cat;
+  renderCerebros();
 }
 
 function renderCerebroCard(c) {
@@ -135,9 +187,59 @@ function formatarAtualizacao(iso) {
   return { texto: `há ${Math.floor(dias / 30)} meses`, recente: false };
 }
 
-async function abrirModalNovoProduto(categoria = 'interno') {
+// Mostra modal com 4 cards (Interno/Externo/Metodologia/Clone) e devolve a categoria escolhida
+function escolherFamiliaParaCriar() {
+  return new Promise(resolve => {
+    const back = el('div', {
+      class: 'modal-backdrop',
+      onclick: (e) => { if (e.target === back) { fechar(null); } },
+    });
+    const card = el('div', { class: 'modal-card', style: 'max-width:560px' });
+    function fechar(v) { back.classList.remove('open'); setTimeout(() => { back.remove(); resolve(v); }, 180); }
+
+    const opcoes = [
+      { cat: 'interno', emoji: '📦', titulo: 'Interno', sub: 'Produto da Pinguim' },
+      { cat: 'externo', emoji: '🔍', titulo: 'Externo', sub: 'Concorrente mapeado' },
+      { cat: 'metodologia', emoji: '📚', titulo: 'Metodologia', sub: 'Técnica de venda' },
+      { cat: 'clone', emoji: '👤', titulo: 'Clone', sub: 'Pessoa (sócio ou conselheiro)' },
+    ];
+
+    card.append(
+      el('div', { class: 'modal-head' }, [
+        el('h2', {}, 'Que tipo de Cérebro?'),
+        el('div', { class: 'modal-sub' }, 'As 4 famílias têm estruturas diferentes. Escolha a categoria.'),
+        el('button', { class: 'modal-close', onclick: () => fechar(null) }, '×'),
+      ]),
+      el('div', {
+        class: 'modal-body',
+        style: 'display:grid;grid-template-columns:1fr 1fr;gap:.75rem;padding:1rem',
+      }, opcoes.map(o => el('button', {
+        style: 'background:var(--bg-elev);border:1px solid var(--border-subtle);border-radius:8px;padding:1.25rem;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:.5rem;transition:border-color .15s,background .15s',
+        onmouseenter: (e) => { e.currentTarget.style.borderColor = 'var(--brand)'; e.currentTarget.style.background = 'var(--bg-elev-hover, var(--bg-elev))'; },
+        onmouseleave: (e) => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.background = 'var(--bg-elev)'; },
+        onclick: () => fechar(o.cat),
+      }, [
+        el('div', { style: 'font-size:1.5rem' }, o.emoji),
+        el('div', { style: 'font-weight:700;color:var(--fg)' }, o.titulo),
+        el('div', { style: 'font-size:.8125rem;color:var(--fg-muted)' }, o.sub),
+      ]))),
+    );
+
+    back.append(card);
+    document.body.append(back);
+    requestAnimationFrame(() => back.classList.add('open'));
+  });
+}
+
+async function abrirModalNovoProduto(categoria = null) {
   const sb = getSupabase();
   if (!sb) { await alertarDark({ titulo: 'Sem conexão', mensagem: 'Supabase não conectado.', tipo: 'erro' }); return; }
+
+  // Se nao recebeu categoria, primeiro pergunta qual familia
+  if (!categoria) {
+    categoria = await escolherFamiliaParaCriar();
+    if (!categoria) return; // usuario fechou modal
+  }
 
   // Labels visuais por familia
   const labelFamilia = {
@@ -248,9 +350,11 @@ async function abrirModalNovoProduto(categoria = 'interno') {
   requestAnimationFrame(() => back.classList.add('open'));
 }
 
-// Expoe pra app.js poder abrir o modal com categoria especifica vinda do subnav
+// Expoe pra app.js poder abrir o modal com categoria especifica
 if (typeof window !== 'undefined') {
   window.__abrirNovoCerebro = abrirModalNovoProduto;
+  window.__aplicarFiltroFamilia = aplicarFiltroFamilia;
+  window.__limparFiltroFamilia = limparFiltroFamilia;
 }
 
 /* ----- Tela detalhada de 1 cérebro ----- */

@@ -135,6 +135,28 @@ function setupNav() {
     if (isMobile()) fecharMobileMenu();
   });
 
+  // Recolher / mostrar subnav
+  const STORAGE_KEY = 'pinguim_subnav_collapsed';
+  const app = document.querySelector('.app');
+  function setCollapsed(collapsed) {
+    if (collapsed) app.classList.add('subnav-collapsed');
+    else app.classList.remove('subnav-collapsed');
+    try { localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); } catch {}
+  }
+  // Restaura estado salvo
+  try {
+    if (localStorage.getItem(STORAGE_KEY) === '1') setCollapsed(true);
+  } catch {}
+  $('#subnav-collapse')?.addEventListener('click', () => setCollapsed(true));
+  $('#subnav-reopen')?.addEventListener('click', () => setCollapsed(false));
+  // Atalho Ctrl+B
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+      e.preventDefault();
+      setCollapsed(!app.classList.contains('subnav-collapsed'));
+    }
+  });
+
   // ---- Roteamento canonico de detalhe (Cerebro / Persona / Squad) ----
   // Fluxo unico: subnav clica -> dispara evento -> aqui SEMPRE garante
   // navegar+renderizar a pagina ANTES de abrir o detalhe. Sem race.
@@ -143,15 +165,17 @@ function setupNav() {
     if (!slug) return;
     await irParaDetalhe('cerebros', slug);
   });
-  // Disparado pelo botao "+" do header de cada familia no subnav
-  window.addEventListener('cerebro:novo-na-familia', async (ev) => {
-    const cat = ev.detail?.categoria || 'interno';
+  // Disparado pelo clique no header de familia (filtra cards da pagina Cerebros)
+  window.addEventListener('cerebro:filtrar-familia', async (ev) => {
+    const cat = ev.detail?.categoria; // null = limpar filtro
     if (paginaAtual !== 'cerebros') {
-      // Garante que estamos na tela Cérebros antes de abrir modal
       await navegar('cerebros');
     }
-    // O handler real vive em cerebros.js e e exposto via window.__abrirNovoCerebro
-    window.__abrirNovoCerebro?.(cat);
+    if (cat) {
+      window.__aplicarFiltroFamilia?.(cat);
+    } else {
+      window.__limparFiltroFamilia?.();
+    }
   });
   window.addEventListener('persona:select', async (ev) => {
     const slug = ev.detail?.slug;
@@ -192,7 +216,6 @@ const SUBNAV_CONFIG = {
     title: 'Cérebros',
     loader: async () => {
       const cerebros = await fetchCerebrosCatalogo();
-      // Ordem das familias no sidebar (visual + UX)
       const ordemFamilias = ['interno', 'externo', 'metodologia', 'clone'];
       const labelFamilia = {
         interno: '📦 Internos',
@@ -200,17 +223,16 @@ const SUBNAV_CONFIG = {
         metodologia: '📚 Metodologias',
         clone: '👤 Clones',
       };
-      // Filtra Pinguim Empresa
       const filtrados = cerebros.filter(c => c.slug !== 'pinguim');
       const items = [];
       ordemFamilias.forEach(cat => {
         const doGrupo = filtrados
           .filter(c => (c.categoria || 'interno') === cat)
           .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-        // Sempre mostra a familia (mesmo vazia) com botao "+" pra criar
-        items.push({ _grupo: labelFamilia[cat], _grupoCategoria: cat, _grupoAcao: 'novo-cerebro' });
+        // Familia clicavel — filtra cards da pagina principal
+        items.push({ _grupo: labelFamilia[cat], _grupoCategoria: cat, _grupoAcao: 'filtrar' });
         if (doGrupo.length === 0) {
-          items.push({ _placeholder: true, _categoria: cat, label: 'Nenhum ainda · clique no + acima' });
+          items.push({ _placeholder: true, _categoria: cat, label: 'Nenhum ainda' });
           return;
         }
         doGrupo.forEach(c => {
@@ -322,25 +344,28 @@ function renderSubnavItems(body, items, cfg, ativoId = null) {
   body.innerHTML = '';
   items.forEach(it => {
     if (it._grupo) {
-      const header = el('div', {
-        class: 'subnav-section',
-        style: 'display:flex;align-items:center;justify-content:space-between;gap:.5rem',
-      }, [
-        el('span', {}, it._grupo),
-      ]);
-      // Botao "+" criar dentro da familia, sem perguntar categoria depois
-      if (it._grupoAcao === 'novo-cerebro' && it._grupoCategoria) {
-        const btnNovo = el('button', {
-          title: `Novo Cérebro nesta família (${it._grupoCategoria})`,
-          style: 'background:transparent;border:1px solid var(--border-subtle);color:var(--fg-muted);width:20px;height:20px;border-radius:4px;font-size:.875rem;line-height:1;cursor:pointer;padding:0',
-          onclick: (e) => {
-            e.stopPropagation();
-            window.dispatchEvent(new CustomEvent('cerebro:novo-na-familia', { detail: { categoria: it._grupoCategoria } }));
+      // Header clicavel pra filtrar (categoria de cerebro: interno/externo/metodologia/clone)
+      if (it._grupoAcao === 'filtrar' && it._grupoCategoria) {
+        const header = el('div', {
+          class: 'subnav-section subnav-section-clickable',
+          data: { familia: it._grupoCategoria },
+          onclick: () => {
+            // Toggle: se ja esta filtrado por essa familia, limpa; senao aplica
+            const jaAtivo = header.classList.contains('active');
+            document.querySelectorAll('.subnav-section[data-familia]').forEach(el => el.classList.remove('active'));
+            if (!jaAtivo) {
+              header.classList.add('active');
+              window.dispatchEvent(new CustomEvent('cerebro:filtrar-familia', { detail: { categoria: it._grupoCategoria } }));
+            } else {
+              window.dispatchEvent(new CustomEvent('cerebro:filtrar-familia', { detail: { categoria: null } }));
+            }
           },
-        }, '+');
-        header.appendChild(btnNovo);
+        }, it._grupo);
+        body.appendChild(header);
+        return;
       }
-      body.appendChild(header);
+      // Header simples nao-clicavel
+      body.appendChild(el('div', { class: 'subnav-section' }, it._grupo));
       return;
     }
     if (it._placeholder) {

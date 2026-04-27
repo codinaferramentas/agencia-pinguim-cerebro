@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pinguim OS</title>
-<link rel="stylesheet" href="css/style.css?v=20260426e">
+<link rel="stylesheet" href="css/style.css?v=20260427a">
 </head>
 <body>
 <!-- Botao hamburger (so mobile) -->
@@ -35,16 +35,16 @@
         <span class="nav-icon">👤</span><span>Personas</span>
         <span class="nav-caret">›</span>
       </div>
-      <div class="nav-item has-sub" data-page="docs">
-        <span class="nav-icon">📖</span><span>Documentação</span>
-        <span class="nav-caret">›</span>
-      </div>
       <div class="nav-item" data-page="integracoes">
         <span class="nav-icon">🔌</span><span>Integrações</span>
       </div>
     </div>
 
     <div class="nav-footer">
+      <div class="nav-item nav-item-footer has-sub" data-page="docs" title="Documentação do sistema">
+        <span class="nav-icon">📖</span><span>Documentação</span>
+        <span class="nav-caret">›</span>
+      </div>
       <div id="nav-env-badge">V0 · Carregando…</div>
       <div id="nav-env-hint">mission-control.local</div>
       <button id="nav-squad-toggle" class="nav-squad-toggle" type="button" title="Liga/desliga a animacao do Squad de agentes ao gerar persona">
@@ -71,7 +71,10 @@
       <span class="subnav-back-label" id="subnav-title">—</span>
     </button>
     <div class="subnav-body" id="subnav-body"></div>
+    <button class="subnav-collapse-btn" id="subnav-collapse" type="button" aria-label="Recolher sidebar" title="Recolher sidebar (Ctrl+B)">‹‹</button>
   </aside>
+  <!-- Botao flutuante pra reabrir o subnav quando recolhido -->
+  <button class="subnav-reopen-btn" id="subnav-reopen" type="button" aria-label="Mostrar sidebar" title="Mostrar sidebar (Ctrl+B)">››</button>
 
   <!-- Conteúdo -->
   <main class="main">
@@ -131,11 +134,11 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="module">
-  import { guard, logout } from './js/auth-gate.js?v=20260426e';
+  import { guard, logout } from './js/auth-gate.js?v=20260427a';
   const ok = await guard();
   if (ok) {
-    await import('./js/sb-client.js?v=20260426e');
-    await import('./js/app.js?v=20260426e');
+    await import('./js/sb-client.js?v=20260427a');
+    await import('./js/app.js?v=20260427a');
     const btn = document.getElementById('nav-logout');
     if (btn) btn.addEventListener('click', logout);
   }
