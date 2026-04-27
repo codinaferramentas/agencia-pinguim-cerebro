@@ -27,17 +27,20 @@ NÃO use quando:
 
 ### Passo 1: Identificar o canal alvo
 
-Mapeie o objetivo da mensagem pra um `canal`:
+Mapeie o objetivo da mensagem pra um `canal` (slug curto):
 
-| Sinal | Canal |
+| Sinal | Canal sugerido |
 |---|---|
 | Aviso operacional rotineiro | `geral` |
 | Alerta crítico (algo quebrou) | `alertas` |
 | Resumo de vendas | `vendas` |
 | Conteúdo / aprovação de copy | `copy` |
 | Pedindo decisão de humano | `escalacoes` |
+| Teste de skill | `bot-testes` |
 
-Cada canal está mapeado pra um webhook Discord nas secrets da Edge Function (`DISCORD_WEBHOOK_<NOME>`). Se o canal não estiver cadastrado, a skill retorna erro.
+Os canais são **cadastrados pelo painel** em `/integracoes > Canais Discord` (slug + nome + webhook URL + ambiente teste/produção). A Edge Function resolve o slug em webhook na hora de enviar. Se o canal não estiver cadastrado ou estiver inativo, retorna erro 400.
+
+Quando estiver em **dúvida sobre qual canal usar**, prefira `escalacoes` e marque o humano explicitamente no texto.
 
 ### Passo 2: Preparar o conteúdo
 

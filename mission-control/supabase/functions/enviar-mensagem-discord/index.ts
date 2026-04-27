@@ -11,6 +11,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -34,12 +35,24 @@ async function requireAuth(req: Request): Promise<boolean> {
   return !error && !!data?.user;
 }
 
-// Resolve um alias de canal pra webhook URL.
-// Permite cadastrar em variaveis de ambiente:
-//   DISCORD_WEBHOOK_GERAL=https://discord.com/api/webhooks/...
-//   DISCORD_WEBHOOK_VENDAS=...
-//   DISCORD_WEBHOOK_ALERTAS=...
-function resolverCanal(canal: string): string | null {
+// Resolve um slug de canal -> webhook_url.
+// Fonte primaria: tabela pinguim.discord_canais (cadastrada pelo painel).
+// Fallback: secret DISCORD_WEBHOOK_<NOME> (compatibilidade).
+async function resolverCanal(canal: string): Promise<string | null> {
+  // 1) banco
+  try {
+    const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false },
+      db: { schema: 'pinguim' },
+    });
+    const { data } = await sb
+      .from('discord_canais')
+      .select('webhook_url, ativo')
+      .eq('slug', canal)
+      .maybeSingle();
+    if (data?.ativo && data.webhook_url) return data.webhook_url;
+  } catch { /* cai pro fallback */ }
+  // 2) env (compat)
   const slug = canal.toUpperCase().replace(/[^A-Z0-9]/g, '_');
   return Deno.env.get(`DISCORD_WEBHOOK_${slug}`) || null;
 }
@@ -62,10 +75,10 @@ serve(async (req) => {
 
   // Resolve canal -> webhook se nao foi passado direto
   if (!webhook_url && canal) {
-    webhook_url = resolverCanal(canal);
+    webhook_url = await resolverCanal(canal);
     if (!webhook_url) {
       return jsonResp({
-        error: `Canal '${canal}' nao configurado. Cadastre DISCORD_WEBHOOK_${canal.toUpperCase()} nas secrets da Edge Function.`
+        error: `Canal '${canal}' nao encontrado. Cadastre em /integracoes > Canais Discord.`
       }, 400);
     }
   }

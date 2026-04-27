@@ -300,13 +300,13 @@ const PLAYGROUNDS = {
     render: renderPlaygroundBuscarCerebro,
   },
   'enviar-mensagem-discord': {
-    descricao: 'Envia mensagem real num webhook do Discord. Use webhook de teste (#bot-testes ou similar) pra não spammar canais reais.',
+    descricao: 'Envia mensagem real num canal do Discord cadastrado. Usa "canal" → resolve via tabela pinguim.discord_canais.',
     render: renderPlaygroundDiscord,
   },
-  'scraping-pagina-publica': {
-    descricao: 'Pega texto de URL pública (página de venda, blog, artigo). Funciona com HTML tradicional — SPAs falham com erro explícito.',
-    render: renderPlaygroundScraping,
-  },
+  // OBS: scraping standalone foi removido (2.3.1). Scraping de URLs continua
+  // existindo dentro da Edge Function ingest-url quando voce sobe URL como
+  // fonte do Cerebro. Quando aparecer caso de uso de "scrap sem cadastrar
+  // fonte", criamos skill nova reaproveitando a logica do ingest-url.
 };
 
 // ----- Aba: Editor -----
@@ -1013,21 +1013,65 @@ async function logarExecucaoSkill(s, { input, output, sucesso, erro, duracao_ms,
 // PLAYGROUND: enviar-mensagem-discord
 // =====================================================================
 async function renderPlaygroundDiscord(s, corpo) {
+  const sb = getSupabaseClient();
   const wrap = el('div', { style: 'display:flex;flex-direction:column;gap:1rem' });
 
-  wrap.appendChild(el('div', { style: 'background:rgba(245,165,36,.08);border:1px solid rgba(245,165,36,.3);border-radius:8px;padding:.75rem .875rem;font-size:.75rem;color:#f5a524' },
-    '⚠️ Atenção: a mensagem é REAL — vai pro canal Discord apontado pelo webhook. Use webhook de teste pra não spammar canais de produção.'));
+  // Carrega canais cadastrados
+  const { data: canais } = sb
+    ? await sb.from('discord_canais').select('*').eq('ativo', true).order('ambiente').order('slug')
+    : { data: [] };
 
+  if (!canais || canais.length === 0) {
+    wrap.appendChild(el('div', {
+      style: 'background:rgba(245,165,36,.08);border:1px solid rgba(245,165,36,.3);border-radius:8px;padding:1rem;font-size:.8125rem;color:#f5a524;line-height:1.55',
+    }, [
+      el('strong', {}, 'Nenhum canal Discord cadastrado.'),
+      el('br', {}),
+      'Vá em ',
+      el('a', {
+        href: '#',
+        style: 'color:inherit;text-decoration:underline;cursor:pointer',
+        onclick: (e) => { e.preventDefault(); window.dispatchEvent(new CustomEvent('navegar:integracoes')); },
+      }, 'Integrações > Canais Discord'),
+      ' e cadastre pelo menos um canal de teste antes de usar o Playground.',
+    ]));
+    corpo.appendChild(wrap);
+    return;
+  }
+
+  wrap.appendChild(el('div', { style: 'background:rgba(245,165,36,.08);border:1px solid rgba(245,165,36,.3);border-radius:8px;padding:.75rem .875rem;font-size:.75rem;color:#f5a524' },
+    '⚠️ A mensagem é REAL — vai pro canal escolhido. Comece pelos canais marcados "teste".'));
+
+  // Modo: select de canal cadastrado OU webhook livre
   wrap.appendChild(el('div', {}, [
-    el('label', { style: 'display:block;font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Webhook URL (Discord)'),
+    el('label', { style: 'display:block;font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Canal'),
+    el('select', {
+      id: 'pg-canal',
+      style: 'width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:.5rem .625rem;color:var(--fg);font-size:.875rem',
+    }, [
+      ...canais.map(c => el('option', { value: c.slug, 'data-amb': c.ambiente }, `${c.ambiente === 'teste' ? '🧪' : '🚀'} ${c.nome} · ${c.slug}`)),
+      el('option', { value: '__custom__' }, '— ou cole webhook ad-hoc —'),
+    ]),
+    el('div', { style: 'font-size:.625rem;color:var(--fg-dim);margin-top:.25rem' },
+      'Cadastre/edite canais em Integrações > Canais Discord.'),
+  ]));
+
+  // Webhook livre (escondido por padrao, mostra se "__custom__")
+  const webhookWrap = el('div', { id: 'pg-webhook-wrap', style: 'display:none' }, [
+    el('label', { style: 'display:block;font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Webhook URL ad-hoc'),
     el('input', {
       id: 'pg-webhook', type: 'text',
-      placeholder: 'https://discord.com/api/webhooks/.../...  (use webhook de teste)',
+      placeholder: 'https://discord.com/api/webhooks/...',
       style: 'width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:.5rem .625rem;color:var(--fg);font-size:.75rem;font-family:var(--font-mono)',
     }),
-    el('div', { style: 'font-size:.625rem;color:var(--fg-dim);margin-top:.25rem' },
-      'Crie um webhook em Discord > Configurações do canal > Integrações > Webhooks. Em produção, isso vira uma secret na Edge Function (DISCORD_WEBHOOK_<NOME>) e o agente passa só "canal":"<nome>".'),
-  ]));
+  ]);
+  wrap.appendChild(webhookWrap);
+
+  // Toggle visibilidade webhook livre
+  const sel = wrap.querySelector('#pg-canal');
+  sel.addEventListener('change', () => {
+    webhookWrap.style.display = sel.value === '__custom__' ? 'block' : 'none';
+  });
 
   wrap.appendChild(el('div', {}, [
     el('label', { style: 'display:block;font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Conteúdo da mensagem (max 2000 chars)'),
@@ -1051,12 +1095,21 @@ async function renderPlaygroundDiscord(s, corpo) {
 }
 
 async function executarDiscord(s) {
-  const webhook = document.getElementById('pg-webhook')?.value?.trim();
+  const canalSlug = document.getElementById('pg-canal')?.value;
+  const webhookCustom = document.getElementById('pg-webhook')?.value?.trim();
   const conteudo = document.getElementById('pg-conteudo')?.value?.trim();
   const resEl = document.getElementById('pg-resultado');
   const btn = document.getElementById('pg-run');
 
-  if (!webhook || !conteudo) { alert('Preencha webhook e conteúdo'); return; }
+  if (!conteudo) { alert('Conteúdo obrigatório'); return; }
+
+  let body;
+  if (canalSlug === '__custom__') {
+    if (!webhookCustom) { alert('Cole o webhook URL'); return; }
+    body = { webhook_url: webhookCustom, conteudo };
+  } else {
+    body = { canal: canalSlug, conteudo };
+  }
 
   btn.disabled = true; btn.textContent = '⏳ Enviando…';
   resEl.innerHTML = '';
@@ -1065,10 +1118,7 @@ async function executarDiscord(s) {
   let resultado, erroMsg = null, sucesso = true;
 
   try {
-    resultado = await chamarEdgeFunction('enviar-mensagem-discord', {
-      webhook_url: webhook,
-      conteudo,
-    });
+    resultado = await chamarEdgeFunction('enviar-mensagem-discord', body);
   } catch (e) {
     sucesso = false;
     erroMsg = e.message || String(e);
@@ -1078,7 +1128,7 @@ async function executarDiscord(s) {
   btn.disabled = false; btn.textContent = '▶ Enviar mensagem';
 
   await logarExecucaoSkill(s, {
-    input: { webhook_redacted: webhook.slice(0, 60) + '…', conteudo_size: conteudo.length },
+    input: { canal: canalSlug !== '__custom__' ? canalSlug : 'webhook_ad_hoc', conteudo_size: conteudo.length },
     output: resultado || null, sucesso, erro: erroMsg, duracao_ms: duracao,
   });
 
@@ -1095,109 +1145,6 @@ async function executarDiscord(s) {
     el('div', { style: 'font-weight:600;margin-bottom:.5rem' }, '✓ Mensagem enviada'),
     el('div', { style: 'color:var(--fg-muted);font-size:.75rem;font-family:var(--font-mono)' },
       `${duracao}ms · ${resultado.tamanho_conteudo} chars · enviada em ${new Date(resultado.enviado_em).toLocaleTimeString('pt-BR')}`),
-  ]));
-}
-
-// =====================================================================
-// PLAYGROUND: scraping-pagina-publica
-// =====================================================================
-async function renderPlaygroundScraping(s, corpo) {
-  const wrap = el('div', { style: 'display:flex;flex-direction:column;gap:1rem' });
-
-  wrap.appendChild(el('div', {}, [
-    el('label', { style: 'display:block;font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'URL pública'),
-    el('input', {
-      id: 'pg-url', type: 'text',
-      placeholder: 'https://exemplo.com/pagina-de-venda',
-      style: 'width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:.5rem .625rem;color:var(--fg);font-size:.875rem;font-family:var(--font-mono)',
-    }),
-    el('div', { style: 'font-size:.625rem;color:var(--fg-dim);margin-top:.25rem' },
-      'Funciona com HTML estático tradicional. SPAs (Notion, Linear, dashboards) retornam erro com explicação.'),
-  ]));
-
-  wrap.appendChild(el('div', {}, [
-    el('label', { style: 'display:block;font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Max chars (default 50000)'),
-    el('input', {
-      id: 'pg-maxchars', type: 'number', min: '500', max: '100000', value: '50000',
-      style: 'width:160px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:.5rem .625rem;color:var(--fg);font-size:.8125rem',
-    }),
-  ]));
-
-  wrap.appendChild(el('button', {
-    id: 'pg-run',
-    class: 'btn btn-primary',
-    type: 'button',
-    style: 'align-self:flex-start',
-    onclick: () => executarScraping(s),
-  }, '▶ Extrair conteúdo'));
-
-  wrap.appendChild(el('div', { id: 'pg-resultado', style: 'margin-top:.5rem' }));
-  corpo.appendChild(wrap);
-}
-
-async function executarScraping(s) {
-  const url = document.getElementById('pg-url')?.value?.trim();
-  const maxChars = Number(document.getElementById('pg-maxchars')?.value) || 50000;
-  const resEl = document.getElementById('pg-resultado');
-  const btn = document.getElementById('pg-run');
-
-  if (!url) { alert('URL obrigatória'); return; }
-
-  btn.disabled = true; btn.textContent = '⏳ Extraindo…';
-  resEl.innerHTML = '';
-
-  const t0 = Date.now();
-  let resultado, erroMsg = null, sucesso = true;
-
-  try {
-    resultado = await chamarEdgeFunction('scraping-pagina-publica', {
-      url, max_chars: maxChars,
-    });
-  } catch (e) {
-    sucesso = false;
-    erroMsg = e.message || String(e);
-  }
-
-  const duracao = Date.now() - t0;
-  btn.disabled = false; btn.textContent = '▶ Extrair conteúdo';
-
-  await logarExecucaoSkill(s, {
-    input: { url, max_chars: maxChars },
-    output: resultado ? { titulo: resultado.titulo, tamanho_chars: resultado.tamanho_chars, metodo: resultado.metodo } : null,
-    sucesso, erro: erroMsg, duracao_ms: duracao,
-  });
-
-  if (!sucesso) {
-    resEl.appendChild(el('div', {
-      style: 'background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:1rem;color:#ef4444;font-size:.8125rem',
-    }, '❌ ' + erroMsg));
-    return;
-  }
-
-  // Header com metricas
-  resEl.appendChild(el('div', {
-    style: 'display:flex;gap:1rem;flex-wrap:wrap;padding:.75rem 1rem;background:var(--surface-2);border:1px solid var(--border-subtle);border-radius:8px;font-family:var(--font-mono);font-size:.6875rem;color:var(--fg-muted);margin-bottom:.75rem',
-  }, [
-    el('span', {}, `✓ ${resultado.tamanho_chars.toLocaleString('pt-BR')} chars`),
-    el('span', {}, `${duracao}ms`),
-    el('span', {}, resultado.metodo),
-    el('span', {}, '$0'),
-  ]));
-
-  // Card com titulo, descricao, texto
-  resEl.appendChild(el('div', {
-    style: 'background:var(--surface-2);border:1px solid var(--border-subtle);border-radius:8px;padding:1rem',
-  }, [
-    el('div', { style: 'font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Título'),
-    el('div', { style: 'font-family:var(--font-heading);font-size:.9375rem;color:var(--fg-title);margin-bottom:.875rem' }, resultado.titulo),
-    resultado.descricao ? el('div', {}, [
-      el('div', { style: 'font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Descrição (meta)'),
-      el('div', { style: 'color:var(--fg-muted);font-size:.8125rem;margin-bottom:.875rem;font-style:italic' }, resultado.descricao),
-    ]) : null,
-    el('div', { style: 'font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Texto extraído'),
-    el('pre', {
-      style: 'background:var(--surface-1);border:1px solid var(--border-subtle);border-radius:6px;padding:.875rem;font-size:.75rem;color:var(--fg-muted);max-height:400px;overflow:auto;white-space:pre-wrap;line-height:1.55;margin:0',
-    }, resultado.texto),
   ]));
 }
 
