@@ -412,15 +412,283 @@ Top 10 objeções comuns de venda B2B + resposta no estilo Voss (sempre começan
 
 **Estimativa de esforço de curadoria:** ~4-6 horas por metodologia se 2 pessoas dividem (uma busca scripts/diálogos, outra busca casos/anti-padrões).
 
-**Ordem sugerida pra atacar:**
-1. **MEDDIC primeiro** — já é a mais robusta no estado atual e é a mais alinhada com infoproduto high-ticket (Pinguim)
-2. **SPIN segundo** — fundamento universal, todo SDR vai usar
-3. **Challenger e Sandler depois** — opções de "tempero" pra A/B test
-4. **Tactical Empathy por último** — vai ser usada mais como complemento do que como primária
+**Ordem REVISADA com André (2026-04-27):**
+1. **SPIN primeiro** — fundamento universal, todo SDR/closer vai usar como base
+2. **CRIAR Cérebro novo `low-ticket-digital` do zero** — Pinguim vive de low ticket (Desafios, ProAlt LT, Mentoria Express). Hoje só tem metodologia high ticket no Cérebro. É buraco gigante. **Detalhamento na seção 6 abaixo.**
+3. **MEDDIC** — high ticket (Elo, programas premium)
+4. **Sandler, Challenger, Voss** — A/B test e complementos
 
 ---
 
-# Anexo: Critérios universais de qualidade
+# 6. Low Ticket Digital (NOVA — Pinguim, baseada em stack canônico do mercado)
+
+## Por que esse Cérebro existe
+
+Pinguim vive de low ticket: Desafios (R$ 47-297), ProAlt LT, Mentoria Express, Análise de Perfil. **O agente comercial vai vender low ticket muito mais do que high ticket.** Não ter metodologia desenhada pra isso = SDR/closer chutando.
+
+E o detalhe: **não existe UMA "metodologia de low ticket" canônica** como SPIN é pro B2B. O que existe é um **stack de frameworks complementares** que juntos formam a metodologia do mercado digital.
+
+## A descoberta da pesquisa (2026-04-27)
+
+**Stack consolidado do mercado low ticket digital:**
+
+| Camada | Framework | Pra que serve |
+|---|---|---|
+| Segmentação | Schwartz — 5 Níveis de Consciência | Decidir o ângulo da mensagem |
+| Oferta | Hormozi — Grand Slam Offer + Value Equation | Construir oferta irresistível ("MEDDIC do digital") |
+| Mensagem | Brunson — Hook, Story, Offer | Estrutura tática de qualquer copy |
+| Persuasão | Cialdini — 7 Princípios | Camada psicológica que TODOS os outros usam |
+| Funil/Lançamento | PLF / Erico Rocha (Fórmula de Lançamento) | Estratégia de aquisição/lançamento BR |
+
+**Pivot brasileiro importante:** Erico Rocha trouxe o PLF (Jeff Walker) pro Brasil como "Fórmula de Lançamento". Virou **padrão do mercado de infoproduto BR**. Pinguim literalmente vive nesse mercado — esse capítulo é OBRIGATÓRIO.
+
+## Fontes recomendadas (12 arquivos)
+
+### 📜 low-ticket-digital-principios.md (visão geral do stack)
+
+**Conteúdo:** explicar de onde vem cada camada, por que o stack funciona junto, o que diferencia low ticket de high ticket (decisão emocional rápida vs. consultiva longa).
+
+**Onde buscar:**
+- Síntese eu posso escrever a partir das outras fontes — esse é o índice mestre
+
+**Critério de aceite:**
+- 5-7 páginas (~10KB)
+- Diagrama mental claro de como as 5 camadas se compõem
+- Exemplos pinguim em cada camada
+
+---
+
+### 📜 low-ticket-digital-execucao.md (como aplicar passo a passo)
+
+**Conteúdo:** workflow de uma venda low ticket end-to-end usando o stack. Do anúncio ao checkout. Onde cada framework entra.
+
+**Onde buscar:**
+- Material híbrido: literatura (livros abaixo) + experiência interna Pinguim
+- **Erico Rocha tem material gratuito** sobre o ciclo: aquecimento → CPL → carrinho → fechamento
+
+**Critério de aceite:**
+- Cobre os 5 momentos: anúncio → captura → nutrição → oferta → fechamento
+- Marca explicitamente qual framework está sendo usado em cada momento
+
+---
+
+### 🛠 low-ticket-hormozi-value-equation.md
+
+**Conteúdo:**
+- Value Equation: Valor = (Sonho × Probabilidade) ÷ (Tempo + Esforço)
+- 4 pilares do Grand Slam Offer
+- Como construir oferta irresistível pra Pinguim
+- Bonuses, garantias, urgência REAL (não fake)
+
+**Onde buscar:**
+- **Livro $100M Offers** (Alex Hormozi, 2021) — Editora Wiser tem edição PT-BR
+- **YouTube canal Hormozi** — videos curtos com cada conceito explicado
+- **Acquisition.com (acquisition.com)** — recursos gratuitos
+- **Resumo SwipeFile / Power Moves** — sínteses estruturadas
+
+**Critério de aceite:**
+- Cada pilar com 1 exemplo Pinguim ("o ProAlt LT já tem isso? como melhorar?")
+- Inclui pelo menos 1 exemplo de **MAU** offer pra contraste
+
+---
+
+### 🛠 low-ticket-schwartz-5-niveis.md
+
+**Conteúdo:**
+- Os 5 níveis: Unaware → Problem Aware → Solution Aware → Product Aware → Most Aware
+- Como identificar em qual nível o lead está
+- Que tipo de mensagem usar pra cada nível
+- Por que abordar Most Aware com mensagem de Unaware queima conversão
+
+**Onde buscar:**
+- **Livro Breakthrough Advertising** (Eugene Schwartz, 1966) — clássico mais respeitado de copywriting. Edição original é cara (~US$ 100); existe PDF "compartilhado" online (controverso)
+- **swipefile.com → 5 Stages of Awareness** — síntese clara
+- **B-PlanNow Schwartz Pyramid Guide** — visualização pedagógica
+
+**Critério de aceite:**
+- Para cada nível, 1 exemplo de headline Pinguim
+- Tabela "se o lead está no nível X, o ângulo é Y"
+
+---
+
+### 🛠 low-ticket-brunson-hook-story-offer.md
+
+**Conteúdo:**
+- Hook: como prender atenção em 1-3 segundos (anúncio, primeiro frame de VSL, primeira linha de email)
+- Story: 3 elementos da Story (vilão, transformação, prova)
+- Offer: anatomia da oferta no estilo Brunson
+- Como compor os 3 numa peça (anúncio, página, sequência de email)
+
+**Onde buscar:**
+- **Livros DotCom Secrets, Expert Secrets, Traffic Secrets** (Russell Brunson) — trilogia ClickFunnels. Edições PT-BR existem (Editora Buzz)
+- **Blog ClickFunnels** — posts gratuitos sobre Hook, Story, Offer
+- **Russell Brunson MasterClass** (paga, mas tem trial)
+- **YouTube canal Russell Brunson** — videos gratuitos
+
+**Critério de aceite:**
+- 3 exemplos de Hook por categoria (tráfego frio, morno, quente)
+- 1 Story completa (qualquer produto Pinguim) com vilão + transformação + prova
+- Diferenciar Brunson de outros ("por que não é só PAS")
+
+---
+
+### 🛠 low-ticket-cialdini-7-gatilhos.md
+
+**Conteúdo:**
+- Os 7 princípios: Reciprocidade, Compromisso/Consistência, Prova Social, Autoridade, Afinidade, Escassez, Unidade (a 7ª, de 2016)
+- Como cada um se manifesta em low ticket digital
+- Diferença entre **gatilho real** (ex: estoque limitado de verdade) e **gatilho fake** (countdown que reseta) — Cialdini condena fake
+
+**Onde buscar:**
+- **Livro Influence** (Robert Cialdini, 1984) — clássico. Edição PT-BR "Armas da Persuasão" (Editora Sextante)
+- **Livro Pre-Suasion** (Cialdini, 2016) — onde introduz a 7ª (Unidade)
+- **Site influenceatwork.com** — recursos gratuitos
+- **CXL.com Blog Cialdini** — síntese aplicada a marketing digital
+
+**Critério de aceite:**
+- 7 princípios × 2 exemplos cada = 14 exemplos Pinguim
+- Seção dedicada a "**escassez ética vs predatória**" — Pinguim NÃO faz fake scarcity
+
+---
+
+### 🛠 low-ticket-erico-rocha-formula-lancamento.md (NÚCLEO BR)
+
+**Conteúdo:**
+- O ciclo completo PLF: pré-lançamento (4 CPLs) → carrinho aberto → carrinho fechado
+- Os 5 gatilhos do Erico Rocha
+- "6 em 7" — fazer 6 dígitos em 7 dias
+- Como funciona o calendário editorial de aquecimento
+- Adaptações brasileiras vs PLF americano original
+
+**Onde buscar:**
+- **Erico Rocha — site oficial ericorocha.com.br** — tem materiais gratuitos
+- **Canal Erico Rocha YouTube** — masterclasses gratuitas
+- **Livro Fórmula de Lançamento** (Erico — versão atualizada)
+- **Jeff Walker — livro Launch** (versão original em inglês)
+- **Bruno Picinini blog** — análises do PLF aplicado
+- **CONHECIMENTO INTERNO PINGUIM** — Pinguim já fez lançamentos, time tem experiência prática
+
+**Critério de aceite:**
+- Calendário típico de lançamento de 14 dias detalhado
+- Diferenças PLF americano vs adaptação BR
+- Pelo menos 2 cases brasileiros de lançamento bem-sucedido
+
+---
+
+### 📜 low-ticket-scripts.md
+
+**Conteúdo:** scripts canônicos pra cada momento da venda low ticket:
+- Hooks de anúncio (vídeo + estático + carrossel)
+- Subject lines de email (5 padrões testados)
+- Linha de abertura de página de venda
+- Frase de transição pro CTA
+- Frases pra **objeção de preço** ("é caro" — específico de low ticket: a resposta NUNCA é justificar; é REFRAMING o valor)
+- Frases pra **abandono de carrinho** (sequência email/SMS/Whatsapp)
+
+**Onde buscar:**
+- **Cashvertising** (Drew Eric Whitman) — 100+ princípios de DR copy aplicada
+- **The Boron Letters** (Gary Halbert) — clássico de copy direta
+- **Swipe files públicos** (swipefile.com, swiped.co)
+- **Time Pinguim** — quais scripts já funcionam HOJE? Pegar do CRM/funil
+
+**Critério de aceite:**
+- 30+ scripts no total, organizados por momento
+- Cada script com "quando usar" + "quando NÃO usar"
+- Mínimo 10 scripts em PT-BR autêntico (não tradução)
+
+---
+
+### 🛡 low-ticket-objecoes-respostas.md
+
+**Top 10 objeções de low ticket digital** (diferentes das de B2B):
+1. "É muito caro" (mesmo R$ 47 — em low ticket é comum)
+2. "Não tenho tempo agora"
+3. "Vou esperar a próxima turma"
+4. "Já tentei algo parecido e não deu certo"
+5. "Cadê a garantia?"
+6. "Como sei que vocês entregam?"
+7. "Funciona pro meu nicho?"
+8. "Posso fazer sozinho com YouTube grátis"
+9. "Preciso pensar / falar com cônjuge"
+10. "Tô sem cartão / sem Pix agora"
+
+**Onde buscar:**
+- **Hormozi — capítulo 9 do $100M Offers** tem objeções low ticket
+- **Russell Brunson — Expert Secrets** tem matriz de objeções
+- **Time Pinguim CRM** — objeções REAIS dos alunos do Desafio Lo-fi e ProAlt LT
+- **Erico Rocha** tem material sobre quebra de objeção em lançamento
+
+**Critério de aceite:**
+- Resposta em até 3 frases (chatbot/SDR vai usar literal)
+- Cada resposta marca qual gatilho Cialdini ou conceito Hormozi está usando
+- Mínimo 5 objeções com exemplos REAIS extraídos do funil Pinguim
+
+---
+
+### 🌟 low-ticket-casos-pinguim.md (DEVER DE CASA INTERNO — só time Pinguim)
+
+**Conteúdo:** Material que **SÓ A PINGUIM TEM** — informação que concorrente não consegue copiar de livro:
+- Como o Desafio Lo-fi vende: ângulo, ad copy que funciona, sequência de aquecimento, conversão típica
+- ProAlt LT: posicionamento, ofertas que funcionaram, taxa de conversão
+- Mentoria Express: pra qual público funciona, ângulo de oferta
+- Quais lançamentos Pinguim foram melhores e POR QUÊ
+- Erros caros do passado: lançamentos que falharam e diagnóstico
+
+**Quem produz:** Luiz, Micha, time comercial. **Não é eu.** Eu não tenho acesso a essa informação.
+
+**Critério de aceite:**
+- Sem dados sensíveis de aluno (LGPD)
+- Números reais quando possível ("CPA do Desafio Lo-fi gira em R$ X")
+- Versionado: marcar data ("estado em 2026-04-XX")
+
+---
+
+### ⚠️ low-ticket-anti-padroes.md
+
+**Erros que matam conversão de low ticket:**
+- Tratar low ticket como high ticket (call de 1h pra vender R$ 47)
+- Justificar preço (vendedor inseguro vira gasto-defesa do produto)
+- Fake scarcity / countdown que reseta — destrói confiança a longo prazo
+- VSL com áudio ruim (low ticket vende em volume, qualidade técnica importa)
+- Não ter ordem dos bumps (ordem de exposição do oferta principal + bumps)
+- Aplicar Pain Funnel do Sandler em low ticket (cliente fecha tab)
+- Misturar low e high ticket no mesmo funil de aquecimento sem segmentação
+- Esquecer follow-up pós-venda (low ticket vivo de LTV via upsell)
+
+**Onde buscar:**
+- **Hormozi tem video específico "Mistakes I See"** no YouTube
+- **Time Pinguim** — quais erros já cometeram em lançamentos? Sócios têm essas histórias na cabeça
+
+---
+
+### 🎯 low-ticket-quando-usar.md (vs SPIN/MEDDIC)
+
+**Conteúdo:** Tabela direta de "use isto, não aquilo":
+
+| Cenário | Metodologia |
+|---|---|
+| Ticket < R$ 1K | low-ticket-digital |
+| Ticket R$ 1K-10K, ciclo médio | SPIN |
+| Ticket > R$ 10K, B2B complexo | MEDDIC |
+| Lançamento orquestrado | low-ticket + PLF |
+| Renovação de aluno | SPIN suave + Voss |
+| Aluno reclamando / pedindo reembolso | Voss (Tactical Empathy) |
+
+**Critério de aceite:**
+- Decisão clara em 5 segundos (agente vai usar como árvore de decisão)
+- Sem "depende" — cada cenário aponta uma metodologia primária
+
+---
+
+## Estimativa de esforço pra esse Cérebro
+
+- 11 arquivos eu posso estruturar baseado em fontes públicas: ~6-8h de trabalho meu
+- 1 arquivo (`low-ticket-casos-pinguim.md`) é dever de casa interno: ~3-4h do time pra produzir
+- Total: 1 sessão minha + 1 reunião do time comercial
+
+**Tamanho-alvo total:** ~200KB de conteúdo curado. **É o maior Cérebro de metodologia da Pinguim**, e propositalmente — é o core do negócio.
+
+---
 
 Toda fonte nova precisa atender:
 
