@@ -6,7 +6,7 @@ import { dataMode, fetchOperacaoData, fetchRoadmapData, fetchCerebrosCatalogo } 
 import { renderHome } from './home.js?v=20260421p';
 import { renderCerebros, initDrawer, abrirCerebroDetalhe } from './cerebros.js?v=20260421p';
 import { renderCrons } from './crons.js?v=20260421p';
-import { renderSkills, abrirSkillDetalhe } from './skills.js?v=20260427n';
+import { renderSkills, abrirSkillDetalhe } from './skills.js?v=20260427o';
 import { renderStub } from './stubs.js?v=20260421p';
 import { iconeNode } from './icone.js?v=20260425g';
 import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260425k';
@@ -454,8 +454,14 @@ async function loadSkillsTree() {
 // Loader: arvore de Personas (flat)
 async function loadPersonasTree() {
   const cerebros = await fetchCerebrosCatalogo();
+  // Personas SO existem para Cerebros Internos e Externos.
+  // Metodologias (SPIN, MEDDIC, etc) e Clones nao tem Persona.
   const lista = cerebros
     .filter(c => (c.total_fontes || 0) > 0)
+    .filter(c => {
+      const cat = c.categoria || 'interno';
+      return cat === 'interno' || cat === 'externo';
+    })
     .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
   return lista.map(c => {
