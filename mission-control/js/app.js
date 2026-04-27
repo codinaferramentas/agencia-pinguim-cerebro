@@ -298,9 +298,21 @@ async function loadCerebrosTree() {
       class: 'nav-cat' + (aberto ? ' open' : ''),
       type: 'button',
       title: labelFamilia[cat],
-      onclick: () => {
-        NAV_OPEN.cerebros_cat[cat] = !NAV_OPEN.cerebros_cat[cat];
+      onclick: async () => {
+        const vaiAbrir = !NAV_OPEN.cerebros_cat[cat];
+        // Comportamento: abrir uma categoria fecha as outras (uma por vez).
+        // Isso casa com o filtro da pagina principal — uma familia ativa.
+        if (vaiAbrir) {
+          ordemFamilias.forEach(c => { NAV_OPEN.cerebros_cat[c] = false; });
+          NAV_OPEN.cerebros_cat[cat] = true;
+        } else {
+          NAV_OPEN.cerebros_cat[cat] = false;
+        }
         persistNavOpen();
+        if (paginaAtual !== 'cerebros') await navegar('cerebros');
+        window.dispatchEvent(new CustomEvent('cerebro:filtrar-familia', {
+          detail: { categoria: vaiAbrir ? cat : null }
+        }));
         renderNavTree();
       },
     }, [
