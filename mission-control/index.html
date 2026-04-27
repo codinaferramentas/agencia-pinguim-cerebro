@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pinguim OS</title>
-<link rel="stylesheet" href="css/style.css?v=20260427a">
+<link rel="stylesheet" href="css/style.css?v=20260427b">
 </head>
 <body>
 <!-- Botao hamburger (so mobile) -->
@@ -16,65 +16,45 @@
 
 <div class="app">
 
-  <!-- Sidebar de navegação (flat, estilo Vercel) -->
+  <!-- Rail estreito — sempre visivel, so icones (modelo dois-colunas) -->
   <nav class="nav">
-    <div class="nav-brand">
-      <img class="nav-brand-icon" src="img/pinguim-icon.svg" alt="">
-      <div class="nav-brand-wordmark">
-        <span class="nav-brand-name">Pinguim</span>
-        <span class="nav-brand-os">OS</span>
-      </div>
+    <div class="nav-brand" title="Pinguim OS">
+      <img class="nav-brand-icon" src="img/pinguim-icon.svg" alt="Pinguim OS">
     </div>
 
     <div class="nav-list">
-      <div class="nav-item has-sub active" data-page="cerebros">
-        <span class="nav-icon">⚛</span><span>Cérebros</span>
-        <span class="nav-caret">›</span>
-      </div>
-      <div class="nav-item has-sub" data-page="personas">
-        <span class="nav-icon">👤</span><span>Personas</span>
-        <span class="nav-caret">›</span>
-      </div>
-      <div class="nav-item" data-page="integracoes">
-        <span class="nav-icon">🔌</span><span>Integrações</span>
-      </div>
+      <button class="nav-item has-sub active" data-page="cerebros" type="button" title="Cérebros" aria-label="Cérebros">
+        <span class="nav-icon">⚛</span>
+      </button>
+      <button class="nav-item has-sub" data-page="personas" type="button" title="Personas" aria-label="Personas">
+        <span class="nav-icon">👤</span>
+      </button>
+      <button class="nav-item" data-page="integracoes" type="button" title="Integrações" aria-label="Integrações">
+        <span class="nav-icon">🔌</span>
+      </button>
     </div>
 
     <div class="nav-footer">
-      <div class="nav-item nav-item-footer has-sub" data-page="docs" title="Documentação do sistema">
-        <span class="nav-icon">📖</span><span>Documentação</span>
-        <span class="nav-caret">›</span>
-      </div>
-      <div id="nav-env-badge">V0 · Carregando…</div>
-      <div id="nav-env-hint">mission-control.local</div>
-      <button id="nav-squad-toggle" class="nav-squad-toggle" type="button" title="Liga/desliga a animacao do Squad de agentes ao gerar persona">
+      <button class="nav-item nav-item-footer has-sub" data-page="docs" type="button" title="Documentação" aria-label="Documentação">
+        <span class="nav-icon">📖</span>
+      </button>
+      <button id="nav-squad-toggle" class="nav-squad-toggle" type="button" title="Liga/desliga a animação do Squad ao gerar persona" aria-label="Squad">
         <span class="squad-toggle-led"></span>
-        <span id="nav-squad-label">Squad · off</span>
       </button>
-      <button id="nav-logout" class="nav-logout" type="button" title="Sair">
-        <span>↪</span> Sair
+      <button id="nav-logout" class="nav-logout" type="button" title="Sair" aria-label="Sair">
+        <span>↪</span>
       </button>
+      <div id="nav-env-badge" title="Ambiente">V0</div>
     </div>
   </nav>
 
-  <!-- Sub-sidebar contextual — SUBSTITUI a nav principal (não empilha) -->
+  <!-- Subnav contextual — abre ao lado do rail (nao substitui mais) -->
   <aside class="subnav" id="subnav" aria-hidden="true">
-    <div class="nav-brand">
-      <img class="nav-brand-icon" src="img/pinguim-icon.svg" alt="">
-      <div class="nav-brand-wordmark">
-        <span class="nav-brand-name">Pinguim</span>
-        <span class="nav-brand-os">OS</span>
-      </div>
-    </div>
-    <button class="subnav-back-row" id="subnav-back" aria-label="Voltar">
-      <span class="subnav-back-icon">‹</span>
-      <span class="subnav-back-label" id="subnav-title">—</span>
+    <button class="subnav-header" id="subnav-back" type="button" title="Voltar pra listagem">
+      <span class="subnav-title" id="subnav-title">—</span>
     </button>
     <div class="subnav-body" id="subnav-body"></div>
-    <button class="subnav-collapse-btn" id="subnav-collapse" type="button" aria-label="Recolher sidebar" title="Recolher sidebar (Ctrl+B)">‹‹</button>
   </aside>
-  <!-- Botao flutuante pra reabrir o subnav quando recolhido -->
-  <button class="subnav-reopen-btn" id="subnav-reopen" type="button" aria-label="Mostrar sidebar" title="Mostrar sidebar (Ctrl+B)">››</button>
 
   <!-- Conteúdo -->
   <main class="main">
@@ -134,11 +114,11 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="module">
-  import { guard, logout } from './js/auth-gate.js?v=20260427a';
+  import { guard, logout } from './js/auth-gate.js?v=20260427b';
   const ok = await guard();
   if (ok) {
-    await import('./js/sb-client.js?v=20260427a');
-    await import('./js/app.js?v=20260427a');
+    await import('./js/sb-client.js?v=20260427b');
+    await import('./js/app.js?v=20260427b');
     const btn = document.getElementById('nav-logout');
     if (btn) btn.addEventListener('click', logout);
   }

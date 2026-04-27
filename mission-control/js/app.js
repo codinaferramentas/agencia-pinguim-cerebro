@@ -112,11 +112,42 @@ function setupMobileMenu() {
 }
 
 function setupNav() {
+  const STORAGE_KEY = 'pinguim_subnav_collapsed';
+  const app = document.querySelector('.app');
+
+  function isCollapsed() {
+    return app.classList.contains('subnav-collapsed');
+  }
+  function setCollapsed(collapsed) {
+    if (collapsed) app.classList.add('subnav-collapsed');
+    else app.classList.remove('subnav-collapsed');
+    try { localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); } catch {}
+  }
+  // Restaura estado salvo (mas so vale quando subnav estiver aberto)
+  try {
+    if (localStorage.getItem(STORAGE_KEY) === '1') setCollapsed(true);
+  } catch {}
+
+  // Header do subnav clicavel: volta pra listagem da pagina (limpa detalhe).
+  $('#subnav-back')?.addEventListener('click', async () => {
+    const page = subnavPageAtual || paginaAtual;
+    if (page) await navegar(page);
+    if (isMobile()) fecharMobileMenu();
+  });
+
   $$('.nav-item').forEach(item => {
     item.addEventListener('click', async () => {
       const pageSlug = item.dataset.page;
       if (item.classList.contains('has-sub')) {
-        // Navega + carrega subnav em paralelo, mas espera AMBOS terminarem
+        // Toggle: se ja esta nessa pagina E subnav aberto E nao colapsado, recolhe.
+        const mesmaPagina = subnavPageAtual === pageSlug;
+        const subnavAberto = app.classList.contains('with-subnav');
+        if (mesmaPagina && subnavAberto && !isCollapsed()) {
+          setCollapsed(true);
+          return;
+        }
+        // Caso contrario: garante subnav expandido e abre/troca
+        setCollapsed(false);
         await Promise.all([navegar(pageSlug), abrirSubnav(pageSlug)]);
       } else {
         fecharSubnav();
@@ -126,34 +157,12 @@ function setupNav() {
     });
   });
 
-  // Seta "Voltar" do subnav: limpa detalhe e volta pra listagem da página
-  // que está aberta no subnav (Cérebros ou Personas).
-  $('#subnav-back')?.addEventListener('click', async () => {
-    const page = subnavPageAtual || paginaAtual;
-    fecharSubnav();
-    if (page) await navegar(page);
-    if (isMobile()) fecharMobileMenu();
-  });
-
-  // Recolher / mostrar subnav
-  const STORAGE_KEY = 'pinguim_subnav_collapsed';
-  const app = document.querySelector('.app');
-  function setCollapsed(collapsed) {
-    if (collapsed) app.classList.add('subnav-collapsed');
-    else app.classList.remove('subnav-collapsed');
-    try { localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); } catch {}
-  }
-  // Restaura estado salvo
-  try {
-    if (localStorage.getItem(STORAGE_KEY) === '1') setCollapsed(true);
-  } catch {}
-  $('#subnav-collapse')?.addEventListener('click', () => setCollapsed(true));
-  $('#subnav-reopen')?.addEventListener('click', () => setCollapsed(false));
-  // Atalho Ctrl+B
+  // Atalho Ctrl+B: toggla colapso (so faz sentido com subnav aberto)
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+      if (!app.classList.contains('with-subnav')) return;
       e.preventDefault();
-      setCollapsed(!app.classList.contains('subnav-collapsed'));
+      setCollapsed(!isCollapsed());
     }
   });
 
@@ -460,16 +469,21 @@ async function atualizarStatusbar() {
   setInterval(updateHora, 1000);
 
   // Nav footer
-  $('#nav-env-badge').textContent = dataMode() === 'supabase' ? 'V0 · Supabase' : 'V0 · Offline';
-  const userEmail = await (async () => {
-    try {
-      const sb = (await import('./sb-client.js')).getSupabaseClient();
-      if (!sb) return null;
-      const { data } = await sb.auth.getUser();
-      return data?.user?.email || null;
-    } catch { return null; }
-  })();
-  $('#nav-env-hint').textContent = userEmail || (dataMode() === 'supabase' ? 'conectado ao banco' : 'modo offline');
+  const badge = $('#nav-env-badge');
+  if (badge) {
+    badge.textContent = 'V0';
+    const userEmail = await (async () => {
+      try {
+        const sb = (await import('./sb-client.js')).getSupabaseClient();
+        if (!sb) return null;
+        const { data } = await sb.auth.getUser();
+        return data?.user?.email || null;
+      } catch { return null; }
+    })();
+    badge.title = userEmail
+      ? `${userEmail} · ${dataMode() === 'supabase' ? 'Supabase' : 'Offline'}`
+      : (dataMode() === 'supabase' ? 'V0 · Supabase' : 'V0 · Offline');
+  }
 }
 
 /* -------- Telas migradas do V0 antigo -------- */
@@ -698,11 +712,12 @@ async function iniciarGeracaoComBarra(slug) {
 
 function setupSquadToggle() {
   const btn = $('#nav-squad-toggle');
-  const label = $('#nav-squad-label');
   if (!btn) return;
   const aplicar = (on) => {
     btn.classList.toggle('on', on);
-    label.textContent = on ? 'Squad · on' : 'Squad · off';
+    btn.title = on
+      ? 'Squad · ON — animação do Squad ligada'
+      : 'Squad · OFF — animação do Squad desligada';
   };
   aplicar(squadLigado());
   btn.addEventListener('click', () => {
@@ -1076,6 +1091,6 @@ function qualiCard(val, lbl, alerta = false) {
   setupSquadToggle();
   initDrawer();
   await atualizarStatusbar();
-  // Renderiza Home primeiro (tela default)
-  navegar('cerebros');
+  // Boot: abre Cérebros + subnav ja expandido (modelo dois-colunas)
+  await Promise.all([navegar('cerebros'), abrirSubnav('cerebros')]);
 })();
