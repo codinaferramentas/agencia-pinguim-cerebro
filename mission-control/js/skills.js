@@ -246,11 +246,13 @@ function montarDetalheCorpo(s) {
   const tabs = el('div', { style: 'display:flex;gap:.25rem;border-bottom:1px solid var(--border);margin-bottom:1rem' });
   const ABAS = [
     { id: 'editor', label: 'Editor' },
+    { id: 'playground', label: 'Playground', disponivel: !!PLAYGROUNDS[s.slug] },
     { id: 'aprendizados', label: 'Aprendizados' },
     { id: 'historico', label: 'Histórico' },
     { id: 'agentes', label: 'Agentes' },
   ];
   ABAS.forEach(aba => {
+    if (aba.disponivel === false) return;
     tabs.appendChild(el('button', {
       type: 'button',
       style: `background:transparent;border:0;border-bottom:2px solid ${abaAtual === aba.id ? 'var(--fg-title)' : 'transparent'};color:${abaAtual === aba.id ? 'var(--fg-title)' : 'var(--fg-muted)'};padding:.625rem 1rem;font-size:.8125rem;cursor:pointer;font-family:var(--font-heading);font-weight:${abaAtual === aba.id ? '600' : '400'}`,
@@ -285,10 +287,19 @@ async function trocarAba(s) {
 
 async function renderizarAba(s, corpo) {
   if (abaAtual === 'editor') return renderAbaEditor(s, corpo);
+  if (abaAtual === 'playground') return renderAbaPlayground(s, corpo);
   if (abaAtual === 'aprendizados') return renderAbaAprendizados(s, corpo);
   if (abaAtual === 'historico') return renderAbaHistorico(s, corpo);
   if (abaAtual === 'agentes') return renderAbaAgentes(s, corpo);
 }
+
+// Mapa de skills com playground real (chamam Edge Function existente)
+const PLAYGROUNDS = {
+  'buscar-cerebro': {
+    descricao: 'Testa busca semântica em um Cérebro do Pinguim. Faz a mesma chamada que um agente real faria.',
+    render: renderPlaygroundBuscarCerebro,
+  },
+};
 
 // ----- Aba: Editor -----
 async function renderAbaEditor(s, corpo) {
@@ -778,6 +789,177 @@ function campoSelectSimples(id, label, opcoes) {
       style: 'width:100%;background:var(--surface-1);border:1px solid var(--border);border-radius:6px;padding:.5rem .625rem;color:var(--fg);font-size:.8125rem;margin-bottom:.75rem',
     }, opcoes.map(o => el('option', { value: o.v }, o.l))),
   ]);
+}
+
+// =====================================================================
+// PLAYGROUND — testa skill real chamando Edge Function
+// =====================================================================
+async function renderAbaPlayground(s, corpo) {
+  const cfg = PLAYGROUNDS[s.slug];
+  if (!cfg) {
+    corpo.appendChild(el('div', { style: 'color:var(--fg-dim);font-style:italic;padding:2rem;text-align:center' },
+      'Playground ainda não disponível pra essa skill. Cada skill precisa de uma Edge Function própria pra rodar de verdade.'));
+    return;
+  }
+  corpo.appendChild(el('div', { style: 'color:var(--fg-muted);font-size:.8125rem;margin-bottom:1rem;padding:.625rem .875rem;background:var(--surface-2);border:1px solid var(--border-subtle);border-radius:6px' },
+    cfg.descricao));
+  await cfg.render(s, corpo);
+}
+
+async function renderPlaygroundBuscarCerebro(s, corpo) {
+  const sb = getSupabaseClient();
+  if (!sb) {
+    corpo.appendChild(el('div', { style: 'color:var(--danger)' }, 'Banco offline.'));
+    return;
+  }
+
+  // Carrega lista de Cerebros pra o select
+  const { data: cerebros } = await sb.from('vw_cerebros_catalogo').select('id, slug, nome, total_fontes').gt('total_fontes', 0).order('nome');
+
+  const wrap = el('div', { style: 'display:flex;flex-direction:column;gap:1rem' });
+
+  // Form
+  wrap.appendChild(el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:.75rem' }, [
+    el('div', {}, [
+      el('label', { style: 'display:block;font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Cérebro alvo'),
+      el('select', {
+        id: 'pg-cerebro',
+        style: 'width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:.5rem .625rem;color:var(--fg);font-size:.8125rem',
+      }, (cerebros || []).map(c => el('option', { value: c.id }, `${c.nome} (${c.total_fontes} fontes)`))),
+    ]),
+    el('div', {}, [
+      el('label', { style: 'display:block;font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Top K'),
+      el('input', {
+        id: 'pg-topk', type: 'number', min: '1', max: '20', value: '5',
+        style: 'width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:.5rem .625rem;color:var(--fg);font-size:.8125rem',
+      }),
+    ]),
+  ]));
+
+  wrap.appendChild(el('div', {}, [
+    el('label', { style: 'display:block;font-size:.625rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);font-family:var(--font-mono);margin-bottom:.25rem' }, 'Pergunta'),
+    el('textarea', {
+      id: 'pg-pergunta', rows: '3',
+      placeholder: 'Ex: "Como é estruturado o programa Elo?" ou "Quais objeções aparecem quando aluno questiona o preço?"',
+      style: 'width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:.625rem;color:var(--fg);font-size:.875rem;font-family:var(--font-body);resize:vertical',
+    }),
+  ]));
+
+  wrap.appendChild(el('button', {
+    id: 'pg-run',
+    class: 'btn btn-primary',
+    type: 'button',
+    style: 'align-self:flex-start',
+    onclick: () => executarBuscarCerebro(s),
+  }, '▶ Executar busca'));
+
+  wrap.appendChild(el('div', { id: 'pg-resultado', style: 'margin-top:.5rem' }));
+
+  corpo.appendChild(wrap);
+}
+
+async function executarBuscarCerebro(s) {
+  const cerebroEl = document.getElementById('pg-cerebro');
+  const perguntaEl = document.getElementById('pg-pergunta');
+  const topkEl = document.getElementById('pg-topk');
+  const resEl = document.getElementById('pg-resultado');
+  const btn = document.getElementById('pg-run');
+
+  const cerebro_id = cerebroEl?.value;
+  const query = perguntaEl?.value?.trim();
+  const top_k = Number(topkEl?.value || 5);
+
+  if (!cerebro_id || !query) { alert('Escolha Cérebro e digite a pergunta'); return; }
+
+  btn.disabled = true; btn.textContent = '⏳ Executando…';
+  resEl.innerHTML = '';
+
+  const sb = getSupabaseClient();
+  const t0 = Date.now();
+  let resultado, erroMsg = null, sucesso = true;
+
+  try {
+    const { data, error } = await sb.functions.invoke('buscar-cerebro', {
+      body: { cerebro_id, query, top_k },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    resultado = data;
+  } catch (e) {
+    sucesso = false;
+    erroMsg = e.message || String(e);
+  }
+
+  const duracao = Date.now() - t0;
+  btn.disabled = false; btn.textContent = '▶ Executar busca';
+
+  // Loga execucao
+  try {
+    await sb.from('skill_execucoes').insert({
+      skill_id: s.id,
+      cerebro_id,
+      input: { query, top_k },
+      output: resultado || null,
+      sucesso,
+      erro: erroMsg,
+      duracao_ms: duracao,
+      custo_usd: resultado?.custo_usd || null,
+    });
+    // Atualiza contador
+    await sb.from('skills').update({
+      total_execucoes: (s.total_execucoes || 0) + 1,
+      ultima_execucao: new Date().toISOString(),
+    }).eq('id', s.id);
+    s.total_execucoes = (s.total_execucoes || 0) + 1;
+    s.ultima_execucao = new Date().toISOString();
+  } catch (e) {
+    console.warn('log execucao falhou', e);
+  }
+
+  // Render resultado
+  if (!sucesso) {
+    resEl.appendChild(el('div', {
+      style: 'background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:1rem;color:#ef4444;font-size:.8125rem',
+    }, '❌ Erro: ' + erroMsg));
+    return;
+  }
+
+  // Header com metricas
+  resEl.appendChild(el('div', {
+    style: 'display:flex;gap:1rem;flex-wrap:wrap;padding:.75rem 1rem;background:var(--surface-2);border:1px solid var(--border-subtle);border-radius:8px;font-family:var(--font-mono);font-size:.6875rem;color:var(--fg-muted);margin-bottom:.75rem',
+  }, [
+    el('span', {}, `✓ ${resultado.total} resultado(s)`),
+    el('span', {}, `${duracao}ms`),
+    resultado.custo_usd ? el('span', {}, `$${resultado.custo_usd.toFixed(8)}`) : null,
+  ]));
+
+  // Lista chunks
+  if (resultado.total === 0) {
+    resEl.appendChild(el('div', { style: 'color:var(--fg-dim);font-style:italic;padding:1rem' },
+      'Nenhum chunk com similaridade suficiente. Cérebro pode não ter conteúdo sobre o assunto (gap de conhecimento).'));
+    return;
+  }
+
+  (resultado.resultados || []).forEach((r, i) => {
+    const scoreColor = r.similarity >= 0.7 ? '#22c55e' : r.similarity >= 0.5 ? '#f5a524' : '#666';
+    resEl.appendChild(el('div', {
+      style: 'background:var(--surface-2);border:1px solid var(--border-subtle);border-radius:8px;padding:.875rem;margin-bottom:.5rem',
+    }, [
+      el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;font-size:.75rem' }, [
+        el('div', {}, [
+          el('span', { style: 'font-family:var(--font-mono);color:var(--fg-dim)' }, `#${i + 1}`),
+          el('span', { style: 'margin-left:.5rem;color:var(--fg-title);font-weight:600' }, r.titulo || '(sem título)'),
+          el('span', { style: 'margin-left:.5rem;color:var(--fg-dim);text-transform:uppercase;font-size:.625rem;font-family:var(--font-mono)' }, r.tipo || ''),
+        ]),
+        el('span', {
+          style: `font-family:var(--font-mono);font-size:.75rem;color:${scoreColor};font-weight:600`,
+        }, `${(r.similarity * 100).toFixed(1)}%`),
+      ]),
+      el('div', {
+        style: 'color:var(--fg-muted);font-size:.8125rem;line-height:1.55;white-space:pre-wrap',
+      }, r.conteudo),
+    ]));
+  });
 }
 
 async function criarSkill(overlay) {
