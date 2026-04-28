@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pinguim OS</title>
-<link rel="stylesheet" href="css/style.css?v=20260428c">
+<link rel="stylesheet" href="css/style.css?v=20260428d">
 </head>
 <body>
 <!-- Botao hamburger (so mobile) -->
@@ -34,6 +34,10 @@
     </div>
 
     <div class="nav-footer">
+      <button class="nav-item nav-item-footer" data-page="mapa" type="button" title="Mapa do Sistema — visão geral pra apresentação">
+        <span class="nav-icon">🗺️</span>
+        <span class="nav-label">Mapa do Sistema</span>
+      </button>
       <button class="nav-item nav-item-footer" data-page="docs" type="button" title="Documentação">
         <span class="nav-icon">📖</span>
         <span class="nav-label">Documentação</span>
@@ -108,11 +112,11 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="module">
-  import { guard, logout } from './js/auth-gate.js?v=20260428c';
+  import { guard, logout } from './js/auth-gate.js?v=20260428d';
   const ok = await guard();
   if (ok) {
-    await import('./js/sb-client.js?v=20260428c');
-    await import('./js/app.js?v=20260428c');
+    await import('./js/sb-client.js?v=20260428d');
+    await import('./js/app.js?v=20260428d');
     const btn = document.getElementById('nav-logout');
     if (btn) btn.addEventListener('click', logout);
   }

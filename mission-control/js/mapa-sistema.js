@@ -82,12 +82,14 @@ function metricBadge(valor, label) {
   ]);
 }
 
-function bloco({ icone, nome, descricao, metrics = [], pagina = null, status = 'ativo' }) {
+const STATUS_LABEL = { ativo: 'Ativo', em_construcao: 'Em construção', planejado: 'Planejado' };
+
+function bloco({ icone, nome, descricao, metrics = [], pagina = null, status = 'ativo', dica = null }) {
   const props = {
     class: `mapa-bloco status-${status}`,
     data: { status },
   };
-  if (pagina) {
+  if (pagina && status === 'ativo') {
     props.role = 'button';
     props.tabindex = '0';
     props.onclick = () => window.dispatchEvent(new CustomEvent('mapa:navegar', { detail: { slug: pagina } }));
@@ -96,8 +98,10 @@ function bloco({ icone, nome, descricao, metrics = [], pagina = null, status = '
     el('div', { class: 'mapa-bloco-head' }, [
       el('span', { class: 'mapa-bloco-icone' }, icone),
       el('div', { class: 'mapa-bloco-nome' }, nome),
+      el('span', { class: `mapa-bloco-selo status-${status}` }, STATUS_LABEL[status] || status),
     ]),
     el('div', { class: 'mapa-bloco-desc' }, descricao),
+    dica ? el('div', { class: 'mapa-bloco-dica', title: dica }, `ⓘ ${dica}`) : null,
     metrics.length
       ? el('div', { class: 'mapa-bloco-metrics' }, metrics.map(m => metricBadge(m.valor, m.label)))
       : null,
@@ -148,9 +152,9 @@ export async function renderMapaSistema() {
         el('div', { class: 'mapa-hero-stat-valor' }, String(m.totalFontes)),
         el('div', { class: 'mapa-hero-stat-label' }, 'Fontes ingeridas'),
       ]),
-      el('div', { class: 'mapa-hero-stat' }, [
+      el('div', { class: 'mapa-hero-stat', title: 'Cada fonte é quebrada em pedaços (parágrafos, blocos) e indexada por significado. Quando um agente precisa de algo, busca o trecho certo — não o documento inteiro. Reduz custo de IA.' }, [
         el('div', { class: 'mapa-hero-stat-valor' }, m.totalChunks.toLocaleString('pt-BR')),
-        el('div', { class: 'mapa-hero-stat-label' }, 'Chunks vetorizados'),
+        el('div', { class: 'mapa-hero-stat-label' }, 'Trechos de conhecimento'),
       ]),
       el('div', { class: 'mapa-hero-stat' }, [
         el('div', { class: 'mapa-hero-stat-valor' }, String(m.totalProvas)),
@@ -161,12 +165,12 @@ export async function renderMapaSistema() {
 
   // CAMADA 1 — CAPTACAO
   wrap.appendChild(camada(1, 'Captação', 'Conteúdo entra de qualquer canal — uma única fila de ingestão', [
-    bloco({ icone: '💬', nome: 'Discord', descricao: 'Canal #depoimentos varrido automaticamente. Vision processa prints, Whisper transcreve áudios.', status: 'ativo' }),
-    bloco({ icone: '📱', nome: 'WhatsApp', descricao: 'Grupos de alunos viram fonte. Z-API / Evolution.', status: 'em_construcao' }),
-    bloco({ icone: '✈️', nome: 'Telegram', descricao: 'Canais e grupos monitorados.', status: 'em_construcao' }),
-    bloco({ icone: '⬆️', nome: 'Upload manual', descricao: 'Arquivo, URL, transcrição. Avulso ou em pacote.', pagina: 'cerebros', status: 'ativo' }),
-    bloco({ icone: '🔌', nome: 'Integrações', descricao: 'YouTube, Instagram, TikTok via RapidAPI/Apify.', metrics: [{ valor: m.totalIntegracoes, label: 'plugadas' }], pagina: 'integracoes', status: 'ativo' }),
-    bloco({ icone: '📋', nome: 'Pesquisas', descricao: 'Forms de aluno novo. Google Forms / Typeform.', status: 'em_construcao' }),
+    bloco({ icone: '💬', nome: 'Discord', descricao: 'Canal #depoimentos varrido automaticamente. Vision lê prints, Whisper transcreve áudios.', status: 'ativo' }),
+    bloco({ icone: '⬆️', nome: 'Upload', descricao: 'Arquivo, URL ou texto direto. Sistema processa, vetoriza e arquiva no Cérebro.', pagina: 'cerebros', status: 'ativo' }),
+    bloco({ icone: '🔌', nome: 'Integrações', descricao: 'YouTube, Instagram, TikTok via APIs externas. Capta conteúdo público pra alimentar Cérebros.', metrics: [{ valor: m.totalIntegracoes, label: 'plugadas' }], pagina: 'integracoes', status: m.totalIntegracoes > 0 ? 'ativo' : 'em_construcao' }),
+    bloco({ icone: '📱', nome: 'WhatsApp', descricao: 'Grupos de alunos viram fonte. Z-API / Evolution API.', status: 'planejado' }),
+    bloco({ icone: '✈️', nome: 'Telegram', descricao: 'Canais e grupos monitorados.', status: 'planejado' }),
+    bloco({ icone: '📋', nome: 'Pesquisas', descricao: 'Forms de aluno novo. Google Forms / Typeform.', status: 'planejado' }),
   ]));
 
   wrap.appendChild(seta());
@@ -178,28 +182,28 @@ export async function renderMapaSistema() {
       descricao: 'Produtos da própria empresa. Cada produto tem 1 Cérebro com aulas, depoimentos, objeções, sacadas.',
       metrics: [{ valor: m.familias.interno, label: 'ativos' }],
       pagina: 'cerebros',
-      status: m.familias.interno > 0 ? 'ativo' : 'em_construcao',
-    }),
-    bloco({
-      icone: '🔍', nome: 'Externos',
-      descricao: 'Cérebros de concorrentes. Inteligência de mercado pra responder gaps e benchmarks.',
-      metrics: [{ valor: m.familias.externo, label: 'ativos' }],
-      pagina: 'cerebros',
-      status: m.familias.externo > 0 ? 'ativo' : 'em_construcao',
+      status: m.familias.interno > 0 ? 'ativo' : 'planejado',
     }),
     bloco({
       icone: '📚', nome: 'Metodologias',
       descricao: 'Biblioteca universal: SPIN, Sandler, Challenger, Voss, MEDDIC, Hormozi. Reutilizável por qualquer agente.',
       metrics: [{ valor: m.familias.metodologia, label: 'curadas' }],
       pagina: 'cerebros',
-      status: m.familias.metodologia > 0 ? 'ativo' : 'em_construcao',
+      status: m.familias.metodologia > 0 ? 'ativo' : 'planejado',
+    }),
+    bloco({
+      icone: '🔍', nome: 'Externos',
+      descricao: 'Cérebros de concorrentes. Inteligência de mercado pra responder gaps e benchmarks.',
+      metrics: [{ valor: m.familias.externo, label: 'ativos' }],
+      pagina: 'cerebros',
+      status: m.familias.externo > 0 ? 'ativo' : 'planejado',
     }),
     bloco({
       icone: '👤', nome: 'Clones',
       descricao: 'Pessoas. Sócios, conselheiros, gurus. Agente combina Cérebro de produto + Clone de pessoa.',
       metrics: [{ valor: m.familias.clone, label: 'ativos' }],
       pagina: 'cerebros',
-      status: m.familias.clone > 0 ? 'ativo' : 'em_construcao',
+      status: m.familias.clone > 0 ? 'ativo' : 'planejado',
     }),
   ]));
 
@@ -214,6 +218,12 @@ export async function renderMapaSistema() {
       status: 'ativo',
     }),
     bloco({
+      icone: '🔁', nome: 'RAG · Busca semântica',
+      descricao: 'Busca pelo significado, não pela palavra. Pergunta "objeção de preço" e o sistema acha depoimentos que falam de "tá caro", "não cabe no bolso", etc.',
+      metrics: [{ valor: m.totalChunks.toLocaleString('pt-BR'), label: 'trechos' }],
+      status: 'ativo',
+    }),
+    bloco({
       icone: '🛠', nome: 'Skills',
       descricao: 'Receitas em Markdown que os agentes leem e executam. Padrão Anthropic. Capacidade reutilizável.',
       metrics: [
@@ -221,41 +231,64 @@ export async function renderMapaSistema() {
         { valor: m.skillsConstrucao, label: 'construindo' },
       ],
       pagina: 'skills',
-      status: m.skillsAtivas > 0 ? 'ativo' : 'em_construcao',
+      status: (m.skillsAtivas + m.skillsConstrucao) > 0 ? (m.skillsAtivas > 0 ? 'ativo' : 'em_construcao') : 'planejado',
     }),
     bloco({
       icone: '🤖', nome: 'Squad de Agentes',
       descricao: 'Agentes especialistas por departamento. Atuam em paralelo, gerando assets de marketing e vendas.',
-      metrics: [{ valor: m.totalAgentes, label: 'agentes' }],
-      pagina: 'agentes',
-      status: m.totalAgentes > 0 ? 'ativo' : 'em_construcao',
-    }),
-    bloco({
-      icone: '🔁', nome: 'RAG (Retrieval)',
-      descricao: 'Busca semântica em todos os Cérebros. Reduz custo de IA porque só envia o trecho certo, não o livro inteiro.',
-      metrics: [{ valor: m.totalChunks.toLocaleString('pt-BR'), label: 'chunks' }],
-      status: 'ativo',
+      metrics: m.totalAgentes > 0 ? [{ valor: m.totalAgentes, label: 'agentes' }] : [],
+      pagina: m.totalAgentes > 0 ? 'agentes' : null,
+      status: m.totalAgentes > 0 ? 'ativo' : 'planejado',
     }),
   ]));
 
   wrap.appendChild(seta());
 
   // CAMADA 4 — ENTREGA
-  wrap.appendChild(camada(4, 'Entrega', 'O que vai pro cliente final — e volta pro Cérebro como nova fonte', [
-    bloco({ icone: '✍️', nome: 'Copy', descricao: 'Páginas de vendas, anúncios, e-mails, scripts. Tom da marca, baseado em depoimento real.', status: 'em_construcao' }),
-    bloco({ icone: '📄', nome: 'Páginas', descricao: 'Landing pages e páginas de captura geradas a partir da Persona + Cérebro do produto.', status: 'em_construcao' }),
-    bloco({ icone: '📊', nome: 'Campanhas', descricao: 'Estrutura de lançamento, criativos, sequência de e-mails. Pronto pra subir no tráfego.', status: 'em_construcao' }),
-    bloco({ icone: '🎯', nome: 'Comercial', descricao: 'SDR, briefing pré-call, co-piloto do closer, analista pós-call. Aprovação Luís → roadmap 5 agentes.', status: 'em_construcao' }),
-    bloco({ icone: '💬', nome: 'Atendimento', descricao: 'Suporte por produto. Aluno pergunta no Discord/WA, agente responde com base no Cérebro.', status: 'em_construcao' }),
-    bloco({ icone: '📈', nome: 'Relatórios', descricao: 'Dashboards e relatórios de saúde do Cérebro, gaps de conteúdo, performance comercial.', status: 'em_construcao' }),
+  wrap.appendChild(camada(4, 'Entrega', 'O que vai pro cliente final — e (ver loop EPP abaixo) realimenta o Cérebro', [
+    bloco({ icone: '✍️', nome: 'Copy', descricao: 'Páginas de vendas, anúncios, e-mails, scripts. Tom da marca, baseado em depoimento real.', status: 'planejado' }),
+    bloco({ icone: '📄', nome: 'Páginas', descricao: 'Landing pages e páginas de captura geradas a partir da Persona + Cérebro do produto.', status: 'planejado' }),
+    bloco({ icone: '📊', nome: 'Campanhas', descricao: 'Estrutura de lançamento, criativos, sequência de e-mails. Pronto pra subir no tráfego.', status: 'planejado' }),
+    bloco({ icone: '🎯', nome: 'Comercial', descricao: 'SDR, briefing pré-call, co-piloto do closer, analista pós-call. Aguarda aprovação do plano comercial.', status: 'planejado' }),
+    bloco({ icone: '💬', nome: 'Atendimento', descricao: 'Suporte por produto. Aluno pergunta no Discord/WA, agente responde com base no Cérebro.', status: 'planejado' }),
+    bloco({ icone: '📈', nome: 'Relatórios', descricao: 'Dashboards e relatórios de saúde do Cérebro, gaps de conteúdo, performance comercial.', status: 'planejado' }),
   ]));
 
-  // Loop de aprendizado
-  wrap.appendChild(el('div', { class: 'mapa-loop' }, [
-    el('div', { class: 'mapa-loop-icone' }, '↻'),
-    el('div', {}, [
-      el('div', { class: 'mapa-loop-titulo' }, 'O sistema aprende sozinho'),
-      el('div', { class: 'mapa-loop-desc' }, 'Tudo que é entregue (copy, página, atendimento) volta pro Cérebro como nova fonte. Quanto mais o sistema roda, mais inteligente fica — sem precisar treinar nada.'),
+  // EPP — Evolução Permanente Pessoal (princípio que conecta tudo)
+  wrap.appendChild(el('div', { class: 'mapa-epp' }, [
+    el('div', { class: 'mapa-epp-head' }, [
+      el('div', { class: 'mapa-epp-icone' }, '↻'),
+      el('div', {}, [
+        el('div', { class: 'mapa-epp-eyebrow' }, 'EPP — Evolução Permanente Pessoal'),
+        el('div', { class: 'mapa-epp-titulo' }, 'O Pinguim OS fica mais inteligente a cada uso'),
+        el('div', { class: 'mapa-epp-lede' }, 'Premissa dura: nenhum agente do Pinguim é estático. Todos seguem o mesmo ciclo.'),
+      ]),
+    ]),
+    el('div', { class: 'mapa-epp-mecanismos' }, [
+      el('div', { class: 'mapa-epp-mec status-ativo' }, [
+        el('div', { class: 'mapa-epp-mec-num' }, '1'),
+        el('div', {}, [
+          el('div', { class: 'mapa-epp-mec-titulo' }, 'Captação alimenta o Cérebro'),
+          el('div', { class: 'mapa-epp-mec-desc' }, 'Toda fonte que entra (Discord, Upload, Integração) é vetorizada na hora e fica disponível pra busca semântica. Nada se perde.'),
+          el('div', { class: 'mapa-epp-mec-status' }, '✓ Em produção'),
+        ]),
+      ]),
+      el('div', { class: 'mapa-epp-mec status-em_construcao' }, [
+        el('div', { class: 'mapa-epp-mec-num' }, '2'),
+        el('div', {}, [
+          el('div', { class: 'mapa-epp-mec-titulo' }, 'Output aprovado vira referência'),
+          el('div', { class: 'mapa-epp-mec-desc' }, 'Quando uma persona, copy ou página é aprovada, ela é salva como nova fonte do Cérebro. Próxima geração já tem essa referência como exemplo do que funciona.'),
+          el('div', { class: 'mapa-epp-mec-status' }, '⧗ Em construção'),
+        ]),
+      ]),
+      el('div', { class: 'mapa-epp-mec status-planejado' }, [
+        el('div', { class: 'mapa-epp-mec-num' }, '3'),
+        el('div', {}, [
+          el('div', { class: 'mapa-epp-mec-titulo' }, 'Feedback humano vira contexto'),
+          el('div', { class: 'mapa-epp-mec-desc' }, 'Cada execução é logada. Você dá 👍/👎 ou comentário. Antes da próxima geração, o agente lê os feedbacks anteriores e ajusta — sem fine-tuning, sem treinar modelo.'),
+          el('div', { class: 'mapa-epp-mec-status' }, '◯ Planejado'),
+        ]),
+      ]),
     ]),
   ]));
 
@@ -263,11 +296,15 @@ export async function renderMapaSistema() {
   wrap.appendChild(el('footer', { class: 'mapa-legenda' }, [
     el('div', { class: 'mapa-legenda-item' }, [
       el('span', { class: 'mapa-legenda-dot status-ativo' }),
-      el('span', {}, 'Em produção'),
+      el('span', {}, 'Ativo'),
     ]),
     el('div', { class: 'mapa-legenda-item' }, [
       el('span', { class: 'mapa-legenda-dot status-em_construcao' }),
       el('span', {}, 'Em construção'),
+    ]),
+    el('div', { class: 'mapa-legenda-item' }, [
+      el('span', { class: 'mapa-legenda-dot status-planejado' }),
+      el('span', {}, 'Planejado'),
     ]),
     el('div', { class: 'mapa-legenda-rodape' }, 'Métricas atualizadas em tempo real do banco do Pinguim OS.'),
   ]));

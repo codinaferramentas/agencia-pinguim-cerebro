@@ -11,7 +11,7 @@ import { renderStub } from './stubs.js?v=20260421p';
 import { iconeNode } from './icone.js?v=20260425g';
 import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260428a';
 import { renderIntegracoes } from './integracoes.js?v=20260425n';
-import { renderMapaSistema } from './mapa-sistema.js?v=20260428c';
+import { renderMapaSistema } from './mapa-sistema.js?v=20260428d';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
@@ -211,7 +211,6 @@ function persistNavOpen() {
 }
 
 const NAV_PRIMARY = [
-  { slug: 'mapa',        label: 'Mapa do Sistema', icon: '🗺️', tree: false },
   { slug: 'cerebros',    label: 'Cérebros',    icon: '⚛',  tree: true,  treeLoader: () => loadCerebrosTree() },
   { slug: 'skills',      label: 'Skills',      icon: '🛠', tree: true,  treeLoader: () => loadSkillsTree() },
   { slug: 'personas',    label: 'Personas',    icon: '👤', tree: true,  treeLoader: () => loadPersonasTree() },
