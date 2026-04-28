@@ -140,9 +140,9 @@ export async function renderMapaSistema() {
 
   // Hero
   wrap.appendChild(el('header', { class: 'mapa-hero' }, [
-    el('div', { class: 'mapa-hero-eyebrow' }, 'Pinguim OS'),
+    el('div', { class: 'mapa-hero-eyebrow' }, 'O Framework Pinguim'),
     el('h1', { class: 'mapa-hero-titulo' }, 'Mapa do Sistema'),
-    el('p', { class: 'mapa-hero-lede' }, 'Como uma agência de IA opera de ponta a ponta — captação, memória, inteligência e entrega — em uma única infraestrutura.'),
+    el('p', { class: 'mapa-hero-lede' }, 'Não é um SaaS. Não é um Notion. É a infraestrutura que faz uma agência de IA operar como um organismo vivo — onde cada entrega volta como aprendizado, e cada agente fica mais inteligente a cada uso.'),
     el('div', { class: 'mapa-hero-stats' }, [
       el('div', { class: 'mapa-hero-stat' }, [
         el('div', { class: 'mapa-hero-stat-valor' }, String(m.cerebrosTotal)),
@@ -245,7 +245,7 @@ export async function renderMapaSistema() {
   wrap.appendChild(seta());
 
   // CAMADA 4 — ENTREGA
-  wrap.appendChild(camada(4, 'Entrega', 'O que vai pro cliente final — e (ver loop EPP abaixo) realimenta o Cérebro', [
+  wrap.appendChild(camada(4, 'Entrega', 'O que vai pro cliente final — e que volta como aprendizado pelo loop EPP', [
     bloco({ icone: '✍️', nome: 'Copy', descricao: 'Páginas de vendas, anúncios, e-mails, scripts. Tom da marca, baseado em depoimento real.', status: 'planejado' }),
     bloco({ icone: '📄', nome: 'Páginas', descricao: 'Landing pages e páginas de captura geradas a partir da Persona + Cérebro do produto.', status: 'planejado' }),
     bloco({ icone: '📊', nome: 'Campanhas', descricao: 'Estrutura de lançamento, criativos, sequência de e-mails. Pronto pra subir no tráfego.', status: 'planejado' }),
@@ -254,42 +254,50 @@ export async function renderMapaSistema() {
     bloco({ icone: '📈', nome: 'Relatórios', descricao: 'Dashboards e relatórios de saúde do Cérebro, gaps de conteúdo, performance comercial.', status: 'planejado' }),
   ]));
 
-  // EPP — Evolução Permanente Pessoal (princípio que conecta tudo)
-  wrap.appendChild(el('div', { class: 'mapa-epp' }, [
-    el('div', { class: 'mapa-epp-head' }, [
-      el('div', { class: 'mapa-epp-icone' }, '↻'),
-      el('div', {}, [
-        el('div', { class: 'mapa-epp-eyebrow' }, 'EPP — Evolução Permanente Pessoal'),
-        el('div', { class: 'mapa-epp-titulo' }, 'O Pinguim OS fica mais inteligente a cada uso'),
-        el('div', { class: 'mapa-epp-lede' }, 'Premissa dura: nenhum agente do Pinguim é estático. Todos seguem o mesmo ciclo.'),
-      ]),
+  // Realimenta — fecha o ciclo
+  wrap.appendChild(el('div', { class: 'mapa-realimenta' }, [
+    el('div', { class: 'mapa-realimenta-curva' }, [
+      el('span', { class: 'mapa-realimenta-icone' }, '↺'),
+      el('span', { class: 'mapa-realimenta-label' }, 'Toda entrega aprovada realimenta o Cérebro'),
     ]),
+  ]));
+
+  // EPP — manifesto + 3 leis
+  wrap.appendChild(el('section', { class: 'mapa-epp' }, [
+    el('div', { class: 'mapa-epp-manifesto' }, [
+      el('div', { class: 'mapa-epp-eyebrow' }, 'Protocolo EPP — Evolução Permanente Pinguim'),
+      el('h2', { class: 'mapa-epp-titulo' }, 'Agente Pinguim ≠ Chatbot'),
+      el('p', { class: 'mapa-epp-claim' }, 'Um chatbot responde. Um Agente Pinguim evolui.'),
+      el('p', { class: 'mapa-epp-lede' }, 'Toda execução é registrada. Toda entrega aprovada vira referência. Todo feedback humano vira contexto da próxima rodada. O agente que você usa hoje é melhor que o agente de ontem — sem retreino, sem custo extra de IA, sem trabalho do time. Esse é o protocolo aplicado em todo agente que sai do Pinguim OS.'),
+    ]),
+    el('div', { class: 'mapa-epp-leis-titulo' }, 'As 3 leis do EPP'),
     el('div', { class: 'mapa-epp-mecanismos' }, [
       el('div', { class: 'mapa-epp-mec status-ativo' }, [
         el('div', { class: 'mapa-epp-mec-num' }, '1'),
-        el('div', {}, [
+        el('div', { class: 'mapa-epp-mec-corpo' }, [
+          el('div', { class: 'mapa-epp-mec-eyebrow' }, '✓ Em produção'),
           el('div', { class: 'mapa-epp-mec-titulo' }, 'Captação alimenta o Cérebro'),
-          el('div', { class: 'mapa-epp-mec-desc' }, 'Toda fonte que entra (Discord, Upload, Integração) é vetorizada na hora e fica disponível pra busca semântica. Nada se perde.'),
-          el('div', { class: 'mapa-epp-mec-status' }, '✓ Em produção'),
+          el('div', { class: 'mapa-epp-mec-desc' }, 'Toda fonte que entra (Discord, Upload, Integração) é processada e indexada na hora. Vira parte da memória disponível pra qualquer agente buscar — sem ensinar de novo.'),
         ]),
       ]),
       el('div', { class: 'mapa-epp-mec status-em_construcao' }, [
         el('div', { class: 'mapa-epp-mec-num' }, '2'),
-        el('div', {}, [
+        el('div', { class: 'mapa-epp-mec-corpo' }, [
+          el('div', { class: 'mapa-epp-mec-eyebrow' }, '⧗ Em construção'),
           el('div', { class: 'mapa-epp-mec-titulo' }, 'Output aprovado vira referência'),
-          el('div', { class: 'mapa-epp-mec-desc' }, 'Quando uma persona, copy ou página é aprovada, ela é salva como nova fonte do Cérebro. Próxima geração já tem essa referência como exemplo do que funciona.'),
-          el('div', { class: 'mapa-epp-mec-status' }, '⧗ Em construção'),
+          el('div', { class: 'mapa-epp-mec-desc' }, 'Persona, copy ou página aprovada é salva como nova fonte do Cérebro. Próxima geração consulta "o que já funcionou aqui" e usa de exemplo. O melhor trabalho de hoje vira ponto de partida do trabalho de amanhã.'),
         ]),
       ]),
       el('div', { class: 'mapa-epp-mec status-planejado' }, [
         el('div', { class: 'mapa-epp-mec-num' }, '3'),
-        el('div', {}, [
+        el('div', { class: 'mapa-epp-mec-corpo' }, [
+          el('div', { class: 'mapa-epp-mec-eyebrow' }, '◯ Planejado'),
           el('div', { class: 'mapa-epp-mec-titulo' }, 'Feedback humano vira contexto'),
-          el('div', { class: 'mapa-epp-mec-desc' }, 'Cada execução é logada. Você dá 👍/👎 ou comentário. Antes da próxima geração, o agente lê os feedbacks anteriores e ajusta — sem fine-tuning, sem treinar modelo.'),
-          el('div', { class: 'mapa-epp-mec-status' }, '◯ Planejado'),
+          el('div', { class: 'mapa-epp-mec-desc' }, 'Cada execução é logada. Você dá 👍/👎 ou comentário. Antes da próxima geração, o agente lê os feedbacks anteriores e ajusta — sem fine-tuning, sem treinar modelo. É contexto acumulado, não modelo retreinado.'),
         ]),
       ]),
     ]),
+    el('div', { class: 'mapa-epp-rodape' }, 'EPP é premissa dura. Nenhum agente do Pinguim OS sai daqui sem responder a essas 3 leis.'),
   ]));
 
   // Legenda de status

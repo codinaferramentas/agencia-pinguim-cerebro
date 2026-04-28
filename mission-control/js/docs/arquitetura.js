@@ -41,23 +41,25 @@ export async function gerar() {
       },
       {
         id: 'epp',
-        titulo: 'EPP — Evolução Permanente Pessoal',
+        titulo: 'EPP — Evolução Permanente Pinguim',
         html: `
-          <p>Premissa dura do Pinguim OS: <strong>nenhum agente é estático</strong>. Todo agente nasce sabendo seguir três regras — e quem não segue, não é agente Pinguim, é só um prompt.</p>
+          <p><strong>Agente Pinguim ≠ chatbot.</strong> Um chatbot responde. Um Agente Pinguim evolui.</p>
+          <p>Premissa dura do Pinguim OS: nenhum agente é estático. Todo agente nasce sabendo seguir três leis — e quem não segue, não é agente Pinguim, é só um prompt.</p>
+          <p><em>Origem da sigla:</em> EPP nasceu como "Evolução Permanente Pessoal", método criado pelo André Codina pra evolução individual contínua. Quando virou protocolo de agente, o segundo P passou a significar Pinguim — mesma sigla, mesma filosofia, agora aplicada à empresa.</p>
 
-          <h3>Mecanismo 1 — Captação alimenta o Cérebro <em>(em produção)</em></h3>
+          <h3>Lei 1 — Captação alimenta o Cérebro <em>(em produção)</em></h3>
           <p>Toda fonte que entra (Discord, Upload, Integração) é processada e indexada na hora. Vira parte da memória disponível pra qualquer agente buscar. Nada se perde, nada precisa ser ensinado de novo.</p>
 
-          <h3>Mecanismo 2 — Output aprovado vira referência <em>(em construção)</em></h3>
+          <h3>Lei 2 — Output aprovado vira referência <em>(em construção)</em></h3>
           <p>Quando você aprova uma persona, copy ou página gerada por agente, ela é salva como <strong>nova fonte do Cérebro</strong>. Na próxima geração, o agente consulta "o que já funcionou aqui" e usa de exemplo.</p>
           <p>Exemplo prático: você pede uma página pro Elo, gera, ajusta o título, aprova. Da próxima vez que alguém pedir página pro Elo, o agente lê: "essa página foi aprovada com esse padrão de título", e segue na mesma direção.</p>
 
-          <h3>Mecanismo 3 — Feedback humano vira contexto <em>(planejado)</em></h3>
+          <h3>Lei 3 — Feedback humano vira contexto <em>(planejado)</em></h3>
           <p>Cada execução de agente é logada (input, output, contexto usado). Você dá 👍/👎 ou comentário livre. Antes da próxima geração do mesmo tipo, o agente lê os feedbacks anteriores e ajusta — sem treinar modelo, sem fine-tuning. É contexto acumulado.</p>
           <p>Exemplo: você diz pro agente de copy "evite gatilhos de medo no Elo, o público reage mal". Da próxima copy pro Elo, esse aprendizado entra no prompt automaticamente.</p>
 
           <h3>Por que importa</h3>
-          <p>Sem EPP, agente IA é fotografia: nasce bom, envelhece igual. Com EPP, agente é vídeo: cada uso o melhora. <strong>Quanto mais o sistema roda, mais inteligente fica</strong> — e isso acontece sem retreino, sem custo extra de IA, sem trabalho adicional do time.</p>
+          <p>Sem EPP, agente IA é fotografia: nasce bom, envelhece igual. Com EPP, agente é vídeo: cada uso o melhora. <strong>O agente que você usa hoje é melhor que o agente de ontem</strong> — sem retreino, sem custo extra de IA, sem trabalho adicional do time. É infraestrutura que vira ativo, não software que vira passivo.</p>
         `,
       },
       {
