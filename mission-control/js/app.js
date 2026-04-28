@@ -11,6 +11,7 @@ import { renderStub } from './stubs.js?v=20260421p';
 import { iconeNode } from './icone.js?v=20260425g';
 import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260428a';
 import { renderIntegracoes } from './integracoes.js?v=20260425n';
+import { renderMapaSistema } from './mapa-sistema.js?v=20260428c';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
@@ -74,7 +75,7 @@ async function navegar(pageSlug, { forcarRender = true } = {}) {
       case 'squads':    await renderSquadsPage(); break;
       case 'crons':     await renderCrons(); break;
       case 'skills':    await renderSkills(); break;
-      case 'mapa':      await renderMapa(); break;
+      case 'mapa':      await renderMapaSistema(); break;
       case 'roadmap':   await renderRoadmap(); break;
       case 'qualidade': await renderQualidade(); break;
       default:
@@ -186,6 +187,12 @@ function setupNav() {
   window.addEventListener('docs:back', async () => {
     await navegar('docs');
   });
+  window.addEventListener('mapa:navegar', async (ev) => {
+    const slug = ev.detail?.slug;
+    if (!slug) return;
+    await navegar(slug);
+    renderNavTree();
+  });
 }
 
 // ---- Estado da arvore (quem esta aberto) — persistido em localStorage ----
@@ -204,6 +211,7 @@ function persistNavOpen() {
 }
 
 const NAV_PRIMARY = [
+  { slug: 'mapa',        label: 'Mapa do Sistema', icon: '🗺️', tree: false },
   { slug: 'cerebros',    label: 'Cérebros',    icon: '⚛',  tree: true,  treeLoader: () => loadCerebrosTree() },
   { slug: 'skills',      label: 'Skills',      icon: '🛠', tree: true,  treeLoader: () => loadSkillsTree() },
   { slug: 'personas',    label: 'Personas',    icon: '👤', tree: true,  treeLoader: () => loadPersonasTree() },
@@ -971,99 +979,6 @@ async function renderSquadsPage() {
       ]);
     }))
   );
-}
-
-async function renderMapa() {
-  const page = $('#page-mapa');
-  page.innerHTML = '';
-  const cerebros = await fetchCerebrosCatalogo();
-
-  page.append(
-    el('div', { class: 'page-header' }, [
-      el('div', {}, [
-        el('h1', { class: 'page-title' }, 'Mapa'),
-        el('div', { class: 'page-subtitle' }, 'Universo estratégico — produtos com Cérebros e ecossistema completo.'),
-      ]),
-    ]),
-    el('div', { class: 'mapa-intro' }, [
-      el('div', { class: 'mapa-intro-text' }, [
-        el('h3', {}, 'Como ler o mapa'),
-        el('p', {}, 'Cada produto Pinguim tem seu Cérebro (tela Cérebros). Os 30 squads / 211 agentes do ecossistema completo serão pintados conforme entram em produção.'),
-      ]),
-      el('div', { class: 'mapa-legenda' }, [
-        legendaItem('#71717A', 'Em construção'),
-        legendaItem('#FB923C', 'Em criação'),
-        legendaItem('#E85C00', 'Em teste'),
-        legendaItem('#22C55E', 'Ativo'),
-      ]),
-    ]),
-    el('div', { class: 'mapa-dominios' }, [
-      renderDominio('🐧 Produtos Pinguim', 'Cada produto tem 1 Cérebro', cerebros.map(c => renderSquadCardMapa(c))),
-      renderDominioLink('🗺️ Ecossistema completo', '30 squads · 211 agentes · 397 tasks · 75 workflows', '../ecossistema-squads-completo.html'),
-    ])
-  );
-}
-
-function renderSquadCardMapa(c) {
-  return el('div', { class: 'squad-card-mapa', data: { status: c.status } }, [
-    el('div', { class: 'squad-card-header' }, [
-      el('div', { class: 'squad-card-name' }, [el('span', {}, c.emoji || '📦'), c.nome]),
-      el('span', { class: `badge badge-${c.status==='ativo'?'em_producao':c.status==='em_construcao'?'em_criacao':'planejado'}` },
-        c.status==='ativo' ? 'Ativo' : c.status==='em_construcao' ? 'Em construção' : 'Rascunho'),
-    ]),
-    el('div', { style: 'font-size:.8125rem;color:var(--fg-muted);line-height:1.5' }, c.descricao || '—'),
-    el('div', { class: 'squad-card-stats' }, [
-      statMini(c.total_fontes || 0, 'Fontes'),
-      statMini(`${c.preenchimento_pct || 0}%`, 'Preench.'),
-      statMini(c.fontes_ultima_semana || 0, '7d'),
-    ]),
-  ]);
-}
-
-function renderDominio(emoji, desc, cards) {
-  return el('div', { class: 'dominio' }, [
-    el('div', { class: 'dominio-header' }, [
-      el('div', { class: 'dominio-emoji' }, emoji.split(' ')[0]),
-      el('div', {}, [
-        el('div', { class: 'dominio-name' }, emoji.split(' ').slice(1).join(' ')),
-        el('div', { class: 'dominio-desc' }, desc),
-      ]),
-    ]),
-    el('div', { class: 'squads-grid' }, cards),
-  ]);
-}
-
-function renderDominioLink(emoji, desc, href) {
-  return el('div', { class: 'dominio' }, [
-    el('div', { class: 'dominio-header' }, [
-      el('div', { class: 'dominio-emoji' }, emoji.split(' ')[0]),
-      el('div', {}, [
-        el('div', { class: 'dominio-name' }, emoji.split(' ').slice(1).join(' ')),
-        el('div', { class: 'dominio-desc' }, desc),
-      ]),
-    ]),
-    el('div', { style: 'padding:1.5rem;color:var(--fg-muted);font-size:.875rem' }, [
-      el('p', {}, [
-        'Consultar versão completa em ',
-        el('a', { href, target: '_blank' }, 'ecossistema-squads-completo.html'),
-        ' (HTML existente). À medida que os squads entram em produção, serão absorvidos aqui no painel.'
-      ])
-    ])
-  ]);
-}
-
-function legendaItem(color, label) {
-  return el('div', { class: 'legenda-item' }, [
-    el('span', { class: 'legenda-dot', style: `background:${color}` }),
-    label,
-  ]);
-}
-
-function statMini(val, lbl) {
-  return el('div', { class: 'squad-card-stat' }, [
-    el('div', { class: 'squad-card-stat-val' }, String(val)),
-    el('div', { class: 'squad-card-stat-lbl' }, lbl),
-  ]);
 }
 
 function stat(val, lbl) {
