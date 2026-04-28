@@ -12,6 +12,7 @@ import { iconeNode } from './icone.js?v=20260425g';
 import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260428a';
 import { renderIntegracoes } from './integracoes.js?v=20260425n';
 import { renderMapaSistema } from './mapa-sistema.js?v=20260428e';
+import { renderFunis } from './funis.js?v=20260428f';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
@@ -70,6 +71,7 @@ async function navegar(pageSlug, { forcarRender = true } = {}) {
       case 'personas':  await renderPersonas(); break;
       case 'docs':      await renderDocs(); break;
       case 'integracoes': await renderIntegracoes(); break;
+      case 'funis':     await renderFunis(); break;
       case 'operacao':  await renderOperacao(); break;
       case 'agentes':   await renderAgentes(); break;
       case 'squads':    await renderSquadsPage(); break;
@@ -214,6 +216,7 @@ const NAV_PRIMARY = [
   { slug: 'cerebros',    label: 'Cérebros',    icon: '⚛',  tree: true,  treeLoader: () => loadCerebrosTree() },
   { slug: 'skills',      label: 'Skills',      icon: '🛠', tree: true,  treeLoader: () => loadSkillsTree() },
   { slug: 'personas',    label: 'Personas',    icon: '👤', tree: true,  treeLoader: () => loadPersonasTree() },
+  { slug: 'funis',       label: 'Funis',       icon: '🎯', tree: false },
   { slug: 'integracoes', label: 'Integrações', icon: '🔌', tree: false },
 ];
 

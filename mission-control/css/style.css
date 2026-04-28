@@ -5062,6 +5062,407 @@ body.mobile-menu-open .mobile-overlay {
   .mapa-realimenta-curva::after { display: none; }
 }
 
+/* =====================================================================
+   FUNIS — 5º pilar do Pinguim OS
+   ===================================================================== */
+.funis-loading {
+  padding: 4rem;
+  text-align: center;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.funis-lista {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2.5rem 2rem 4rem;
+}
+
+.funis-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 2rem;
+  padding-bottom: 1.75rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.funis-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--pc);
+  margin-bottom: 0.625rem;
+}
+.funis-titulo {
+  font-family: var(--font-heading);
+  font-size: 1.875rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--fg-title);
+  margin: 0 0 0.625rem;
+}
+.funis-lede {
+  font-size: 0.9375rem;
+  color: var(--fg-muted);
+  max-width: 640px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* Estado vazio */
+.funis-vazio {
+  background: var(--surface-2);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-xl);
+  padding: 3.5rem 2rem;
+  text-align: center;
+}
+.funis-vazio-icone { font-size: 3rem; line-height: 1; margin-bottom: 1rem; }
+.funis-vazio-titulo {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 1.125rem;
+  color: var(--fg-title);
+  margin-bottom: 0.5rem;
+}
+.funis-vazio-desc {
+  font-size: 0.875rem;
+  color: var(--fg-muted);
+  max-width: 480px;
+  margin: 0 auto;
+  line-height: 1.55;
+}
+
+/* Grid de cards */
+.funis-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 0.875rem;
+}
+.funil-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 1.125rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  transition: border-color .15s, transform .08s, box-shadow .15s;
+  box-shadow: var(--elev-1);
+}
+.funil-card:hover {
+  border-color: var(--pc-400);
+  box-shadow: var(--elev-2);
+  transform: translateY(-1px);
+}
+.funil-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.625rem;
+}
+.funil-card h3 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--fg-title);
+  margin: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.funil-card-desc {
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+  line-height: 1.5;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.funil-card-stats {
+  display: flex;
+  gap: 1rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-subtle);
+}
+.funil-card-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+.funil-card-stat-valor {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  color: var(--fg-title);
+  font-size: 0.875rem;
+}
+.funil-card-stat-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-muted);
+}
+
+.badge.badge-rascunho {
+  background: rgba(113, 113, 122, 0.15);
+  color: #A1A1AA;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.badge.badge-ativo {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22C55E;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.badge.badge-arquivado {
+  background: rgba(251, 146, 60, 0.15);
+  color: #FB923C;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* ----- Modal ----- */
+.funis-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+.funis-modal {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 1.75rem;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.funis-modal h2 {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 1.25rem;
+  color: var(--fg-title);
+  margin: 0;
+}
+.funis-modal-lede {
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+.funis-modal label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+.funis-modal label span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-muted);
+}
+.funis-modal input,
+.funis-modal textarea {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 0.625rem 0.75rem;
+  color: var(--fg);
+  font-size: 0.875rem;
+  font-family: inherit;
+  resize: vertical;
+}
+.funis-modal input:focus,
+.funis-modal textarea:focus {
+  outline: none;
+  border-color: var(--pc-400);
+}
+.funis-modal-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.625rem;
+  margin-top: 0.5rem;
+}
+
+/* ----- Editor ----- */
+.funil-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: calc(100vh - 60px);
+}
+.funil-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.875rem 1.5rem;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+}
+.funil-voltar {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 0.4375rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.funil-voltar:hover {
+  background: var(--surface-3);
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+.funil-editor-titulo {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex: 1;
+}
+.funil-editor-nome {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--fg-title);
+}
+.funil-editor-acoes { display: flex; gap: 0.5rem; }
+.btn.btn-danger {
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #EF4444;
+}
+.btn.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: #EF4444;
+}
+
+.funil-editor-corpo {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  flex: 1;
+  min-height: 0;
+}
+.funil-sidebar {
+  background: var(--surface-1);
+  border-right: 1px solid var(--border);
+  padding: 1.25rem;
+  overflow-y: auto;
+}
+.funil-sidebar-titulo {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  color: var(--fg-title);
+  margin-bottom: 0.5rem;
+}
+.funil-sidebar-lede {
+  font-size: 0.78125rem;
+  color: var(--fg-muted);
+  line-height: 1.5;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.funil-sidebar-placeholder {
+  background: var(--surface-2);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-md);
+  padding: 1rem;
+  font-size: 0.78125rem;
+  color: var(--fg-muted);
+  text-align: center;
+  line-height: 1.5;
+}
+
+.funil-canvas {
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.03) 1px, transparent 1px) 0 0 / 22px 22px,
+    var(--bg, #0A0A0A);
+  position: relative;
+  overflow: auto;
+  display: grid;
+  place-items: center;
+}
+.funil-canvas-vazio {
+  text-align: center;
+  max-width: 480px;
+  padding: 2rem;
+}
+.funil-canvas-vazio-icone {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  filter: grayscale(0.3);
+}
+.funil-canvas-vazio-titulo {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 1.125rem;
+  color: var(--fg-title);
+  margin-bottom: 0.625rem;
+}
+.funil-canvas-vazio-desc {
+  font-size: 0.875rem;
+  color: var(--fg-muted);
+  line-height: 1.6;
+  margin-bottom: 1.25rem;
+}
+.funil-canvas-vazio-status {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--pc);
+  background: var(--pc-subtle);
+  border: 1px dashed var(--pc-400);
+  border-radius: 999px;
+  padding: 0.375rem 0.875rem;
+}
+
+@media (max-width: 900px) {
+  .funil-editor-corpo { grid-template-columns: 1fr; }
+  .funil-sidebar { display: none; }
+}
+
 /* ----- Legenda ----- */
 .mapa-legenda {
   display: flex;
