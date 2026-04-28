@@ -113,6 +113,7 @@ export async function renderDocs() {
 
   Object.keys(porSecao).forEach(secao => {
     wrap.appendChild(el('div', { class: 'docs-section-label' }, secao));
+    const grid = el('div', { class: 'docs-grid' });
     porSecao[secao].forEach(doc => {
       const card = el('a', {
         class: 'docs-card',
@@ -122,14 +123,16 @@ export async function renderDocs() {
           window.dispatchEvent(new CustomEvent('docs:select', { detail: { slug: doc.slug } }));
         },
       }, [
-        el('div', { class: 'docs-card-row1' }, [
+        el('div', { class: 'docs-card-head' }, [
           el('h3', {}, doc.titulo),
           el('div', { class: 'docs-card-meta' }, doc.meta),
         ]),
         el('p', {}, doc.descricao),
+        el('div', { class: 'docs-card-cta' }, 'Abrir →'),
       ]);
-      wrap.appendChild(card);
+      grid.appendChild(card);
     });
+    wrap.appendChild(grid);
   });
 
   page.appendChild(wrap);

@@ -9,7 +9,7 @@ import { renderCrons } from './crons.js?v=20260421p';
 import { renderSkills, abrirSkillDetalhe } from './skills.js?v=20260427o';
 import { renderStub } from './stubs.js?v=20260421p';
 import { iconeNode } from './icone.js?v=20260425g';
-import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260425k';
+import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260428a';
 import { renderIntegracoes } from './integracoes.js?v=20260425n';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
