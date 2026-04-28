@@ -795,11 +795,14 @@ async function iniciarGeracaoComBarra(slug) {
 function setupSquadToggle() {
   const btn = $('#nav-squad-toggle');
   if (!btn) return;
+  const label = $('#nav-squad-label');
   const aplicar = (on) => {
     btn.classList.toggle('on', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (label) label.textContent = on ? 'Squad · ON' : 'Squad · OFF';
     btn.title = on
-      ? 'Squad · ON — animação do Squad ligada'
-      : 'Squad · OFF — animação do Squad desligada';
+      ? 'Squad · ON — animação ligada (clique para desligar)'
+      : 'Squad · OFF — animação desligada (clique para ligar)';
   };
   aplicar(squadLigado());
   btn.addEventListener('click', () => {
