@@ -1068,25 +1068,27 @@ function instalarDragConexao(handleEl, origemEtapa, ramo) {
 
     function getEtapaAlvoEm(clientX, clientY) {
       const elements = document.elementsFromPoint(clientX, clientY);
-      dlog('elementsFromPoint', clientX, clientY, '→', elements.map(e => e.tagName + '.' + (e.className?.baseVal || e.className || '')).join(' | '));
+      dlog('elementsFromPoint', clientX, clientY, 'origem=', origemEtapa.id);
       for (const elNo of elements) {
         const noEl = elNo.closest?.('.funil-no');
         if (!noEl) continue;
         const id = noEl.dataset.etapaId;
+        dlog('  achei .funil-no id=', id, id === origemEtapa.id ? '(é a ORIGEM, ignorando)' : '(é DESTINO, vou conectar)');
         if (id && id !== origemEtapa.id) {
-          dlog('alvo via elementsFromPoint:', id);
           return { el: noEl, id };
         }
       }
-      // Fallback bbox
+      // Fallback bbox (com tolerancia de 10px pra borda)
+      const TOL = 10;
+      const r = canvas.getBoundingClientRect();
       for (const etapa of estadoEditor.etapas) {
         if (etapa.id === origemEtapa.id) continue;
         const w = etapa.tipo === 'condicional' ? COND_TAMANHO : NO_LARGURA;
         const h = etapa.tipo === 'condicional' ? COND_TAMANHO : NO_ALTURA;
-        const r = canvas.getBoundingClientRect();
         const x = r.left - canvas.scrollLeft + etapa.posicao_x;
         const y = r.top - canvas.scrollTop + etapa.posicao_y;
-        if (clientX >= x && clientX <= x + w && clientY >= y && clientY <= y + h) {
+        dlog('  bbox check etapa=', etapa.id, 'rect=', x, y, x+w, y+h, 'cursor=', clientX, clientY);
+        if (clientX >= x - TOL && clientX <= x + w + TOL && clientY >= y - TOL && clientY <= y + h + TOL) {
           const noEl = document.querySelector(`.funil-no[data-etapa-id="${etapa.id}"]`);
           if (noEl) {
             dlog('alvo via bbox fallback:', etapa.id);
