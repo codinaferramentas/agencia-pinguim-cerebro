@@ -353,15 +353,32 @@ async function loadCerebrosTree() {
         catSub.appendChild(el('div', { class: 'nav-empty' }, 'Nenhum ainda'));
       } else if (cat === 'clone') {
         // Clone agrupa por subcategoria (socio_pinguim, externo_copy, externo_storytelling, ...)
-        const subOrdem = ['socio_pinguim', 'externo_copy', 'externo_storytelling', 'externo_advisor', 'externo_design', 'externo_data', 'externo_traffic', 'outros'];
+        const subOrdem = [
+          'socio_pinguim',
+          'externo_advisor',
+          'externo_copy',
+          'externo_storytelling',
+          'externo_traffic',
+          'externo_design',
+          'externo_data',
+          'externo_finops',
+          'externo_research',
+          'externo_translate',
+          'externo_creator',
+          'outros',
+        ];
         const subLabel = {
           socio_pinguim: 'Sócios Pinguim',
+          externo_advisor: 'Advisors',
           externo_copy: 'Copywriters',
           externo_storytelling: 'Storytellers',
-          externo_advisor: 'Advisors',
-          externo_design: 'Designers',
-          externo_data: 'Data',
           externo_traffic: 'Tráfego',
+          externo_design: 'Design',
+          externo_data: 'Data',
+          externo_finops: 'FinOps',
+          externo_research: 'Research',
+          externo_translate: 'Translate',
+          externo_creator: 'Creator',
           outros: 'Outros',
         };
         const porSub = {};

@@ -118,10 +118,79 @@ def slugify(s):
     return s
 
 # --- Lista de clones a importar ---
+# Cada squad define: pasta base, subcategoria, emoji default, e excludes
+# (slugs que NAO sao clone — orquestradores/papeis funcionais Pinguim).
+SQUADS = [
+    {
+        'caminho': 'cerebro/squads/copy/agentes',
+        'subcategoria': 'externo_copy',
+        'emoji': '✍️',
+        'excludes': {'copy-chief'},
+    },
+    {
+        'caminho': 'cerebro/squads/storytelling/agentes',
+        'subcategoria': 'externo_storytelling',
+        'emoji': '📖',
+        'excludes': {'story-chief'},
+    },
+    {
+        'caminho': 'cerebro/squads/advisory-board/agentes',
+        'subcategoria': 'externo_advisor',
+        'emoji': '🧭',
+        'excludes': {'board-chair'},
+    },
+    {
+        'caminho': 'cerebro/squads/traffic-masters/agentes',
+        'subcategoria': 'externo_traffic',
+        'emoji': '📈',
+        'excludes': {
+            'ad-midas', 'ads-analyst', 'creative-analyst', 'fiscal',
+            'media-buyer', 'performance-analyst', 'pixel-specialist',
+            'scale-optimizer', 'traffic-masters-chief',
+        },
+    },
+    {
+        'caminho': 'cerebro/squads/design/agentes',
+        'subcategoria': 'externo_design',
+        'emoji': '🎨',
+        'excludes': {'design-chief'},
+    },
+    {
+        'caminho': 'cerebro/squads/data/agentes',
+        'subcategoria': 'externo_data',
+        'emoji': '📊',
+        'excludes': {'data-chief'},
+    },
+    {
+        'caminho': 'cerebro/squads/finops/agentes',
+        'subcategoria': 'externo_finops',
+        'emoji': '💰',
+        'excludes': {'finops-chief'},
+    },
+    {
+        'caminho': 'cerebro/squads/deep-research/agentes',
+        'subcategoria': 'externo_research',
+        'emoji': '🔬',
+        'excludes': {'dr-orchestrator'},
+    },
+    {
+        'caminho': 'cerebro/squads/translate/agentes',
+        'subcategoria': 'externo_translate',
+        'emoji': '🌐',
+        'excludes': {'cultural-bridge', 'token-optimizer', 'translate-chief'},
+    },
+    {
+        'caminho': 'cerebro/squads/squad-creator-pro/agentes',
+        'subcategoria': 'externo_creator',
+        'emoji': '🎬',
+        'excludes': {'squad-chief'},
+    },
+]
+
 def coletar_clones():
     clones = []
 
-    # 1. Socios Pinguim
+    # 1. Socios Pinguim (caminho fora do padrao squads/agentes)
     base_socios = ROOT / 'cerebro' / 'agentes' / 'pessoais'
     for slug in ['luiz', 'micha', 'pedro']:
         d = base_socios / slug
@@ -141,46 +210,31 @@ def coletar_clones():
             'origem': str(d.relative_to(ROOT)),
         })
 
-    # 2. Copywriters
-    base_copy = ROOT / 'cerebro' / 'squads' / 'copy' / 'agentes'
-    if base_copy.exists():
-        for d in sorted(base_copy.iterdir()):
+    # 2. Squads (estrutura padronizada)
+    for sq in SQUADS:
+        base = ROOT / sq['caminho']
+        if not base.exists():
+            print(f"[SKIP] {base} nao existe")
+            continue
+        for d in sorted(base.iterdir()):
             if not d.is_dir():
                 continue
             slug_pasta = d.name
-            if slug_pasta == 'copy-chief':
-                continue  # orquestrador, nao e clone
+            if slug_pasta in sq['excludes']:
+                continue
+            soul_path = d / 'SOUL.md'
+            if not soul_path.exists():
+                print(f"[SKIP sem SOUL] {d.relative_to(ROOT)}")
+                continue
             nome, emoji = parse_identity(d / 'IDENTITY.md')
-            descricao = parse_descricao(d / 'SOUL.md')
-            soul = (d / 'SOUL.md').read_text(encoding='utf-8') if (d / 'SOUL.md').exists() else ''
+            descricao = parse_descricao(soul_path)
+            soul = soul_path.read_text(encoding='utf-8')
             clones.append({
                 'slug': f'clone-{slug_pasta}',
                 'nome': nome or slug_pasta.replace('-', ' ').title(),
-                'emoji': emoji or '✍️',
+                'emoji': emoji or sq['emoji'],
                 'descricao': descricao or '',
-                'subcategoria': 'externo_copy',
-                'soul_md': soul,
-                'origem': str(d.relative_to(ROOT)),
-            })
-
-    # 3. Storytellers
-    base_story = ROOT / 'cerebro' / 'squads' / 'storytelling' / 'agentes'
-    if base_story.exists():
-        for d in sorted(base_story.iterdir()):
-            if not d.is_dir():
-                continue
-            slug_pasta = d.name
-            if slug_pasta == 'story-chief':
-                continue
-            nome, emoji = parse_identity(d / 'IDENTITY.md')
-            descricao = parse_descricao(d / 'SOUL.md')
-            soul = (d / 'SOUL.md').read_text(encoding='utf-8') if (d / 'SOUL.md').exists() else ''
-            clones.append({
-                'slug': f'clone-{slug_pasta}',
-                'nome': nome or slug_pasta.replace('-', ' ').title(),
-                'emoji': emoji or '📖',
-                'descricao': descricao or '',
-                'subcategoria': 'externo_storytelling',
+                'subcategoria': sq['subcategoria'],
                 'soul_md': soul,
                 'origem': str(d.relative_to(ROOT)),
             })
