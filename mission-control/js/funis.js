@@ -898,7 +898,7 @@ function renderNoProduto(etapa) {
   const no = el('div', {
     class: 'funil-no funil-no-produto' + (isSel ? ' selecionado' : ''),
     style: `left:${etapa.posicao_x}px;top:${etapa.posicao_y}px;border-color:${cor}`,
-    data: { etapaId: etapa.id },
+    data: { 'etapa-id': etapa.id },
   }, [
     el('div', { class: 'funil-no-handle entrada', title: 'Entrada' }),
     el('div', { class: 'funil-no-head' }, [
@@ -932,7 +932,7 @@ function renderNoCondicional(etapa) {
   const no = el('div', {
     class: 'funil-no funil-no-condicional' + (isSel ? ' selecionado' : ''),
     style: `left:${etapa.posicao_x}px;top:${etapa.posicao_y}px;width:${COND_TAMANHO}px;height:${COND_TAMANHO}px`,
-    data: { etapaId: etapa.id },
+    data: { 'etapa-id': etapa.id },
   }, [
     el('div', { class: 'funil-no-cond-losango', style: `border-color:${cor}` }, [
       el('div', { class: 'funil-no-cond-conteudo' }, [
@@ -1023,20 +1023,15 @@ function instalarInteracoesNo(noEl, etapa) {
 }
 
 /* ----- Drag-to-connect: padrao n8n/Figma ----- */
-function dlog(...args) {
-  if (window.__debugFunil) console.log('[funil]', ...args);
-}
-
 function instalarDragConexao(handleEl, origemEtapa, ramo) {
   handleEl.addEventListener('pointerdown', (ev) => {
     if (ev.button !== 0) return;
     ev.preventDefault();
     ev.stopPropagation();
-    dlog('pointerdown handle', { etapa: origemEtapa.id, ramo, x: ev.clientX, y: ev.clientY });
 
     const canvas = document.getElementById('funil-canvas-area');
     const svg = document.getElementById('funil-svg');
-    if (!canvas || !svg) { dlog('SEM canvas/svg'); return; }
+    if (!canvas || !svg) return;
 
     // Ponto de origem (centro do handle, em coords do canvas-svg)
     const handleRect = handleEl.getBoundingClientRect();
@@ -1068,17 +1063,13 @@ function instalarDragConexao(handleEl, origemEtapa, ramo) {
 
     function getEtapaAlvoEm(clientX, clientY) {
       const elements = document.elementsFromPoint(clientX, clientY);
-      dlog('elementsFromPoint', clientX, clientY, 'origem=', origemEtapa.id);
       for (const elNo of elements) {
         const noEl = elNo.closest?.('.funil-no');
         if (!noEl) continue;
         const id = noEl.dataset.etapaId;
-        dlog('  achei .funil-no id=', id, id === origemEtapa.id ? '(é a ORIGEM, ignorando)' : '(é DESTINO, vou conectar)');
-        if (id && id !== origemEtapa.id) {
-          return { el: noEl, id };
-        }
+        if (id && id !== origemEtapa.id) return { el: noEl, id };
       }
-      // Fallback bbox (com tolerancia de 10px pra borda)
+      // Fallback bbox com tolerancia de 10px
       const TOL = 10;
       const r = canvas.getBoundingClientRect();
       for (const etapa of estadoEditor.etapas) {
@@ -1087,16 +1078,11 @@ function instalarDragConexao(handleEl, origemEtapa, ramo) {
         const h = etapa.tipo === 'condicional' ? COND_TAMANHO : NO_ALTURA;
         const x = r.left - canvas.scrollLeft + etapa.posicao_x;
         const y = r.top - canvas.scrollTop + etapa.posicao_y;
-        dlog('  bbox check etapa=', etapa.id, 'rect=', x, y, x+w, y+h, 'cursor=', clientX, clientY);
         if (clientX >= x - TOL && clientX <= x + w + TOL && clientY >= y - TOL && clientY <= y + h + TOL) {
           const noEl = document.querySelector(`.funil-no[data-etapa-id="${etapa.id}"]`);
-          if (noEl) {
-            dlog('alvo via bbox fallback:', etapa.id);
-            return { el: noEl, id: etapa.id };
-          }
+          if (noEl) return { el: noEl, id: etapa.id };
         }
       }
-      dlog('nenhum alvo no ponto', clientX, clientY);
       return null;
     }
 
@@ -1126,13 +1112,9 @@ function instalarDragConexao(handleEl, origemEtapa, ramo) {
       tempPath.remove();
       if (alvoEl) alvoEl.classList.remove('alvo-conexao');
 
-      dlog('pointerup', { x: e.clientX, y: e.clientY, alvoEtapaIdNoMove: alvoEtapaId });
       const alvoFinal = getEtapaAlvoEm(e.clientX, e.clientY);
       const idFinal = alvoFinal?.id || alvoEtapaId;
-      dlog('idFinal pra conectar:', idFinal);
-      if (idFinal) {
-        await tentarConectar(origemEtapa.id, idFinal, ramo);
-      }
+      if (idFinal) await tentarConectar(origemEtapa.id, idFinal, ramo);
     }
 
     document.addEventListener('pointermove', onMove);
@@ -1141,21 +1123,17 @@ function instalarDragConexao(handleEl, origemEtapa, ramo) {
 }
 
 async function tentarConectar(origemId, destinoId, ramo) {
-  dlog('tentarConectar', { origemId, destinoId, ramo });
   if (origemId === destinoId) {
-    dlog('bloqueado: A->A');
     await alertaPinguim({ titulo: 'Conexão inválida', descricao: 'Uma etapa não pode se conectar a si mesma.' });
     return;
   }
   const ja = estadoEditor.conexoes.find(c => c.etapa_origem_id === origemId && c.etapa_destino_id === destinoId);
   if (ja) {
-    dlog('bloqueado: duplicada');
     await alertaPinguim({ titulo: 'Conexão duplicada', descricao: 'Essas duas etapas já estão conectadas.' });
     return;
   }
   const voltariaPraOrigem = estadoEditor.conexoes.some(c => c.etapa_origem_id === destinoId && c.etapa_destino_id === origemId);
   if (voltariaPraOrigem) {
-    dlog('bloqueado: loop');
     await alertaPinguim({
       titulo: 'Funil não pode ter ciclo',
       descricao: 'Essa conexão criaria um loop (A → B → A). Funil de venda é direcional — pessoa avança, não volta.',
@@ -1163,14 +1141,11 @@ async function tentarConectar(origemId, destinoId, ramo) {
     return;
   }
   try {
-    dlog('chamando criarConexao no banco...');
     const conexao = await criarConexao(estadoEditor.funil.id, origemId, destinoId, ramo);
-    dlog('CONEXAO CRIADA', conexao);
     estadoEditor.conexoes.push(conexao);
     redesenharCanvas();
     piscarSalvo();
   } catch (err) {
-    dlog('ERRO criarConexao', err);
     if (err.code === '23505') {
       await alertaPinguim({ titulo: 'Conexão duplicada', descricao: 'Essas duas etapas já estão conectadas.' });
     } else {
