@@ -5463,6 +5463,98 @@ body.mobile-menu-open .mobile-overlay {
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--border-subtle);
 }
+
+/* Tabs da sidebar */
+.funil-sidebar { padding: 0; display: flex; flex-direction: column; }
+.funil-sidebar-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.funil-sidebar-tab {
+  background: transparent;
+  border: 0;
+  padding: 0.75rem 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+}
+.funil-sidebar-tab:hover { color: var(--fg); }
+.funil-sidebar-tab.ativo {
+  color: var(--pc);
+  border-bottom-color: var(--pc);
+}
+.funil-sidebar-conteudo {
+  padding: 1.25rem;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.funil-aba { display: flex; flex-direction: column; }
+.funil-aba-lede {
+  font-size: 0.78125rem;
+  color: var(--fg-muted);
+  line-height: 1.5;
+  margin-bottom: 1rem;
+}
+
+/* Card de ferramenta na sidebar (Condicional etc.) */
+.funil-ferramenta-card {
+  align-items: stretch;
+  padding: 0.75rem 0.875rem;
+}
+.funil-ferramenta-icone {
+  font-size: 1.625rem;
+  font-weight: 700;
+  color: #FBBF24;
+  width: 32px;
+  text-align: center;
+  align-self: center;
+  flex-shrink: 0;
+}
+.funil-ferramenta-desc {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+  margin-top: 2px;
+}
+
+/* Indicador "Salvo" */
+.funil-salvo-indicador {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-muted);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  border: 1px solid var(--border-subtle);
+  transition: background .25s, color .25s, border-color .25s;
+  margin-left: 0.25rem;
+}
+.funil-salvo-indicador.piscando {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22C55E;
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+/* Estado "arrastando" do no */
+.funil-no.arrastando {
+  cursor: grabbing;
+  opacity: 0.92;
+  z-index: 10;
+}
 .funil-sidebar-placeholder {
   background: var(--surface-2);
   border: 1px dashed var(--border);
