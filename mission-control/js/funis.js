@@ -1023,15 +1023,20 @@ function instalarInteracoesNo(noEl, etapa) {
 }
 
 /* ----- Drag-to-connect: padrao n8n/Figma ----- */
+function dlog(...args) {
+  if (window.__debugFunil) console.log('[funil]', ...args);
+}
+
 function instalarDragConexao(handleEl, origemEtapa, ramo) {
   handleEl.addEventListener('pointerdown', (ev) => {
     if (ev.button !== 0) return;
     ev.preventDefault();
     ev.stopPropagation();
+    dlog('pointerdown handle', { etapa: origemEtapa.id, ramo, x: ev.clientX, y: ev.clientY });
 
     const canvas = document.getElementById('funil-canvas-area');
     const svg = document.getElementById('funil-svg');
-    if (!canvas || !svg) return;
+    if (!canvas || !svg) { dlog('SEM canvas/svg'); return; }
 
     // Ponto de origem (centro do handle, em coords do canvas-svg)
     const handleRect = handleEl.getBoundingClientRect();
@@ -1063,15 +1068,17 @@ function instalarDragConexao(handleEl, origemEtapa, ramo) {
 
     function getEtapaAlvoEm(clientX, clientY) {
       const elements = document.elementsFromPoint(clientX, clientY);
+      dlog('elementsFromPoint', clientX, clientY, '→', elements.map(e => e.tagName + '.' + (e.className?.baseVal || e.className || '')).join(' | '));
       for (const elNo of elements) {
-        // Pra HTMLElement: closest funciona normal
-        let noEl = elNo.closest?.('.funil-no');
-        // Fallback: SVG element (closest nao sai do SVG); checa se ponto cai sobre algum no
+        const noEl = elNo.closest?.('.funil-no');
         if (!noEl) continue;
         const id = noEl.dataset.etapaId;
-        if (id && id !== origemEtapa.id) return { el: noEl, id };
+        if (id && id !== origemEtapa.id) {
+          dlog('alvo via elementsFromPoint:', id);
+          return { el: noEl, id };
+        }
       }
-      // Fallback final: bate ponto nos retangulos dos nos
+      // Fallback bbox
       for (const etapa of estadoEditor.etapas) {
         if (etapa.id === origemEtapa.id) continue;
         const w = etapa.tipo === 'condicional' ? COND_TAMANHO : NO_LARGURA;
@@ -1081,9 +1088,13 @@ function instalarDragConexao(handleEl, origemEtapa, ramo) {
         const y = r.top - canvas.scrollTop + etapa.posicao_y;
         if (clientX >= x && clientX <= x + w && clientY >= y && clientY <= y + h) {
           const noEl = document.querySelector(`.funil-no[data-etapa-id="${etapa.id}"]`);
-          if (noEl) return { el: noEl, id: etapa.id };
+          if (noEl) {
+            dlog('alvo via bbox fallback:', etapa.id);
+            return { el: noEl, id: etapa.id };
+          }
         }
       }
+      dlog('nenhum alvo no ponto', clientX, clientY);
       return null;
     }
 
@@ -1113,9 +1124,10 @@ function instalarDragConexao(handleEl, origemEtapa, ramo) {
       tempPath.remove();
       if (alvoEl) alvoEl.classList.remove('alvo-conexao');
 
-      // Revalida no ponto exato de soltar (evita lag de 1 evento)
+      dlog('pointerup', { x: e.clientX, y: e.clientY, alvoEtapaIdNoMove: alvoEtapaId });
       const alvoFinal = getEtapaAlvoEm(e.clientX, e.clientY);
       const idFinal = alvoFinal?.id || alvoEtapaId;
+      dlog('idFinal pra conectar:', idFinal);
       if (idFinal) {
         await tentarConectar(origemEtapa.id, idFinal, ramo);
       }
@@ -1127,17 +1139,21 @@ function instalarDragConexao(handleEl, origemEtapa, ramo) {
 }
 
 async function tentarConectar(origemId, destinoId, ramo) {
+  dlog('tentarConectar', { origemId, destinoId, ramo });
   if (origemId === destinoId) {
+    dlog('bloqueado: A->A');
     await alertaPinguim({ titulo: 'Conexão inválida', descricao: 'Uma etapa não pode se conectar a si mesma.' });
     return;
   }
   const ja = estadoEditor.conexoes.find(c => c.etapa_origem_id === origemId && c.etapa_destino_id === destinoId);
   if (ja) {
+    dlog('bloqueado: duplicada');
     await alertaPinguim({ titulo: 'Conexão duplicada', descricao: 'Essas duas etapas já estão conectadas.' });
     return;
   }
   const voltariaPraOrigem = estadoEditor.conexoes.some(c => c.etapa_origem_id === destinoId && c.etapa_destino_id === origemId);
   if (voltariaPraOrigem) {
+    dlog('bloqueado: loop');
     await alertaPinguim({
       titulo: 'Funil não pode ter ciclo',
       descricao: 'Essa conexão criaria um loop (A → B → A). Funil de venda é direcional — pessoa avança, não volta.',
@@ -1145,11 +1161,14 @@ async function tentarConectar(origemId, destinoId, ramo) {
     return;
   }
   try {
+    dlog('chamando criarConexao no banco...');
     const conexao = await criarConexao(estadoEditor.funil.id, origemId, destinoId, ramo);
+    dlog('CONEXAO CRIADA', conexao);
     estadoEditor.conexoes.push(conexao);
     redesenharCanvas();
     piscarSalvo();
   } catch (err) {
+    dlog('ERRO criarConexao', err);
     if (err.code === '23505') {
       await alertaPinguim({ titulo: 'Conexão duplicada', descricao: 'Essas duas etapas já estão conectadas.' });
     } else {
