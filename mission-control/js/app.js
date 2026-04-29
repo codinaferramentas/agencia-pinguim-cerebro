@@ -56,6 +56,7 @@ let paginaAtual = null;
 
 async function navegar(pageSlug, { forcarRender = true } = {}) {
   paginaAtual = pageSlug;
+  document.getElementById('drawer')?.classList.remove('open');
   $$('.nav-item').forEach(i => i.classList.toggle('active', i.dataset.page === pageSlug));
   $$('.page').forEach(p => p.classList.remove('active'));
   const page = document.getElementById('page-' + pageSlug);
