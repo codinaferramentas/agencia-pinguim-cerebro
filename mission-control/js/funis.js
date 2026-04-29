@@ -350,7 +350,6 @@ async function renderEditor(page, funil) {
     funil, produtos, etapas, conexoes, agentes,
     agentesHab: new Set(agentesHab),
     selecionado: null,
-    conectandoDe: null,
   };
 
   page.innerHTML = '';
@@ -410,7 +409,7 @@ function renderToolbar() {
     el('div', { class: 'funil-editor-titulo' }, [
       el('span', { class: 'funil-editor-nome' }, estadoEditor.funil.nome),
       el('span', { class: `badge badge-${status}` }, labelStatus),
-      el('span', { class: 'funil-salvo-indicador', id: 'funil-salvo-indicador', title: 'Tudo é salvo automaticamente em tempo real' }, '✓ Salvo'),
+      el('span', { class: 'funil-salvo-indicador salvo', id: 'funil-salvo-indicador', title: 'Tudo é salvo automaticamente em tempo real' }, '✓ Salvo'),
     ]),
     avatares,
     el('div', { class: 'funil-editor-acoes' }, [
@@ -452,11 +451,19 @@ async function mudarStatusFunil(novoStatus) {
   piscarSalvo();
 }
 
+let salvoTimer = null;
 function piscarSalvo() {
   const ind = document.getElementById('funil-salvo-indicador');
   if (!ind) return;
-  ind.classList.add('piscando');
-  setTimeout(() => ind.classList.remove('piscando'), 900);
+  ind.textContent = '⟳ Salvando…';
+  ind.classList.remove('salvo');
+  ind.classList.add('salvando');
+  clearTimeout(salvoTimer);
+  salvoTimer = setTimeout(() => {
+    ind.textContent = '✓ Salvo';
+    ind.classList.remove('salvando');
+    ind.classList.add('salvo');
+  }, 350);
 }
 
 function handleKeydownEditor(ev) {
@@ -472,7 +479,6 @@ function handleKeydownEditor(ev) {
     else if (sel.tipo === 'conexao') confirmarERemoverConexao(sel.id);
   }
   if (ev.key === 'Escape') {
-    estadoEditor.conectandoDe = null;
     estadoEditor.selecionado = null;
     fecharMenuContexto();
     redesenharCanvas();
@@ -654,12 +660,11 @@ function renderCanvas() {
   const nos = el('div', { class: 'funil-nos', id: 'funil-nos' });
   canvas.appendChild(nos);
 
-  // Legenda de atalhos
   canvas.appendChild(el('div', { class: 'funil-canvas-atalhos' }, [
-    el('span', { class: 'funil-canvas-atalho' }, [el('kbd', {}, 'DEL'), ' apaga']),
+    el('span', { class: 'funil-canvas-atalho' }, [el('kbd', {}, 'ARRASTE'), ' o → pra conectar']),
     el('span', { class: 'funil-canvas-atalho' }, [el('kbd', {}, 'DBL CLIQUE'), ' edita']),
-    el('span', { class: 'funil-canvas-atalho' }, [el('kbd', {}, 'BOTÃO DIREITO'), ' menu']),
-    el('span', { class: 'funil-canvas-atalho' }, [el('kbd', {}, 'ESC'), ' cancela']),
+    el('span', { class: 'funil-canvas-atalho' }, [el('kbd', {}, 'DIREITO'), ' menu']),
+    el('span', { class: 'funil-canvas-atalho' }, [el('kbd', {}, 'DEL'), ' apaga']),
   ]));
 
   canvas.addEventListener('dragover', (ev) => {
@@ -690,7 +695,6 @@ function renderCanvas() {
 
   canvas.addEventListener('click', (ev) => {
     if (ev.target === canvas || ev.target === svg || ev.target === nos) {
-      estadoEditor.conectandoDe = null;
       estadoEditor.selecionado = null;
       redesenharCanvas();
     }
@@ -880,34 +884,29 @@ function renderNoProduto(etapa) {
   const produto = estadoEditor.produtos.find(p => p.id === etapa.produto_id);
   if (!produto) return null;
   const isSel = estadoEditor.selecionado?.tipo === 'etapa' && estadoEditor.selecionado.id === etapa.id;
-  const isConn = estadoEditor.conectandoDe === etapa.id;
   const cor = PAPEL_CORES[etapa.papel] || '#888';
 
   const ic = iconeNode(produto, { size: 28 });
   ic.classList.add('funil-no-icone-wrap');
 
+  const handleSaida = el('div', {
+    class: 'funil-no-handle saida',
+    title: 'Arraste daqui pra outro nó pra conectar',
+  }, [el('span', { class: 'funil-no-handle-icone' }, '→')]);
+  instalarDragConexao(handleSaida, etapa, null);
+
   const no = el('div', {
-    class: 'funil-no funil-no-produto' + (isSel ? ' selecionado' : '') + (isConn ? ' conectando' : ''),
+    class: 'funil-no funil-no-produto' + (isSel ? ' selecionado' : ''),
     style: `left:${etapa.posicao_x}px;top:${etapa.posicao_y}px;border-color:${cor}`,
     data: { etapaId: etapa.id },
   }, [
-    // Handle de entrada (esquerda)
     el('div', { class: 'funil-no-handle entrada', title: 'Entrada' }),
     el('div', { class: 'funil-no-head' }, [
       ic,
       el('span', { class: 'funil-no-nome' }, produto.nome),
     ]),
     el('div', { class: 'funil-no-papel', style: `color:${cor};border-color:${cor}` }, PAPEL_LABELS[etapa.papel]),
-    // Handle de saida (direita)
-    el('button', {
-      class: 'funil-no-handle saida',
-      title: 'Conectar a outra etapa (clique aqui, depois clique no destino)',
-      onclick: (ev) => {
-        ev.stopPropagation();
-        estadoEditor.conectandoDe = estadoEditor.conectandoDe === etapa.id ? null : etapa.id;
-        redesenharCanvas();
-      },
-    }, '→'),
+    handleSaida,
   ]);
 
   instalarInteracoesNo(no, etapa);
@@ -916,14 +915,22 @@ function renderNoProduto(etapa) {
 
 function renderNoCondicional(etapa) {
   const isSel = estadoEditor.selecionado?.tipo === 'etapa' && estadoEditor.selecionado.id === etapa.id;
-  const isConn = estadoEditor.conectandoDe === etapa.id;
   const cor = PAPEL_CORES.condicional;
 
-  // Conta saidas pra mostrar Sim/Nao
-  const saidas = estadoEditor.conexoes.filter(c => c.etapa_origem_id === etapa.id);
+  const handleSim = el('div', {
+    class: 'funil-no-handle saida cond-sim',
+    title: 'Arraste daqui pra outro nó pra conectar (Sim)',
+  }, [el('span', { class: 'funil-no-handle-icone' }, '✓')]);
+  instalarDragConexao(handleSim, etapa, 'sim');
+
+  const handleNao = el('div', {
+    class: 'funil-no-handle saida cond-nao',
+    title: 'Arraste daqui pra outro nó pra conectar (Não)',
+  }, [el('span', { class: 'funil-no-handle-icone' }, '✗')]);
+  instalarDragConexao(handleNao, etapa, 'nao');
 
   const no = el('div', {
-    class: 'funil-no funil-no-condicional' + (isSel ? ' selecionado' : '') + (isConn ? ' conectando' : ''),
+    class: 'funil-no funil-no-condicional' + (isSel ? ' selecionado' : ''),
     style: `left:${etapa.posicao_x}px;top:${etapa.posicao_y}px;width:${COND_TAMANHO}px;height:${COND_TAMANHO}px`,
     data: { etapaId: etapa.id },
   }, [
@@ -933,28 +940,9 @@ function renderNoCondicional(etapa) {
         el('div', { class: 'funil-no-cond-texto' }, etapa.condicao_texto || 'Condição'),
       ]),
     ]),
-    // Handle entrada esquerda
     el('div', { class: 'funil-no-handle entrada cond', title: 'Entrada' }),
-    // Handle saida Sim (direita-cima)
-    el('button', {
-      class: 'funil-no-handle saida cond-sim',
-      title: saidas[0] ? 'SIM (já conectada)' : 'Conectar Sim',
-      onclick: (ev) => {
-        ev.stopPropagation();
-        estadoEditor.conectandoDe = estadoEditor.conectandoDe === etapa.id + ':sim' ? null : etapa.id + ':sim';
-        redesenharCanvas();
-      },
-    }, '✓'),
-    // Handle saida Nao (direita-baixo)
-    el('button', {
-      class: 'funil-no-handle saida cond-nao',
-      title: saidas[1] ? 'NÃO (já conectada)' : 'Conectar Não',
-      onclick: (ev) => {
-        ev.stopPropagation();
-        estadoEditor.conectandoDe = estadoEditor.conectandoDe === etapa.id + ':nao' ? null : etapa.id + ':nao';
-        redesenharCanvas();
-      },
-    }, '✗'),
+    handleSim,
+    handleNao,
   ]);
 
   instalarInteracoesNo(no, etapa);
@@ -1016,13 +1004,6 @@ function instalarInteracoesNo(noEl, etapa) {
     if (ev.target.closest('.funil-no-handle')) return;
     if (noEl.dataset.bloquearClick) return;
     ev.stopPropagation();
-    const conn = estadoEditor.conectandoDe;
-    const origemId = conn?.split(':')[0];
-    const ramo = conn?.split(':')[1] || null;
-    if (origemId && origemId !== etapa.id) {
-      await tentarConectar(origemId, etapa.id, ramo);
-      return;
-    }
     estadoEditor.selecionado = { tipo: 'etapa', id: etapa.id };
     redesenharCanvas();
   });
@@ -1041,37 +1022,114 @@ function instalarInteracoesNo(noEl, etapa) {
   });
 }
 
+/* ----- Drag-to-connect: padrao n8n/Figma ----- */
+function instalarDragConexao(handleEl, origemEtapa, ramo) {
+  handleEl.addEventListener('pointerdown', (ev) => {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+
+    const canvas = document.getElementById('funil-canvas-area');
+    const svg = document.getElementById('funil-svg');
+    if (!canvas || !svg) return;
+
+    // Ponto de origem (centro do handle, em coords do canvas-svg)
+    const handleRect = handleEl.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    const x1 = handleRect.left + handleRect.width / 2 - canvasRect.left + canvas.scrollLeft;
+    const y1 = handleRect.top + handleRect.height / 2 - canvasRect.top + canvas.scrollTop;
+
+    // Cria linha temporaria
+    let cor = '#E85C00';
+    if (ramo === 'sim') cor = COR_SIM;
+    else if (ramo === 'nao') cor = COR_NAO;
+
+    const tempPath = elNS('path', {
+      class: 'funil-conexao-temp',
+      fill: 'none',
+      stroke: cor,
+      'stroke-width': '2.5',
+      'stroke-linecap': 'round',
+      'stroke-dasharray': '6 5',
+      'pointer-events': 'none',
+    });
+    tempPath.style.animation = 'funilFlow 0.7s linear infinite';
+    svg.appendChild(tempPath);
+    ajustarTamanhoSvg();
+
+    // Estado de hover sobre alvos
+    let alvoEl = null;
+    let alvoEtapaId = null;
+
+    function getEtapaAlvoEm(clientX, clientY) {
+      const elements = document.elementsFromPoint(clientX, clientY);
+      for (const el of elements) {
+        const noEl = el.closest?.('.funil-no');
+        if (noEl) {
+          const id = noEl.dataset.etapaId;
+          if (id && id !== origemEtapa.id) return { el: noEl, id };
+        }
+      }
+      return null;
+    }
+
+    function onMove(e) {
+      e.preventDefault();
+      const x2 = e.clientX - canvasRect.left + canvas.scrollLeft;
+      const y2 = e.clientY - canvasRect.top + canvas.scrollTop;
+      const dx = Math.abs(x2 - x1);
+      const cx1 = x1 + Math.max(40, dx * 0.4);
+      const cx2 = x2 - Math.max(40, dx * 0.4);
+      tempPath.setAttribute('d', `M ${x1} ${y1} C ${cx1} ${y1}, ${cx2} ${y2}, ${x2} ${y2}`);
+      ajustarTamanhoSvg();
+
+      // Hover detection
+      const alvo = getEtapaAlvoEm(e.clientX, e.clientY);
+      if (alvo?.id !== alvoEtapaId) {
+        if (alvoEl) alvoEl.classList.remove('alvo-conexao');
+        alvoEl = alvo?.el || null;
+        alvoEtapaId = alvo?.id || null;
+        if (alvoEl) alvoEl.classList.add('alvo-conexao');
+      }
+    }
+
+    async function onUp(e) {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      tempPath.remove();
+      if (alvoEl) alvoEl.classList.remove('alvo-conexao');
+
+      if (alvoEtapaId) {
+        await tentarConectar(origemEtapa.id, alvoEtapaId, ramo);
+      }
+    }
+
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  });
+}
+
 async function tentarConectar(origemId, destinoId, ramo) {
-  // Bloqueio: A → A
   if (origemId === destinoId) {
     await alertaPinguim({ titulo: 'Conexão inválida', descricao: 'Uma etapa não pode se conectar a si mesma.' });
-    estadoEditor.conectandoDe = null;
-    redesenharCanvas();
     return;
   }
-  // Bloqueio: ja existe
   const ja = estadoEditor.conexoes.find(c => c.etapa_origem_id === origemId && c.etapa_destino_id === destinoId);
   if (ja) {
     await alertaPinguim({ titulo: 'Conexão duplicada', descricao: 'Essas duas etapas já estão conectadas.' });
-    estadoEditor.conectandoDe = null;
-    redesenharCanvas();
     return;
   }
-  // Bloqueio: loop curto A → B → A
   const voltariaPraOrigem = estadoEditor.conexoes.some(c => c.etapa_origem_id === destinoId && c.etapa_destino_id === origemId);
   if (voltariaPraOrigem) {
     await alertaPinguim({
       titulo: 'Funil não pode ter ciclo',
       descricao: 'Essa conexão criaria um loop (A → B → A). Funil de venda é direcional — pessoa avança, não volta.',
     });
-    estadoEditor.conectandoDe = null;
-    redesenharCanvas();
     return;
   }
   try {
     const conexao = await criarConexao(estadoEditor.funil.id, origemId, destinoId, ramo);
     estadoEditor.conexoes.push(conexao);
-    estadoEditor.conectandoDe = null;
     redesenharCanvas();
     piscarSalvo();
   } catch (err) {
@@ -1080,8 +1138,6 @@ async function tentarConectar(origemId, destinoId, ramo) {
     } else {
       await alertaPinguim({ titulo: 'Erro ao conectar', descricao: err.message });
     }
-    estadoEditor.conectandoDe = null;
-    redesenharCanvas();
   }
 }
 
