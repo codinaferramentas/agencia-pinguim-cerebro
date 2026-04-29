@@ -1063,11 +1063,25 @@ function instalarDragConexao(handleEl, origemEtapa, ramo) {
 
     function getEtapaAlvoEm(clientX, clientY) {
       const elements = document.elementsFromPoint(clientX, clientY);
-      for (const el of elements) {
-        const noEl = el.closest?.('.funil-no');
-        if (noEl) {
-          const id = noEl.dataset.etapaId;
-          if (id && id !== origemEtapa.id) return { el: noEl, id };
+      for (const elNo of elements) {
+        // Pra HTMLElement: closest funciona normal
+        let noEl = elNo.closest?.('.funil-no');
+        // Fallback: SVG element (closest nao sai do SVG); checa se ponto cai sobre algum no
+        if (!noEl) continue;
+        const id = noEl.dataset.etapaId;
+        if (id && id !== origemEtapa.id) return { el: noEl, id };
+      }
+      // Fallback final: bate ponto nos retangulos dos nos
+      for (const etapa of estadoEditor.etapas) {
+        if (etapa.id === origemEtapa.id) continue;
+        const w = etapa.tipo === 'condicional' ? COND_TAMANHO : NO_LARGURA;
+        const h = etapa.tipo === 'condicional' ? COND_TAMANHO : NO_ALTURA;
+        const r = canvas.getBoundingClientRect();
+        const x = r.left - canvas.scrollLeft + etapa.posicao_x;
+        const y = r.top - canvas.scrollTop + etapa.posicao_y;
+        if (clientX >= x && clientX <= x + w && clientY >= y && clientY <= y + h) {
+          const noEl = document.querySelector(`.funil-no[data-etapa-id="${etapa.id}"]`);
+          if (noEl) return { el: noEl, id: etapa.id };
         }
       }
       return null;
@@ -1099,8 +1113,11 @@ function instalarDragConexao(handleEl, origemEtapa, ramo) {
       tempPath.remove();
       if (alvoEl) alvoEl.classList.remove('alvo-conexao');
 
-      if (alvoEtapaId) {
-        await tentarConectar(origemEtapa.id, alvoEtapaId, ramo);
+      // Revalida no ponto exato de soltar (evita lag de 1 evento)
+      const alvoFinal = getEtapaAlvoEm(e.clientX, e.clientY);
+      const idFinal = alvoFinal?.id || alvoEtapaId;
+      if (idFinal) {
+        await tentarConectar(origemEtapa.id, idFinal, ramo);
       }
     }
 
