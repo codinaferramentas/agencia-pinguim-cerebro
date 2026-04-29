@@ -1588,6 +1588,48 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   margin-top: 0.25rem;
 }
 
+.fonte-versao-linha {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.fonte-versao-atual {
+  border-color: var(--accent, #E85C00);
+  background: rgba(232, 92, 0, 0.06);
+}
+.fonte-versao-tag {
+  background: var(--accent, #E85C00);
+  color: white;
+  padding: 0.125rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  min-width: 3rem;
+  text-align: center;
+}
+.fonte-versao-tag-old {
+  background: var(--surface-3);
+  color: var(--fg-muted);
+}
+.fonte-versao-dados { display: flex; flex-direction: column; gap: 0.125rem; }
+.fonte-versao-num { font-weight: 600; font-size: 0.875rem; color: var(--fg); }
+.fonte-versao-meta { font-size: 0.75rem; color: var(--fg-muted); }
+.fonte-versao-vazio {
+  text-align: center;
+  padding: 2rem;
+  color: var(--fg-muted);
+  font-size: 0.875rem;
+  background: var(--surface-2);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--r-md);
+}
+
 .view-toggle {
   display: flex;
   gap: 0.25rem;

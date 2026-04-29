@@ -115,21 +115,23 @@ export async function gerar() {
             <li>Estrutura no banco (categoria=clone + subcategoria=slug-da-squad-canônica em <code>pinguim.produtos</code>)</li>
             <li><strong>103 clones importados</strong> seguindo a fonte canônica do ecossistema:
               <ul>
-                <li>3 Sócios Pinguim (Luiz, Micha, Pedro)</li>
-                <li>100 Especialistas em 12 squads canônicas</li>
+                <li>3 Sócios Pinguim (Luiz, Micha, Pedro) — alimentação manual pelos próprios sócios</li>
+                <li>100 Especialistas em 12 squads canônicas — todos com SOUL rico (média 4.700–7.400 chars)</li>
               </ul>
             </li>
+            <li><strong>SOULs ricos em todos os clones de Especialistas</strong>. Padrão de 5 seções: Contexto, Metodologia Central, Estilo, Padrões de Trabalho, Exemplos Anotados. Frameworks reais (Value Equation, Daring Leadership, BRAVING, GIST, etc.) e citações reconstruídas fiéis ao estilo de cada profissional.</li>
             <li>SOULs vetorizados como primeira fonte de cada Cérebro de Clone (busca semântica funcionando)</li>
             <li>Sidebar de Cérebros mostra Clones em 2 famílias (Sócios + Especialistas), com cada uma das 12 squads colapsável e legendada com domínio canônico</li>
             <li>Filtro visual por categoria de Cérebro</li>
             <li><strong>Edição guiada do SOUL</strong>: ao abrir um Clone, painel "Voz e identidade" oferece edição por 8 campos guiados (tom, vocabulário, princípios, exemplos…) em vez de markdown livre. Salvar revetoriza automaticamente.</li>
             <li><strong>Alimentação com fontes adicionais</strong>: botão "+ Alimentar" suporta upload avulso de áudio, post, e-mail, PDF — mesmo motor de ingest dos Cérebros de produto. Animação Squad roda durante o processo se o toggle estiver ligado.</li>
+            <li><strong>Versionamento do SOUL</strong>: cada edição cria um snapshot. Botão "📜 Histórico" mostra todas as versões anteriores (com motivo: edição guiada, edição livre, enriquecimento por IA), permite ver o conteúdo de qualquer versão e restaurar. A restauração também vira versão — nunca perde nada.</li>
+            <li><strong>Seleção de clones por agente</strong>: na tela de Agentes, cada card tem botão "👤 Clones consultados" que abre modal pra marcar quais clones aquele agente carrega no contexto. Tabela <code>pinguim.agente_clones</code> guarda a relação. Pronto pra ser lido pelo agente em runtime.</li>
           </ul>
 
           <h3>⧗ Em construção</h3>
           <ul>
-            <li>AGENT-CARD com campo <code>clones_consultados</code> sendo lido em runtime</li>
-            <li>UI pra ver e editar quais Clones cada agente consulta</li>
+            <li>AGENT-CARD lendo <code>clones_consultados</code> em runtime — depende de criar o primeiro agente real (próximo pilar)</li>
             <li>Tela de "ajustar curadoria do framework" — cliente do Pinguim OS escolhe quais das 12 squads canônicas faz sentido pra negócio dele</li>
           </ul>
 

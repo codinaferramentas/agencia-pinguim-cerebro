@@ -1537,7 +1537,10 @@ async function editarFonte(peca) {
           erroEl.style.display = 'none';
 
           try {
-            // 1. Update na tabela
+            // 1. Snapshot antes da edicao (so se conteudo mudou)
+            if (conteudoMudou) await salvarVersaoFonte(peca.id, 'edicao_livre');
+
+            // 2. Update na tabela
             const { error: errUp } = await sb.from('cerebro_fontes').update({
               titulo, tipo, autor, url, tags: tagsArr.length ? tagsArr : null,
               conteudo_md: conteudo, tamanho_bytes: conteudo.length,
@@ -1637,6 +1640,90 @@ function escapeHtml(s) {
 }
 
 /* ================================================================
+   VERSIONAMENTO DE FONTE — primariamente pra SOUL de Clone.
+   Salva snapshot ANTES de cada edicao em cerebro_fonte_versoes,
+   e incrementa cerebro_fontes.versao. Idempotente: se conteudo
+   for igual (ou diff < 50 chars), pula.
+   ================================================================ */
+async function salvarVersaoFonte(fonteId, motivo) {
+  const sb = getSupabase();
+  if (!sb) return null;
+  const { data: f, error } = await sb.from('cerebro_fontes')
+    .select('id, conteudo_md, tamanho_bytes, versao, metadata')
+    .eq('id', fonteId).single();
+  if (error || !f) return null;
+  if (!f.conteudo_md || f.conteudo_md.length === 0) return null;
+  const versaoAtual = f.versao || 1;
+  const { error: errIns } = await sb.from('cerebro_fonte_versoes').insert({
+    fonte_id: f.id,
+    versao: versaoAtual,
+    conteudo_md: f.conteudo_md,
+    tamanho_bytes: f.tamanho_bytes,
+    metadata: f.metadata || {},
+    motivo: motivo || 'edicao',
+  });
+  if (errIns) {
+    // Se ja existe versao, ignora (idempotente)
+    if (!String(errIns.message || '').includes('duplicate')) console.warn('versao SOUL:', errIns.message);
+  }
+  // Incrementa versao na fonte
+  await sb.from('cerebro_fontes').update({ versao: versaoAtual + 1 }).eq('id', fonteId);
+  return versaoAtual;
+}
+
+async function fetchVersoesFonte(fonteId) {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const { data, error } = await sb.from('cerebro_fonte_versoes')
+    .select('id, versao, tamanho_bytes, motivo, criado_em, metadata')
+    .eq('fonte_id', fonteId)
+    .order('versao', { ascending: false });
+  if (error) return [];
+  return data || [];
+}
+
+async function fetchVersaoFonteConteudo(versaoId) {
+  const sb = getSupabase();
+  if (!sb) return null;
+  const { data } = await sb.from('cerebro_fonte_versoes')
+    .select('conteudo_md').eq('id', versaoId).single();
+  return data?.conteudo_md || null;
+}
+
+async function restaurarVersaoFonte(fonteId, versaoId) {
+  const sb = getSupabase();
+  if (!sb) throw new Error('Supabase nao conectado');
+  const conteudo = await fetchVersaoFonteConteudo(versaoId);
+  if (!conteudo) throw new Error('Versao nao encontrada');
+  // Salva versao atual antes de sobrescrever
+  await salvarVersaoFonte(fonteId, 'antes_de_restaurar');
+  // Atualiza fonte com conteudo da versao restaurada
+  const { error: errUp } = await sb.from('cerebro_fontes').update({
+    conteudo_md: conteudo,
+    tamanho_bytes: conteudo.length,
+  }).eq('id', fonteId);
+  if (errUp) throw new Error(errUp.message);
+  // Re-vetoriza
+  await sb.from('cerebro_fontes_chunks').delete().eq('fonte_id', fonteId);
+  const { data: { session } } = await sb.auth.getSession();
+  const fnUrl = `${window.__ENV__.SUPABASE_URL}/functions/v1/revetorizar-fonte`;
+  const resp = await fetch(fnUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`,
+      'apikey': window.__ENV__.SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ fonte_id: fonteId }),
+  });
+  if (!resp.ok) {
+    const errBody = await resp.json().catch(() => ({}));
+    throw new Error(`Revetorização falhou: ${errBody.error || resp.status}`);
+  }
+  return true;
+}
+
+/* ================================================================
    EDICAO GUIADA DO SOUL — so pra Cerebros categoria=clone.
    Substitui edicao em texto livre por 8 campos guiados.
    ================================================================ */
@@ -1690,9 +1777,130 @@ function blocoEdicaoClone() {
       'Edite a SOUL.md por campos guiados — sem precisar formatar Markdown na mão. Pra alimentar com áudios, posts ou e-mails reais, use "+ Alimentar" no topo.'),
     el('div', { class: 'clone-painel-acoes' }, [
       el('button', { class: 'btn btn-primary', onclick: () => abrirEdicaoGuiadaSoul() }, '✎ Editar voz com guia'),
+      el('button', { class: 'btn', onclick: () => abrirHistoricoSoul() }, '📜 Histórico'),
     ]),
   );
   return card;
+}
+
+async function abrirHistoricoSoul() {
+  const sb = getSupabase();
+  if (!sb) { await alertarDark({ titulo: 'Sem conexão', mensagem: 'Supabase não conectado.', tipo: 'erro' }); return; }
+
+  // Pega fonte SOUL (mesmo padrao da edicao guiada)
+  let fonteSoul = pecasCache.find(p =>
+    (p.titulo || '').toLowerCase().includes('soul') || p.tipo === 'manifesto'
+  );
+  if (!fonteSoul) {
+    const { data } = await sb.from('cerebro_fontes')
+      .select('id, titulo, tipo, conteudo_md, versao')
+      .eq('cerebro_id', cerebroAtual.cerebro_id)
+      .or('tipo.eq.manifesto,titulo.ilike.%soul%').limit(1);
+    if (!data || !data.length) {
+      await alertarDark({ titulo: 'Sem SOUL', mensagem: 'Esse Clone ainda não tem SOUL.', tipo: 'erro' });
+      return;
+    }
+    fonteSoul = data[0];
+  }
+
+  const versoes = await fetchVersoesFonte(fonteSoul.id);
+  const versaoAtual = fonteSoul.versao || 1;
+
+  const back = el('div', {
+    class: 'modal-backdrop', style: 'z-index:10000',
+    onclick: (e) => { if (e.target === back) fechar(); }
+  });
+  const card = el('div', { class: 'modal-card', style: 'max-width:760px;max-height:90vh;display:flex;flex-direction:column' });
+  function fechar() { back.classList.remove('open'); setTimeout(() => back.remove(), 180); }
+
+  const motivoLabel = {
+    edicao_guiada: 'Edição guiada',
+    edicao_livre: 'Edição livre',
+    enriquecimento_llm: 'Enriquecido por IA',
+    antes_de_restaurar: 'Antes de restaurar',
+    edicao: 'Edição',
+  };
+
+  const lista = el('div', { style: 'flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem' });
+
+  // Versao atual no topo
+  lista.append(el('div', { class: 'fonte-versao-linha fonte-versao-atual' }, [
+    el('div', { class: 'fonte-versao-tag' }, 'Atual'),
+    el('div', { class: 'fonte-versao-dados', style: 'flex:1' }, [
+      el('div', { class: 'fonte-versao-num' }, `v${versaoAtual}`),
+      el('div', { class: 'fonte-versao-meta' }, `${(fonteSoul.tamanho_bytes ?? fonteSoul.conteudo_md?.length ?? 0)} chars`),
+    ]),
+  ]));
+
+  if (versoes.length === 0) {
+    lista.append(el('div', { class: 'fonte-versao-vazio' },
+      'Nenhuma versão anterior. Cada vez que você editar a SOUL, uma versão é guardada aqui.'));
+  } else {
+    versoes.forEach(v => {
+      const data = new Date(v.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+      const linha = el('div', { class: 'fonte-versao-linha' }, [
+        el('div', { class: 'fonte-versao-tag fonte-versao-tag-old' }, `v${v.versao}`),
+        el('div', { class: 'fonte-versao-dados', style: 'flex:1' }, [
+          el('div', { class: 'fonte-versao-num' }, motivoLabel[v.motivo] || v.motivo || 'Edição'),
+          el('div', { class: 'fonte-versao-meta' }, `${data} · ${v.tamanho_bytes || 0} chars`),
+        ]),
+        el('div', { style: 'display:flex;gap:.375rem' }, [
+          el('button', {
+            class: 'btn btn-ghost', style: 'font-size:.75rem;padding:.25rem .625rem',
+            onclick: async () => { await previewVersao(v.id, v.versao); },
+          }, 'Ver'),
+          el('button', {
+            class: 'btn', style: 'font-size:.75rem;padding:.25rem .625rem',
+            onclick: async () => {
+              if (!confirm(`Restaurar v${v.versao}? A versão atual vira histórico (você não perde nada).`)) return;
+              try {
+                await restaurarVersaoFonte(fonteSoul.id, v.id);
+                fechar();
+                if (cerebroAtual?.slug) abrirCerebroDetalhe(cerebroAtual.slug);
+              } catch (e) {
+                await alertarDark({ titulo: 'Erro', mensagem: e.message, tipo: 'erro' });
+              }
+            },
+          }, 'Restaurar'),
+        ]),
+      ]);
+      lista.append(linha);
+    });
+  }
+
+  card.append(
+    el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;padding:0 0 1rem;border-bottom:1px solid var(--border-subtle);margin-bottom:1rem' }, [
+      el('div', {}, [
+        el('div', { style: 'font-family:var(--font-heading);font-size:1rem;font-weight:600' }, `Histórico — SOUL de ${cerebroAtual.nome}`),
+        el('div', { style: 'font-size:.8125rem;color:var(--fg-muted);margin-top:.125rem' }, 'Cada edição cria uma versão. Você pode comparar e restaurar.'),
+      ]),
+      el('button', { type: 'button', class: 'modal-close', onclick: fechar }, '×'),
+    ]),
+    lista,
+  );
+  back.append(card);
+  document.body.append(back);
+  requestAnimationFrame(() => back.classList.add('open'));
+}
+
+async function previewVersao(versaoId, num) {
+  const conteudo = await fetchVersaoFonteConteudo(versaoId);
+  const back = el('div', {
+    class: 'modal-backdrop', style: 'z-index:10001',
+    onclick: (e) => { if (e.target === back) fechar(); }
+  });
+  const card = el('div', { class: 'modal-card', style: 'max-width:780px;max-height:90vh;display:flex;flex-direction:column' });
+  function fechar() { back.classList.remove('open'); setTimeout(() => back.remove(), 180); }
+  card.append(
+    el('div', { style: 'display:flex;justify-content:space-between;align-items:center;padding-bottom:1rem;border-bottom:1px solid var(--border-subtle);margin-bottom:1rem' }, [
+      el('div', { style: 'font-family:var(--font-heading);font-weight:600' }, `Preview — v${num}`),
+      el('button', { class: 'modal-close', onclick: fechar }, '×'),
+    ]),
+    el('pre', { style: 'flex:1;min-height:0;overflow:auto;white-space:pre-wrap;word-wrap:break-word;font-size:.8125rem;line-height:1.5;color:var(--fg-muted)' }, conteudo || '(vazio)'),
+  );
+  back.append(card);
+  document.body.append(back);
+  requestAnimationFrame(() => back.classList.add('open'));
 }
 
 async function abrirEdicaoGuiadaSoul() {
@@ -1774,6 +1982,9 @@ async function abrirEdicaoGuiadaSoul() {
         const mudou = novoMd.trim() !== (fonteSoul.conteudo_md || '').trim();
 
         if (!mudou) { fechar(); return; }
+
+        // Snapshot ANTES da edicao
+        await salvarVersaoFonte(fonteSoul.id, 'edicao_guiada');
 
         const { error: errUp } = await sb.from('cerebro_fontes').update({
           conteudo_md: novoMd,

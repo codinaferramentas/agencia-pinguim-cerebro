@@ -1078,7 +1078,163 @@ function renderAgentCard(a) {
     field('Handoff', a.handoff),
     field('Critério de qualidade', a.criterio_qualidade || a.critério_qualidade),
     field('Métrica de sucesso', a.metrica_sucesso || a.métrica_sucesso),
+    el('div', { class: 'agent-card-actions', style: 'display:flex;gap:.5rem;margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border-subtle)' }, [
+      el('button', {
+        class: 'btn',
+        style: 'font-size:.75rem',
+        onclick: () => abrirModalClonesAgente(a),
+      }, '👤 Clones consultados'),
+    ]),
   ]);
+}
+
+async function abrirModalClonesAgente(agente) {
+  const { getSupabase } = await import('./sb-client.js?v=20260429d');
+  const sb = getSupabase();
+  if (!sb) return;
+  // Carrega clones disponiveis + ativos pra esse agente
+  const [clonesRes, atualRes] = await Promise.all([
+    sb.from('vw_cerebros_catalogo').select('produto_id, slug, nome, emoji, subcategoria').eq('categoria', 'clone').order('subcategoria').order('nome'),
+    sb.from('agente_clones').select('clone_produto_id, ativo, ordem').eq('agente_id', agente.id),
+  ]);
+  if (clonesRes.error) { console.error(clonesRes.error); return; }
+  const clones = clonesRes.data || [];
+  const ativos = new Map((atualRes.data || []).map(r => [r.clone_produto_id, r.ativo]));
+
+  const SUB_LABEL = {
+    socio_pinguim: 'Sócios Pinguim',
+    'advisory-board': 'Advisory Board',
+    'copy': 'Copywriters',
+    'storytelling': 'Storytellers',
+    'traffic-masters': 'Traffic Masters',
+    'design': 'Design',
+    'data': 'Data',
+    'deep-research': 'Deep Research',
+    'finops': 'FinOps',
+    'legal': 'Legal',
+    'cybersecurity': 'Cybersecurity',
+    'translate': 'Translate',
+    'squad-creator-pro': 'Squad Creator Pro',
+  };
+
+  // Agrupa por subcategoria
+  const grupos = {};
+  for (const c of clones) {
+    const k = c.subcategoria || 'outros';
+    (grupos[k] = grupos[k] || []).push(c);
+  }
+
+  const back = document.createElement('div');
+  back.className = 'modal-backdrop';
+  back.style.zIndex = 10000;
+  back.onclick = (e) => { if (e.target === back) fechar(); };
+
+  const card = document.createElement('div');
+  card.className = 'modal-card';
+  card.style.cssText = 'max-width:780px;max-height:90vh;display:flex;flex-direction:column';
+  function fechar() { back.classList.remove('open'); setTimeout(() => back.remove(), 180); }
+
+  const lista = document.createElement('div');
+  lista.style.cssText = 'flex:1;min-height:0;overflow-y:auto;padding-right:.25rem;display:flex;flex-direction:column;gap:.875rem';
+
+  // Estado local: mapa produto_id -> ativo
+  const estado = new Map();
+  clones.forEach(c => estado.set(c.produto_id, ativos.has(c.produto_id) ? !!ativos.get(c.produto_id) : false));
+
+  const ORDEM = ['socio_pinguim','advisory-board','copy','storytelling','traffic-masters','design','data','deep-research','finops','legal','cybersecurity','translate','squad-creator-pro'];
+  ORDEM.forEach(sub => {
+    const lst = grupos[sub];
+    if (!lst || !lst.length) return;
+    const grupo = document.createElement('div');
+    const titulo = document.createElement('div');
+    titulo.style.cssText = 'font-family:var(--font-mono);font-size:.6875rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);margin-bottom:.375rem';
+    titulo.textContent = `${SUB_LABEL[sub] || sub} · ${lst.length}`;
+    grupo.appendChild(titulo);
+    const grade = document.createElement('div');
+    grade.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.375rem';
+    lst.forEach(c => {
+      const lab = document.createElement('label');
+      lab.style.cssText = 'display:flex;align-items:center;gap:.5rem;padding:.5rem .625rem;border:1px solid var(--border-subtle);border-radius:.375rem;cursor:pointer;background:var(--surface-2);font-size:.8125rem';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!estado.get(c.produto_id);
+      cb.onchange = () => estado.set(c.produto_id, cb.checked);
+      const span = document.createElement('span');
+      span.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      span.textContent = `${c.emoji || '👤'} ${c.nome}`;
+      lab.appendChild(cb);
+      lab.appendChild(span);
+      grade.appendChild(lab);
+    });
+    grupo.appendChild(grade);
+    lista.appendChild(grupo);
+  });
+
+  const btnSalvar = document.createElement('button');
+  btnSalvar.type = 'button';
+  btnSalvar.className = 'btn btn-primary';
+  btnSalvar.textContent = 'Salvar';
+  btnSalvar.onclick = async () => {
+    btnSalvar.disabled = true;
+    btnSalvar.textContent = 'Salvando…';
+    try {
+      const linhasNovas = [];
+      const idsParaApagar = [];
+      for (const [pid, ativo] of estado.entries()) {
+        const tinha = ativos.has(pid);
+        if (ativo && !tinha) {
+          linhasNovas.push({ agente_id: agente.id, clone_produto_id: pid, ativo: true });
+        } else if (!ativo && tinha) {
+          idsParaApagar.push(pid);
+        }
+      }
+      if (linhasNovas.length) {
+        const { error } = await sb.from('agente_clones').insert(linhasNovas);
+        if (error) throw error;
+      }
+      if (idsParaApagar.length) {
+        const { error } = await sb.from('agente_clones').delete()
+          .eq('agente_id', agente.id)
+          .in('clone_produto_id', idsParaApagar);
+        if (error) throw error;
+      }
+      fechar();
+    } catch (e) {
+      btnSalvar.disabled = false;
+      btnSalvar.textContent = 'Salvar';
+      alert('Erro: ' + (e.message || e));
+    }
+  };
+
+  const btnCancel = document.createElement('button');
+  btnCancel.type = 'button';
+  btnCancel.className = 'btn btn-ghost';
+  btnCancel.textContent = 'Cancelar';
+  btnCancel.onclick = fechar;
+
+  const head = document.createElement('div');
+  head.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;padding:0 0 1rem;border-bottom:1px solid var(--border-subtle);margin-bottom:1rem';
+  const titulo = document.createElement('div');
+  titulo.innerHTML = `<div style="font-family:var(--font-heading);font-size:1rem;font-weight:600">Clones consultados — ${agente.nome}</div><div style="font-size:.8125rem;color:var(--fg-muted);margin-top:.125rem">Marque os Clones que esse agente carrega no contexto. Vira diretiva <code>clones_consultados</code> no AGENT-CARD em runtime.</div>`;
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'modal-close';
+  closeBtn.textContent = '×';
+  closeBtn.onclick = fechar;
+  head.appendChild(titulo);
+  head.appendChild(closeBtn);
+
+  const footer = document.createElement('div');
+  footer.style.cssText = 'display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border-subtle)';
+  footer.appendChild(btnCancel);
+  footer.appendChild(btnSalvar);
+
+  card.appendChild(head);
+  card.appendChild(lista);
+  card.appendChild(footer);
+  back.appendChild(card);
+  document.body.appendChild(back);
+  requestAnimationFrame(() => back.classList.add('open'));
 }
 
 async function renderSquadsPage() {
