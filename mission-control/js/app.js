@@ -350,6 +350,53 @@ async function loadCerebrosTree() {
       const catSub = el('div', { class: 'nav-cat-sub' });
       if (doGrupo.length === 0) {
         catSub.appendChild(el('div', { class: 'nav-empty' }, 'Nenhum ainda'));
+      } else if (cat === 'clone') {
+        // Clone agrupa por subcategoria (socio_pinguim, externo_copy, externo_storytelling, ...)
+        const subOrdem = ['socio_pinguim', 'externo_copy', 'externo_storytelling', 'externo_advisor', 'externo_design', 'externo_data', 'externo_traffic', 'outros'];
+        const subLabel = {
+          socio_pinguim: 'Sócios Pinguim',
+          externo_copy: 'Copywriters',
+          externo_storytelling: 'Storytellers',
+          externo_advisor: 'Advisors',
+          externo_design: 'Designers',
+          externo_data: 'Data',
+          externo_traffic: 'Tráfego',
+          outros: 'Outros',
+        };
+        const porSub = {};
+        doGrupo.forEach(c => {
+          const sub = c.subcategoria || 'outros';
+          (porSub[sub] = porSub[sub] || []).push(c);
+        });
+        subOrdem.forEach(sub => {
+          const lista = porSub[sub];
+          if (!lista || lista.length === 0) return;
+          catSub.appendChild(el('div', { class: 'nav-subcat-label' }, [
+            el('span', {}, subLabel[sub] || sub),
+            el('span', { class: 'nav-subcat-count' }, String(lista.length)),
+          ]));
+          lista.forEach(c => {
+            const id = c.slug || c.id;
+            const ativo = window.__cerebroAtivoSlug === id;
+            const leaf = el('button', {
+              class: 'nav-leaf' + (ativo ? ' active' : ''),
+              type: 'button',
+              data: { id },
+              title: c.nome,
+              onclick: () => {
+                window.__cerebroAtivoSlug = id;
+                window.dispatchEvent(new CustomEvent('cerebro:select', { detail: { slug: id } }));
+                renderNavTree();
+                if (isMobile()) fecharMobileMenu();
+              },
+            }, [
+              iconeNode({ icone_url: c.icone_url, emoji: c.emoji, nome: c.nome }, { size: 'sm', className: 'nav-leaf-icon' }),
+              el('span', { class: 'nav-leaf-label' }, c.nome),
+              (c.total_fontes != null) ? el('span', { class: 'nav-leaf-meta' }, String(c.total_fontes)) : null,
+            ]);
+            catSub.appendChild(leaf);
+          });
+        });
       } else {
         doGrupo.forEach(c => {
           const id = c.slug || c.id;

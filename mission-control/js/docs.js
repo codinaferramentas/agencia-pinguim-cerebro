@@ -31,6 +31,13 @@ export const DOCS_CATALOGO = [
     secao: 'Fundamentos',
   },
   {
+    slug: 'anatomia-agente',
+    titulo: 'Anatomia do Agente Pinguim',
+    descricao: 'Como um agente é construído: 7 arquivos de identidade + 5 fontes vivas (Cérebro, Persona, Skill, Clone, Funil) + estado runtime + loop EPP. Leitura obrigatória antes de criar agente novo.',
+    meta: '8 min · fundamental',
+    secao: 'Fundamentos',
+  },
+  {
     slug: 'cerebros',
     titulo: 'Cérebros',
     descricao: 'A memória viva da agência. Cada produto tem um Cérebro alimentado com aulas, depoimentos, objeções, sacadas. Tudo que vira persona, copy, campanha nasce daqui.',
@@ -49,6 +56,13 @@ export const DOCS_CATALOGO = [
     titulo: 'Skills',
     descricao: 'Receitas em Markdown que os agentes leem e executam. Padrão Anthropic Agent Skills (Dez/2025). 3 categorias: Universais, Por Área, Específicas. Capacidade reutilizável em escala.',
     meta: '6 min · módulo principal',
+    secao: 'Módulos',
+  },
+  {
+    slug: 'clones',
+    titulo: 'Clones',
+    descricao: 'Subtipo de Cérebro com voz/método de pessoa específica (sócio interno ou expert externo). 39 importados: 3 sócios + 24 copywriters + 12 storytellers. Não é agente — é fonte de voz que agentes consultam.',
+    meta: '5 min · módulo principal',
     secao: 'Módulos',
   },
   {
@@ -160,7 +174,7 @@ export async function renderDocDetalhe(slug) {
   page.innerHTML = '<div style="padding:3rem;color:var(--fg-muted);text-align:center">Carregando…</div>';
 
   // Importa modulo da doc dinamicamente (lazy)
-  const mod = await import(`./docs/${slug}.js?v=20260428p`);
+  const mod = await import(`./docs/${slug}.js?v=20260428q`);
   const conteudo = await mod.gerar();
 
   const wrap = el('div', { class: 'docs-detail' });

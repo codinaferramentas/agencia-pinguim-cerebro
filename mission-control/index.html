@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pinguim OS</title>
-<link rel="stylesheet" href="css/style.css?v=20260428p">
+<link rel="stylesheet" href="css/style.css?v=20260428q">
 </head>
 <body>
 <!-- Botao hamburger (so mobile) -->
@@ -112,11 +112,11 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="module">
-  import { guard, logout } from './js/auth-gate.js?v=20260428p';
+  import { guard, logout } from './js/auth-gate.js?v=20260428q';
   const ok = await guard();
   if (ok) {
-    await import('./js/sb-client.js?v=20260428p');
-    await import('./js/app.js?v=20260428p');
+    await import('./js/sb-client.js?v=20260428q');
+    await import('./js/app.js?v=20260428q');
     const btn = document.getElementById('nav-logout');
     if (btn) btn.addEventListener('click', logout);
   }

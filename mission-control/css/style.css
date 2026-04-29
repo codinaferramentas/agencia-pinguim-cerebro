@@ -514,6 +514,33 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   font-size: 0.625rem;
   color: var(--fg-dim);
 }
+
+/* Sub-categoria (usado em Clones — Sócios / Copywriters / Storytellers etc) */
+.nav-subcat-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--fg-muted);
+  padding: 0.5rem 0.625rem 0.25rem;
+  margin-top: 0.375rem;
+  border-top: 1px solid var(--border-subtle);
+}
+.nav-subcat-label:first-child {
+  margin-top: 0;
+  border-top: none;
+}
+.nav-subcat-count {
+  background: var(--surface-3);
+  color: var(--fg-dim);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 600;
+}
 .nav-cat-caret {
   font-size: 0.6875rem;
   color: var(--fg-dim);
