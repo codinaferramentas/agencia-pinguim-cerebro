@@ -209,6 +209,7 @@ const NAV_OPEN = (() => {
 })();
 if (!NAV_OPEN.cerebros_cat) NAV_OPEN.cerebros_cat = {};
 if (!NAV_OPEN.skills_cat) NAV_OPEN.skills_cat = {};
+if (!NAV_OPEN.cerebros_subcat) NAV_OPEN.cerebros_subcat = {};
 function persistNavOpen() {
   try { localStorage.setItem('pinguim_nav_open', JSON.stringify(NAV_OPEN)); } catch {}
 }
@@ -389,15 +390,27 @@ async function loadCerebrosTree() {
         subOrdem.forEach(sub => {
           const lista = porSub[sub];
           if (!lista || lista.length === 0) return;
-          catSub.appendChild(el('div', { class: 'nav-subcat-label' }, [
-            el('span', {}, subLabel[sub] || sub),
+          const subAberto = !!NAV_OPEN.cerebros_subcat[sub];
+          const subBtn = el('button', {
+            class: 'nav-subcat-toggle' + (subAberto ? ' open' : ''),
+            type: 'button',
+            onclick: () => {
+              NAV_OPEN.cerebros_subcat[sub] = !NAV_OPEN.cerebros_subcat[sub];
+              persistNavOpen();
+              renderNavTree();
+            },
+          }, [
+            el('span', { class: 'nav-subcat-caret' }, '›'),
+            el('span', { class: 'nav-subcat-label-text' }, subLabel[sub] || sub),
             el('span', { class: 'nav-subcat-count' }, String(lista.length)),
-          ]));
+          ]);
+          catSub.appendChild(subBtn);
+          if (!subAberto) return;
           lista.forEach(c => {
             const id = c.slug || c.id;
             const ativo = window.__cerebroAtivoSlug === id;
             const leaf = el('button', {
-              class: 'nav-leaf' + (ativo ? ' active' : ''),
+              class: 'nav-leaf nav-leaf-deep' + (ativo ? ' active' : ''),
               type: 'button',
               data: { id },
               title: c.nome,

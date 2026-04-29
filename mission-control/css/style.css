@@ -549,6 +549,41 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
 }
 .nav-cat.open .nav-cat-caret { transform: rotate(90deg); }
 
+.nav-subcat-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--fg-muted);
+  padding: 0.5rem 0.625rem 0.375rem;
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--border-subtle);
+  text-align: left;
+  transition: color .15s;
+}
+.nav-subcat-toggle:first-child { margin-top: 0; border-top: none; }
+.nav-subcat-toggle:hover { color: var(--fg); }
+.nav-subcat-caret {
+  font-size: 0.6875rem;
+  color: var(--fg-dim);
+  transition: transform .2s;
+  flex-shrink: 0;
+}
+.nav-subcat-toggle.open .nav-subcat-caret { transform: rotate(90deg); }
+.nav-subcat-label-text { flex: 1; }
+
+.nav-leaf-deep {
+  padding-left: 1.875rem;
+}
+.nav-leaf-deep::before { left: -0.5rem; width: 0.5rem; }
+
 /* Folha (cerebro especifico, persona especifica).
    Tracinho horizontal liga a linha do nav-cat-sub ate o icone. */
 .nav-leaf {

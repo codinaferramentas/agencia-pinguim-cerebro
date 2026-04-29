@@ -1741,7 +1741,7 @@ async function abrirEdicaoGuiadaSoul() {
   function fechar() { back.classList.remove('open'); setTimeout(() => back.remove(), 180); }
 
   const camposEls = {};
-  const camposWrap = el('div', { style: 'display:flex;flex-direction:column;gap:1rem;overflow-y:auto;padding-right:.25rem' });
+  const camposWrap = el('div', { style: 'display:flex;flex-direction:column;gap:1rem;overflow-y:auto;flex:1;min-height:0;padding-right:.25rem' });
   for (const c of CAMPOS_SOUL_GUIADO) {
     const ta = el('textarea', {
       rows: c.key === 'exemplos' ? '6' : '3',
