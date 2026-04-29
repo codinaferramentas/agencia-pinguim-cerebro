@@ -580,9 +580,66 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
 .nav-subcat-label-text { flex: 1; }
 
 .nav-leaf-deep {
-  padding-left: 1.875rem;
+  padding-left: 2.25rem;
 }
 .nav-leaf-deep::before { left: -0.5rem; width: 0.5rem; }
+
+.nav-squad-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: var(--fg-muted);
+  padding: 0.375rem 0.625rem 0.375rem 1.25rem;
+  text-align: left;
+  transition: color .15s, background .15s;
+  border-radius: var(--r-sm);
+}
+.nav-squad-toggle:hover { color: var(--fg); background: var(--surface-2); }
+.nav-squad-caret {
+  font-size: 0.6875rem;
+  color: var(--fg-dim);
+  transition: transform .2s;
+  flex-shrink: 0;
+}
+.nav-squad-toggle.open .nav-squad-caret { transform: rotate(90deg); }
+.nav-squad-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  min-width: 0;
+}
+.nav-squad-titulo {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-squad-dominio {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-squad-count {
+  background: var(--surface-3);
+  color: var(--fg-dim);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
 
 /* Folha (cerebro especifico, persona especifica).
    Tracinho horizontal liga a linha do nav-cat-sub ate o icone. */
@@ -4396,6 +4453,33 @@ body.mobile-menu-open .mobile-overlay {
   color: var(--docs-fg-2);
   line-height: 1.65;
 }
+
+#page-docs .docs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  margin: 0.75rem 0 1.25rem;
+}
+#page-docs .docs-table th,
+#page-docs .docs-table td {
+  text-align: left;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--docs-line);
+  vertical-align: top;
+}
+#page-docs .docs-table th {
+  font-family: var(--docs-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--docs-fg-3);
+  border-bottom-color: var(--docs-line-2);
+}
+#page-docs .docs-table td {
+  color: var(--docs-fg-2);
+}
+#page-docs .docs-table td strong { color: var(--docs-fg); }
 
 .docs-index, .docs-detail {
   max-width: 1100px;

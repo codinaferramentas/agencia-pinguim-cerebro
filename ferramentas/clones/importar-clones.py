@@ -120,28 +120,32 @@ def slugify(s):
 # --- Lista de clones a importar ---
 # Cada squad define: pasta base, subcategoria, emoji default, e excludes
 # (slugs que NAO sao clone — orquestradores/papeis funcionais Pinguim).
+# Subcategorias usam o slug da SQUAD canonica do HTML/JSON do ecossistema
+# (fonte: ecossistema-squads-completo.html + ecossistema-mapeamento.json).
+# Cada entrada equivale a uma das 12 squads marcadas como "Squads de Clones
+# de Pessoas Reais" no HTML.
 SQUADS = [
     {
         'caminho': 'cerebro/squads/copy/agentes',
-        'subcategoria': 'externo_copy',
+        'subcategoria': 'copy',
         'emoji': '✍️',
         'excludes': {'copy-chief'},
     },
     {
         'caminho': 'cerebro/squads/storytelling/agentes',
-        'subcategoria': 'externo_storytelling',
+        'subcategoria': 'storytelling',
         'emoji': '📖',
         'excludes': {'story-chief'},
     },
     {
         'caminho': 'cerebro/squads/advisory-board/agentes',
-        'subcategoria': 'externo_advisor',
+        'subcategoria': 'advisory-board',
         'emoji': '🧭',
         'excludes': {'board-chair'},
     },
     {
         'caminho': 'cerebro/squads/traffic-masters/agentes',
-        'subcategoria': 'externo_traffic',
+        'subcategoria': 'traffic-masters',
         'emoji': '📈',
         'excludes': {
             'ad-midas', 'ads-analyst', 'creative-analyst', 'fiscal',
@@ -151,39 +155,66 @@ SQUADS = [
     },
     {
         'caminho': 'cerebro/squads/design/agentes',
-        'subcategoria': 'externo_design',
+        'subcategoria': 'design',
         'emoji': '🎨',
         'excludes': {'design-chief'},
     },
     {
         'caminho': 'cerebro/squads/data/agentes',
-        'subcategoria': 'externo_data',
+        'subcategoria': 'data',
         'emoji': '📊',
         'excludes': {'data-chief'},
     },
     {
         'caminho': 'cerebro/squads/finops/agentes',
-        'subcategoria': 'externo_finops',
+        'subcategoria': 'finops',
         'emoji': '💰',
         'excludes': {'finops-chief'},
     },
     {
         'caminho': 'cerebro/squads/deep-research/agentes',
-        'subcategoria': 'externo_research',
+        'subcategoria': 'deep-research',
         'emoji': '🔬',
         'excludes': {'dr-orchestrator'},
     },
     {
         'caminho': 'cerebro/squads/translate/agentes',
-        'subcategoria': 'externo_translate',
+        'subcategoria': 'translate',
         'emoji': '🌐',
         'excludes': {'cultural-bridge', 'token-optimizer', 'translate-chief'},
     },
     {
         'caminho': 'cerebro/squads/squad-creator-pro/agentes',
-        'subcategoria': 'externo_creator',
+        'subcategoria': 'squad-creator-pro',
         'emoji': '🎬',
         'excludes': {'squad-chief'},
+    },
+    {
+        'caminho': 'cerebro/squads/cybersecurity/agentes',
+        'subcategoria': 'cybersecurity',
+        'emoji': '🛡',
+        # Apenas Peter Kim, Georgia Weidman, Jim Manico, Chris Sanders,
+        # Marcus Carey, Omar Santos sao pessoas reais (HTML canonico).
+        # Demais sao ferramentas funcionais Pinguim, NAO clones.
+        'excludes': {
+            'cyber-chief',
+            'busterer', 'cartographer', 'command-generator', 'dirber',
+            'fuzzer', 'ripper', 'rogue', 'shannon-runner',
+        },
+    },
+    {
+        'caminho': 'cerebro/squads/legal/agentes',
+        'subcategoria': 'legal',
+        'emoji': '⚖️',
+        # Apenas Brad Feld, Ken Adams, Pierpaolo Bottini sao pessoas reais
+        # (HTML canonico). Demais sao agentes operacionais.
+        'excludes': {
+            'legal-chief',
+            'compliance-architect', 'contract-drafter', 'lgpd-specialist',
+            'safe-counsel', 'societarista', 'startup-counsel-br',
+            'tax-strategist-br', 'thesis-researcher', 'trabalhista',
+            'tributarista', 'vc-negotiator',
+        },
     },
 ]
 

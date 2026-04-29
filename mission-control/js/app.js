@@ -353,81 +353,132 @@ async function loadCerebrosTree() {
       if (doGrupo.length === 0) {
         catSub.appendChild(el('div', { class: 'nav-empty' }, 'Nenhum ainda'));
       } else if (cat === 'clone') {
-        // Clone agrupa por subcategoria (socio_pinguim, externo_copy, externo_storytelling, ...)
-        const subOrdem = [
-          'socio_pinguim',
-          'externo_advisor',
-          'externo_copy',
-          'externo_storytelling',
-          'externo_traffic',
-          'externo_design',
-          'externo_data',
-          'externo_finops',
-          'externo_research',
-          'externo_translate',
-          'externo_creator',
-          'outros',
+        // Clones agrupam em 2 familias visuais: Socios + Especialistas.
+        // Especialistas tem 12 squads canonicas (fonte: ecossistema-squads-completo.html).
+        // Cada squad e colapsavel; rotulos e dominios vem do JSON do ecossistema.
+        const ESPECIALISTAS_ORDEM = [
+          'advisory-board',
+          'copy',
+          'storytelling',
+          'traffic-masters',
+          'design',
+          'data',
+          'deep-research',
+          'finops',
+          'legal',
+          'cybersecurity',
+          'translate',
+          'squad-creator-pro',
         ];
-        const subLabel = {
-          socio_pinguim: 'Sócios Pinguim',
-          externo_advisor: 'Advisors',
-          externo_copy: 'Copywriters',
-          externo_storytelling: 'Storytellers',
-          externo_traffic: 'Tráfego',
-          externo_design: 'Design',
-          externo_data: 'Data',
-          externo_finops: 'FinOps',
-          externo_research: 'Research',
-          externo_translate: 'Translate',
-          externo_creator: 'Creator',
-          outros: 'Outros',
+        const SQUAD_INFO = {
+          'advisory-board':    { titulo: 'Advisory Board',  dominio: 'People & Psychology' },
+          'copy':              { titulo: 'Copywriters',     dominio: 'Content & Marketing' },
+          'storytelling':      { titulo: 'Storytellers',    dominio: 'Content & Marketing' },
+          'traffic-masters':   { titulo: 'Traffic Masters', dominio: 'Content & Marketing' },
+          'design':            { titulo: 'Design',          dominio: 'Design & UX' },
+          'data':              { titulo: 'Data',            dominio: 'Data & Analytics' },
+          'deep-research':     { titulo: 'Deep Research',   dominio: 'Data & Analytics' },
+          'finops':            { titulo: 'FinOps',          dominio: 'Business Operations' },
+          'legal':             { titulo: 'Legal',           dominio: 'Business Operations' },
+          'cybersecurity':     { titulo: 'Cybersecurity',   dominio: 'Technical' },
+          'translate':         { titulo: 'Translate',       dominio: 'Communication' },
+          'squad-creator-pro': { titulo: 'Squad Creator Pro', dominio: 'Meta & Frameworks' },
         };
+
         const porSub = {};
         doGrupo.forEach(c => {
           const sub = c.subcategoria || 'outros';
           (porSub[sub] = porSub[sub] || []).push(c);
         });
-        subOrdem.forEach(sub => {
-          const lista = porSub[sub];
-          if (!lista || lista.length === 0) return;
-          const subAberto = !!NAV_OPEN.cerebros_subcat[sub];
-          const subBtn = el('button', {
-            class: 'nav-subcat-toggle' + (subAberto ? ' open' : ''),
+
+        function renderLeaf(c) {
+          const id = c.slug || c.id;
+          const ativo = window.__cerebroAtivoSlug === id;
+          return el('button', {
+            class: 'nav-leaf nav-leaf-deep' + (ativo ? ' active' : ''),
+            type: 'button',
+            data: { id },
+            title: c.nome,
+            onclick: () => {
+              window.__cerebroAtivoSlug = id;
+              window.dispatchEvent(new CustomEvent('cerebro:select', { detail: { slug: id } }));
+              renderNavTree();
+              if (isMobile()) fecharMobileMenu();
+            },
+          }, [
+            iconeNode({ icone_url: c.icone_url, emoji: c.emoji, nome: c.nome }, { size: 'sm', className: 'nav-leaf-icon' }),
+            el('span', { class: 'nav-leaf-label' }, c.nome),
+            (c.total_fontes != null) ? el('span', { class: 'nav-leaf-meta' }, String(c.total_fontes)) : null,
+          ]);
+        }
+
+        // ---- Familia 1: Socios Pinguim ----
+        const socios = porSub['socio_pinguim'] || [];
+        if (socios.length) {
+          const sociosKey = 'fam_socios';
+          const sociosAberto = !!NAV_OPEN.cerebros_subcat[sociosKey];
+          catSub.appendChild(el('button', {
+            class: 'nav-subcat-toggle' + (sociosAberto ? ' open' : ''),
             type: 'button',
             onclick: () => {
-              NAV_OPEN.cerebros_subcat[sub] = !NAV_OPEN.cerebros_subcat[sub];
+              NAV_OPEN.cerebros_subcat[sociosKey] = !NAV_OPEN.cerebros_subcat[sociosKey];
               persistNavOpen();
               renderNavTree();
             },
           }, [
             el('span', { class: 'nav-subcat-caret' }, '›'),
-            el('span', { class: 'nav-subcat-label-text' }, subLabel[sub] || sub),
-            el('span', { class: 'nav-subcat-count' }, String(lista.length)),
-          ]);
-          catSub.appendChild(subBtn);
-          if (!subAberto) return;
-          lista.forEach(c => {
-            const id = c.slug || c.id;
-            const ativo = window.__cerebroAtivoSlug === id;
-            const leaf = el('button', {
-              class: 'nav-leaf nav-leaf-deep' + (ativo ? ' active' : ''),
-              type: 'button',
-              data: { id },
-              title: c.nome,
-              onclick: () => {
-                window.__cerebroAtivoSlug = id;
-                window.dispatchEvent(new CustomEvent('cerebro:select', { detail: { slug: id } }));
-                renderNavTree();
-                if (isMobile()) fecharMobileMenu();
-              },
-            }, [
-              iconeNode({ icone_url: c.icone_url, emoji: c.emoji, nome: c.nome }, { size: 'sm', className: 'nav-leaf-icon' }),
-              el('span', { class: 'nav-leaf-label' }, c.nome),
-              (c.total_fontes != null) ? el('span', { class: 'nav-leaf-meta' }, String(c.total_fontes)) : null,
-            ]);
-            catSub.appendChild(leaf);
-          });
-        });
+            el('span', { class: 'nav-subcat-label-text' }, 'Sócios Pinguim'),
+            el('span', { class: 'nav-subcat-count' }, String(socios.length)),
+          ]));
+          if (sociosAberto) socios.forEach(c => catSub.appendChild(renderLeaf(c)));
+        }
+
+        // ---- Familia 2: Especialistas (12 squads canonicas) ----
+        const totalEsp = ESPECIALISTAS_ORDEM.reduce((acc, sq) => acc + (porSub[sq]?.length || 0), 0);
+        if (totalEsp > 0) {
+          const espKey = 'fam_especialistas';
+          const espAberto = !!NAV_OPEN.cerebros_subcat[espKey];
+          catSub.appendChild(el('button', {
+            class: 'nav-subcat-toggle' + (espAberto ? ' open' : ''),
+            type: 'button',
+            onclick: () => {
+              NAV_OPEN.cerebros_subcat[espKey] = !NAV_OPEN.cerebros_subcat[espKey];
+              persistNavOpen();
+              renderNavTree();
+            },
+          }, [
+            el('span', { class: 'nav-subcat-caret' }, '›'),
+            el('span', { class: 'nav-subcat-label-text' }, 'Especialistas'),
+            el('span', { class: 'nav-subcat-count' }, String(totalEsp)),
+          ]));
+
+          if (espAberto) {
+            ESPECIALISTAS_ORDEM.forEach(sq => {
+              const lista = porSub[sq];
+              if (!lista || !lista.length) return;
+              const info = SQUAD_INFO[sq] || { titulo: sq, dominio: '' };
+              const sqAberto = !!NAV_OPEN.cerebros_subcat[sq];
+              const sqBtn = el('button', {
+                class: 'nav-squad-toggle' + (sqAberto ? ' open' : ''),
+                type: 'button',
+                onclick: () => {
+                  NAV_OPEN.cerebros_subcat[sq] = !NAV_OPEN.cerebros_subcat[sq];
+                  persistNavOpen();
+                  renderNavTree();
+                },
+              }, [
+                el('span', { class: 'nav-squad-caret' }, '›'),
+                el('span', { class: 'nav-squad-text' }, [
+                  el('span', { class: 'nav-squad-titulo' }, info.titulo),
+                  el('span', { class: 'nav-squad-dominio' }, info.dominio),
+                ]),
+                el('span', { class: 'nav-squad-count' }, String(lista.length)),
+              ]);
+              catSub.appendChild(sqBtn);
+              if (sqAberto) lista.forEach(c => catSub.appendChild(renderLeaf(c)));
+            });
+          }
+        }
       } else {
         doGrupo.forEach(c => {
           const id = c.slug || c.id;
