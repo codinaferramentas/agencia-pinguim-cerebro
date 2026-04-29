@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Ecossistema de Squads & Agentes IA — Agencia Pinguim</title>
+<!--
+  Documento mapa do ecossistema completo de squads e agentes IA do Pinguim.
+  30 squads, 211 agentes, 397 tasks, 75 workflows, 10 dominios.
+  Salvo no repo em 2026-04-28 pra servir de fonte canonica do que
+  vai ser implementado como Clones (squads de pessoas reais clonadas)
+  e Squads (agrupamento por dominio).
+
+  Atualizado pelo Andre via anexo no chat 2026-04-28.
+  Fonte original: arquivo enviado manualmente.
+-->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+:root{--bg:#0a0a0f;--bg2:#111118;--card:#1a1a28;--blue:#4f8cff;--purple:#8b5cf6;--green:#10b981;--orange:#f59e0b;--red:#ef4444;--cyan:#06b6d4;--pink:#ec4899;--text:#f1f5f9;--text2:#94a3b8;--text3:#64748b;--border:#2a2a3e;--grad:linear-gradient(135deg,var(--blue),var(--purple),var(--pink));}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);line-height:1.7;}
+::selection{background:rgba(79,140,255,.3);}
+@keyframes fadeUp{from{opacity:0;transform:translateY(30px);}to{opacity:1;transform:translateY(0);}}
+.fade-up{animation:fadeUp .6s ease-out both;}
+.hero{text-align:center;padding:5rem 2rem 3rem;}
+.hero h1{font-size:clamp(2rem,5vw,3.5rem);font-weight:900;margin-bottom:.75rem;}
+.hero h1 span{background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.hero p{color:var(--text2);font-size:1.1rem;max-width:700px;margin:0 auto;}
+.hero-stats{display:flex;justify-content:center;gap:2.5rem;margin-top:2.5rem;flex-wrap:wrap;}
+.hero-stat .val{font-size:2rem;font-weight:900;background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.hero-stat .lbl{font-size:.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;}
+.section{max-width:1200px;margin:0 auto;padding:4rem 2rem;}
+.note{background:#1a1a28;border:1px solid #2a2a3e;border-radius:8px;padding:1rem 1.5rem;margin:0 auto;max-width:900px;font-size:.9rem;color:#94a3b8;}
+.note strong{color:#f1f5f9;}
+</style>
+</head>
+<body>
+<section class="hero">
+<div class="fade-up">
+<h1>Ecossistema de <span>Squads &amp; Agentes IA</span></h1>
+<p>30 squads especializadas, 211 agentes IA, cobrindo de copywriting a cybersecurity</p>
+<div class="hero-stats">
+<div class="hero-stat"><div class="val">30</div><div class="lbl">Squads</div></div>
+<div class="hero-stat"><div class="val">211</div><div class="lbl">Agentes IA</div></div>
+<div class="hero-stat"><div class="val">397</div><div class="lbl">Tasks</div></div>
+<div class="hero-stat"><div class="val">75</div><div class="lbl">Workflows</div></div>
+<div class="hero-stat"><div class="val">10</div><div class="lbl">Dominios</div></div>
+</div>
+</div>
+</section>
+<section class="section">
+<div class="note">
+<strong>Nota:</strong> Documento referencia salvo no repo em 2026-04-28. Versao reduzida do HTML original.
+Para o conteudo completo dos 211 agentes, ver tambem <code>ecossistema-mapeamento.json</code> na raiz do repo
+(versao estruturada, 1088 linhas) e os SOULs reais em <code>cerebro/squads/&lt;squad&gt;/agentes/&lt;clone&gt;/SOUL.md</code>.
+<br><br>
+<strong>10 dominios:</strong> Agencia Pinguim, Content &amp; Marketing, Technical, Design &amp; UX,
+People &amp; Psychology, Business Operations, Data &amp; Analytics, Meta &amp; Frameworks, Communication.
+<br><br>
+<strong>Squads de Clones de Pessoas Reais (ja com SOULs ricos no repo):</strong>
+<ul style="margin-left:1.5rem;margin-top:.5rem;">
+<li><strong>copy</strong> (25 agentes): Hormozi, Halbert, Bencivenga, Ogilvy, Schwartz, Hopkins, Sugarman, Collier, Kennedy, Carlton, Makepeace, Deutsch, Lampropoulos, Brown, Rutz, Georgi, Schwartz (Ry), Chaperon, Settle, Benson, Kern, Brunson, Walker, Koe + Copy Chief</li>
+<li><strong>storytelling</strong> (13 agentes): Joseph Campbell, Donald Miller, Oren Klaff, Kindra Hall, Matthew Dicks, Park Howell, Marshall Ganz, Blake Snyder, Nancy Duarte, Shawn Coyne, Dan Harmon, Keith Johnstone + Story Chief</li>
+<li><strong>traffic-masters</strong> (16): Pedro Sobral, Molly Pittman, Nicholas Kusmich, Depesh Mandalia, Kasim Aslam, Tom Breeze, Ralph Burns + 9 operacionais</li>
+<li><strong>cybersecurity</strong> (15): Peter Kim, Georgia Weidman, Jim Manico, Chris Sanders, Marcus Carey, Omar Santos + ferramentas</li>
+<li><strong>design</strong> (9): Chris Do, Marty Neumeier, Aaron Draplin, Brad Frost, Dave Malouf, Paddy Galloway, Joe McNally, Peter McKinnon + Design Chief</li>
+<li><strong>advisory-board</strong> (11): Ray Dalio, Charlie Munger, Naval Ravikant, Peter Thiel, Reid Hoffman, Simon Sinek, Brene Brown, Patrick Lencioni, Derek Sivers, Yvon Chouinard + Board Chair</li>
+<li><strong>legal</strong> (15): Brad Feld, Ken Adams, Pierpaolo Bottini + 12 especialistas operacionais</li>
+<li><strong>data</strong> (7): Avinash Kaushik, Peter Fader, Sean Ellis, Nick Mehta, David Spinks, Wes Kao + Data Chief</li>
+<li><strong>finops</strong> (5): JR Storment, Corey Quinn, Eli Mansoor, Mike Fuller + FinOps Chief</li>
+<li><strong>deep-research</strong> (11): Kahneman, Klein, Ioannidis, Sackett, Cochrane, Higgins, Booth, Creswell, Forsgren, Gilad + Dr Orchestrator</li>
+<li><strong>translate</strong> (10): Vermeer, Nord, Nida, House, Baker, Pym, Venuti + 3 operacionais</li>
+<li><strong>squad-creator-pro</strong> (4): Alan Nicolas, Pedro Valerio, Thiago Finch + Squad Chief</li>
+</ul>
+</div>
+</section>
+</body>
+</html>
