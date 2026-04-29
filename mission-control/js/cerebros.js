@@ -447,8 +447,13 @@ export async function abrirCerebroDetalhe(slug) {
     viewArea.innerHTML = '<div style="padding:3rem;color:var(--fg-muted);text-align:center">Carregando fontes…</div>';
   }
 
+  const clonePainel = (cerebroAtual.categoria === 'clone')
+    ? blocoEdicaoClone()
+    : null;
+
   page.append(el('div', { class: 'cerebro-detail' }, [
     header,
+    clonePainel,
     buscaSlot,
     toggle,
     viewArea,
@@ -1629,6 +1634,208 @@ async function editarFonte(peca) {
 
 function escapeHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ================================================================
+   EDICAO GUIADA DO SOUL — so pra Cerebros categoria=clone.
+   Substitui edicao em texto livre por 8 campos guiados.
+   ================================================================ */
+
+const CAMPOS_SOUL_GUIADO = [
+  { key: 'tom', label: 'Como você fala', dica: 'Tom, ritmo, intensidade. Curto e direto? Longo e didático? Fala palavrão? Pausa muito?', placeholder: 'Ex.: direto, sem rodeio. Frase curta. Pergunta antes de afirmar. Usa "olha", "cara", "tipo"...' },
+  { key: 'vocabulario', label: 'Vocabulário típico', dica: 'Palavras, expressões e bordões que você repete bastante.', placeholder: 'Ex.: "na real", "saca?", "joga limpo", "vamo combinar"' },
+  { key: 'nunca_diria', label: 'O que você NUNCA diria', dica: 'Termos, jargões ou tons que destoam de você. Marca de "não sou eu".', placeholder: 'Ex.: nunca digo "exponencial", "inovação", "sinergia". Não uso emoji. Não falo no plural majestático.' },
+  { key: 'principios', label: 'Princípios não-negociáveis', dica: 'O que você defende mesmo perdendo dinheiro/cliente/seguidor.', placeholder: 'Ex.: 1) Não promete o que não entrega. 2) Crítica direta vale mais que elogio mole. 3) Cliente que mente sai.' },
+  { key: 'publico', label: 'Pra quem você fala', dica: 'Seu público alvo nas suas palavras. Quem te entende e quem não.', placeholder: 'Ex.: empreendedor solo no primeiro lançamento. Já leu Hormozi mas trava na execução. Não fala com guru.' },
+  { key: 'referencias', label: 'Referências que te formaram', dica: 'Pessoas, livros, vivências que moldaram seu jeito.', placeholder: 'Ex.: Halbert pra venda, Eugene Schwartz pra estratégia, Ogilvy pra estética. Pai vendedor de carro.' },
+  { key: 'sinais', label: 'Sinais de identidade', dica: 'Manias, jeitos, marcas pessoais — o que faz qualquer um reconhecer "isso é você".', placeholder: 'Ex.: começa frase com pergunta. Termina com gancho. Sempre dá um exemplo concreto antes de generalizar.' },
+  { key: 'exemplos', label: 'Exemplos de mensagens reais', dica: 'Cole 3-5 mensagens, posts ou áudios transcritos seus. É a fonte mais rica.', placeholder: '— Cola aqui mensagens reais separadas por linha em branco —' },
+];
+
+function parseSoulGuiado(md) {
+  // Tenta extrair as 8 secoes do markdown atual. Se nao achar, deixa vazio.
+  const valores = {};
+  if (!md) {
+    CAMPOS_SOUL_GUIADO.forEach(c => valores[c.key] = '');
+    return valores;
+  }
+  for (const c of CAMPOS_SOUL_GUIADO) {
+    const re = new RegExp(`##\\s+${escapeRegex(c.label)}\\s*\\n+([\\s\\S]*?)(?=\\n##\\s|$)`, 'i');
+    const m = md.match(re);
+    valores[c.key] = m ? m[1].trim() : '';
+  }
+  return valores;
+}
+
+function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+function montarSoulGuiado(valores, nomeClone) {
+  const linhas = [`# SOUL — ${nomeClone}`, ''];
+  for (const c of CAMPOS_SOUL_GUIADO) {
+    const v = (valores[c.key] || '').trim();
+    if (!v) continue;
+    linhas.push(`## ${c.label}`, '', v, '');
+  }
+  return linhas.join('\n').trim() + '\n';
+}
+
+function blocoEdicaoClone() {
+  const card = el('div', { class: 'clone-painel' });
+  card.append(
+    el('div', { class: 'clone-painel-titulo' }, [
+      el('span', {}, '🎙'),
+      el('span', {}, 'Voz e identidade'),
+    ]),
+    el('div', { class: 'clone-painel-sub' },
+      'Edite a SOUL.md por campos guiados — sem precisar formatar Markdown na mão. Pra alimentar com áudios, posts ou e-mails reais, use "+ Alimentar" no topo.'),
+    el('div', { class: 'clone-painel-acoes' }, [
+      el('button', { class: 'btn btn-primary', onclick: () => abrirEdicaoGuiadaSoul() }, '✎ Editar voz com guia'),
+    ]),
+  );
+  return card;
+}
+
+async function abrirEdicaoGuiadaSoul() {
+  const sb = getSupabase();
+  if (!sb) { await alertarDark({ titulo: 'Sem conexão', mensagem: 'Supabase não conectado.', tipo: 'erro' }); return; }
+
+  // Pega a fonte SOUL do clone (titulo='SOUL — voz e metodo' OR tipo='manifesto').
+  // Usa cache (pecasCache) primeiro, fallback pra busca direta.
+  let fonteSoul = pecasCache.find(p =>
+    (p.titulo || '').toLowerCase().includes('soul') ||
+    p.tipo === 'manifesto'
+  );
+
+  if (!fonteSoul) {
+    // Tenta buscar do servidor. Pode ainda estar carregando.
+    const { data, error } = await sb
+      .from('cerebro_fontes')
+      .select('id, titulo, tipo, conteudo_md, metadata')
+      .eq('cerebro_id', cerebroAtual.cerebro_id)
+      .or('tipo.eq.manifesto,titulo.ilike.%soul%')
+      .limit(1);
+    if (error || !data || !data.length) {
+      await alertarDark({
+        titulo: 'SOUL não encontrado',
+        mensagem: 'Esse Clone ainda não tem fonte SOUL. Crie pelo "+ Alimentar" ou contate suporte.',
+        tipo: 'erro',
+      });
+      return;
+    }
+    fonteSoul = data[0];
+  }
+
+  // Garante conteudo carregado
+  if (fonteSoul.conteudo_md === undefined || fonteSoul.conteudo_md === null) {
+    fonteSoul.conteudo_md = (await fetchFonteConteudo(fonteSoul.id)) || '';
+  }
+
+  const valoresIniciais = parseSoulGuiado(fonteSoul.conteudo_md);
+
+  const back = el('div', {
+    class: 'modal-backdrop',
+    style: 'z-index:10000',
+    onclick: (e) => { if (e.target === back) fechar(); }
+  });
+  const card = el('div', { class: 'modal-card', style: 'max-width:780px;max-height:92vh;display:flex;flex-direction:column' });
+  function fechar() { back.classList.remove('open'); setTimeout(() => back.remove(), 180); }
+
+  const camposEls = {};
+  const camposWrap = el('div', { style: 'display:flex;flex-direction:column;gap:1rem;overflow-y:auto;padding-right:.25rem' });
+  for (const c of CAMPOS_SOUL_GUIADO) {
+    const ta = el('textarea', {
+      rows: c.key === 'exemplos' ? '6' : '3',
+      style: 'width:100%;font-family:inherit;font-size:.875rem;line-height:1.5;padding:.625rem .75rem;background:var(--bg-elev);color:var(--fg);border:1px solid var(--border-subtle);border-radius:.5rem;resize:vertical',
+      placeholder: c.placeholder,
+    });
+    ta.value = valoresIniciais[c.key] || '';
+    camposEls[c.key] = ta;
+    camposWrap.append(el('div', {}, [
+      el('label', { style: 'display:block;font-weight:600;font-size:.875rem;color:var(--fg);margin-bottom:.125rem' }, c.label),
+      el('div', { style: 'font-size:.75rem;color:var(--fg-muted);margin-bottom:.375rem' }, c.dica),
+      ta,
+    ]));
+  }
+
+  const erroEl = el('div', { style: 'color:var(--danger);font-size:.8125rem;margin-top:.5rem;display:none' });
+  const btnSalvar = el('button', { type: 'submit', class: 'btn btn-primary' }, 'Salvar voz');
+
+  const form = el('form', {
+    style: 'display:flex;flex-direction:column;flex:1;overflow:hidden',
+    onsubmit: async (e) => {
+      e.preventDefault();
+      btnSalvar.disabled = true;
+      btnSalvar.textContent = 'Salvando…';
+      erroEl.style.display = 'none';
+      try {
+        const valores = {};
+        for (const c of CAMPOS_SOUL_GUIADO) valores[c.key] = camposEls[c.key].value.trim();
+        const novoMd = montarSoulGuiado(valores, cerebroAtual.nome);
+        const mudou = novoMd.trim() !== (fonteSoul.conteudo_md || '').trim();
+
+        if (!mudou) { fechar(); return; }
+
+        const { error: errUp } = await sb.from('cerebro_fontes').update({
+          conteudo_md: novoMd,
+          tamanho_bytes: novoMd.length,
+          metadata: {
+            ...(fonteSoul.metadata || {}),
+            editado_via_guia: new Date().toISOString(),
+          },
+        }).eq('id', fonteSoul.id);
+        if (errUp) throw new Error(errUp.message);
+
+        // Re-vetoriza
+        btnSalvar.textContent = 'Revetorizando…';
+        await sb.from('cerebro_fontes_chunks').delete().eq('fonte_id', fonteSoul.id);
+        const { data: { session } } = await sb.auth.getSession();
+        const fnUrl = `${window.__ENV__.SUPABASE_URL}/functions/v1/revetorizar-fonte`;
+        const resp = await fetch(fnUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'apikey': window.__ENV__.SUPABASE_ANON_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ fonte_id: fonteSoul.id }),
+        });
+        if (!resp.ok) {
+          const errBody = await resp.json().catch(() => ({}));
+          throw new Error(`Revetorização falhou: ${errBody.error || resp.status}`);
+        }
+
+        // Atualiza cache
+        const idx = pecasCache.findIndex(p => p.id === fonteSoul.id);
+        if (idx >= 0) pecasCache[idx] = { ...pecasCache[idx], conteudo_md: novoMd };
+        fechar();
+        if (typeof renderView === 'function') renderView();
+      } catch (e2) {
+        erroEl.style.display = '';
+        erroEl.textContent = e2.message;
+        btnSalvar.disabled = false;
+        btnSalvar.textContent = 'Salvar voz';
+      }
+    },
+  });
+  form.append(
+    el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;padding:0 0 1rem;border-bottom:1px solid var(--border-subtle);margin-bottom:1rem' }, [
+      el('div', {}, [
+        el('div', { style: 'font-family:var(--font-heading);font-size:1rem;font-weight:600' }, `Voz de ${cerebroAtual.nome}`),
+        el('div', { style: 'font-size:.8125rem;color:var(--fg-muted);margin-top:.125rem' }, 'Cada campo vira uma seção do SOUL.md. Deixa em branco o que não souber ainda.'),
+      ]),
+      el('button', { type: 'button', class: 'modal-close', onclick: fechar }, '×'),
+    ]),
+    camposWrap,
+    erroEl,
+    el('div', { style: 'display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border-subtle)' }, [
+      el('button', { type: 'button', class: 'btn btn-ghost', onclick: fechar }, 'Cancelar'),
+      btnSalvar,
+    ]),
+  );
+  card.append(form);
+  back.append(card);
+  document.body.append(back);
+  requestAnimationFrame(() => back.classList.add('open'));
 }
 
 export function initDrawer() {

@@ -1466,6 +1466,36 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   flex-wrap: wrap;
 }
 
+.clone-painel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  box-shadow: var(--elev-1);
+}
+.clone-painel-titulo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+.clone-painel-sub {
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+  line-height: 1.5;
+  max-width: 64ch;
+}
+.clone-painel-acoes {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
 .view-toggle {
   display: flex;
   gap: 0.25rem;
