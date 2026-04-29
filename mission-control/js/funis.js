@@ -521,7 +521,7 @@ function abaTab(slug, label) {
 
 function renderAbaProdutos() {
   const wrap = el('div', { class: 'funil-aba' });
-  wrap.appendChild(el('div', { class: 'funil-aba-lede' }, 'Arraste pro canvas pra adicionar etapa.'));
+  wrap.appendChild(el('div', { class: 'funil-aba-lede' }, 'Arraste pro canvas ou clique 2× pra adicionar etapa.'));
 
   if (estadoEditor.produtos.length === 0) {
     wrap.appendChild(el('div', { class: 'funil-sidebar-placeholder' }, 'Sem produtos internos cadastrados. Vá em Cérebros pra criar produtos primeiro.'));
@@ -532,6 +532,7 @@ function renderAbaProdutos() {
     const card = el('div', {
       class: 'funil-produto-card',
       draggable: 'true',
+      title: 'Arraste pro canvas ou clique 2× pra adicionar',
       data: { produtoId: p.id, dragKind: 'produto' },
       ondragstart: (ev) => {
         ev.dataTransfer.setData('text/plain', JSON.stringify({ kind: 'produto', id: p.id }));
@@ -539,6 +540,10 @@ function renderAbaProdutos() {
         card.classList.add('dragging');
       },
       ondragend: () => card.classList.remove('dragging'),
+      ondblclick: () => {
+        const { x, y } = posicaoSugeridaCanvas();
+        abrirModalPapel(p.id, x, y);
+      },
     });
     const ic = iconeNode(p, { size: 24 });
     ic.classList.add('funil-produto-icone-wrap');
@@ -550,13 +555,33 @@ function renderAbaProdutos() {
   return wrap;
 }
 
+function posicaoSugeridaCanvas() {
+  const canvas = document.getElementById('funil-canvas-area');
+  if (!canvas) return { x: 100, y: 100 };
+  if (estadoEditor.etapas.length === 0) {
+    // Centro do canvas visivel
+    return {
+      x: Math.max(40, canvas.scrollLeft + canvas.clientWidth / 2 - NO_LARGURA / 2),
+      y: Math.max(40, canvas.scrollTop + canvas.clientHeight / 2 - NO_ALTURA / 2),
+    };
+  }
+  // Mais a direita do mais recente, com offset vertical leve pra nao sobrepor
+  const ultima = estadoEditor.etapas[estadoEditor.etapas.length - 1];
+  const offsetX = (ultima.tipo === 'condicional' ? COND_TAMANHO : NO_LARGURA) + 60;
+  return {
+    x: ultima.posicao_x + offsetX,
+    y: ultima.posicao_y,
+  };
+}
+
 function renderAbaFerramentas() {
   const wrap = el('div', { class: 'funil-aba' });
-  wrap.appendChild(el('div', { class: 'funil-aba-lede' }, 'Arraste pro canvas pra adicionar lógica ao funil.'));
+  wrap.appendChild(el('div', { class: 'funil-aba-lede' }, 'Arraste pro canvas ou clique 2× pra adicionar lógica.'));
 
   const cardCondicional = el('div', {
     class: 'funil-produto-card funil-ferramenta-card',
     draggable: 'true',
+    title: 'Arraste pro canvas ou clique 2× pra adicionar',
     data: { dragKind: 'condicional' },
     ondragstart: (ev) => {
       ev.dataTransfer.setData('text/plain', JSON.stringify({ kind: 'condicional' }));
@@ -564,6 +589,10 @@ function renderAbaFerramentas() {
       cardCondicional.classList.add('dragging');
     },
     ondragend: () => cardCondicional.classList.remove('dragging'),
+    ondblclick: () => {
+      const { x, y } = posicaoSugeridaCanvas();
+      abrirModalNovaCondicional(x, y);
+    },
   }, [
     el('div', { class: 'funil-ferramenta-icone' }, '◇'),
     el('div', {}, [
