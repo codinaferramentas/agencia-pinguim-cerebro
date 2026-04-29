@@ -51,14 +51,15 @@ async function carregarMetricas() {
       return count || 0;
     } catch { return 0; }
   };
-  let totalFontes = 0, totalChunks = 0, totalAgentes = 0, totalProvas = 0, totalIntegracoes = 0;
+  let totalFontes = 0, totalChunks = 0, totalAgentes = 0, totalProvas = 0, totalIntegracoes = 0, totalFunis = 0;
   if (sb) {
-    [totalFontes, totalChunks, totalAgentes, totalProvas, totalIntegracoes] = await Promise.all([
+    [totalFontes, totalChunks, totalAgentes, totalProvas, totalIntegracoes, totalFunis] = await Promise.all([
       contar('cerebro_fontes', { col: 'ingest_status', val: 'ok' }),
       contar('cerebro_fontes_chunks'),
       contar('agentes'),
       contar('provas_sociais'),
       contar('integracoes'),
+      contar('funis'),
     ]);
   }
 
@@ -72,6 +73,7 @@ async function carregarMetricas() {
     totalAgentes,
     totalProvas,
     totalIntegracoes,
+    totalFunis,
   };
 }
 
@@ -234,12 +236,53 @@ export async function renderMapaSistema() {
       status: (m.skillsAtivas + m.skillsConstrucao) > 0 ? (m.skillsAtivas > 0 ? 'ativo' : 'em_construcao') : 'planejado',
     }),
     bloco({
+      icone: '🎯', nome: 'Funis',
+      descricao: 'Construtor visual de funis de venda. Cada funil é dado consultável por agente em tempo real, com chave de habilitação por agente. Diferencial vs Geru/MailChimp.',
+      metrics: [{ valor: m.totalFunis, label: 'criados' }],
+      pagina: 'funis',
+      status: m.totalFunis > 0 ? 'ativo' : 'em_construcao',
+    }),
+    bloco({
       icone: '🤖', nome: 'Squad de Agentes',
       descricao: 'Agentes especialistas por departamento. Atuam em paralelo, gerando assets de marketing e vendas.',
       metrics: m.totalAgentes > 0 ? [{ valor: m.totalAgentes, label: 'agentes' }] : [],
       pagina: m.totalAgentes > 0 ? 'agentes' : null,
       status: m.totalAgentes > 0 ? 'ativo' : 'planejado',
     }),
+  ]));
+
+  // Mini-secao: 3 camadas do funil
+  wrap.appendChild(el('div', { class: 'mapa-funil-camadas' }, [
+    el('div', { class: 'mapa-funil-camadas-head' }, [
+      el('div', { class: 'mapa-funil-camadas-eyebrow' }, '🎯 Anatomia do Funil Pinguim'),
+      el('div', { class: 'mapa-funil-camadas-titulo' }, 'Por que funil aqui não é desenho — é inteligência executável'),
+    ]),
+    el('div', { class: 'mapa-funil-camadas-grid' }, [
+      el('div', { class: 'mapa-funil-camada status-ativo' }, [
+        el('div', { class: 'mapa-funil-camada-num' }, '1'),
+        el('div', {}, [
+          el('div', { class: 'mapa-funil-camada-titulo' }, 'Visual'),
+          el('div', { class: 'mapa-funil-camada-desc' }, 'Construtor drag-to-connect. Você arrasta produtos pro canvas, conecta com setas vivas, define papéis (entrada, order bump, upsell, downsell), adiciona condicionais.'),
+          el('div', { class: 'mapa-funil-camada-status' }, '✓ Em produção'),
+        ]),
+      ]),
+      el('div', { class: 'mapa-funil-camada status-ativo' }, [
+        el('div', { class: 'mapa-funil-camada-num' }, '2'),
+        el('div', {}, [
+          el('div', { class: 'mapa-funil-camada-titulo' }, 'Estratégica'),
+          el('div', { class: 'mapa-funil-camada-desc' }, 'Cada funil tem chave de habilitação por agente. SDR vê os funis dele, Co-piloto vê os dele. Mesmo banco, visão curada por uso. Diferencial vendável.'),
+          el('div', { class: 'mapa-funil-camada-status' }, '✓ Em produção'),
+        ]),
+      ]),
+      el('div', { class: 'mapa-funil-camada status-em_construcao' }, [
+        el('div', { class: 'mapa-funil-camada-num' }, '3'),
+        el('div', {}, [
+          el('div', { class: 'mapa-funil-camada-titulo' }, 'Operacional'),
+          el('div', { class: 'mapa-funil-camada-desc' }, 'Agente SDR consulta funil em tempo real, decide produto-alvo. Briefing pra vendedora sai pronto: "lead vindo de Desafio LoFi → Elo, com Análise de Perfil como order bump".'),
+          el('div', { class: 'mapa-funil-camada-status' }, '⧗ Em construção'),
+        ]),
+      ]),
+    ]),
   ]));
 
   wrap.appendChild(seta());

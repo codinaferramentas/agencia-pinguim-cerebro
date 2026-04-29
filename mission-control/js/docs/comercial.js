@@ -64,6 +64,7 @@ export async function gerar() {
           <p><strong>Missão:</strong> qualificar todo lead novo antes de chegar pra vendedora. Decide quente / morno / frio + dor + próximo passo + roteamento de produto.</p>
           <p><strong>Por que primeiro:</strong> sem lead bom, nada do resto importa. Vendedora com tempo livre é vendedora produtiva.</p>
           <p><strong>Entrada:</strong> dados do Clint (formulário, quiz, primeira mensagem). <strong>Saída:</strong> briefing de 1 página com perfil + dor + recomendação.</p>
+          <p><strong>Pré-requisito Funil:</strong> SDR consulta os <a href="#" onclick="event.preventDefault();window.dispatchEvent(new CustomEvent('docs:select',{detail:{slug:'funis'}}));"><strong>funis habilitados pra ele</strong></a> pra decidir o produto-alvo. Funil "Lançamento Elo Q2" mapeado é o que diz "lead vindo de Desafio LoFi → Elo, com Análise de Perfil como order bump". Sem funil mapeado, SDR adivinha; com funil, ele segue a estratégia desenhada.</p>
           <p><strong>Tipo:</strong> agente LLM (OpenAI gpt-4o-mini, qualificação rápida). <strong>Custo estimado:</strong> ~R$ 0,01 por lead qualificado.</p>
 
           <h3>Agente 2 — Co-piloto · Apoio em tempo real</h3>

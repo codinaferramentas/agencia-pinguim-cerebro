@@ -52,6 +52,13 @@ export const DOCS_CATALOGO = [
     secao: 'Módulos',
   },
   {
+    slug: 'funis',
+    titulo: 'Funis',
+    descricao: 'Construtor visual de funis de venda + chave de habilitação por agente. Não é diagrama isolado — é inteligência consumível em tempo real pelos agentes Pinguim. 5º pilar do sistema.',
+    meta: '6 min · módulo principal',
+    secao: 'Módulos',
+  },
+  {
     slug: 'rag',
     titulo: 'RAG e consumo de tokens',
     descricao: 'Como o sistema reduz custo de IA usando recuperação contextual. As três portas de entrada e as cinco regras de ouro pra manter o consumo sob controle.',
@@ -153,7 +160,7 @@ export async function renderDocDetalhe(slug) {
   page.innerHTML = '<div style="padding:3rem;color:var(--fg-muted);text-align:center">Carregando…</div>';
 
   // Importa modulo da doc dinamicamente (lazy)
-  const mod = await import(`./docs/${slug}.js?v=20260427a`);
+  const mod = await import(`./docs/${slug}.js?v=20260428p`);
   const conteudo = await mod.gerar();
 
   const wrap = el('div', { class: 'docs-detail' });

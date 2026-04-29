@@ -11,8 +11,8 @@ import { renderStub } from './stubs.js?v=20260421p';
 import { iconeNode } from './icone.js?v=20260425g';
 import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260428a';
 import { renderIntegracoes } from './integracoes.js?v=20260425n';
-import { renderMapaSistema } from './mapa-sistema.js?v=20260428e';
-import { renderFunis } from './funis.js?v=20260428o';
+import { renderMapaSistema } from './mapa-sistema.js?v=20260428p';
+import { renderFunis } from './funis.js?v=20260428p';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
