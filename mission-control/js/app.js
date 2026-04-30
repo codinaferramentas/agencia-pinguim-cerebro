@@ -12,8 +12,8 @@ import { iconeNode } from './icone.js?v=20260425g';
 import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260428a';
 import { renderIntegracoes } from './integracoes.js?v=20260425n';
 import { renderMapaSistema } from './mapa-sistema.js?v=20260428p';
-import { renderSeguranca } from './seguranca.js?v=20260430f';
-import { renderFinOps } from './finops.js?v=20260430f';
+import { renderSeguranca } from './seguranca.js?v=20260430g';
+import { renderFinOps } from './finops.js?v=20260430g';
 import { renderFunis } from './funis.js?v=20260428p';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
@@ -228,6 +228,19 @@ const NAV_PRIMARY = [
   { slug: 'finops',      label: 'FinOps',      icon: '💰', tree: false },
 ];
 
+/**
+ * Atualizacao incremental: troca classe .active nas folhas da arvore
+ * SEM destruir/recriar o sidebar inteiro. Evita flash visual ao trocar
+ * de Cerebro/Persona/Skill ativo.
+ */
+function marcarLeafAtivo(slug) {
+  const list = $('#nav-list');
+  if (!list) return;
+  list.querySelectorAll('.nav-leaf').forEach(leaf => {
+    leaf.classList.toggle('active', leaf.dataset.id === slug);
+  });
+}
+
 async function renderNavTree() {
   const list = $('#nav-list');
   if (!list) return;
@@ -408,7 +421,7 @@ async function loadCerebrosTree() {
             onclick: () => {
               window.__cerebroAtivoSlug = id;
               window.dispatchEvent(new CustomEvent('cerebro:select', { detail: { slug: id } }));
-              renderNavTree();
+              marcarLeafAtivo(id);
               if (isMobile()) fecharMobileMenu();
             },
           }, [
@@ -497,7 +510,7 @@ async function loadCerebrosTree() {
             onclick: () => {
               window.__cerebroAtivoSlug = id;
               window.dispatchEvent(new CustomEvent('cerebro:select', { detail: { slug: id } }));
-              renderNavTree();
+              marcarLeafAtivo(id);
               if (isMobile()) fecharMobileMenu();
             },
           }, [
@@ -578,7 +591,7 @@ async function loadSkillsTree() {
             onclick: () => {
               window.__skillAtivoSlug = s.slug;
               window.dispatchEvent(new CustomEvent('skill:select', { detail: { slug: s.slug } }));
-              renderNavTree();
+              marcarLeafAtivo(s.slug);
               if (isMobile()) fecharMobileMenu();
             },
           }, [
@@ -620,7 +633,7 @@ async function loadPersonasTree() {
       onclick: () => {
         window.__personaAtivoSlug = id;
         window.dispatchEvent(new CustomEvent('persona:select', { detail: { slug: id } }));
-        renderNavTree();
+        marcarLeafAtivo(id);
         if (isMobile()) fecharMobileMenu();
       },
     }, [

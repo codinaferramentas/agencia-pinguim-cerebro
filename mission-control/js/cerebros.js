@@ -371,8 +371,8 @@ export async function abrirCerebroDetalhe(slug) {
 
   // RENDER INSTANTANEO: usa dados ja em memoria (cerebrosCache) pra montar a tela
   // sem esperar nenhum round-trip. Fontes carregam em paralelo e populam depois.
+  // Constroi a tela inteira ANTES de trocar — evita flash visual de "tela em branco".
   const page = document.getElementById('page-cerebros');
-  page.innerHTML = '';
   pecasCache = [];  // limpa antes de carregar pra nao misturar de outro Cerebro
 
   // Estimativa de quantas fontes esperar (usa total da view de catalogo)
@@ -451,7 +451,8 @@ export async function abrirCerebroDetalhe(slug) {
     ? blocoEdicaoClone()
     : null;
 
-  page.append(el('div', { class: 'cerebro-detail' }, [
+  // replaceChildren: troca todo conteudo de uma vez, sem flash de "vazio".
+  page.replaceChildren(el('div', { class: 'cerebro-detail' }, [
     header,
     clonePainel,
     buscaSlot,
