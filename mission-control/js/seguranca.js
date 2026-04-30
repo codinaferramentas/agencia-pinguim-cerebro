@@ -179,18 +179,14 @@ async function renderVisaoGeral(container) {
     }),
   );
 
-  // Ações globais — botões com mesmo peso visual (ambos primary), tooltips
+  // Acao global: so a auditoria completa fica na Visao geral.
+  // Atualizar raio-X foi movido pra dentro da propria aba Raio-X (UX consistente).
   const acoes = el('div', { class: 'seguranca-acoes-global' }, [
     el('button', {
       class: 'btn btn-primary',
       title: 'Squad Cyber roda auditoria completa do sistema (RLS + policies + funções SECURITY DEFINER + incidentes). Anima na tela enquanto roda.',
       onclick: () => rodarAuditoriaComAnimacao(),
     }, '▶ Rodar auditoria completa'),
-    el('button', {
-      class: 'btn btn-primary',
-      title: 'Re-agrega tamanho e contagem real de cada tabela do banco. Atualiza a aba Raio-X.',
-      onclick: () => rodarRaioXComToast(),
-    }, '📊 Atualizar raio-X'),
   ]);
 
   container.append(acoes, grade);
@@ -518,6 +514,16 @@ async function renderRaioX(container) {
   const limiteMB = dados.plano_limite_bytes / 1024 / 1024;
   const pct = dados.pct_plano || 0;
   const status = pct >= 90 ? 'critical' : (pct >= 70 ? 'warning' : 'ok');
+
+  // Acao da aba: atualizar dados (substitui o botao que estava na Visao geral)
+  const acoesAba = el('div', { class: 'seguranca-acoes-global', style: 'margin-bottom:1rem' }, [
+    el('button', {
+      class: 'btn btn-primary',
+      title: 'Re-agrega tamanho e contagem real de cada tabela do banco. Roda a Edge Function raio-x-banco.',
+      onclick: () => rodarRaioXComToast(),
+    }, '🔄 Atualizar dados'),
+  ]);
+  container.appendChild(acoesAba);
 
   const head = el('div', { class: 'raiox-head' }, [
     el('div', { class: 'raiox-pct-wrap' }, [
