@@ -328,10 +328,18 @@ async function abrirFormChave(id, refContainer) {
 
   const checkAtivo = el('input', { type: 'checkbox' });
   checkAtivo.checked = valoresAtuais.ativo;
-  const checkRotacao = el('input', { type: 'checkbox' });
-  checkRotacao.checked = false;
+
+  // Wrappers consistentes — usa classe ao inves de inline style
+  function campo(labelTxt, input, dica) {
+    return el('div', { class: 'cofre-field' }, [
+      el('label', { class: 'cofre-field-label' }, labelTxt),
+      input,
+      dica ? el('div', { class: 'cofre-field-dica' }, dica) : null,
+    ]);
+  }
 
   const form = el('form', {
+    class: 'cofre-form',
     onsubmit: async (e) => {
       e.preventDefault();
       const payload = {
@@ -345,40 +353,35 @@ async function abrirFormChave(id, refContainer) {
       };
       if (inputValor.value.trim()) {
         payload.valor_completo = inputValor.value.trim();
-        if (id || checkRotacao.checked) payload.ultima_rotacao = new Date().toISOString();
-        else payload.ultima_rotacao = new Date().toISOString();
+        payload.ultima_rotacao = new Date().toISOString();
       }
       let result;
-      if (id) {
-        result = await sb.from('cofre_chaves').update(payload).eq('id', id);
-      } else {
-        result = await sb.from('cofre_chaves').insert(payload);
-      }
+      if (id) result = await sb.from('cofre_chaves').update(payload).eq('id', id);
+      else result = await sb.from('cofre_chaves').insert(payload);
       if (result.error) { alert(result.error.message); return; }
       fechar();
       await renderCofre(refContainer);
     },
   }, [
-    el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:.75rem' }, [
-      el('div', {}, [el('label', { class: 'novo-cerebro-label' }, 'Nome (ex.: OPENAI_API_KEY)'), inputNome]),
-      el('div', {}, [el('label', { class: 'novo-cerebro-label' }, 'Provedor'), selectProvedor]),
+    el('div', { class: 'cofre-row-2' }, [
+      campo('Nome (ex.: OPENAI_API_KEY)', inputNome),
+      campo('Provedor', selectProvedor),
     ]),
-    el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.75rem' }, [
-      el('div', {}, [el('label', { class: 'novo-cerebro-label' }, 'Escopo'), selectEscopo]),
-      el('div', {}, [el('label', { class: 'novo-cerebro-label' }, 'Onde vive'), selectOndeVive]),
+    el('div', { class: 'cofre-row-2' }, [
+      campo('Escopo', selectEscopo),
+      campo('Onde vive', selectOndeVive),
     ]),
-    el('label', { class: 'novo-cerebro-label', style: 'margin-top:.75rem' }, 'Descrição'),
-    inputDesc,
-    el('label', { class: 'novo-cerebro-label', style: 'margin-top:.75rem' }, id ? 'Novo valor (cola pra rotacionar — vazio mantém)' : 'Valor da chave'),
-    inputValor,
-    el('label', { class: 'novo-cerebro-label', style: 'margin-top:.75rem' }, 'Observações'),
-    inputObs,
-    el('label', { style: 'display:flex;align-items:center;gap:.5rem;margin-top:.75rem;font-size:.875rem;cursor:pointer' }, [
-      checkAtivo, el('span', {}, 'Ativa'),
-    ]),
-    el('div', { style: 'display:flex;gap:.5rem;justify-content:space-between;margin-top:1rem;align-items:center' }, [
+    campo('Descrição', inputDesc, 'Pra que serve essa chave (ex.: usada por Edge Function buscar-cerebro)'),
+    campo(
+      id ? 'Novo valor (cola pra rotacionar — vazio mantém o atual)' : 'Valor da chave',
+      inputValor,
+      id ? null : 'Cola o valor da chave aqui. Fica criptografado no banco. O painel só mostra os últimos 4 chars.'
+    ),
+    campo('Observações', inputObs, 'Limites do plano, restrições, escopos (opcional)'),
+    el('label', { class: 'cofre-checkbox-line' }, [checkAtivo, el('span', {}, 'Chave ativa')]),
+    el('div', { class: 'cofre-form-footer' }, [
       id ? el('button', {
-        type: 'button', class: 'btn btn-ghost', style: 'color:var(--danger)',
+        type: 'button', class: 'btn btn-ghost cofre-btn-apagar',
         onclick: async () => {
           if (!confirm('Apagar essa chave do cofre? (não apaga do provedor — só do registro daqui)')) return;
           const { error } = await sb.from('cofre_chaves').delete().eq('id', id);
@@ -387,7 +390,7 @@ async function abrirFormChave(id, refContainer) {
           await renderCofre(refContainer);
         },
       }, 'Apagar') : el('span', {}),
-      el('div', { style: 'display:flex;gap:.5rem' }, [
+      el('div', { class: 'cofre-form-acoes' }, [
         el('button', { type: 'button', class: 'btn btn-ghost', onclick: fechar }, 'Cancelar'),
         el('button', { type: 'submit', class: 'btn btn-primary' }, id ? 'Salvar' : 'Cadastrar'),
       ]),
