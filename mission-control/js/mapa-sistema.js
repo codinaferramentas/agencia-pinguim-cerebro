@@ -321,6 +321,28 @@ export async function renderMapaSistema() {
     ]),
   ]));
 
+  // CAMADA TRANSVERSAL — FINOPS
+  wrap.appendChild(el('section', { class: 'mapa-finops-camada' }, [
+    el('div', { class: 'mapa-finops-head' }, [
+      el('div', { class: 'mapa-finops-eyebrow' }, '💰 Camada Transversal · FinOps'),
+      el('div', { class: 'mapa-finops-titulo' }, 'Squad FinOps controlando custo em tempo real'),
+      el('div', { class: 'mapa-finops-sub' },
+        'Cliente abre painel e vê quanto está gastando. Sem surpresa de fatura. Cron diário agrega, projeção de fim de mês, alertas configuráveis.'),
+    ]),
+    el('div', { class: 'mapa-seguranca-conselheiros' }, [
+      bloco({ icone: '💰', nome: 'JR Storment', descricao: 'FinOps Foundation co-founder — framework, governança, agregado mensal.', status: 'ativo' }),
+      bloco({ icone: '💰', nome: 'Corey Quinn', descricao: 'Last Week in AWS — caça desperdício. Alerta sobre o que você paga e não usa.', status: 'em-construcao' }),
+      bloco({ icone: '💰', nome: 'Eli Mansoor', descricao: 'Cloud cost optimization — quando trocar plano, consolidar, otimizar.', status: 'em-construcao' }),
+      bloco({ icone: '💰', nome: 'Mike Fuller', descricao: 'Atlassian FinOps — custo-por-workload (custo por agente, por cliente, por operação).', status: 'em-construcao' }),
+    ]),
+    el('div', { class: 'mapa-seguranca-cards' }, [
+      bloco({ icone: '📊', nome: 'Custos diários', descricao: 'Tabela custos_diarios agregada por dia/provedor/operação. Cron 5h UTC.', status: 'ativo' }),
+      bloco({ icone: '📈', nome: 'Projeção de mês', descricao: 'RPC custo_mes_corrente() projeta fim de mês com base nos dias corridos.', status: 'ativo' }),
+      bloco({ icone: '🚨', nome: 'Alertas', descricao: '3 alertas pré-cadastrados (OpenAI > $50, total > $100, banco > 80%). Configurável.', status: 'ativo' }),
+      bloco({ icone: '📉', nome: 'Histórico 30d', descricao: 'Gráfico de barras + tabela cronológica. RPC custos_30_dias().', status: 'ativo' }),
+    ]),
+  ]));
+
   // Realimenta — fecha o ciclo
   wrap.appendChild(el('div', { class: 'mapa-realimenta' }, [
     el('div', { class: 'mapa-realimenta-curva' }, [

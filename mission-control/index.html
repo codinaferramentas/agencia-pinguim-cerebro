@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pinguim OS</title>
-<link rel="stylesheet" href="css/style.css?v=20260430e">
+<link rel="stylesheet" href="css/style.css?v=20260430f">
 </head>
 <body>
 <!-- Botao hamburger (so mobile) -->
@@ -74,6 +74,7 @@
     <section class="page" id="page-biblioteca"></section>
     <section class="page" id="page-qualidade"></section>
     <section class="page" id="page-seguranca"></section>
+    <section class="page" id="page-finops"></section>
     <section class="page" id="page-debug"></section>
     <section class="page" id="page-mapa"></section>
     <section class="page" id="page-roadmap"></section>
@@ -112,11 +113,11 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="module">
-  import { guard, logout } from './js/auth-gate.js?v=20260430e';
+  import { guard, logout } from './js/auth-gate.js?v=20260430f';
   const ok = await guard();
   if (ok) {
-    await import('./js/sb-client.js?v=20260430e');
-    await import('./js/app.js?v=20260430e');
+    await import('./js/sb-client.js?v=20260430f');
+    await import('./js/app.js?v=20260430f');
     const btn = document.getElementById('nav-logout');
     if (btn) btn.addEventListener('click', logout);
   }

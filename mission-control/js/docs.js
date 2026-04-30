@@ -107,6 +107,13 @@ export const DOCS_CATALOGO = [
     meta: '8 min · módulo principal',
     secao: 'Módulos',
   },
+  {
+    slug: 'finops',
+    titulo: 'FinOps',
+    descricao: 'Pilar de gestão de custo do Pinguim OS. Squad de 4 conselheiros (JR Storment, Corey Quinn, Eli Mansoor, Mike Fuller). Quanto cada provedor consome, projeção de fim de mês, alertas. Sem surpresa de fatura.',
+    meta: '6 min · módulo principal',
+    secao: 'Módulos',
+  },
 ];
 
 export function buscarDoc(slug) {
@@ -181,7 +188,7 @@ export async function renderDocDetalhe(slug) {
   page.innerHTML = '<div style="padding:3rem;color:var(--fg-muted);text-align:center">Carregando…</div>';
 
   // Importa modulo da doc dinamicamente (lazy)
-  const mod = await import(`./docs/${slug}.js?v=20260430e`);
+  const mod = await import(`./docs/${slug}.js?v=20260430f`);
   const conteudo = await mod.gerar();
 
   const wrap = el('div', { class: 'docs-detail' });

@@ -1866,6 +1866,219 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
 .cofre-auditoria-sucesso-warn { background: rgba(245,158,11,0.15); color: #f59e0b; }
 .cofre-auditoria-sucesso-err { background: rgba(239,68,68,0.15); color: #ef4444; }
 
+/* ============================================================
+   FINOPS — pilar visual
+   ============================================================ */
+#page-finops { padding: 1.25rem 1.5rem; }
+#page-finops .seguranca-tabs { /* reusa estilo de tabs */ }
+.finops-card-principal {
+  background: linear-gradient(135deg, var(--surface-2), var(--surface-3));
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent, #E85C00);
+  border-radius: var(--r-md);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+.finops-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+  margin-bottom: 0.5rem;
+}
+.finops-total-num {
+  font-size: 2rem;
+  font-weight: 700;
+  font-family: var(--font-heading);
+  color: var(--fg);
+}
+.finops-total-brl {
+  font-size: 0.875rem;
+  color: var(--fg-muted);
+  margin-top: 0.125rem;
+}
+.finops-projecao {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.875rem;
+  color: var(--fg-muted);
+}
+
+.finops-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.625rem;
+  margin-bottom: 1rem;
+}
+.finops-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  padding: 0.75rem 0.875rem;
+}
+.finops-card-titulo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+}
+.finops-card-pct {
+  font-size: 0.6875rem;
+  background: var(--surface-3);
+  color: var(--fg-muted);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.finops-card-valor {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+.finops-card-brl {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  margin-bottom: 0.375rem;
+}
+.finops-card-bar-bg {
+  background: var(--surface-3);
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.finops-card-bar-fg {
+  background: var(--accent, #E85C00);
+  height: 100%;
+  transition: width .3s;
+}
+
+.finops-secao { margin-top: 1rem; }
+.finops-secao-titulo {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+.finops-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.finops-tabela th, .finops-tabela td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.finops-tabela th {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-dim);
+}
+.finops-pct-badge {
+  background: var(--surface-3);
+  color: var(--fg-muted);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+.finops-nota {
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+  font-style: italic;
+  margin-top: 1rem;
+  padding: 0.625rem 0.875rem;
+  background: var(--surface-2);
+  border-left: 2px solid var(--fg-dim);
+  border-radius: 0 0.25rem 0.25rem 0;
+}
+
+.finops-historico-grafico {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 140px;
+  padding: 0.5rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  margin-top: 1rem;
+}
+.finops-bar-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+}
+.finops-bar {
+  width: 100%;
+  background: var(--accent, #E85C00);
+  border-radius: 2px 2px 0 0;
+  min-height: 2px;
+}
+.finops-bar:hover { opacity: 0.8; }
+.finops-bar-label {
+  font-size: 0.625rem;
+  color: var(--fg-dim);
+  margin-top: 0.25rem;
+  font-family: var(--font-mono);
+}
+
+.finops-alertas-lista { display: flex; flex-direction: column; gap: 0.625rem; }
+.finops-alerta-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--fg-dim);
+  border-radius: var(--r-md);
+  padding: 0.75rem 1rem;
+}
+.finops-alerta-ativo { border-left-color: var(--accent, #E85C00); }
+.finops-alerta-inativo { opacity: 0.5; }
+.finops-alerta-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+.finops-alerta-titulo { font-weight: 600; font-size: 0.9375rem; }
+.finops-alerta-status {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+.finops-alerta-status-ativo { background: rgba(16,185,129,0.15); color: #10b981; }
+.finops-alerta-status-inativo { background: var(--surface-3); color: var(--fg-dim); }
+.finops-alerta-desc { font-size: 0.8125rem; color: var(--fg-muted); margin-bottom: 0.375rem; }
+.finops-alerta-meta {
+  font-size: 0.75rem;
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+}
+.finops-alerta-tipo {
+  background: var(--surface-3);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--fg-muted);
+}
+.finops-alerta-ultimo {
+  font-size: 0.75rem;
+  color: var(--fg-dim);
+  margin-top: 0.375rem;
+}
+
 /* Toast de confirmacao */
 .seg-toast {
   position: fixed;
@@ -5531,6 +5744,34 @@ body.mobile-menu-open .mobile-overlay {
   gap: 0.5rem;
   margin-top: 0.875rem;
 }
+
+.mapa-finops-camada {
+  margin-top: 1.25rem;
+  background: linear-gradient(180deg, rgba(16,185,129,0.04), transparent);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid #10b981;
+  border-radius: var(--r-xl);
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+.mapa-finops-head { margin-bottom: 1rem; padding-bottom: 0.875rem; border-bottom: 1px solid var(--border-subtle); }
+.mapa-finops-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #10b981;
+  margin-bottom: 0.375rem;
+  font-weight: 700;
+}
+.mapa-finops-titulo {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+  margin-bottom: 0.25rem;
+}
+.mapa-finops-sub { font-size: 0.875rem; color: var(--fg-muted); }
 
 .mapa-funil-camadas {
   margin-top: 1rem;

@@ -12,7 +12,8 @@ import { iconeNode } from './icone.js?v=20260425g';
 import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260428a';
 import { renderIntegracoes } from './integracoes.js?v=20260425n';
 import { renderMapaSistema } from './mapa-sistema.js?v=20260428p';
-import { renderSeguranca } from './seguranca.js?v=20260430e';
+import { renderSeguranca } from './seguranca.js?v=20260430f';
+import { renderFinOps } from './finops.js?v=20260430f';
 import { renderFunis } from './funis.js?v=20260428p';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
@@ -45,7 +46,7 @@ const KANBAN_COLS = [
   { id: 'done', label: 'Done' },
 ];
 
-const STUB_PAGES = ['conteudo', 'funis', 'trafego', 'vendas', 'suporte', 'biblioteca', 'seguranca', 'debug'];
+const STUB_PAGES = ['conteudo', 'trafego', 'vendas', 'suporte', 'biblioteca', 'debug'];
 
 /* -------- Navegação --------
    Sempre re-renderiza a página ao navegar — evita estado "preso" de um
@@ -83,6 +84,7 @@ async function navegar(pageSlug, { forcarRender = true } = {}) {
       case 'roadmap':   await renderRoadmap(); break;
       case 'qualidade': await renderQualidade(); break;
       case 'seguranca': await renderSeguranca(); break;
+      case 'finops':    await renderFinOps(); break;
       default:
         if (STUB_PAGES.includes(pageSlug)) renderStub(pageSlug);
     }
@@ -223,6 +225,7 @@ const NAV_PRIMARY = [
   { slug: 'funis',       label: 'Funis',       icon: '🎯', tree: false },
   { slug: 'integracoes', label: 'Integrações', icon: '🔌', tree: false },
   { slug: 'seguranca',   label: 'Segurança',   icon: '🛡', tree: false },
+  { slug: 'finops',      label: 'FinOps',      icon: '💰', tree: false },
 ];
 
 async function renderNavTree() {
