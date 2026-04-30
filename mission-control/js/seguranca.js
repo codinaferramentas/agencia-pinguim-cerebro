@@ -179,7 +179,7 @@ async function renderVisaoGeral(container) {
     }),
   );
 
-  // Ações globais — visual padronizado, com tooltips
+  // Ações globais — botões com mesmo peso visual (ambos primary), tooltips
   const acoes = el('div', { class: 'seguranca-acoes-global' }, [
     el('button', {
       class: 'btn btn-primary',
@@ -188,7 +188,6 @@ async function renderVisaoGeral(container) {
     }, '▶ Rodar auditoria completa'),
     el('button', {
       class: 'btn btn-primary',
-      style: 'background: var(--surface-3); color: var(--fg); border-color: var(--border)',
       title: 'Re-agrega tamanho e contagem real de cada tabela do banco. Atualiza a aba Raio-X.',
       onclick: () => rodarRaioXComToast(),
     }, '📊 Atualizar raio-X'),

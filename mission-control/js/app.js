@@ -12,8 +12,8 @@ import { iconeNode } from './icone.js?v=20260425g';
 import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260428a';
 import { renderIntegracoes } from './integracoes.js?v=20260425n';
 import { renderMapaSistema } from './mapa-sistema.js?v=20260428p';
-import { renderSeguranca } from './seguranca.js?v=20260430h';
-import { renderFinOps } from './finops.js?v=20260430h';
+import { renderSeguranca } from './seguranca.js?v=20260430i';
+import { renderFinOps } from './finops.js?v=20260430i';
 import { renderFunis } from './funis.js?v=20260428p';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
