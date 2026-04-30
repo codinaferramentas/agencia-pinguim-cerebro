@@ -30,8 +30,14 @@ const LABEL_FAMILIA = {
 
 export async function renderCerebros() {
   const page = document.getElementById('page-cerebros');
-  page.innerHTML = '';
-  page.append(el('div', { html: '<div style="padding:3rem;color:var(--fg-muted);text-align:center">Carregando cérebros…</div>' }));
+
+  // So mostra "Carregando" se cache vazio (primeiro acesso). Depois renderiza
+  // sincrono direto, sem flash.
+  const temCache = cerebrosCache && cerebrosCache.length > 0;
+  if (!temCache) {
+    page.innerHTML = '';
+    page.append(el('div', { html: '<div style="padding:3rem;color:var(--fg-muted);text-align:center">Carregando cérebros…</div>' }));
+  }
 
   try {
     cerebrosCache = await fetchCerebrosCatalogo();
@@ -60,7 +66,8 @@ export async function renderCerebros() {
   // Botao "+ Novo" — quando ha filtro ativo, abre modal direto pra essa familia (sem perguntar)
   const onClickNovo = () => abrirModalNovoProduto(filtroFamilia || null);
 
-  page.innerHTML = '';
+  // Constroi conteudo novo num fragment e troca atomico (replaceChildren) —
+  // sem flash de "tela em branco" entre o velho e o novo.
   const headerKids = [
     el('div', {}, [
       el('h1', { class: 'page-title' }, titulo),
@@ -81,7 +88,7 @@ export async function renderCerebros() {
     ? `+ Novo ${{interno:'Interno',externo:'Externo',metodologia:'Metodologia',clone:'Clone'}[filtroFamilia]}`
     : '+ Novo Cérebro'));
 
-  page.append(
+  page.replaceChildren(
     el('div', { class: 'cerebros-header' }, headerKids),
     cerebrosVisiveis.length === 0
       ? el('div', { class: 'stub-screen' }, [

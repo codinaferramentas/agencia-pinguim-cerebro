@@ -12,8 +12,8 @@ import { iconeNode } from './icone.js?v=20260425g';
 import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260428a';
 import { renderIntegracoes } from './integracoes.js?v=20260425n';
 import { renderMapaSistema } from './mapa-sistema.js?v=20260428p';
-import { renderSeguranca } from './seguranca.js?v=20260430g';
-import { renderFinOps } from './finops.js?v=20260430g';
+import { renderSeguranca } from './seguranca.js?v=20260430h';
+import { renderFinOps } from './finops.js?v=20260430h';
 import { renderFunis } from './funis.js?v=20260428p';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
@@ -241,6 +241,22 @@ function marcarLeafAtivo(slug) {
   });
 }
 
+/**
+ * Cache em memoria dos dados que alimentam treeLoaders. Evita refetch ao
+ * banco a cada toggle de categoria/abertura/fechamento. Invalidar via
+ * window.__invalidarCacheNav() quando Cerebro/Skill/Persona for criado,
+ * editado ou apagado.
+ */
+const NAV_CACHE = {
+  cerebros: null,
+  skills: null,
+  personas: null,
+};
+window.__invalidarCacheNav = function(qual) {
+  if (qual) NAV_CACHE[qual] = null;
+  else { NAV_CACHE.cerebros = null; NAV_CACHE.skills = null; NAV_CACHE.personas = null; }
+};
+
 async function renderNavTree() {
   const list = $('#nav-list');
   if (!list) return;
@@ -297,8 +313,16 @@ async function renderNavTree() {
 
     if (NAV_OPEN[nav.slug]) {
       const sub = el('div', { class: 'nav-sub' });
-      sub.appendChild(el('div', { class: 'nav-loading' }, 'Carregando…'));
       wrap.appendChild(sub);
+
+      // Se ja tem cache, renderiza SINCRONO sem mostrar "Carregando..."
+      const cacheKey = nav.slug; // 'cerebros' | 'skills' | 'personas'
+      const temCache = NAV_CACHE[cacheKey] != null;
+
+      if (!temCache) {
+        sub.appendChild(el('div', { class: 'nav-loading' }, 'Carregando…'));
+      }
+
       nav.treeLoader().then(nodes => {
         sub.innerHTML = '';
         if (nodes.length === 0) {
@@ -319,7 +343,8 @@ async function renderNavTree() {
 
 // Loader: arvore de Cerebros (4 categorias com toggle individual)
 async function loadCerebrosTree() {
-  const cerebros = await fetchCerebrosCatalogo();
+  if (!NAV_CACHE.cerebros) NAV_CACHE.cerebros = await fetchCerebrosCatalogo();
+  const cerebros = NAV_CACHE.cerebros;
   const filtrados = cerebros.filter(c => c.slug !== 'pinguim');
   const ordemFamilias = ['interno', 'externo', 'metodologia', 'clone'];
   const labelFamilia = {
@@ -530,8 +555,11 @@ async function loadCerebrosTree() {
 
 // Loader: arvore de Skills (3 categorias com toggle individual)
 async function loadSkillsTree() {
-  const { fetchSkillsCatalogo } = await import('./sb-client.js');
-  const skills = await fetchSkillsCatalogo();
+  if (!NAV_CACHE.skills) {
+    const { fetchSkillsCatalogo } = await import('./sb-client.js');
+    NAV_CACHE.skills = await fetchSkillsCatalogo();
+  }
+  const skills = NAV_CACHE.skills;
   const ordemCategorias = ['universal', 'por_area', 'especifica'];
   const labelCategoria = {
     universal: 'Universais', por_area: 'Por Área', especifica: 'Específicas',
@@ -611,7 +639,8 @@ async function loadSkillsTree() {
 
 // Loader: arvore de Personas (flat)
 async function loadPersonasTree() {
-  const cerebros = await fetchCerebrosCatalogo();
+  if (!NAV_CACHE.cerebros) NAV_CACHE.cerebros = await fetchCerebrosCatalogo();
+  const cerebros = NAV_CACHE.cerebros;
   // Personas SO existem para Cerebros Internos e Externos.
   // Metodologias (SPIN, MEDDIC, etc) e Clones nao tem Persona.
   const lista = cerebros

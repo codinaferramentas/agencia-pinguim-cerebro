@@ -199,6 +199,10 @@ serve(async (req) => {
   const inicio = Date.now();
   const checks: CheckResultado[] = [];
 
+  // Reconcilia incidentes RLS (resolve falsos positivos antigos do trigger barulhento,
+  // abre novos quando aparecer tabela sem RLS de verdade).
+  try { await sb.rpc('reconciliar_incidentes_rls'); } catch (_) {}
+
   if (tipos.includes('rls'))               checks.push(await checkRls(sb));
   if (tipos.includes('policies'))          checks.push(await checkPolicies(sb));
   if (tipos.includes('security_definer'))  checks.push(await checkSecurityDefiner(sb));

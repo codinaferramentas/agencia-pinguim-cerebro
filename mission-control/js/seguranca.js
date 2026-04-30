@@ -14,6 +14,7 @@
  *  Omar Santos · Chris Sanders.
  */
 import { getSupabase } from './sb-client.js?v=20260429d';
+import { abrirSquadCyberModal } from './squad-cyber-modal.js?v=20260430h';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -178,10 +179,19 @@ async function renderVisaoGeral(container) {
     }),
   );
 
-  // Ações globais
+  // Ações globais — visual padronizado, com tooltips
   const acoes = el('div', { class: 'seguranca-acoes-global' }, [
-    el('button', { class: 'btn btn-primary', onclick: () => rodarAuditoriaCompleta() }, '▶ Rodar auditoria completa'),
-    el('button', { class: 'btn', onclick: () => rodarRaioX() }, '📊 Atualizar raio-X'),
+    el('button', {
+      class: 'btn btn-primary',
+      title: 'Squad Cyber roda auditoria completa do sistema (RLS + policies + funções SECURITY DEFINER + incidentes). Anima na tela enquanto roda.',
+      onclick: () => rodarAuditoriaComAnimacao(),
+    }, '▶ Rodar auditoria completa'),
+    el('button', {
+      class: 'btn btn-primary',
+      style: 'background: var(--surface-3); color: var(--fg); border-color: var(--border)',
+      title: 'Re-agrega tamanho e contagem real de cada tabela do banco. Atualiza a aba Raio-X.',
+      onclick: () => rodarRaioXComToast(),
+    }, '📊 Atualizar raio-X'),
   ]);
 
   container.append(acoes, grade);
@@ -739,6 +749,48 @@ async function renderAuditoria(container) {
 // ============================================================
 // Acoes
 // ============================================================
+
+// Auditoria completa COM animacao do Squad Cyber.
+// 6 conselheiros aparecem trabalhando enquanto a Edge Function roda
+// em paralelo. Quando termina, mostra resultado dos checks no log.
+async function rodarAuditoriaComAnimacao() {
+  const sb = getSupabase();
+  const { data: { session } } = await sb.auth.getSession();
+  const apiCall = () => fetch(`${window.__ENV__.SUPABASE_URL}/functions/v1/auditar-seguranca`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`,
+      'apikey': window.__ENV__.SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({}),
+  }).then(async r => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  });
+
+  try {
+    const resultado = await abrirSquadCyberModal({
+      titulo: 'Auditoria completa do sistema',
+      subtitulo: 'Squad Cyber rodando 4 checks (RLS, policies, security definer, incidentes)',
+      apiCall,
+    });
+    const status = resultado?.status_geral || 'ok';
+    if (status === 'ok') {
+      toast('✓ Auditoria concluída — sistema OK.', 'sucesso');
+    } else if (status === 'warning') {
+      toast('⚠ Auditoria concluída com avisos. Veja Histórico.', 'aviso');
+    } else {
+      toast('⚠ Auditoria detectou problemas críticos. Veja Incidentes.', 'erro');
+    }
+  } catch (e) {
+    toast('✗ Erro na auditoria: ' + (e.message || e), 'erro');
+  }
+  await renderSeguranca();
+}
+
+// Versao legado (sem animacao) — usada por cardStatus quando user clica
+// "Auditar agora" num card especifico
 async function rodarAuditoriaCompleta() {
   const sb = getSupabase();
   const { data: { session } } = await sb.auth.getSession();
@@ -782,6 +834,16 @@ async function rodarRaioX() {
     body: JSON.stringify({}),
   });
   await renderSeguranca();
+}
+
+async function rodarRaioXComToast() {
+  toast('📊 Atualizando raio-X do banco...', 'sucesso');
+  try {
+    await rodarRaioX();
+    toast('✓ Raio-X atualizado.', 'sucesso');
+  } catch (e) {
+    toast('✗ Erro ao atualizar raio-X: ' + (e.message || e), 'erro');
+  }
 }
 
 function escapeHtml(s) {
