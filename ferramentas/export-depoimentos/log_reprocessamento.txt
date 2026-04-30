@@ -1,0 +1,45 @@
+Progresso carregado: 167 ja processados
+
+Total a processar: 254
+
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1437406449905963059) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1405306396337111221) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1404566898955255818) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1402278300868673538) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1391748397555515452) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1387775523173699645) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1385591927667429418) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1385009243224277103) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1384286786829942914) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  [55/254]  ok:0  falha:9  desc:7  custo:$0.028 (~R$0.14)
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1384286702884880455) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1382803146442801364) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1382802978981019851) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1382702760461340736) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  [60/254]  ok:0  falha:13  desc:11  custo:$0.039 (~R$0.19)
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1377297154028208199) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  [65/254]  ok:0  falha:14  desc:12  custo:$0.040 (~R$0.20)
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1369035429789175808) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  [70/254]  ok:0  falha:15  desc:13  custo:$0.042 (~R$0.21)
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1367933137908400209) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1364029452413304903) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1358880788459950172) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  [80/254]  ok:0  falha:18  desc:16  custo:$0.055 (~R$0.27)
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1357410982577574101) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1357022346967519375) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1356952731578798171) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  [85/254]  ok:0  falha:21  desc:19  custo:$0.069 (~R$0.35)
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1349143499735433226) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1347623336779452528) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1337495375485079624) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1336681214542610463) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  [115/254]  ok:0  falha:25  desc:22  custo:$0.080 (~R$0.40)
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1336661259700928542) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1336402274922008658) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1336401864853426176) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1336035001959055494) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  [120/254]  ok:0  falha:29  desc:26  custo:$0.090 (~R$0.45)
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1335968481048399922) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1334980477941186702) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1334980034703790133) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}
+  ERRO insert provas_sociais: {"code":"23505","details":"Key (mensagem_discord_id)=(1334574243605778442) already exists.","hint":null,"message":"duplicate key value violates unique constraint \"provas_sociais_mensagem_discord_id_key\""}

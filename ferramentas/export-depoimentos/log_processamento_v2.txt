@@ -1,0 +1,77 @@
+Progresso carregado: 0 ja processados
+
+Total a processar: 254
+
+  [5/254]  ok:5  falha:0  desc:0  custo:$0.012 (~R$0.06)
+  [10/254]  ok:10  falha:0  desc:0  custo:$0.022 (~R$0.11)
+  [15/254]  ok:15  falha:0  desc:0  custo:$0.033 (~R$0.16)
+  [20/254]  ok:20  falha:0  desc:0  custo:$0.048 (~R$0.24)
+  [AUDIT-FAIL msg 1467856205769605154] LLM disse 'Taurus' mas nenhuma variante ['taurus', 'taurinos', 'taurinas'] encontrada
+  [25/254]  ok:25  falha:0  desc:2  custo:$0.070 (~R$0.35)
+  [30/254]  ok:30  falha:0  desc:2  custo:$0.086 (~R$0.43)
+  [35/254]  ok:35  falha:0  desc:4  custo:$0.105 (~R$0.53)
+  [40/254]  ok:40  falha:0  desc:6  custo:$0.118 (~R$0.59)
+  [AUDIT-FAIL msg 1400489636228370600] LLM disse 'Taurus' mas nenhuma variante ['taurus', 'taurinos', 'taurinas'] encontrada
+  [45/254]  ok:45  falha:0  desc:8  custo:$0.137 (~R$0.69)
+  [AUDIT-FAIL msg 1400446545870196736] LLM disse 'Taurus' mas nenhuma variante ['taurus', 'taurinos', 'taurinas'] encontrada
+  [50/254]  ok:50  falha:0  desc:12  custo:$0.174 (~R$0.87)
+  [55/254]  ok:55  falha:0  desc:16  custo:$0.186 (~R$0.93)
+  [60/254]  ok:60  falha:0  desc:20  custo:$0.202 (~R$1.01)
+  [65/254]  ok:65  falha:0  desc:23  custo:$0.214 (~R$1.07)
+  [70/254]  ok:70  falha:0  desc:24  custo:$0.225 (~R$1.13)
+  [75/254]  ok:75  falha:0  desc:27  custo:$0.244 (~R$1.22)
+  [80/254]  ok:80  falha:0  desc:29  custo:$0.258 (~R$1.29)
+  [AUDIT-FAIL msg 1357390193530900520] LLM disse 'Taurus' mas nenhuma variante ['taurus', 'taurinos', 'taurinas'] encontrada
+  [85/254]  ok:85  falha:0  desc:34  custo:$0.287 (~R$1.43)
+  [90/254]  ok:90  falha:0  desc:37  custo:$0.294 (~R$1.47)
+  [95/254]  ok:95  falha:0  desc:42  custo:$0.310 (~R$1.55)
+  [100/254]  ok:100  falha:0  desc:46  custo:$0.317 (~R$1.59)
+  [105/254]  ok:105  falha:0  desc:49  custo:$0.324 (~R$1.62)
+  [110/254]  ok:110  falha:0  desc:51  custo:$0.350 (~R$1.75)
+  [115/254]  ok:115  falha:0  desc:55  custo:$0.372 (~R$1.86)
+  [120/254]  ok:120  falha:0  desc:60  custo:$0.387 (~R$1.94)
+  [125/254]  ok:125  falha:0  desc:64  custo:$0.397 (~R$1.98)
+  [130/254]  ok:130  falha:0  desc:66  custo:$0.422 (~R$2.11)
+  [135/254]  ok:135  falha:0  desc:70  custo:$0.434 (~R$2.17)
+  [140/254]  ok:140  falha:0  desc:73  custo:$0.447 (~R$2.23)
+  [145/254]  ok:145  falha:0  desc:76  custo:$0.464 (~R$2.32)
+  [150/254]  ok:150  falha:0  desc:78  custo:$0.549 (~R$2.75)
+  [155/254]  ok:155  falha:0  desc:83  custo:$0.564 (~R$2.82)
+  [160/254]  ok:160  falha:0  desc:86  custo:$0.588 (~R$2.94)
+  [165/254]  ok:165  falha:0  desc:90  custo:$0.602 (~R$3.01)
+  [170/254]  ok:170  falha:0  desc:95  custo:$0.629 (~R$3.14)
+  [175/254]  ok:175  falha:0  desc:98  custo:$0.640 (~R$3.20)
+  [179/254] ERRO em 1242800312998170745: HTTPError: HTTP Error 400: Bad Request
+  [180/254]  ok:179  falha:1  desc:102  custo:$0.661 (~R$3.30)
+  [185/254]  ok:184  falha:1  desc:107  custo:$0.681 (~R$3.40)
+  [190/254]  ok:189  falha:1  desc:112  custo:$0.693 (~R$3.46)
+  [195/254]  ok:194  falha:1  desc:116  custo:$0.704 (~R$3.52)
+  [200/254]  ok:199  falha:1  desc:121  custo:$0.713 (~R$3.57)
+  [205/254]  ok:204  falha:1  desc:124  custo:$0.734 (~R$3.67)
+  [210/254]  ok:209  falha:1  desc:127  custo:$0.762 (~R$3.81)
+  [215/254]  ok:214  falha:1  desc:131  custo:$0.787 (~R$3.94)
+  [220/254]  ok:219  falha:1  desc:135  custo:$0.808 (~R$4.04)
+  [225/254]  ok:224  falha:1  desc:140  custo:$0.835 (~R$4.18)
+  [230/254]  ok:229  falha:1  desc:145  custo:$0.853 (~R$4.27)
+  [235/254]  ok:234  falha:1  desc:148  custo:$0.862 (~R$4.31)
+  [240/254]  ok:239  falha:1  desc:151  custo:$0.880 (~R$4.40)
+  [245/254]  ok:244  falha:1  desc:156  custo:$0.881 (~R$4.40)
+  [250/254]  ok:249  falha:1  desc:159  custo:$0.896 (~R$4.48)
+
+=== Final ===
+Processados: 253
+Falhas:      1
+Desconhecido: 162
+Custo USD:   $0.905
+Custo BRL:   ~R$4.52
+
+Distribuicao por produto:
+  desconhecido: 162
+  taurus: 53
+  elo: 16
+  lyra: 7
+  orion: 6
+  low ticket: 4
+  proalt: 3
+  analise de perfil: 1
+  mentoria express: 1

@@ -1,0 +1,1777 @@
+{
+  "1494429854953898015": {
+    "ok": true,
+    "produto": "lyra",
+    "aluno": "André Rodrigues",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0015496499999999999
+  },
+  "1494321990184468590": {
+    "ok": true,
+    "produto": "proalt",
+    "aluno": "Charles Oliveira",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00240675
+  },
+  "1490767509463498834": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Guilhermo Lemos Pressi",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0024056999999999998
+  },
+  "1490727900419199006": {
+    "ok": true,
+    "produto": "elo",
+    "aluno": "Matheus Fernandes",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.004498349999999999
+  },
+  "1490727384301834240": {
+    "ok": true,
+    "produto": "elo",
+    "aluno": "Elisângela Moura",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0015189000000000001
+  },
+  "1490727069645275187": {
+    "ok": true,
+    "produto": "elo",
+    "aluno": "Ana Kalline Lima dos Santos",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0023948999999999997
+  },
+  "1486775564734955640": {
+    "ok": true,
+    "produto": "elo",
+    "aluno": "Daniela Porto",
+    "tipo": "faturamento",
+    "custo_usd": 0.00152805
+  },
+  "1484255135025598545": {
+    "ok": true,
+    "produto": "elo",
+    "aluno": "Natalia Pamela Pereira Pinheiro",
+    "tipo": "faturamento",
+    "custo_usd": 0.00237195
+  },
+  "1484254848185798897": {
+    "ok": true,
+    "produto": "elo",
+    "aluno": "Luciana Melo Tomich",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00150675
+  },
+  "1484254548817350726": {
+    "ok": true,
+    "produto": "elo",
+    "aluno": "Daniela Porto",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0015028499999999998
+  },
+  "1484254266196754595": {
+    "ok": true,
+    "produto": "elo",
+    "aluno": "Cida Queiroga",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0024126
+  },
+  "1484253944359288884": {
+    "ok": true,
+    "produto": "elo",
+    "aluno": "Natalia Pamela Pereira Pinheiro",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0023881499999999995
+  },
+  "1484253331550502972": {
+    "ok": true,
+    "produto": "elo",
+    "aluno": "Natalia Pamela Pereira Pinheiro",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0023545499999999995
+  },
+  "1484252887990407280": {
+    "ok": true,
+    "produto": "elo",
+    "aluno": "Alice Benvenuti",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0015258
+  },
+  "1484252545047204002": {
+    "ok": true,
+    "produto": "elo",
+    "aluno": "Juliana Santos Nunes",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0023778000000000002
+  },
+  "1484252382660399236": {
+    "ok": true,
+    "produto": "elo",
+    "aluno": "Ileana Ortega",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.002781
+  },
+  "1484251932716695733": {
+    "ok": true,
+    "produto": "elo",
+    "aluno": "Alexia Oliveira de Souza",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0015139499999999998
+  },
+  "1484251654982336742": {
+    "ok": true,
+    "produto": "elo",
+    "aluno": "Juliana Santos Nunes",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0023664000000000003
+  },
+  "1484251149619167292": {
+    "ok": true,
+    "produto": "proalt",
+    "aluno": "Rafael Palazzio",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0024181499999999996
+  },
+  "1479139085191741470": {
+    "ok": true,
+    "produto": "elo",
+    "aluno": "Natalia Pamela Pereira Pinheiro",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0057687
+  },
+  "1478010929760174100": {
+    "ok": true,
+    "produto": "proalt",
+    "aluno": "Elisa Escola",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.004052999999999999
+  },
+  "1471626999922688110": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Claudia Guimarães",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0005786999999999999
+  },
+  "1467856205769605154": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Milton Geovani Bergamaschi",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.007475849999999999
+  },
+  "1446482037430161498": {
+    "ok": true,
+    "produto": "lyra",
+    "aluno": "Leandro Rodriguez Cunha",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0057912
+  },
+  "1443214490836406272": {
+    "ok": true,
+    "produto": "low ticket",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.004074
+  },
+  "1437406449905963059": {
+    "ok": true,
+    "produto": "analise de perfil",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0057710999999999995
+  },
+  "1435628358351458378": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Bruno Dourado Leandro",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.00044310000000000004
+  },
+  "1414589805269880905": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Milton Geovani Bergamaschi",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0024294
+  },
+  "1413527232336625675": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Bruno Dourado Leandro",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0040845
+  },
+  "1408562638136283186": {
+    "ok": true,
+    "produto": "low ticket",
+    "aluno": "Milton Geovani Bergamaschi",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.004069499999999999
+  },
+  "1408562008571252906": {
+    "ok": true,
+    "produto": "low ticket",
+    "aluno": "Daniel Vicidomini Macagnan & Carla de Aquino Vicidomini Macagnan",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0041307
+  },
+  "1407358978261909514": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "João Jota",
+    "tipo": "faturamento",
+    "custo_usd": 0.0041112
+  },
+  "1405306396337111221": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0040631999999999995
+  },
+  "1405305841984344196": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0040932
+  },
+  "1405304403124031559": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Luana Leticia da Silva Melo",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0023945999999999998
+  },
+  "1405195005206724718": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Marcos",
+    "tipo": "faturamento",
+    "custo_usd": 0.00238005
+  },
+  "1404567149267124324": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Amanda Isabela Silva Mattos",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0041418
+  },
+  "1404566898955255818": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0023791499999999996
+  },
+  "1404566575360643082": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Paula Vieira Lauria",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.004136399999999999
+  },
+  "1404566562219884664": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00024134999999999998
+  },
+  "1402278300868673538": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Davidson Rodrigues",
+    "tipo": "faturamento",
+    "custo_usd": 0.00408795
+  },
+  "1401930337210335362": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Décio Terror Filho",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0041052
+  },
+  "1401927838247944352": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Juliana Alessandra Silva Oliveira",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0041296499999999995
+  },
+  "1401907684827205644": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Juliana Alessandra",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0024315
+  },
+  "1400489636228370600": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Décio Terror Filho",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.004136099999999999
+  },
+  "1400446545870196736": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "César Yuzo Hirai",
+    "tipo": "faturamento",
+    "custo_usd": 0.0210828
+  },
+  "1399359299104538805": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.004471800000000001
+  },
+  "1392152572520960213": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.007468199999999999
+  },
+  "1391748397555515452": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "faturamento",
+    "custo_usd": 0.0023601
+  },
+  "1389645421751832667": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "João Victor de Holanda Leonel",
+    "tipo": "faturamento",
+    "custo_usd": 0.00155325
+  },
+  "1387775523173699645": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "faturamento",
+    "custo_usd": 0.004128
+  },
+  "1387775506451005440": {
+    "ok": true,
+    "produto": "low ticket",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0024327
+  },
+  "1385591927667429418": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Davi Santos",
+    "tipo": "faturamento",
+    "custo_usd": 0.0023841
+  },
+  "1385009243224277103": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Davi Santos",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0015394500000000001
+  },
+  "1384286786829942914": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Ruskaiia Duarte",
+    "tipo": "faturamento",
+    "custo_usd": 0.00151605
+  },
+  "1384286702884880455": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "faturamento",
+    "custo_usd": 0.0024285
+  },
+  "1382803146442801364": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00151485
+  },
+  "1382802978981019851": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0015190499999999999
+  },
+  "1382710058407956510": {
+    "ok": true,
+    "produto": "orion",
+    "aluno": "Michael de Lima",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00407235
+  },
+  "1382702760461340736": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0057735
+  },
+  "1381652294533386424": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00023564999999999998
+  },
+  "1381646688820920461": {
+    "ok": true,
+    "produto": "orion",
+    "aluno": "Heloise Nogueira",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0023646
+  },
+  "1379485757672001697": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0002337
+  },
+  "1379476933431132202": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0079017
+  },
+  "1377297154028208199": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Davi Santos",
+    "tipo": "faturamento",
+    "custo_usd": 0.00154305
+  },
+  "1376624860826173544": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Milton Bergamaschi",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0023726999999999997
+  },
+  "1374762855391428650": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0023871
+  },
+  "1374744989912928358": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Rodrigo Estevam",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0024096
+  },
+  "1374451778262798486": {
+    "ok": true,
+    "produto": "lyra",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0027916499999999997
+  },
+  "1369035429789175808": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0015248999999999998
+  },
+  "1368969730068713583": {
+    "ok": true,
+    "produto": "orion",
+    "aluno": "João Victor dos Santos",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00151845
+  },
+  "1367933137908400209": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0015139499999999998
+  },
+  "1364029595854176276": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00023669999999999998
+  },
+  "1364029452413304903": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "faturamento",
+    "custo_usd": 0.0074616
+  },
+  "1364029385811824690": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Bruno Leandro",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.007565999999999999
+  },
+  "1361340729477300316": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00022635
+  },
+  "1361340178215473343": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Wagner Machado",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0024344999999999996
+  },
+  "1360271458701676738": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Wallace Melo",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.00042135
+  },
+  "1359195207786041435": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Maria Angélica",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.00751995
+  },
+  "1358880788459950172": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "faturamento",
+    "custo_usd": 0.004089
+  },
+  "1357410982577574101": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "faturamento",
+    "custo_usd": 0.007499999999999999
+  },
+  "1357390630736625789": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0002313
+  },
+  "1357390193530900520": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "João Victor de Holanda Leonel",
+    "tipo": "faturamento",
+    "custo_usd": 0.01350075
+  },
+  "1357022346967519375": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Matheus Ferreira",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00153825
+  },
+  "1356952731578798171": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "faturamento",
+    "custo_usd": 0.0057710999999999995
+  },
+  "1356732397214896169": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00022710000000000002
+  },
+  "1356730652556529876": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00022935
+  },
+  "1356730576962584798": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Diego",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.00406275
+  },
+  "1356727660578996287": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Atila",
+    "tipo": "faturamento",
+    "custo_usd": 0.0023626499999999996
+  },
+  "1355703505096282152": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00023025
+  },
+  "1355703434644422707": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.007480799999999999
+  },
+  "1351204060820275201": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00027135
+  },
+  "1351203078254104597": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Rodrigo",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00024675
+  },
+  "1350096202754035784": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Camilla",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.007506
+  },
+  "1349357374594617417": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00022544999999999998
+  },
+  "1349155062911336508": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00022484999999999996
+  },
+  "1349153024366477424": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00022679999999999998
+  },
+  "1349152545158991943": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00022695
+  },
+  "1349143499735433226": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Rodrigo Augusto",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.004206
+  },
+  "1348705074536255612": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Matheus",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0024157499999999995
+  },
+  "1347625783316844597": {
+    "ok": true,
+    "produto": "lyra",
+    "aluno": "Juliana Oliveira",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0040611
+  },
+  "1347624112381493321": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0002301
+  },
+  "1347623336779452528": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0023728499999999997
+  },
+  "1344068387227041894": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.000228
+  },
+  "1344065392871608341": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00024
+  },
+  "1344065316019245198": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "null",
+    "tipo": "faturamento",
+    "custo_usd": 0.01132335
+  },
+  "1343640337062826125": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Lucas Arantes",
+    "tipo": "faturamento",
+    "custo_usd": 0.004130099999999999
+  },
+  "1342499755564990486": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Nathalia Neves",
+    "tipo": "faturamento",
+    "custo_usd": 0.00239085
+  },
+  "1342246247351713865": {
+    "ok": true,
+    "produto": "orion",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0074513999999999995
+  },
+  "1339969326819835924": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0002415
+  },
+  "1339966168550867066": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0041418
+  },
+  "1339963012064350271": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Bruno Dourado Leandro",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0017085
+  },
+  "1337495375485079624": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0023607000000000003
+  },
+  "1337164587052564621": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.01173915
+  },
+  "1336681214542610463": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0023865
+  },
+  "1336661259700928542": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Juliana Grein",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0023745
+  },
+  "1336434268821520494": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0057552
+  },
+  "1336402274922008658": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.00239295
+  },
+  "1336401864853426176": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0023526
+  },
+  "1336035001959055494": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0023688
+  },
+  "1335974085821468732": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00022769999999999998
+  },
+  "1335968481048399922": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00235425
+  },
+  "1334980477941186702": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0023556
+  },
+  "1334980034703790133": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0023556
+  },
+  "1334623245386907709": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "João Victor Leonel",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.00239715
+  },
+  "1334574243605778442": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0023584499999999998
+  },
+  "1334528337409867886": {
+    "ok": true,
+    "produto": "lyra",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0031997999999999996
+  },
+  "1333489210832982036": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00022695
+  },
+  "1333487329482113085": {
+    "ok": true,
+    "produto": "orion",
+    "aluno": "Jefferson Granetto",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0023598
+  },
+  "1329519996799291432": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Igor Araújo",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.016946700000000002
+  },
+  "1322291405787496489": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00022845
+  },
+  "1322289835649662998": {
+    "ok": true,
+    "produto": "lyra",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0041004
+  },
+  "1322287679294935131": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0002304
+  },
+  "1322276415743332414": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00023295
+  },
+  "1322275982983561227": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0075174
+  },
+  "1319289078952366172": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0002343
+  },
+  "1319284991657508864": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Felippe Marcel Zancarli",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0023931
+  },
+  "1313877821608824883": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Schirlei Zimmermann",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0015306000000000002
+  },
+  "1313483181147553803": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.005762849999999999
+  },
+  "1312036934327210045": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Felippe",
+    "tipo": "faturamento",
+    "custo_usd": 0.002385
+  },
+  "1311689801426272426": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Juliana Gasparini",
+    "tipo": "faturamento",
+    "custo_usd": 0.0024005999999999997
+  },
+  "1309608898843508806": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0023823000000000004
+  },
+  "1309521944449781760": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.00407475
+  },
+  "1303783688437497866": {
+    "ok": true,
+    "produto": "orion",
+    "aluno": "Leo Castiglio",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00278325
+  },
+  "1303782851640295465": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0057993
+  },
+  "1303773203398656103": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Juliana Alessandra",
+    "tipo": "faturamento",
+    "custo_usd": 0.0057801
+  },
+  "1301881480364163193": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Thiago Alves",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00156945
+  },
+  "1301580947375788163": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.02232465
+  },
+  "1301580919383003156": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.055497149999999995
+  },
+  "1300883907171979366": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0002247
+  },
+  "1300883555911733268": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00022889999999999998
+  },
+  "1296843544278995004": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00405375
+  },
+  "1295782874854723584": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0032269499999999997
+  },
+  "1295740717078941767": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0023595
+  },
+  "1295163564146950205": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Yan Ximenes AA",
+    "tipo": "faturamento",
+    "custo_usd": 0.004204049999999999
+  },
+  "1293301715373785180": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.007457849999999999
+  },
+  "1288490280177107036": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0040824
+  },
+  "1285606646617215138": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00239475
+  },
+  "1284260996705288244": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Natália",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0032178
+  },
+  "1276522226950344868": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Pedro Monte",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.007497599999999999
+  },
+  "1267895230783557632": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00154545
+  },
+  "1263551027768987761": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Alexandre santos",
+    "tipo": "faturamento",
+    "custo_usd": 0.0015455999999999998
+  },
+  "1262849173733118032": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "José",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0058899
+  },
+  "1260250651183546389": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00024765
+  },
+  "1260249941821886464": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00430875
+  },
+  "1256005751353376900": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Weslley Jonh",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0074946
+  },
+  "1252634248490385489": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0040716
+  },
+  "1250482598439026750": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.007480799999999999
+  },
+  "1250482515911643146": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0075179999999999995
+  },
+  "1249742096022376448": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00022455
+  },
+  "1249738637956874381": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Diego Martins",
+    "tipo": "faturamento",
+    "custo_usd": 0.004122600000000001
+  },
+  "1245368339061018705": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00023145
+  },
+  "1245354178864222309": {
+    "ok": true,
+    "produto": "lyra",
+    "aluno": "Gisele Meter",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0041028
+  },
+  "1244635468319162398": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0023631
+  },
+  "1243554690579300402": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0002262
+  },
+  "1243554499596128256": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "faturamento",
+    "custo_usd": 0.0040548
+  },
+  "1243554390867185704": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0040878
+  },
+  "1243307606362292236": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Caio Vasconselos Oliveira",
+    "tipo": "faturamento",
+    "custo_usd": 0.00406665
+  },
+  "1242800312998170745": {
+    "ok": false,
+    "erro": "HTTP Error 400: Bad Request"
+  },
+  "1239953240796172368": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Isabela",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0087534
+  },
+  "1238491048854945833": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Paulo Fernando",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0041805
+  },
+  "1235572035405484072": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.007447799999999999
+  },
+  "1235571711664066581": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Paulo Santiago",
+    "tipo": "faturamento",
+    "custo_usd": 0.004088099999999999
+  },
+  "1235568106001141760": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0002265
+  },
+  "1235568083872251944": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0041088
+  },
+  "1235567987759513731": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Alessandro Pinheiro Pinto da Silva",
+    "tipo": "outro",
+    "custo_usd": 0.0041202
+  },
+  "1233432895234900048": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Caio Vasconselos Oliveira",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00327735
+  },
+  "1229834790190972928": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.00409395
+  },
+  "1229514585149669387": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00022935
+  },
+  "1229514549066203267": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0002247
+  },
+  "1229514525162602658": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": null,
+    "tipo": "desconhecido",
+    "custo_usd": 0.00022424999999999998
+  },
+  "1229427708266549299": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Paula Vieira",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0041016
+  },
+  "1227353413705138238": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0041274
+  },
+  "1225479205521985726": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00022994999999999998
+  },
+  "1225478526317101168": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Cristiano Lopes Figueiredo",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0024028499999999998
+  },
+  "1217819678676750366": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0023556
+  },
+  "1217807923343003699": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0002331
+  },
+  "1217806670890270730": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Paula",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0023691
+  },
+  "1217806592733610055": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0023839499999999997
+  },
+  "1214304524140019712": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Caio Vasconselos Oliveira",
+    "tipo": "faturamento",
+    "custo_usd": 0.00237135
+  },
+  "1213165159292477570": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Jefferson",
+    "tipo": "faturamento",
+    "custo_usd": 0.0074627999999999995
+  },
+  "1213155398245158982": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "faturamento",
+    "custo_usd": 0.0058521
+  },
+  "1210606059111186505": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00239955
+  },
+  "1203048667163140166": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Caio Vasconselos Oliveira",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0024555
+  },
+  "1203048573181370448": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Phillipe Lacerda",
+    "tipo": "faturamento",
+    "custo_usd": 0.00235605
+  },
+  "1197138934770188368": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Phillipe Lacerda",
+    "tipo": "faturamento",
+    "custo_usd": 0.00154665
+  },
+  "1196119538027220993": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0074934
+  },
+  "1183869257847668776": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Mari Alexandre",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0058046999999999994
+  },
+  "1181244748414070864": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0057777
+  },
+  "1179718547451166790": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": null,
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.007503599999999999
+  },
+  "1179395834186580099": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0057488999999999995
+  },
+  "1177586727699886131": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Angela Teider",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0057867
+  },
+  "1176211308446756874": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0057525
+  },
+  "1173753323074101378": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Árina Jaíne",
+    "tipo": "faturamento",
+    "custo_usd": 0.007505999999999999
+  },
+  "1173696760397451484": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00025409999999999994
+  },
+  "1173696635503652925": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0005184
+  },
+  "1173610469622296576": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.005774099999999999
+  },
+  "1173605212515213322": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0057837
+  },
+  "1172638500101824562": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Michael Silva",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0042384
+  },
+  "1172610858531160067": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "faturamento",
+    "custo_usd": 0.0041532
+  },
+  "1172602201244455012": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Fernando Dias",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0023895
+  },
+  "1172540690505400361": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Emery Alvares",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0074826
+  },
+  "1171987968752373882": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00807375
+  },
+  "1171099086255034508": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0040722
+  },
+  "1166349746793893928": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0059067
+  },
+  "1164726904541151312": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Jeferson Silva",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.007526999999999999
+  },
+  "1163475017800089660": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "faturamento",
+    "custo_usd": 0.005754899999999999
+  },
+  "1163432412894736394": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Renan Nascimento",
+    "tipo": "faturamento",
+    "custo_usd": 0.0040903499999999995
+  },
+  "1159831764575985675": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00025275
+  },
+  "1159831323859484713": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00022830000000000002
+  },
+  "1159827295222120529": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00024239999999999998
+  },
+  "1159827163822956554": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Paulo Santiago",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00038895
+  },
+  "1158853188376592456": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": null,
+    "tipo": "faturamento",
+    "custo_usd": 0.007492199999999999
+  },
+  "1152214759446421588": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00041775
+  },
+  "1152212216112742410": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Magda dos Santos",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.0002313
+  },
+  "1151117381716938802": {
+    "ok": true,
+    "produto": "mentoria express",
+    "aluno": "Jeferson Silva",
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.00038415
+  },
+  "1149056763539243049": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Geovana",
+    "tipo": "faturamento",
+    "custo_usd": 0.0015294
+  },
+  "1148578484134891530": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Leandro B.",
+    "tipo": "faturamento",
+    "custo_usd": 0.0075131999999999985
+  },
+  "1148578381030506607": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "faturamento",
+    "custo_usd": 0.0023739
+  },
+  "1148262906937491567": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "depoimento_texto",
+    "custo_usd": 0.005771699999999999
+  },
+  "1148228831019290694": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0002307
+  },
+  "1148228362582630533": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00023295
+  },
+  "1148227997531373568": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00022845
+  },
+  "1148227757394899014": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0002355
+  },
+  "1148227462304649216": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00023009999999999998
+  },
+  "1148216670410788886": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Mina do Tráfego",
+    "tipo": "faturamento",
+    "custo_usd": 0.00152625
+  },
+  "1148215505459609702": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "faturamento",
+    "custo_usd": 0.0041208
+  },
+  "1148215291193610260": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Andreza Lageman",
+    "tipo": "faturamento",
+    "custo_usd": 0.0041532
+  },
+  "1148215244066402355": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Diane Moreira",
+    "tipo": "faturamento",
+    "custo_usd": 0.0040847999999999995
+  },
+  "1148214953636003991": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Erivelton Lucena",
+    "tipo": "faturamento",
+    "custo_usd": 0.0015226500000000002
+  },
+  "1148214806176866374": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.00022334999999999998
+  },
+  "1147227546665103472": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": "Jeferson Silva",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0057837
+  },
+  "1147227495452655798": {
+    "ok": true,
+    "produto": "taurus",
+    "aluno": "Viviane Rodrigues de Oliveira",
+    "tipo": "conversa_whatsapp",
+    "custo_usd": 0.0024045
+  },
+  "1147227473864573050": {
+    "ok": true,
+    "produto": "desconhecido",
+    "aluno": null,
+    "tipo": "outro",
+    "custo_usd": 0.0002421
+  }
+}

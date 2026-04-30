@@ -97,10 +97,33 @@ serve(async (req) => {
     });
   }
 
-  // Chama API da Vercel
-  const url = new URL(`https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}/env`);
-  if (VERCEL_TEAM_ID) url.searchParams.set('teamId', VERCEL_TEAM_ID);
+  // Auto-descoberta de team se VERCEL_TEAM_ID nao estiver setado
+  let teamIdEfetivo = VERCEL_TEAM_ID;
+  if (!teamIdEfetivo) {
+    try {
+      const tResp = await fetch('https://api.vercel.com/v2/teams', {
+        headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
+      });
+      if (tResp.ok) {
+        const tData = await tResp.json();
+        const teams = tData.teams || [];
+        if (teams.length === 1) {
+          teamIdEfetivo = teams[0].id;
+        } else if (teams.length > 1) {
+          // Tenta achar pelo slug que aparece na URL do projeto
+          const candidate = teams.find((t: any) => t.slug?.includes('ferramenta'));
+          if (candidate) teamIdEfetivo = candidate.id;
+          else teamIdEfetivo = teams[0].id;
+        }
+      }
+    } catch (_) { /* ignora */ }
+  }
+
+  // Chama API da Vercel — usa v10 que retorna paginado e cobre todos os tipos
+  const url = new URL(`https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env`);
+  if (teamIdEfetivo) url.searchParams.set('teamId', teamIdEfetivo);
   url.searchParams.set('decrypt', 'false'); // NUNCA descriptografa
+  url.searchParams.set('limit', '100');
 
   const resp = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
@@ -117,6 +140,34 @@ serve(async (req) => {
   }
   const dados = await resp.json();
   const envs = dados.envs || [];
+
+  // Diagnostico extra: se 0 envs, tenta listar projetos do team pra confirmar acesso
+  let diagnostico: any = null;
+  if (envs.length === 0) {
+    try {
+      const projUrl = new URL('https://api.vercel.com/v9/projects');
+      if (teamIdEfetivo) projUrl.searchParams.set('teamId', teamIdEfetivo);
+      projUrl.searchParams.set('limit', '20');
+      const pResp = await fetch(projUrl.toString(), { headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } });
+      if (pResp.ok) {
+        const pData = await pResp.json();
+        const projetos = (pData.projects || []).map((p: any) => ({ id: p.id, name: p.name }));
+        const projetoEsperado = projetos.find((p: any) => p.id === VERCEL_PROJECT_ID);
+        diagnostico = {
+          token_lista_projetos: true,
+          projetos_visiveis_count: projetos.length,
+          project_id_atual: VERCEL_PROJECT_ID,
+          project_id_encontrado_no_team: !!projetoEsperado,
+          nome_projeto_encontrado: projetoEsperado?.name || null,
+          primeiros_projetos: projetos.slice(0, 5),
+        };
+      } else {
+        diagnostico = { token_lista_projetos: false, status: pResp.status };
+      }
+    } catch (e) {
+      diagnostico = { erro_diagnostico: String(e) };
+    }
+  }
 
   const mascaradas = envs.map((e: any) => {
     const nome = e.key as string;
@@ -144,8 +195,10 @@ serve(async (req) => {
   return jsonResp({
     ok: true,
     configurado: true,
+    team_id_usado: teamIdEfetivo || null,
     total: mascaradas.length,
     por_provedor: porProvedor,
     variaveis: mascaradas,
+    ...(diagnostico ? { diagnostico } : {}),
   });
 });

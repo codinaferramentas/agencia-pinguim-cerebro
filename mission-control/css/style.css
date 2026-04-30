@@ -1812,6 +1812,67 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
 }
 .cofre-form-acoes { display: flex; gap: 0.5rem; }
 .cofre-btn-apagar { color: var(--danger); }
+
+/* Auditoria de uso */
+.cofre-auditoria {
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  padding: 1rem 1.125rem;
+  margin-bottom: 0.75rem;
+}
+.cofre-auditoria-titulo {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+  font-weight: 600;
+  margin-bottom: 0.625rem;
+}
+.cofre-auditoria-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.5rem;
+}
+.cofre-auditoria-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+}
+.cofre-auditoria-chave {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--fg);
+  margin-bottom: 0.25rem;
+}
+.cofre-auditoria-stats {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+.cofre-auditoria-total { color: var(--fg-muted); }
+.cofre-auditoria-sucesso {
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.6875rem;
+}
+.cofre-auditoria-sucesso-ok { background: rgba(16,185,129,0.15); color: #10b981; }
+.cofre-auditoria-sucesso-warn { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.cofre-auditoria-sucesso-err { background: rgba(239,68,68,0.15); color: #ef4444; }
+.cofre-auditoria-meta {
+  font-size: 0.6875rem;
+  color: var(--fg-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  margin-top: 0.25rem;
+}
 .cofre-tabela {
   width: 100%;
   border-collapse: collapse;

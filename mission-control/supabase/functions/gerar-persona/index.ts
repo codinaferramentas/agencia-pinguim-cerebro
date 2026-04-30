@@ -11,10 +11,10 @@
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { getChave } from '../_shared/cofre.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')!;
 
 const MODEL = 'gpt-4o-mini';
 const MAX_FONTES = 30;
@@ -110,6 +110,7 @@ Regras:
 - Nao invente numeros ou dados quantitativos.`;
 
 async function callOpenAI(fontes: Array<{ titulo: string; tipo: string; conteudo_md: string }>, cerebroNome: string) {
+  const OPENAI_API_KEY = await getChave('OPENAI_API_KEY', 'gerar-persona');
   const bloco = fontes.map((f, i) => {
     const trecho = (f.conteudo_md || '').slice(0, MAX_CHARS_POR_FONTE);
     return `### Fonte ${i + 1} [${f.tipo}] — ${f.titulo}\n${trecho}`;

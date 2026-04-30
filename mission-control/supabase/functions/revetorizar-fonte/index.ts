@@ -10,11 +10,14 @@
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { getChave } from '../_shared/cofre.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')!;
+
+// OPENAI_API_KEY vem do cofre (lazy)
+let OPENAI_API_KEY = '';
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 const CHUNK_SIZE_CHARS = 2000;
@@ -35,11 +38,19 @@ function jsonResp(body: unknown, status = 200) {
 }
 
 async function requireAuth(req: Request): Promise<boolean> {
-  const authHeader = req.headers.get('Authorization') || '';
-  const jwt = authHeader.replace('Bearer ', '');
-  if (!jwt) return false;
-  const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const { data, error } = await sb.auth.getUser(jwt);
+  const auth = req.headers.get('Authorization') || '';
+  const headerJwt = auth.replace('Bearer ', '');
+  if (!headerJwt) return false;
+  if (headerJwt === SUPABASE_SERVICE_ROLE_KEY) return true;
+  if (headerJwt.startsWith('eyJ')) {
+    try {
+      const adminClient = createClient(SUPABASE_URL, headerJwt, { auth: { persistSession: false } });
+      const { error } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1 });
+      if (!error) return true;
+    } catch (_) {}
+  }
+  const sbAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const { data, error } = await sbAnon.auth.getUser(headerJwt);
   return !error && !!data?.user;
 }
 
@@ -87,6 +98,9 @@ serve(async (req) => {
 
   const { fonte_id } = body;
   if (!fonte_id) return jsonResp({ error: 'fonte_id obrigatorio' }, 400);
+
+  // Carrega OPENAI_API_KEY do cofre (cache 5min)
+  OPENAI_API_KEY = await getChave('OPENAI_API_KEY', 'revetorizar-fonte');
 
   try {
     const client = sb();

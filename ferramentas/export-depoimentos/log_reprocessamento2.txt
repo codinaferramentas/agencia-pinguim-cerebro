@@ -1,0 +1,42 @@
+Progresso carregado: 127 ja processados
+
+Total a processar: 254
+
+  [55/254]  ok:7  falha:0  desc:7  custo:$0.018 (~R$0.09)
+  [60/254]  ok:11  falha:0  desc:11  custo:$0.029 (~R$0.14)
+  [65/254]  ok:14  falha:0  desc:14  custo:$0.031 (~R$0.15)
+  [70/254]  ok:15  falha:0  desc:15  custo:$0.032 (~R$0.16)
+  [80/254]  ok:20  falha:0  desc:20  custo:$0.046 (~R$0.23)
+  [85/254]  ok:24  falha:0  desc:24  custo:$0.060 (~R$0.30)
+  [90/254]  ok:27  falha:0  desc:27  custo:$0.061 (~R$0.30)
+  [95/254]  ok:30  falha:0  desc:30  custo:$0.061 (~R$0.31)
+  [105/254]  ok:36  falha:0  desc:36  custo:$0.064 (~R$0.32)
+  [110/254]  ok:37  falha:0  desc:37  custo:$0.065 (~R$0.32)
+  [115/254]  ok:39  falha:0  desc:39  custo:$0.069 (~R$0.35)
+  [120/254]  ok:43  falha:0  desc:43  custo:$0.078 (~R$0.39)
+  [135/254]  ok:53  falha:0  desc:53  custo:$0.096 (~R$0.48)
+  [140/254]  ok:56  falha:0  desc:56  custo:$0.100 (~R$0.50)
+  [150/254]  ok:59  falha:0  desc:59  custo:$0.106 (~R$0.53)
+  [155/254]  ok:63  falha:0  desc:62  custo:$0.117 (~R$0.58)
+  [165/254]  ok:68  falha:0  desc:67  custo:$0.129 (~R$0.65)
+  [170/254]  ok:73  falha:0  desc:72  custo:$0.155 (~R$0.78)
+  [175/254]  ok:75  falha:0  desc:74  custo:$0.158 (~R$0.79)
+  [185/254]  ok:81  falha:0  desc:80  custo:$0.182 (~R$0.91)
+  [190/254]  ok:85  falha:0  desc:84  custo:$0.190 (~R$0.95)
+  [215/254]  ok:101  falha:0  desc:100  custo:$0.250 (~R$1.25)
+  [220/254]  ok:105  falha:0  desc:104  custo:$0.266 (~R$1.33)
+  [225/254]  ok:110  falha:0  desc:108  custo:$0.293 (~R$1.47)
+  [230/254]  ok:113  falha:0  desc:111  custo:$0.299 (~R$1.50)
+  [240/254]  ok:117  falha:0  desc:115  custo:$0.309 (~R$1.54)
+  [245/254]  ok:122  falha:0  desc:120  custo:$0.310 (~R$1.55)
+
+=== Final ===
+Processados: 127
+Falhas:      0
+Desconhecido: 125
+Custo USD:   $0.324
+Custo BRL:   ~R$1.62
+
+Distribuicao por produto:
+  desconhecido: 125
+  proalt: 2

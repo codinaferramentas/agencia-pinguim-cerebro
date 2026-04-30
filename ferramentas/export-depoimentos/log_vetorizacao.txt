@@ -1,0 +1,19 @@
+Fontes pendentes: 126
+
+  [10/126] ok:10 falha:0 custo:$0.0000
+  [20/126] ok:20 falha:0 custo:$0.0001
+  [30/126] ok:30 falha:0 custo:$0.0001
+  [40/126] ok:40 falha:0 custo:$0.0002
+  [50/126] ok:50 falha:0 custo:$0.0002
+  [60/126] ok:60 falha:0 custo:$0.0002
+  [70/126] ok:70 falha:0 custo:$0.0003
+  [80/126] ok:80 falha:0 custo:$0.0003
+  [90/126] ok:90 falha:0 custo:$0.0003
+  [100/126] ok:100 falha:0 custo:$0.0004
+  [110/126] ok:110 falha:0 custo:$0.0004
+  [120/126] ok:120 falha:0 custo:$0.0005
+
+=== Vetorizacao final ===
+Sucesso: 126
+Falha:   0
+Custo:   $0.0005 (~R$0.002)

@@ -231,18 +231,50 @@ async function renderCofre(container) {
   });
 
   // Header com info + botao novo
+  // Auditoria de uso (ultimas 24h)
+  const { data: usoData } = await sb.rpc('listar_chaves_em_uso', { p_horas: 24 });
+  const usoPorChave = {};
+  (usoData || []).forEach(u => { usoPorChave[u.chave_nome] = u; });
+
   const headerInfo = el('div', { class: 'cofre-header' }, [
     el('div', {}, [
       el('div', { style: 'font-weight:600;font-size:.9375rem' }, `${total} chave(s) cadastrada(s)`),
       el('div', { style: 'font-size:.8125rem;color:var(--fg-muted);margin-top:.25rem' },
         Object.entries(porProvedor).map(([p, n]) => `${p}: ${n}`).join(' · ') || 'Nenhuma chave ainda.'),
       el('div', { style: 'font-size:.75rem;color:var(--fg-dim);margin-top:.5rem;max-width:60ch' },
-        '🛡 Cofre próprio, agnóstico de provedor. Vercel/Cloudflare/AWS/etc. Painel mostra mascarado (últimos 4 chars). Valor completo só via service_role no banco.'),
+        '🛡 Cofre como fonte canônica. Edge Functions + scripts locais leem aqui (cache 5min). Rotação no painel = mudança ativa em todo o sistema sem deploy.'),
     ]),
     el('button', { class: 'btn btn-primary', onclick: () => abrirNovaChave(container) }, '+ Nova chave'),
   ]);
 
   container.append(headerInfo);
+
+  // Bloco auditoria (so se houver uso registrado)
+  if ((usoData || []).length > 0) {
+    const auditoriaBloco = el('div', { class: 'cofre-auditoria' }, [
+      el('div', { class: 'cofre-auditoria-titulo' }, '📊 Uso nas últimas 24h'),
+      el('div', { class: 'cofre-auditoria-grid' }, usoData.map(u => {
+        const sucessoPct = u.total_leituras > 0
+          ? Math.round(((u.total_leituras - u.total_falhas) / u.total_leituras) * 100)
+          : 0;
+        const ultima = new Date(u.ultima_leitura);
+        const minAtras = Math.round((Date.now() - ultima.getTime()) / 60000);
+        return el('div', { class: 'cofre-auditoria-card' }, [
+          el('div', { class: 'cofre-auditoria-chave' }, u.chave_nome),
+          el('div', { class: 'cofre-auditoria-stats' }, [
+            el('span', { class: 'cofre-auditoria-total' }, `${u.total_leituras} leituras`),
+            el('span', { class: `cofre-auditoria-sucesso cofre-auditoria-sucesso-${sucessoPct === 100 ? 'ok' : sucessoPct > 0 ? 'warn' : 'err'}` },
+              `${sucessoPct}% sucesso`),
+          ]),
+          el('div', { class: 'cofre-auditoria-meta' }, [
+            el('span', {}, `${u.consumidores.length} consumidor(es): ${u.consumidores.slice(0, 3).join(', ')}${u.consumidores.length > 3 ? '...' : ''}`),
+            el('span', {}, ` · última há ${minAtras < 60 ? minAtras + 'min' : Math.round(minAtras/60) + 'h'}`),
+          ]),
+        ]);
+      })),
+    ]);
+    container.append(auditoriaBloco);
+  }
 
   if (total === 0) {
     container.append(el('div', { class: 'seguranca-empty', style: 'margin-top:1rem' }, [

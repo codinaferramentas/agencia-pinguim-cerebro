@@ -1,8 +1,29 @@
 import OpenAI from 'openai';
 import { env } from './env.mjs';
+import { getChave } from './cofre.mjs';
 
 let _client = null;
+let _clientPromise = null;
 
+// Async — busca chave do cofre na primeira vez (com fallback .env)
+export async function openaiAsync() {
+  if (_client) return _client;
+  if (_clientPromise) return _clientPromise;
+  _clientPromise = (async () => {
+    let apiKey;
+    try {
+      apiKey = await getChave('OPENAI_API_KEY', 'ingest-engine-local');
+    } catch (e) {
+      // fallback final: env.mjs (.env.local)
+      apiKey = env().OPENAI_API_KEY;
+    }
+    _client = new OpenAI({ apiKey });
+    return _client;
+  })();
+  return _clientPromise;
+}
+
+// Sync legado — usado em codigo antigo. Tenta env primeiro, deixa cofre pro caminho async.
 export function openai() {
   if (_client) return _client;
   const cfg = env();

@@ -20,6 +20,7 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import JSZip from 'https://esm.sh/jszip@3.10.1';
 import { extractText as pdfExtractText, getDocumentProxy } from 'https://esm.sh/unpdf@0.12.1';
+import { getChave } from '../_shared/cofre.ts';
 
 // ========================================================================
 // Config
@@ -27,7 +28,10 @@ import { extractText as pdfExtractText, getDocumentProxy } from 'https://esm.sh/
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')!;
+
+// OPENAI_API_KEY agora vem do cofre (lazy, cache 5min). Mantem variavel
+// pra nao mexer em N usages no codigo — atribuida no inicio do handler.
+let OPENAI_API_KEY = '';
 
 const CLASSIFIER_MODEL = 'gpt-4o-mini';
 const VISION_MODEL = 'gpt-4o-mini';      // OCR + leitura de imagem (custo-benefício)
@@ -883,6 +887,9 @@ serve(async (req) => {
   if (!lote_id || !cerebro_id) {
     return jsonResp({ error: 'lote_id e cerebro_id obrigatórios' }, 400);
   }
+
+  // Cofre: carrega OPENAI_API_KEY do cofre (cache 5min)
+  OPENAI_API_KEY = await getChave('OPENAI_API_KEY', 'ingest-pacote');
 
   const client = sb();
 

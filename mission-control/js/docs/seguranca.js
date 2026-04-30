@@ -66,18 +66,36 @@ export async function gerar() {
             <li><code>vercel-env-vars</code> — sincroniza chaves Vercel quando plano permite (Pro+). Em Hobby, fallback é cofre próprio.</li>
           </ul>
 
-          <h3>Cofre próprio (agnóstico de provedor)</h3>
-          <p>Tabela <code>pinguim.cofre_chaves</code> + view <code>vw_cofre_chaves</code>. O Pinguim OS NÃO depende de Vercel API pra cofre. Cada chave é cadastrada manualmente com:</p>
+          <h3>Cofre como fonte canônica (não inventário)</h3>
+          <p>O cofre Pinguim OS <strong>controla</strong> as chaves. Quando você rotaciona/edita no painel, o sistema todo passa a usar a nova versão na próxima invocação (cache 5min). Sem deploy, sem mexer em Vercel/Supabase secrets, sem mexer em .env.</p>
+
+          <h4>Componentes</h4>
           <ul>
-            <li><strong>Nome</strong> — ex.: <code>OPENAI_API_KEY</code></li>
-            <li><strong>Provedor</strong> — OpenAI, Anthropic, Supabase, Vercel, etc.</li>
-            <li><strong>Escopo</strong> — public / secret / admin</li>
-            <li><strong>Onde vive</strong> — Vercel env, Supabase Edge secret, GitHub Actions, .env.local, outro</li>
-            <li><strong>Valor completo</strong> — criptografado por RLS, só service_role decifra</li>
-            <li><strong>Última rotação</strong> — auditoria de "quanto tempo essa chave tem"</li>
+            <li><code>pinguim.cofre_chaves</code> — tabela com nome, provedor, escopo, onde vive, valor (criptografado por RLS), últimos 4 chars, última rotação</li>
+            <li><code>vw_cofre_chaves</code> — view que NUNCA expõe <code>valor_completo</code></li>
+            <li><code>get_chave(nome, consumidor, origem)</code> — RPC SECURITY DEFINER que retorna o valor + audita uso</li>
+            <li><code>chave_uso</code> — toda leitura registrada (chave, consumidor, origem, sucesso, timestamp)</li>
+            <li><code>listar_chaves_em_uso(horas)</code> — agrega leituras pra dashboard</li>
+            <li><code>chaves-gateway</code> Edge Function — gateway central (raramente usada — Edge Functions chamam direto)</li>
+            <li><code>_shared/cofre.ts</code> — helper das Edge Functions (<code>getChave('OPENAI_API_KEY', 'buscar-cerebro')</code>)</li>
+            <li><code>ingest-engine/lib/cofre.mjs</code> — espelho do helper pro lado local</li>
           </ul>
-          <p>O painel mostra só meta + últimos 4 chars + dias desde rotação. Nunca expõe valor.</p>
-          <p><strong>Por que cofre próprio:</strong> plano Hobby da Vercel não retorna env vars via REST API. Isolar do provedor torna o framework portável — cliente pode usar Vercel/Cloudflare/AWS/Railway, o cofre Pinguim OS funciona igual.</p>
+
+          <h4>O que o cofre controla</h4>
+          <p>Hoje 5 Edge Functions já leem do cofre: <code>buscar-cerebro</code>, <code>gerar-persona</code>, <code>ingest-pacote</code>, <code>ingest-url</code>, <code>revetorizar-fonte</code>. Mais o ingest-engine local. Todas com <strong>fallback em <code>Deno.env</code> / <code>.env.local</code></strong> — se cofre não tiver valor, sistema continua funcionando.</p>
+
+          <h4>O que o cofre NÃO controla (bootstrap secrets)</h4>
+          <ul>
+            <li><strong><code>SUPABASE_URL</code></strong> e <strong><code>SUPABASE_SERVICE_ROLE_KEY</code></strong> — usadas pra <em>autenticar no banco</em> antes de ler o cofre. Bootstrap clássico — ovo precisa vir antes da galinha. Continuam vindo de <code>Deno.env</code>.</li>
+            <li><strong><code>SUPABASE_URL</code></strong> e <strong><code>SUPABASE_ANON_KEY</code></strong> no front — vão pro browser do cliente, cofre não pode entregar (expor service_role). Continuam em Vercel env vars.</li>
+          </ul>
+          <p>Total: 3 chaves bootstrap (1 delas duplicada em front e Edge), todo o resto vem do cofre.</p>
+
+          <h4>Auditoria viva</h4>
+          <p>Toda leitura grava em <code>chave_uso</code>: chave, consumidor (qual Edge Function leu), origem (edge-function/local/painel), sucesso/falha, motivo. A aba "Cofre" mostra: total de leituras nas últimas 24h, % de sucesso, consumidores ativos, quando foi a última leitura.</p>
+
+          <h4>Por que cofre próprio</h4>
+          <p>Plano Hobby da Vercel não retorna env vars via REST API. Isolar do provedor torna o framework portável: cliente Pinguim OS pode usar Vercel/Cloudflare/AWS/Railway, o cofre funciona igual. Vantagem maior: <strong>rotação centralizada</strong>. Cliente roda compromisso vazado, abre o painel, troca chave em 1 lugar, sistema inteiro passa a usar a nova em ≤5min.</p>
         `,
       },
       {
