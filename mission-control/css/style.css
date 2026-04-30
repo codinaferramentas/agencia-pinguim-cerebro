@@ -1630,6 +1630,261 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
   border-radius: var(--r-md);
 }
 
+/* ============================================================
+   SEGURANCA — pilar visual
+   ============================================================ */
+#page-seguranca { padding: 1.25rem 1.5rem; }
+.seguranca-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+  margin: 1rem 0 1.25rem;
+  flex-wrap: wrap;
+}
+.seguranca-tab {
+  background: transparent;
+  border: 0;
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  color: var(--fg-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.seguranca-tab:hover { color: var(--fg); }
+.seguranca-tab.active {
+  color: var(--accent, #E85C00);
+  border-bottom-color: var(--accent, #E85C00);
+}
+.seguranca-loading, .seguranca-empty, .seguranca-erro {
+  padding: 2rem;
+  text-align: center;
+  color: var(--fg-muted);
+  background: var(--surface-2);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--r-md);
+  font-size: 0.875rem;
+}
+.seguranca-erro { color: var(--danger); border-style: solid; border-color: var(--danger); }
+.seguranca-acoes-global {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.seguranca-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 0.875rem;
+}
+.seg-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  padding: 0.875rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.seg-card-ok       { border-left-color: #10b981; }
+.seg-card-warning  { border-left-color: #f59e0b; }
+.seg-card-critical { border-left-color: #ef4444; }
+.seg-card-planejado { border-left-color: var(--fg-dim); }
+.seg-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.seg-card-icon { font-size: 1.125rem; }
+.seg-card-titulo {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--fg);
+}
+.seg-badge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+.seg-badge-ok { background: rgba(16,185,129,0.15); color: #10b981; }
+.seg-badge-warning { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.seg-badge-critical { background: rgba(239,68,68,0.15); color: #ef4444; }
+.seg-badge-unknown, .seg-badge-planejado { background: var(--surface-3); color: var(--fg-dim); }
+.seg-card-resumo {
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+  line-height: 1.45;
+}
+.seg-card-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--fg-dim);
+  align-items: center;
+}
+.seg-card-conselheiro { font-style: italic; }
+.seg-card-acao {
+  align-self: flex-start;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.625rem;
+}
+
+/* COFRE */
+.cofre-header {
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  padding: 0.875rem 1rem;
+  margin-bottom: 0.75rem;
+}
+.cofre-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+.cofre-tabela th, .cofre-tabela td {
+  text-align: left;
+  padding: 0.5rem 0.625rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.cofre-tabela th {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-dim);
+}
+.cofre-nome { font-family: var(--font-mono); font-weight: 600; }
+.cofre-mascara { font-family: var(--font-mono); color: var(--fg-muted); }
+.cofre-data { color: var(--fg-dim); font-size: 0.75rem; }
+.cofre-provedor, .cofre-escopo {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  background: var(--surface-3);
+  color: var(--fg-muted);
+}
+.cofre-escopo-secret { background: rgba(239,68,68,0.15); color: #ef4444; }
+.cofre-escopo-public { background: rgba(16,185,129,0.15); color: #10b981; }
+
+/* RAIO-X */
+.raiox-head {
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+.raiox-pct-label { font-weight: 600; font-size: 0.9375rem; margin-bottom: 0.5rem; }
+.raiox-bar-bg {
+  background: var(--surface-3);
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  margin-bottom: 0.375rem;
+}
+.raiox-bar-fg { height: 100%; transition: width .3s; }
+.raiox-bar-ok       { background: #10b981; }
+.raiox-bar-warning  { background: #f59e0b; }
+.raiox-bar-critical { background: #ef4444; }
+.raiox-pct-num { font-size: 0.8125rem; color: var(--fg-muted); }
+.raiox-projecao {
+  margin-top: 0.625rem;
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+}
+.raiox-projecao-vazia { color: var(--fg-dim); font-style: italic; }
+.raiox-tabela, .incidentes-tabela, .auditoria-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+.raiox-tabela th, .raiox-tabela td,
+.incidentes-tabela th, .incidentes-tabela td,
+.auditoria-tabela th, .auditoria-tabela td {
+  text-align: left;
+  padding: 0.5rem 0.625rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.raiox-tabela th, .incidentes-tabela th, .auditoria-tabela th {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-dim);
+}
+
+/* INCIDENTES */
+.incidente-sev {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.incidente-sev-baixo { background: var(--surface-3); color: var(--fg-muted); }
+.incidente-sev-medio { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.incidente-sev-alto { background: rgba(239,68,68,0.15); color: #ef4444; }
+.incidente-sev-critico { background: #ef4444; color: white; }
+.incidente-resolvido { opacity: 0.5; }
+
+/* POLITICAS */
+.politicas-lista { display: flex; flex-direction: column; gap: 0.75rem; }
+.politica-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  padding: 0.875rem 1rem;
+}
+.politica-inativa { opacity: 0.5; }
+.politica-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.375rem;
+  flex-wrap: wrap;
+}
+.politica-titulo { font-weight: 600; font-size: 0.9375rem; flex: 1; }
+.politica-badge {
+  background: var(--surface-3);
+  color: var(--fg-muted);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.politica-origem {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--fg-dim);
+}
+.politica-desc { color: var(--fg-muted); font-size: 0.8125rem; margin-bottom: 0.5rem; }
+.politica-regra {
+  background: var(--surface-3);
+  border-radius: 4px;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
 .view-toggle {
   display: flex;
   gap: 0.25rem;
@@ -5087,6 +5342,40 @@ body.mobile-menu-open .mobile-overlay {
 }
 
 /* ----- Mini-secao Funil (Anatomia em 3 camadas) ----- */
+.mapa-seguranca-camada {
+  margin-top: 2rem;
+  background: linear-gradient(180deg, rgba(232,92,0,0.04), transparent);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent, #E85C00);
+  border-radius: var(--r-xl);
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+.mapa-seguranca-head { margin-bottom: 1rem; padding-bottom: 0.875rem; border-bottom: 1px solid var(--border-subtle); }
+.mapa-seguranca-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent, #E85C00);
+  margin-bottom: 0.375rem;
+  font-weight: 700;
+}
+.mapa-seguranca-titulo {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+  margin-bottom: 0.25rem;
+}
+.mapa-seguranca-sub { font-size: 0.875rem; color: var(--fg-muted); }
+.mapa-seguranca-conselheiros, .mapa-seguranca-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.875rem;
+}
+
 .mapa-funil-camadas {
   margin-top: 1rem;
   background: var(--surface-1);

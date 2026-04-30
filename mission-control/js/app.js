@@ -12,6 +12,7 @@ import { iconeNode } from './icone.js?v=20260425g';
 import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260428a';
 import { renderIntegracoes } from './integracoes.js?v=20260425n';
 import { renderMapaSistema } from './mapa-sistema.js?v=20260428p';
+import { renderSeguranca } from './seguranca.js?v=20260429e';
 import { renderFunis } from './funis.js?v=20260428p';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
@@ -81,6 +82,7 @@ async function navegar(pageSlug, { forcarRender = true } = {}) {
       case 'mapa':      await renderMapaSistema(); break;
       case 'roadmap':   await renderRoadmap(); break;
       case 'qualidade': await renderQualidade(); break;
+      case 'seguranca': await renderSeguranca(); break;
       default:
         if (STUB_PAGES.includes(pageSlug)) renderStub(pageSlug);
     }
@@ -220,6 +222,7 @@ const NAV_PRIMARY = [
   { slug: 'personas',    label: 'Personas',    icon: '👤', tree: true,  treeLoader: () => loadPersonasTree() },
   { slug: 'funis',       label: 'Funis',       icon: '🎯', tree: false },
   { slug: 'integracoes', label: 'Integrações', icon: '🔌', tree: false },
+  { slug: 'seguranca',   label: 'Segurança',   icon: '🛡', tree: false },
 ];
 
 async function renderNavTree() {

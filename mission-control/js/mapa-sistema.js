@@ -297,6 +297,30 @@ export async function renderMapaSistema() {
     bloco({ icone: '📈', nome: 'Relatórios', descricao: 'Dashboards e relatórios de saúde do Cérebro, gaps de conteúdo, performance comercial.', status: 'planejado' }),
   ]));
 
+  // CAMADA TRANSVERSAL — SEGURANCA
+  wrap.appendChild(el('section', { class: 'mapa-seguranca-camada' }, [
+    el('div', { class: 'mapa-seguranca-head' }, [
+      el('div', { class: 'mapa-seguranca-eyebrow' }, '🛡 Camada Transversal · Segurança Contínua'),
+      el('div', { class: 'mapa-seguranca-titulo' }, 'Squad Cyber operando 24/7, em paralelo a tudo'),
+      el('div', { class: 'mapa-seguranca-sub' },
+        'Defesa em profundidade + Zero Trust + IDS + Threat Intel. Não é correção pontual — é camada permanente, escalável e visível.'),
+    ]),
+    el('div', { class: 'mapa-seguranca-conselheiros' }, [
+      bloco({ icone: '🛡', nome: 'Peter Kim', descricao: 'Red Team — simula ataque diário. F12, IDOR, query injection. Tudo que vaza vira incidente.', status: 'em-construcao' }),
+      bloco({ icone: '🛡', nome: 'Georgia Weidman', descricao: 'Pentest semanal — OWASP Top 10 contra o sistema. Princípio do menor privilégio.', status: 'em-construcao' }),
+      bloco({ icone: '🛡', nome: 'Jim Manico', descricao: 'Code Auditor — secure coding em todo push. Validação de input, autenticação, sessão.', status: 'em-construcao' }),
+      bloco({ icone: '🛡', nome: 'Marcus Carey', descricao: 'Threat Intel — lê logs Vercel/Supabase a cada 6h. Coleta → análise → disseminação → feedback.', status: 'em-construcao' }),
+      bloco({ icone: '🛡', nome: 'Omar Santos', descricao: 'Zero Trust — toda Edge valida JWT. Toda tool tem allowlist. Nada confiável por padrão.', status: 'ativo' }),
+      bloco({ icone: '🛡', nome: 'Chris Sanders', descricao: 'IDS — compara tráfego com baseline. Alerta em desvio. Anomalia vira incidente.', status: 'em-construcao' }),
+    ]),
+    el('div', { class: 'mapa-seguranca-cards' }, [
+      bloco({ icone: '🔒', nome: 'RLS auditado', descricao: 'Toda tabela do schema pinguim com RLS ativo + policy. Trigger valida em CREATE TABLE.', status: 'ativo' }),
+      bloco({ icone: '🔑', nome: 'Cofre Vercel', descricao: 'Painel mostra nomes mascarados das chaves (último 4 chars). Valor nunca exposto.', status: 'ativo' }),
+      bloco({ icone: '📊', nome: 'Raio-X do banco', descricao: 'Contagens reais (sem limite PostgREST), tamanho por tabela, projeção de quando estoura.', status: 'ativo' }),
+      bloco({ icone: '⚖', nome: 'Políticas escritas', descricao: 'Princípio Dalio: feedback vira política, política não evapora. Tabela politicas_seguranca.', status: 'ativo' }),
+    ]),
+  ]));
+
   // Realimenta — fecha o ciclo
   wrap.appendChild(el('div', { class: 'mapa-realimenta' }, [
     el('div', { class: 'mapa-realimenta-curva' }, [

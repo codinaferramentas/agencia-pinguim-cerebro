@@ -100,6 +100,13 @@ export const DOCS_CATALOGO = [
     meta: '8 min · proposta',
     secao: 'Propostas',
   },
+  {
+    slug: 'seguranca',
+    titulo: 'Segurança',
+    descricao: 'Pilar Cyber do Pinguim OS. Squad de 6 conselheiros (Peter Kim, Georgia Weidman, Jim Manico, Marcus Carey, Omar Santos, Chris Sanders). Auditoria contínua, raio-X do banco, cofre de chaves, políticas escritas, incidentes. Defesa em profundidade + Zero Trust.',
+    meta: '8 min · módulo principal',
+    secao: 'Módulos',
+  },
 ];
 
 export function buscarDoc(slug) {
@@ -174,7 +181,7 @@ export async function renderDocDetalhe(slug) {
   page.innerHTML = '<div style="padding:3rem;color:var(--fg-muted);text-align:center">Carregando…</div>';
 
   // Importa modulo da doc dinamicamente (lazy)
-  const mod = await import(`./docs/${slug}.js?v=20260429d`);
+  const mod = await import(`./docs/${slug}.js?v=20260429e`);
   const conteudo = await mod.gerar();
 
   const wrap = el('div', { class: 'docs-detail' });
