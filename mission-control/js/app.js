@@ -223,9 +223,9 @@ const NAV_PRIMARY = [
   { slug: 'skills',      label: 'Skills',      icon: '🛠', tree: true,  treeLoader: () => loadSkillsTree() },
   { slug: 'personas',    label: 'Personas',    icon: '👤', tree: true,  treeLoader: () => loadPersonasTree() },
   { slug: 'funis',       label: 'Funis',       icon: '🎯', tree: false },
-  { slug: 'integracoes', label: 'Integrações', icon: '🔌', tree: false },
-  { slug: 'seguranca',   label: 'Segurança',   icon: '🛡', tree: false },
   { slug: 'finops',      label: 'FinOps',      icon: '💰', tree: false },
+  { slug: 'seguranca',   label: 'Segurança',   icon: '🛡', tree: false },
+  { slug: 'integracoes', label: 'Integrações', icon: '🔌', tree: false },
 ];
 
 /**
