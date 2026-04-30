@@ -4,7 +4,7 @@
 
 import { dataMode, fetchOperacaoData, fetchRoadmapData, fetchCerebrosCatalogo } from './sb-client.js?v=20260421p';
 import { renderHome } from './home.js?v=20260421p';
-import { renderCerebros, initDrawer, abrirCerebroDetalhe } from './cerebros.js?v=20260421p';
+import { renderCerebros, initDrawer, abrirCerebroDetalhe } from './cerebros.js?v=20260430l';
 import { renderCrons } from './crons.js?v=20260421p';
 import { renderSkills, abrirSkillDetalhe } from './skills.js?v=20260427o';
 import { renderStub } from './stubs.js?v=20260421p';

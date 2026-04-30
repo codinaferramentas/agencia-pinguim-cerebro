@@ -20,6 +20,9 @@ const el = (tag, attrs = {}, children = []) => {
 
 let cerebrosCache = [];
 let filtroFamilia = null;  // null = todas; senao 'interno'|'externo'|'metodologia'|'clone'
+let filtroBusca = '';      // termo digitado na busca (case-insensitive, sem acento)
+
+const normalizar = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 const LABEL_FAMILIA = {
   interno: { titulo: '📦 Cérebros Internos', sub: 'Produtos da Pinguim. Tem persona, prova social, cases.' },
@@ -48,14 +51,26 @@ export async function renderCerebros() {
 
   // "Cérebro é o pai de tudo" — só aparece cérebro com fonte
   // Cérebros cadastrados mas sem fonte ficam acessíveis via modal "+ Novo Cérebro"
-  let cerebrosVisiveis = cerebrosCache.filter(c =>
+  const baseVisiveis = cerebrosCache.filter(c =>
     c.slug !== 'pinguim' && (c.total_fontes || 0) > 0
   );
 
-  // Aplica filtro de familia se ativo
-  if (filtroFamilia) {
-    cerebrosVisiveis = cerebrosVisiveis.filter(c => (c.categoria || 'interno') === filtroFamilia);
-  }
+  // Contagem por familia (sem aplicar filtro de familia, mas com a busca já filtrada — assim o chip mostra quantos casam)
+  const buscaNorm = normalizar(filtroBusca.trim());
+  const passaBusca = (c) => !buscaNorm || normalizar(c.nome).includes(buscaNorm) || normalizar(c.descricao).includes(buscaNorm);
+  const aposBusca = baseVisiveis.filter(passaBusca);
+  const contagem = {
+    todos: aposBusca.length,
+    interno: aposBusca.filter(c => (c.categoria || 'interno') === 'interno').length,
+    externo: aposBusca.filter(c => c.categoria === 'externo').length,
+    metodologia: aposBusca.filter(c => c.categoria === 'metodologia').length,
+    clone: aposBusca.filter(c => c.categoria === 'clone').length,
+  };
+
+  // Aplica filtro de familia depois da busca
+  let cerebrosVisiveis = filtroFamilia
+    ? aposBusca.filter(c => (c.categoria || 'interno') === filtroFamilia)
+    : aposBusca;
 
   // Cabecalho dinamico — muda quando ha filtro ativo
   const titulo = filtroFamilia ? LABEL_FAMILIA[filtroFamilia].titulo : 'Cérebros';
@@ -66,21 +81,13 @@ export async function renderCerebros() {
   // Botao "+ Novo" — quando ha filtro ativo, abre modal direto pra essa familia (sem perguntar)
   const onClickNovo = () => abrirModalNovoProduto(filtroFamilia || null);
 
-  // Constroi conteudo novo num fragment e troca atomico (replaceChildren) —
-  // sem flash de "tela em branco" entre o velho e o novo.
+  // Linha 1 do header: titulo + acoes (sem botao "× Limpar filtro" — agora tem chip "Todos")
   const headerKids = [
     el('div', {}, [
       el('h1', { class: 'page-title' }, titulo),
       el('div', { class: 'page-subtitle' }, subtitulo),
     ]),
   ];
-  if (filtroFamilia) {
-    headerKids.push(el('button', {
-      class: 'btn btn-ghost',
-      style: 'margin-right:.5rem',
-      onclick: () => limparFiltroFamilia(),
-    }, '× Limpar filtro'));
-  }
   headerKids.push(el('button', {
     class: 'btn btn-primary',
     onclick: onClickNovo,
@@ -88,15 +95,87 @@ export async function renderCerebros() {
     ? `+ Novo ${{interno:'Interno',externo:'Externo',metodologia:'Metodologia',clone:'Clone'}[filtroFamilia]}`
     : '+ Novo Cérebro'));
 
+  // Linha 2: chips de familia + busca
+  const chipDef = [
+    { cat: null,           label: 'Todos',         icon: '',   key: 'todos' },
+    { cat: 'interno',      label: 'Internos',      icon: '📦', key: 'interno' },
+    { cat: 'externo',      label: 'Externos',      icon: '🔍', key: 'externo' },
+    { cat: 'metodologia',  label: 'Metodologias',  icon: '📚', key: 'metodologia' },
+    { cat: 'clone',        label: 'Clones',        icon: '👤', key: 'clone' },
+  ];
+  const chips = chipDef.map(d => el('button', {
+    class: 'cerebros-chip' + (filtroFamilia === d.cat ? ' active' : ''),
+    onclick: () => {
+      filtroFamilia = d.cat;
+      // Sincroniza destaque do subnav pra ficar coerente com o chip
+      document.querySelectorAll('.subnav-section[data-familia].active').forEach(el => el.classList.remove('active'));
+      if (d.cat) {
+        const sec = document.querySelector(`.subnav-section[data-familia="${d.cat}"]`);
+        if (sec) sec.classList.add('active');
+      }
+      renderCerebros();
+    },
+  }, [
+    d.icon ? el('span', { class: 'cerebros-chip-icon' }, d.icon) : null,
+    el('span', {}, d.label),
+    el('span', { class: 'cerebros-chip-count' }, String(contagem[d.key])),
+  ]));
+
+  const buscaInput = el('input', {
+    type: 'text',
+    class: 'cerebros-busca-input',
+    placeholder: 'Buscar por nome ou descrição…',
+    value: filtroBusca,
+    oninput: (e) => {
+      filtroBusca = e.target.value;
+      renderCerebros();
+      // Devolve foco e cursor pro fim depois do re-render
+      requestAnimationFrame(() => {
+        const novo = document.querySelector('.cerebros-busca-input');
+        if (novo) {
+          novo.focus();
+          novo.setSelectionRange(novo.value.length, novo.value.length);
+        }
+      });
+    },
+  });
+
+  const filtros = el('div', { class: 'cerebros-filtros' }, [
+    el('div', { class: 'cerebros-chips' }, chips),
+    el('div', { class: 'cerebros-busca' }, [
+      el('span', { class: 'cerebros-busca-icon' }, '🔎'),
+      buscaInput,
+      filtroBusca
+        ? el('button', {
+            class: 'cerebros-busca-limpar',
+            title: 'Limpar busca',
+            onclick: () => { filtroBusca = ''; renderCerebros(); },
+          }, '×')
+        : null,
+    ]),
+  ]);
+
+  // Estado vazio com mensagem que reflete os filtros ativos
+  function mensagemVazio() {
+    if (filtroBusca && filtroFamilia) {
+      const fam = LABEL_FAMILIA[filtroFamilia].titulo.replace(/^[^\s]+\s/, '');
+      return `Nenhum Cérebro com "${filtroBusca}" em ${fam}`;
+    }
+    if (filtroBusca) return `Nenhum Cérebro com "${filtroBusca}"`;
+    if (filtroFamilia) return `Nenhum Cérebro ${LABEL_FAMILIA[filtroFamilia].titulo.replace(/^[^\s]+\s/, '')} ainda`;
+    return 'Nenhum Cérebro alimentado ainda';
+  }
+
   page.replaceChildren(
     el('div', { class: 'cerebros-header' }, headerKids),
+    filtros,
     cerebrosVisiveis.length === 0
       ? el('div', { class: 'stub-screen' }, [
           el('div', { class: 'stub-badge' }, 'vazio'),
-          el('h2', {}, filtroFamilia
-            ? `Nenhum Cérebro ${LABEL_FAMILIA[filtroFamilia].titulo.replace(/^[^\s]+\s/, '')} ainda`
-            : 'Nenhum Cérebro alimentado ainda'),
-          el('p', {}, 'Cérebros aparecem aqui assim que recebem a primeira fonte. Clique em "+ Novo Cérebro" pra criar ou continuar alimentando um existente.'),
+          el('h2', {}, mensagemVazio()),
+          el('p', {}, filtroBusca
+            ? 'Tente um termo diferente ou troque a categoria.'
+            : 'Cérebros aparecem aqui assim que recebem a primeira fonte. Clique em "+ Novo Cérebro" pra criar ou continuar alimentando um existente.'),
           el('button', {
             class: 'btn btn-primary',
             style: 'margin-top:1rem',
