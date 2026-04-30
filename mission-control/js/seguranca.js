@@ -14,7 +14,7 @@
  *  Omar Santos · Chris Sanders.
  */
 import { getSupabase } from './sb-client.js?v=20260429d';
-import { abrirSquadCyberModal } from './squad-cyber-modal.js?v=20260430h';
+import { iniciarCyberParalelo } from './squad-cyber-modal.js?v=20260430j';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -750,40 +750,48 @@ async function renderAuditoria(container) {
 // ============================================================
 
 // Auditoria completa COM animacao do Squad Cyber.
-// 6 conselheiros aparecem trabalhando enquanto a Edge Function roda
-// em paralelo. Quando termina, mostra resultado dos checks no log.
+// Modal canvas pixel-art mostra 6 agentes brasileiros (Ingrid, Fernanda,
+// Bejairo, Rafael, Tati, Dom) trabalhando em paralelo nas 3 salas (Central
+// de Operações, Oficina de Inovação, Guarita do Cofre) enquanto a Edge
+// Function `auditar-seguranca` roda.
 async function rodarAuditoriaComAnimacao() {
   const sb = getSupabase();
   const { data: { session } } = await sb.auth.getSession();
-  const apiCall = () => fetch(`${window.__ENV__.SUPABASE_URL}/functions/v1/auditar-seguranca`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${session.access_token}`,
-      'apikey': window.__ENV__.SUPABASE_ANON_KEY,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({}),
-  }).then(async r => {
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return r.json();
+
+  // iniciarCyberParalelo abre o modal e retorna controles pra
+  // sinalizar conclusao quando a API real responder
+  const { sinalizarConclusao, sinalizarErro } = iniciarCyberParalelo('auditoriaSeguranca', {
+    titulo: 'Auditoria completa do sistema',
+    subtitulo: '6 agentes em paralelo — RLS, policies, SECURITY DEFINER, incidentes',
   });
 
+  let resultado = null;
   try {
-    const resultado = await abrirSquadCyberModal({
-      titulo: 'Auditoria completa do sistema',
-      subtitulo: 'Squad Cyber rodando 4 checks (RLS, policies, security definer, incidentes)',
-      apiCall,
+    const r = await fetch(`${window.__ENV__.SUPABASE_URL}/functions/v1/auditar-seguranca`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': window.__ENV__.SUPABASE_ANON_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
     });
-    const status = resultado?.status_geral || 'ok';
-    if (status === 'ok') {
-      toast('✓ Auditoria concluída — sistema OK.', 'sucesso');
-    } else if (status === 'warning') {
-      toast('⚠ Auditoria concluída com avisos. Veja Histórico.', 'aviso');
-    } else {
-      toast('⚠ Auditoria detectou problemas críticos. Veja Incidentes.', 'erro');
-    }
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    resultado = await r.json();
+    sinalizarConclusao(resultado);
   } catch (e) {
+    sinalizarErro(e);
     toast('✗ Erro na auditoria: ' + (e.message || e), 'erro');
+    return;
+  }
+
+  const status = resultado?.status_geral || 'ok';
+  if (status === 'ok') {
+    toast('✓ Auditoria concluída — sistema OK.', 'sucesso');
+  } else if (status === 'warning') {
+    toast('⚠ Auditoria concluída com avisos. Veja Histórico.', 'aviso');
+  } else {
+    toast('⚠ Auditoria detectou problemas críticos. Veja Incidentes.', 'erro');
   }
   await renderSeguranca();
 }

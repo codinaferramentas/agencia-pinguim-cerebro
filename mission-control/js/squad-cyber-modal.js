@@ -1,258 +1,166 @@
-/**
- * Modal de auditoria do Squad Cyber.
- *
- * Diferente do squad-modal.js (canvas pixel-art dos sócios Pinguim), este é
- * um modal especifico pra Squad Cyber — 6 conselheiros (Kim, Weidman, Manico,
- * Carey, Santos, Sanders) trabalhando enquanto a Edge Function `auditar-seguranca`
- * roda.
- *
- * Visual: 6 cards com avatar + status (idle/working/done/erro) + log live
- * com falas dos conselheiros usando voz real (extraida dos SOULs).
- */
+/* Mission Control — Squad Cyber Modal
+   Variante do squad-modal pro contexto Cyber Security. Usa o canvas
+   pixel-art em squad-cyber-animation.js (3 salas em PT-BR + 6 agentes BR).
 
-const CONSELHEIROS = [
-  {
-    id: 'kim',
-    nome: 'Peter Kim',
-    role: 'Red Team · The Hacker Playbook',
-    emoji: '🛡',
-    cor: '#ef4444',
-    falas: [
-      'Iniciando red team. Vou pensar como atacante.',
-      'Procurando endpoints expostos sem auth...',
-      'Testando IDOR — request injection em URLs.',
-      'Simulando F12 — vendo o que vaza no Network tab.',
-    ],
-  },
-  {
-    id: 'weidman',
-    nome: 'Georgia Weidman',
-    role: 'Penetration Testing',
-    emoji: '🔓',
-    cor: '#f59e0b',
-    falas: [
-      'Defesa em profundidade. Conferindo cada camada.',
-      'Princípio do menor privilégio em todas as chaves.',
-      'Auditando RLS por linha em cada tabela.',
-      'Validando que cada policy bate com o caso de uso.',
-    ],
-  },
-  {
-    id: 'manico',
-    nome: 'Jim Manico',
-    role: 'OWASP · Secure Coding',
-    emoji: '🔐',
-    cor: '#10b981',
-    falas: [
-      'Rodando OWASP Top 10 contra o sistema.',
-      'Validando input de cada Edge Function.',
-      'Checando funções SECURITY DEFINER têm search_path.',
-      'Secure by design. Nada por padrão é confiável.',
-    ],
-  },
-  {
-    id: 'carey',
-    nome: 'Marcus Carey',
-    role: 'Threat Intelligence',
-    emoji: '🎯',
-    cor: '#3b82f6',
-    falas: [
-      'Coleta → análise → disseminação → feedback.',
-      'Lendo logs do Vercel e Supabase das últimas 6h.',
-      'Identificando padrões de ataque conhecidos.',
-      'Cruzando IPs com base de threat intel.',
-    ],
-  },
-  {
-    id: 'santos',
-    nome: 'Omar Santos',
-    role: 'Cisco · Zero Trust',
-    emoji: '⚔',
-    cor: '#a855f7',
-    falas: [
-      'Zero Trust. Nenhuma requisição é confiável.',
-      'Validando JWT em cada Edge Function.',
-      'Auditando allowlist das tools dos agentes.',
-      'Verificando escopo mínimo das chaves.',
-    ],
-  },
-  {
-    id: 'sanders',
-    nome: 'Chris Sanders',
-    role: 'Intrusion Detection',
-    emoji: '👁',
-    cor: '#06b6d4',
-    falas: [
-      'Comparando tráfego com baseline de 7 dias.',
-      'Estabelecendo baseline do comportamento normal.',
-      'Procurando desvios significativos.',
-      'Anomalia vira incidente, incidente vira ação.',
-    ],
-  },
-];
+   IMPORTANTE: NAO substitui squad-modal.js — coexiste. Cada feature
+   chama o modal correto. Persona/Pacote -> squad-modal. Auditoria -> aqui.
+*/
 
-function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+import { criarEngine, SQUAD_AGENTS } from './squad-cyber-animation.js?v=20260430j';
+import { ROTEIROS_CYBER } from './squad-cyber-roteiros.js?v=20260430j';
 
-function el(tag, attrs = {}, children = []) {
-  const n = document.createElement(tag);
-  for (const k in attrs) {
-    if (k === 'class') n.className = attrs[k];
-    else if (k === 'html') n.innerHTML = attrs[k];
-    else if (k.startsWith('on')) n.addEventListener(k.slice(2), attrs[k]);
-    else n.setAttribute(k, attrs[k]);
-  }
-  (Array.isArray(children) ? children : [children]).forEach(c => {
-    if (c != null) n.append(c.nodeType ? c : document.createTextNode(c));
+export async function abrirSquadCyberModal({ roteiro, apiCall, titulo, subtitulo, contexto }) {
+  const roteiroFn = ROTEIROS_CYBER[roteiro];
+  if (!roteiroFn) throw new Error(`Roteiro Cyber ${roteiro} nao encontrado`);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'squad-overlay';
+  overlay.innerHTML = `
+    <div class="squad-modal">
+      <div class="squad-header">
+        <div>
+          <div class="squad-badge" style="background:#ef444433;color:#ef4444;border-color:#ef4444">🛡 Squad Cyber em ação</div>
+          <h2 class="squad-title">${escapeHTML(titulo || 'Auditoria de segurança')}</h2>
+          <div class="squad-subtitle">${escapeHTML(subtitulo || '')}</div>
+        </div>
+        <div class="squad-close-hint">Trabalho em paralelo — todos ativos</div>
+      </div>
+      <div class="squad-body">
+        <div class="squad-canvas-wrap">
+          <canvas class="squad-canvas" width="980" height="600"></canvas>
+        </div>
+        <aside class="squad-panel">
+          <div class="squad-panel-block">
+            <div class="squad-panel-title">Status</div>
+            <div class="squad-statusbar" id="squad-statusbar">Aguardando squad...</div>
+            <div class="squad-counters">
+              <div><span class="squad-counter-num" id="squad-c-elapsed">0s</span><span class="squad-counter-label">Tempo</span></div>
+              <div><span class="squad-counter-num" id="squad-c-steps">0</span><span class="squad-counter-label">Etapas</span></div>
+              <div><span class="squad-counter-num" id="squad-c-ativos">0<span class="squad-counter-total">/${SQUAD_AGENTS.length}</span></span><span class="squad-counter-label">Na missão</span></div>
+            </div>
+          </div>
+          <div class="squad-panel-block">
+            <div class="squad-panel-title">Log de auditoria</div>
+            <div class="squad-log" id="squad-log"></div>
+          </div>
+          <div class="squad-panel-block">
+            <div class="squad-panel-title">Squad Cyber Pinguim</div>
+            <div class="squad-agent-list" id="squad-agents"></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const agentsEl = overlay.querySelector('#squad-agents');
+  SQUAD_AGENTS.forEach(a => {
+    const row = document.createElement('div');
+    row.className = 'squad-agent-item';
+    row.id = `squad-agent-${a.id}`;
+    row.innerHTML = `
+      <div class="squad-agent-avatar" style="background: ${a.shirt}33; border: 1.5px solid ${a.shirt}">${a.emoji}</div>
+      <div class="squad-agent-info">
+        <div class="squad-agent-name">${a.name}</div>
+        <div class="squad-agent-role">${a.role}</div>
+      </div>
+      <div class="squad-agent-status">de prontidão</div>
+    `;
+    agentsEl.appendChild(row);
   });
-  return n;
+
+  const canvas = overlay.querySelector('.squad-canvas');
+  const statusbar = overlay.querySelector('#squad-statusbar');
+  const logEl = overlay.querySelector('#squad-log');
+  const cSteps = overlay.querySelector('#squad-c-steps');
+  const cElapsed = overlay.querySelector('#squad-c-elapsed');
+  const cAtivos = overlay.querySelector('#squad-c-ativos');
+
+  const engineRaw = criarEngine(canvas);
+
+  // Wrapper igual ao squad-modal — intercepta setProtagonists pra UI
+  const engine = {
+    ...engineRaw,
+    setProtagonists: (ids) => {
+      engineRaw.setProtagonists(ids);
+      if (cAtivos) cAtivos.innerHTML = `${ids.length}<span class="squad-counter-total">/${SQUAD_AGENTS.length}</span>`;
+      SQUAD_AGENTS.forEach(a => {
+        const row = overlay.querySelector(`#squad-agent-${a.id}`);
+        if (!row) return;
+        const isAtivo = ids.includes(a.id);
+        row.classList.toggle('squad-agent-ativo', isAtivo);
+        const status = row.querySelector('.squad-agent-status');
+        if (status) status.textContent = isAtivo ? 'em ação' : 'de prontidão';
+      });
+    },
+  };
+
+  const t0 = Date.now();
+  const elapsedTimer = setInterval(() => {
+    const s = Math.floor((Date.now() - t0) / 1000);
+    cElapsed.textContent = s + 's';
+  }, 500);
+
+  let etapas = 0;
+  function setStatus(texto) { statusbar.innerHTML = texto; etapas++; cSteps.textContent = etapas; }
+  function log(autor, texto, tipo) {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2, '0');
+    const m = String(now.getMinutes()).padStart(2, '0');
+    const s = String(now.getSeconds()).padStart(2, '0');
+    const line = document.createElement('div');
+    line.className = `squad-log-line ${tipo || 'info'}`;
+    line.innerHTML = `<span class="squad-log-time">${h}:${m}:${s}</span> <span class="squad-log-author">${escapeHTML(autor)}:</span> ${escapeHTML(texto)}`;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  try {
+    const result = await roteiroFn({ engine, log, setStatus, apiCall, ...(contexto || {}) });
+    setStatus('<span style="color:#10b981">✅ Auditoria concluída!</span>');
+    await new Promise(r => setTimeout(r, 1000));
+    clearInterval(elapsedTimer);
+    engine.destroy();
+    overlay.classList.add('squad-closing');
+    await new Promise(r => setTimeout(r, 260));
+    overlay.remove();
+    return result;
+  } catch (e) {
+    clearInterval(elapsedTimer);
+    statusbar.innerHTML = `<span style="color:#FF5555">Falha: ${escapeHTML(e.message || String(e))}</span>`;
+    log('Sistema', `Erro: ${e.message || e}`, 'final');
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'btn btn-ghost squad-error-close';
+    closeBtn.textContent = 'Fechar';
+    closeBtn.onclick = () => { engine.destroy(); overlay.remove(); };
+    overlay.querySelector('.squad-header').appendChild(closeBtn);
+    throw e;
+  }
 }
 
-/**
- * Abre o modal de auditoria do Squad Cyber e dispara o roteiro em paralelo
- * com a chamada real `apiCall()` (que executa a Edge Function auditar-seguranca).
- *
- * @returns Promise<resultado da auditoria>
- */
-export async function abrirSquadCyberModal({ titulo, subtitulo, apiCall }) {
-  const back = el('div', { class: 'squad-cyber-back' });
-  const card = el('div', { class: 'squad-cyber-card' });
-  function fechar() {
-    back.classList.remove('squad-cyber-visible');
-    setTimeout(() => back.remove(), 300);
-  }
+// API publica: dispara em paralelo ao apiCall (igual iniciarSquadParalelo).
+// Sempre roda (ignora toggle 'pinguim_squad_animacao' — auditoria de
+// seguranca e visual obrigatorio do produto).
+export function iniciarCyberParalelo(roteiroId, contexto) {
+  let resolveExt; let rejectExt;
+  const promiseExt = new Promise((res, rej) => { resolveExt = res; rejectExt = rej; });
 
-  // Header
-  const header = el('div', { class: 'squad-cyber-header' }, [
-    el('div', {}, [
-      el('div', { class: 'squad-cyber-eyebrow' }, '🛡 Squad Cyber'),
-      el('div', { class: 'squad-cyber-titulo' }, titulo || 'Auditoria de segurança'),
-      subtitulo ? el('div', { class: 'squad-cyber-sub' }, subtitulo) : null,
-    ]),
-    el('button', { class: 'squad-cyber-close', onclick: fechar, title: 'Fechar' }, '×'),
-  ]);
+  abrirSquadCyberModal({
+    roteiro: roteiroId,
+    titulo: contexto?.titulo || 'Auditoria de segurança',
+    subtitulo: contexto?.subtitulo || '',
+    apiCall: () => promiseExt,
+    contexto,
+  }).catch(() => { /* erro do modal nao bloqueia chamador */ });
 
-  // Cards dos conselheiros
-  const cardsRow = el('div', { class: 'squad-cyber-conselheiros' });
-  const cardEls = {};
-  CONSELHEIROS.forEach(c => {
-    const cardEl = el('div', { class: 'squad-cyber-conselheiro idle', style: `--cyber-cor:${c.cor}` }, [
-      el('div', { class: 'squad-cyber-avatar' }, c.emoji),
-      el('div', { class: 'squad-cyber-conselheiro-info' }, [
-        el('div', { class: 'squad-cyber-conselheiro-nome' }, c.nome),
-        el('div', { class: 'squad-cyber-conselheiro-role' }, c.role),
-      ]),
-      el('div', { class: 'squad-cyber-status-dot' }),
-    ]);
-    cardEls[c.id] = cardEl;
-    cardsRow.appendChild(cardEl);
-  });
+  return {
+    sinalizarConclusao: (resultado) => resolveExt(resultado || { ok: true }),
+    sinalizarErro: (e) => rejectExt(e),
+  };
+}
 
-  // Bolha de fala (uma global, troca de cor + posicao)
-  const bolha = el('div', { class: 'squad-cyber-bolha' });
-
-  // Log
-  const logArea = el('div', { class: 'squad-cyber-log' });
-  function pushLog(autor, msg, tipo = 'info') {
-    const linha = el('div', { class: `squad-cyber-log-linha squad-cyber-log-${tipo}` }, [
-      el('span', { class: 'squad-cyber-log-autor' }, autor),
-      el('span', { class: 'squad-cyber-log-msg' }, msg),
-    ]);
-    logArea.appendChild(linha);
-    logArea.scrollTop = logArea.scrollHeight;
-  }
-
-  // Progresso
-  const progressoTxt = el('div', { class: 'squad-cyber-progresso-txt' }, '0 / 4 checks rodando');
-  const progressoBar = el('div', { class: 'squad-cyber-progresso-bg' }, [
-    el('div', { class: 'squad-cyber-progresso-fg', style: 'width:0%' }),
-  ]);
-
-  card.append(header, cardsRow, bolha, progressoBar, progressoTxt, logArea);
-  back.appendChild(card);
-  document.body.appendChild(back);
-  requestAnimationFrame(() => back.classList.add('squad-cyber-visible'));
-
-  // === Roteiro animado ===
-  function setStatus(id, status) {
-    const c = cardEls[id];
-    if (!c) return;
-    c.classList.remove('idle', 'working', 'done', 'erro');
-    c.classList.add(status);
-  }
-  function falar(id, msg) {
-    const c = CONSELHEIROS.find(x => x.id === id);
-    if (!c) return;
-    const cardEl = cardEls[id];
-    const r = cardEl.getBoundingClientRect();
-    const containerR = card.getBoundingClientRect();
-    bolha.textContent = msg;
-    bolha.style.left = (r.left - containerR.left + r.width / 2 - 80) + 'px';
-    bolha.style.top = (r.top - containerR.top + r.height + 8) + 'px';
-    bolha.style.borderColor = c.cor;
-    bolha.classList.add('squad-cyber-bolha-visible');
-    setTimeout(() => bolha.classList.remove('squad-cyber-bolha-visible'), 1800);
-  }
-  function setProgresso(checksFeitos, total) {
-    const pct = total > 0 ? Math.round((checksFeitos / total) * 100) : 0;
-    progressoTxt.textContent = `${checksFeitos} / ${total} checks`;
-    progressoBar.firstChild.style.width = pct + '%';
-  }
-
-  // Total de checks padrao (RLS + policies + security_definer + incidentes)
-  setProgresso(0, 4);
-
-  // Inicia 6 conselheiros em sequencia, todos working
-  let resultadoAuditoria = null;
-  let erroAuditoria = null;
-
-  // Dispara API real em paralelo
-  const apiPromise = apiCall().then(r => { resultadoAuditoria = r; }).catch(e => { erroAuditoria = e; });
-
-  // Roteiro: cada conselheiro entra, fala, marca como working ou done
-  // baseado no que retorna da API
-  for (let i = 0; i < CONSELHEIROS.length; i++) {
-    const c = CONSELHEIROS[i];
-    setStatus(c.id, 'working');
-    falar(c.id, c.falas[0]);
-    pushLog(c.nome, c.falas[0], 'working');
-    await delay(700);
-  }
-
-  // Aguarda API real
-  while (resultadoAuditoria === null && erroAuditoria === null) {
-    // Roteiro de fundo: cada conselheiro fala uma frase aleatoria
-    const c = CONSELHEIROS[Math.floor(Math.random() * CONSELHEIROS.length)];
-    const frase = c.falas[Math.floor(Math.random() * c.falas.length)];
-    falar(c.id, frase);
-    await delay(1200);
-  }
-
-  if (erroAuditoria) {
-    CONSELHEIROS.forEach(c => setStatus(c.id, 'erro'));
-    pushLog('Sistema', `Erro: ${erroAuditoria.message || erroAuditoria}`, 'erro');
-    setProgresso(0, 4);
-    await delay(2200);
-    fechar();
-    throw erroAuditoria;
-  }
-
-  // Marca todos como done + mostra resumo dos checks
-  CONSELHEIROS.forEach(c => setStatus(c.id, 'done'));
-  const r = resultadoAuditoria;
-  if (r && Array.isArray(r.checks)) {
-    setProgresso(r.checks.length, r.checks.length);
-    r.checks.forEach((chk) => {
-      const tipo = chk.status === 'ok' ? 'done' : (chk.status === 'critical' ? 'erro' : 'aviso');
-      pushLog('Resultado', `${chk.tipo}: ${chk.resumo}`, tipo);
-    });
-    const status = r.status_geral === 'ok' ? 'done' : (r.status_geral === 'critical' ? 'erro' : 'aviso');
-    pushLog('Squad Cyber', `Auditoria concluída em ${r.duracao_ms}ms — status geral: ${r.status_geral.toUpperCase()}`, status);
-  } else {
-    setProgresso(4, 4);
-    pushLog('Squad Cyber', 'Auditoria concluída.', 'done');
-  }
-
-  await delay(2500);
-  fechar();
-  return resultadoAuditoria;
+function escapeHTML(s) {
+  return String(s || '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
+  );
 }
