@@ -392,7 +392,8 @@ async function abrirFormChave(id, refContainer) {
       else result = await sb.from('cofre_chaves').insert(payload);
       if (result.error) { alert(result.error.message); return; }
       fechar();
-      await renderCofre(refContainer);
+      toast(id ? `✓ Chave ${payload.nome} atualizada. Sistema usa a nova em até 5 min.` : `✓ Chave ${payload.nome} cadastrada no cofre.`);
+      await renderSeguranca();
     },
   }, [
     el('div', { class: 'cofre-row-2' }, [
@@ -416,10 +417,12 @@ async function abrirFormChave(id, refContainer) {
         type: 'button', class: 'btn btn-ghost cofre-btn-apagar',
         onclick: async () => {
           if (!confirm('Apagar essa chave do cofre? (não apaga do provedor — só do registro daqui)')) return;
+          const nome = valoresAtuais.nome;
           const { error } = await sb.from('cofre_chaves').delete().eq('id', id);
           if (error) { alert(error.message); return; }
           fechar();
-          await renderCofre(refContainer);
+          toast(`✗ Chave ${nome} removida do cofre.`, 'aviso');
+          await renderSeguranca();
         },
       }, 'Apagar') : el('span', {}),
       el('div', { class: 'cofre-form-acoes' }, [
@@ -640,7 +643,8 @@ async function abrirNovaPolitica(refContainer) {
       });
       if (error) { alert(error.message); return; }
       fechar();
-      await renderPoliticas(refContainer);
+      toast(`✓ Política "${titulo}" salva.`);
+      await renderSeguranca();
     },
   }, [
     el('label', { class: 'novo-cerebro-label' }, 'Título'),
@@ -749,4 +753,18 @@ async function rodarRaioX() {
 
 function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Toast de confirmacao (aparece 3s no canto inferior direito)
+function toast(mensagem, tipo = 'sucesso') {
+  const t = el('div', {
+    class: `seg-toast seg-toast-${tipo}`,
+    role: 'status',
+  }, mensagem);
+  document.body.append(t);
+  requestAnimationFrame(() => t.classList.add('seg-toast-visible'));
+  setTimeout(() => {
+    t.classList.remove('seg-toast-visible');
+    setTimeout(() => t.remove(), 300);
+  }, 3500);
 }

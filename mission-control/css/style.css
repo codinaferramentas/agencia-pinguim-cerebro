@@ -1865,6 +1865,32 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
 .cofre-auditoria-sucesso-ok { background: rgba(16,185,129,0.15); color: #10b981; }
 .cofre-auditoria-sucesso-warn { background: rgba(245,158,11,0.15); color: #f59e0b; }
 .cofre-auditoria-sucesso-err { background: rgba(239,68,68,0.15); color: #ef4444; }
+
+/* Toast de confirmacao */
+.seg-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid #10b981;
+  padding: 0.75rem 1rem;
+  border-radius: var(--r-md);
+  font-size: 0.875rem;
+  color: var(--fg);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  z-index: 11000;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity .2s, transform .2s;
+  max-width: 420px;
+}
+.seg-toast.seg-toast-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.seg-toast-aviso { border-left-color: #f59e0b; }
+.seg-toast-erro { border-left-color: #ef4444; }
 .cofre-auditoria-meta {
   font-size: 0.6875rem;
   color: var(--fg-dim);
