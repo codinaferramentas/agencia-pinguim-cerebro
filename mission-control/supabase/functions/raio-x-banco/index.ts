@@ -34,12 +34,18 @@ function jsonResp(body: unknown, status = 200) {
 
 async function requireAuth(req: Request): Promise<boolean> {
   const auth = req.headers.get('Authorization') || '';
-  const apikey = req.headers.get('apikey') || '';
-  if (auth === `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` || apikey === SUPABASE_SERVICE_ROLE_KEY) return true;
-  const jwt = auth.replace('Bearer ', '');
-  if (!jwt) return false;
+  const headerJwt = auth.replace('Bearer ', '');
+  if (!headerJwt) return false;
+  if (headerJwt === SUPABASE_SERVICE_ROLE_KEY) return true;
+  if (headerJwt.startsWith('eyJ')) {
+    try {
+      const adminClient = createClient(SUPABASE_URL, headerJwt, { auth: { persistSession: false } });
+      const { error } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1 });
+      if (!error) return true;
+    } catch (_) {}
+  }
   const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const { data, error } = await sb.auth.getUser(jwt);
+  const { data, error } = await sb.auth.getUser(headerJwt);
   return !error && !!data?.user;
 }
 

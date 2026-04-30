@@ -38,11 +38,18 @@ function jsonResp(body: unknown, status = 200) {
 
 async function requireAuth(req: Request): Promise<boolean> {
   const auth = req.headers.get('Authorization') || '';
-  if (auth === `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`) return true;
-  const jwt = auth.replace('Bearer ', '');
-  if (!jwt) return false;
+  const headerJwt = auth.replace('Bearer ', '');
+  if (!headerJwt) return false;
+  if (headerJwt === SUPABASE_SERVICE_ROLE_KEY) return true;
+  if (headerJwt.startsWith('eyJ')) {
+    try {
+      const adminClient = createClient(SUPABASE_URL, headerJwt, { auth: { persistSession: false } });
+      const { error } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1 });
+      if (!error) return true;
+    } catch (_) {}
+  }
   const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const { data, error } = await sb.auth.getUser(jwt);
+  const { data, error } = await sb.auth.getUser(headerJwt);
   return !error && !!data?.user;
 }
 
@@ -100,7 +107,13 @@ serve(async (req) => {
   });
   if (!resp.ok) {
     const err = await resp.text();
-    return jsonResp({ ok: false, configurado: true, erro: `Vercel API: ${resp.status} ${err.slice(0, 200)}` }, 500);
+    return jsonResp({
+      ok: false, configurado: true,
+      erro: `Vercel API: ${resp.status} ${err.slice(0, 300)}`,
+      hints: resp.status === 403
+        ? ['Token sem escopo no projeto. Recrie o token na Vercel selecionando o projeto Pinguim.', 'Se o projeto está em um Team, adicione VERCEL_TEAM_ID nos secrets.']
+        : (resp.status === 404 ? ['VERCEL_PROJECT_ID errado, ou projeto está em Team sem VERCEL_TEAM_ID.'] : []),
+    }, 200);
   }
   const dados = await resp.json();
   const envs = dados.envs || [];

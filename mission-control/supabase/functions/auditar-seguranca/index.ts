@@ -44,13 +44,27 @@ function sbService() {
 
 async function requireAuth(req: Request): Promise<boolean> {
   const auth = req.headers.get('Authorization') || '';
-  // Aceita service_role direto (cron interno + chamadas admin)
-  if (auth === `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`) return true;
+  const headerJwt = auth.replace('Bearer ', '');
+  if (!headerJwt) return false;
+
+  // Match direto com SUPABASE_SERVICE_ROLE_KEY (qualquer formato — sb_secret_ ou JWT legacy)
+  if (headerJwt === SUPABASE_SERVICE_ROLE_KEY) return true;
+
+  // Tenta validar como service_role JWT legacy: tenta operacao admin que so service_role consegue
+  // (listar 1 usuario). Se passar, e service role legitimo.
+  if (headerJwt.startsWith('eyJ')) {
+    try {
+      const adminClient = createClient(SUPABASE_URL, headerJwt, {
+        auth: { persistSession: false }
+      });
+      const { error } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1 });
+      if (!error) return true;
+    } catch (_) { /* ignora */ }
+  }
+
   // Senao, valida JWT de usuario autenticado via anon client
-  const jwt = auth.replace('Bearer ', '');
-  if (!jwt) return false;
   const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const { data, error } = await sb.auth.getUser(jwt);
+  const { data, error } = await sb.auth.getUser(headerJwt);
   return !error && !!data?.user;
 }
 
