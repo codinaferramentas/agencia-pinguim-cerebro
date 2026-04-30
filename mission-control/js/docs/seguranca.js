@@ -63,8 +63,21 @@ export async function gerar() {
           <ul>
             <li><code>auditar-seguranca</code> — checks RLS + policies + security_definer + incidentes_abertos</li>
             <li><code>raio-x-banco</code> — contagens reais (sem limite PostgREST), tamanhos, projeção</li>
-            <li><code>vercel-env-vars</code> — lista chaves da Vercel mascaradas</li>
+            <li><code>vercel-env-vars</code> — sincroniza chaves Vercel quando plano permite (Pro+). Em Hobby, fallback é cofre próprio.</li>
           </ul>
+
+          <h3>Cofre próprio (agnóstico de provedor)</h3>
+          <p>Tabela <code>pinguim.cofre_chaves</code> + view <code>vw_cofre_chaves</code>. O Pinguim OS NÃO depende de Vercel API pra cofre. Cada chave é cadastrada manualmente com:</p>
+          <ul>
+            <li><strong>Nome</strong> — ex.: <code>OPENAI_API_KEY</code></li>
+            <li><strong>Provedor</strong> — OpenAI, Anthropic, Supabase, Vercel, etc.</li>
+            <li><strong>Escopo</strong> — public / secret / admin</li>
+            <li><strong>Onde vive</strong> — Vercel env, Supabase Edge secret, GitHub Actions, .env.local, outro</li>
+            <li><strong>Valor completo</strong> — criptografado por RLS, só service_role decifra</li>
+            <li><strong>Última rotação</strong> — auditoria de "quanto tempo essa chave tem"</li>
+          </ul>
+          <p>O painel mostra só meta + últimos 4 chars + dias desde rotação. Nunca expõe valor.</p>
+          <p><strong>Por que cofre próprio:</strong> plano Hobby da Vercel não retorna env vars via REST API. Isolar do provedor torna o framework portável — cliente pode usar Vercel/Cloudflare/AWS/Railway, o cofre Pinguim OS funciona igual.</p>
         `,
       },
       {

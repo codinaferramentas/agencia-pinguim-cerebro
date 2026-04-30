@@ -213,61 +213,46 @@ function labelStatus(s) {
 }
 
 // ============================================================
-// COFRE — chaves da Vercel mascaradas
+// COFRE — gestao manual de chaves (Pinguim OS, agnostico de provedor)
 // ============================================================
 async function renderCofre(container) {
   container.innerHTML = '';
   const sb = getSupabase();
   if (!sb) { container.innerHTML = '<div class="seguranca-erro">Sem conexão.</div>'; return; }
 
-  const { data: { session } } = await sb.auth.getSession();
-  const fnUrl = `${window.__ENV__.SUPABASE_URL}/functions/v1/vercel-env-vars`;
-  const resp = await fetch(fnUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${session.access_token}`,
-      'apikey': window.__ENV__.SUPABASE_ANON_KEY,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({}),
+  const { data, error } = await sb.from('vw_cofre_chaves')
+    .select('*').order('provedor').order('nome');
+  if (error) { container.append(el('div', { class: 'seguranca-erro' }, error.message)); return; }
+
+  const total = (data || []).length;
+  const porProvedor = {};
+  (data || []).forEach(d => {
+    porProvedor[d.provedor] = (porProvedor[d.provedor] || 0) + 1;
   });
-  const dados = await resp.json();
 
-  if (!dados.configurado) {
-    container.append(
-      el('div', { class: 'seguranca-empty' }, [
-        el('div', { style: 'font-size:2rem;margin-bottom:.5rem' }, '🔑'),
-        el('div', { style: 'font-weight:600;margin-bottom:.25rem' }, 'Cofre não configurado'),
-        el('div', { style: 'color:var(--fg-muted);max-width:50ch;margin:0 auto;font-size:.875rem' }, dados.mensagem || ''),
-        el('div', { style: 'background:var(--surface-2);border:1px solid var(--border-subtle);border-radius:.5rem;padding:1rem;margin-top:1rem;text-align:left;max-width:60ch;font-family:var(--font-mono);font-size:.75rem;line-height:1.6' }, [
-          el('div', { style: 'color:var(--fg);margin-bottom:.5rem' }, 'Como configurar:'),
-          el('div', {}, '1) Crie Personal Access Token na Vercel (escopo Read).'),
-          el('div', {}, '2) Pegue o Project ID em Settings > General.'),
-          el('div', {}, '3) Supabase Dashboard > Edge Functions > vercel-env-vars > Secrets:'),
-          el('div', { style: 'margin-left:1.5rem;color:var(--fg-muted)' }, 'VERCEL_TOKEN, VERCEL_PROJECT_ID (opcional VERCEL_TEAM_ID)'),
-          el('div', { style: 'margin-top:.5rem' }, '4) Volta nesta tela e refresca.'),
-        ]),
-      ])
-    );
-    return;
-  }
-
-  if (!dados.ok) {
-    container.append(el('div', { class: 'seguranca-erro' }, dados.erro || 'Erro consultando Vercel.'));
-    return;
-  }
-
-  const total = dados.total || 0;
-  const porProvedor = dados.por_provedor || {};
-  const variaveis = dados.variaveis || [];
-
+  // Header com info + botao novo
   const headerInfo = el('div', { class: 'cofre-header' }, [
     el('div', {}, [
-      el('div', { style: 'font-weight:600;font-size:.9375rem' }, `${total} variáveis ativas`),
-      el('div', { style: 'font-size:.8125rem;color:var(--fg-muted)' },
-        Object.entries(porProvedor).map(([p, n]) => `${p}: ${n}`).join(' · ')),
+      el('div', { style: 'font-weight:600;font-size:.9375rem' }, `${total} chave(s) cadastrada(s)`),
+      el('div', { style: 'font-size:.8125rem;color:var(--fg-muted);margin-top:.25rem' },
+        Object.entries(porProvedor).map(([p, n]) => `${p}: ${n}`).join(' · ') || 'Nenhuma chave ainda.'),
+      el('div', { style: 'font-size:.75rem;color:var(--fg-dim);margin-top:.5rem;max-width:60ch' },
+        '🛡 Cofre próprio, agnóstico de provedor. Vercel/Cloudflare/AWS/etc. Painel mostra mascarado (últimos 4 chars). Valor completo só via service_role no banco.'),
     ]),
+    el('button', { class: 'btn btn-primary', onclick: () => abrirNovaChave(container) }, '+ Nova chave'),
   ]);
+
+  container.append(headerInfo);
+
+  if (total === 0) {
+    container.append(el('div', { class: 'seguranca-empty', style: 'margin-top:1rem' }, [
+      el('div', { style: 'font-size:2rem;margin-bottom:.5rem' }, '🔑'),
+      el('div', { style: 'font-weight:600;margin-bottom:.25rem' }, 'Cofre vazio'),
+      el('div', { style: 'color:var(--fg-muted);max-width:50ch;margin:0 auto;font-size:.875rem' },
+        'Cadastra cada chave que existe no projeto (OpenAI, Anthropic, Supabase, Vercel, etc). Valor fica criptografado, painel mostra só o nome + últimos 4 chars + onde a chave vive.'),
+    ]));
+    return;
+  }
 
   const tabela = el('table', { class: 'cofre-tabela' }, [
     el('thead', {}, [
@@ -275,22 +260,153 @@ async function renderCofre(container) {
         el('th', {}, 'Nome'),
         el('th', {}, 'Provedor'),
         el('th', {}, 'Escopo'),
-        el('th', {}, 'Target'),
-        el('th', {}, 'Valor'),
-        el('th', {}, 'Atualizado'),
+        el('th', {}, 'Onde vive'),
+        el('th', {}, 'Últimos 4'),
+        el('th', {}, 'Última rotação'),
+        el('th', {}, ''),
       ]),
     ]),
-    el('tbody', {}, variaveis.map(v => el('tr', {}, [
+    el('tbody', {}, (data || []).map(v => el('tr', {}, [
       el('td', { class: 'cofre-nome' }, v.nome),
-      el('td', {}, [el('span', { class: `cofre-provedor cofre-provedor-${v.provedor.toLowerCase()}` }, v.provedor)]),
+      el('td', {}, [el('span', { class: `cofre-provedor cofre-provedor-${(v.provedor || '').toLowerCase()}` }, v.provedor)]),
       el('td', {}, [el('span', { class: `cofre-escopo cofre-escopo-${v.escopo}` }, v.escopo)]),
-      el('td', {}, v.target),
-      el('td', { class: 'cofre-mascara' }, v.valor_mascara),
-      el('td', { class: 'cofre-data' }, v.atualizado_em ? new Date(v.atualizado_em).toLocaleDateString('pt-BR') : '—'),
+      el('td', { style: 'font-size:.75rem;color:var(--fg-muted)' }, v.onde_vive),
+      el('td', { class: 'cofre-mascara' }, v.ultimos_4 ? '••••' + v.ultimos_4 : '—'),
+      el('td', { class: 'cofre-data' },
+        v.ultima_rotacao
+          ? `há ${v.dias_desde_ultima_rotacao}d`
+          : (v.ativo ? 'nunca' : 'inativa')),
+      el('td', {}, [
+        el('button', {
+          class: 'btn btn-ghost', style: 'font-size:.7rem;padding:.25rem .5rem',
+          onclick: () => abrirEditarChave(v.id, container),
+        }, '✎'),
+      ]),
     ]))),
   ]);
 
-  container.append(headerInfo, tabela);
+  container.append(tabela);
+}
+
+async function abrirNovaChave(refContainer) { abrirFormChave(null, refContainer); }
+async function abrirEditarChave(id, refContainer) { abrirFormChave(id, refContainer); }
+
+async function abrirFormChave(id, refContainer) {
+  const sb = getSupabase();
+  let valoresAtuais = {
+    nome: '', provedor: 'OpenAI', escopo: 'secret', onde_vive: 'vercel-env',
+    descricao: '', valor_completo: '', observacoes: '', ativo: true,
+  };
+  if (id) {
+    const { data } = await sb.from('cofre_chaves').select('*').eq('id', id).single();
+    if (data) valoresAtuais = data;
+  }
+
+  const back = el('div', { class: 'modal-backdrop', onclick: e => { if (e.target === back) fechar(); } });
+  const card = el('div', { class: 'modal-card', style: 'max-width:640px' });
+  function fechar() { back.classList.remove('open'); setTimeout(() => back.remove(), 180); }
+
+  const inputNome = el('input', { type: 'text', class: 'novo-cerebro-input', placeholder: 'Ex.: OPENAI_API_KEY', required: 'required' });
+  inputNome.value = valoresAtuais.nome || '';
+  const selectProvedor = el('select', { class: 'novo-cerebro-input' });
+  ['OpenAI', 'Anthropic', 'Google', 'Perplexity', 'Supabase', 'Vercel', 'GitHub', 'Stripe', 'Discord', 'Twilio', 'Email', 'Outro']
+    .forEach(p => { const o = el('option', { value: p }, p); if (p === valoresAtuais.provedor) o.selected = true; selectProvedor.append(o); });
+  const selectEscopo = el('select', { class: 'novo-cerebro-input' });
+  [['public', 'public — exposto ao front'], ['secret', 'secret — só backend'], ['admin', 'admin — service_role / root']]
+    .forEach(([v, l]) => { const o = el('option', { value: v }, l); if (v === valoresAtuais.escopo) o.selected = true; selectEscopo.append(o); });
+  const selectOndeVive = el('select', { class: 'novo-cerebro-input' });
+  [['vercel-env', 'Vercel env vars'], ['supabase-secret', 'Supabase Edge Function secrets'], ['github-secret', 'GitHub Actions secrets'], ['.env.local', 'Local .env.local'], ['outro', 'Outro']]
+    .forEach(([v, l]) => { const o = el('option', { value: v }, l); if (v === valoresAtuais.onde_vive) o.selected = true; selectOndeVive.append(o); });
+
+  const inputDesc = el('input', { type: 'text', class: 'novo-cerebro-input', placeholder: 'Pra que serve' });
+  inputDesc.value = valoresAtuais.descricao || '';
+
+  const inputValor = el('input', { type: 'password', class: 'novo-cerebro-input', placeholder: id ? 'Deixa em branco pra manter o valor atual' : 'Cola a chave aqui', autocomplete: 'new-password' });
+
+  const inputObs = el('textarea', { rows: '2', class: 'novo-cerebro-input', placeholder: 'Limites do plano, restrições, etc' });
+  inputObs.value = valoresAtuais.observacoes || '';
+
+  const checkAtivo = el('input', { type: 'checkbox' });
+  checkAtivo.checked = valoresAtuais.ativo;
+  const checkRotacao = el('input', { type: 'checkbox' });
+  checkRotacao.checked = false;
+
+  const form = el('form', {
+    onsubmit: async (e) => {
+      e.preventDefault();
+      const payload = {
+        nome: inputNome.value.trim(),
+        provedor: selectProvedor.value,
+        escopo: selectEscopo.value,
+        onde_vive: selectOndeVive.value,
+        descricao: inputDesc.value.trim(),
+        observacoes: inputObs.value.trim(),
+        ativo: checkAtivo.checked,
+      };
+      if (inputValor.value.trim()) {
+        payload.valor_completo = inputValor.value.trim();
+        if (id || checkRotacao.checked) payload.ultima_rotacao = new Date().toISOString();
+        else payload.ultima_rotacao = new Date().toISOString();
+      }
+      let result;
+      if (id) {
+        result = await sb.from('cofre_chaves').update(payload).eq('id', id);
+      } else {
+        result = await sb.from('cofre_chaves').insert(payload);
+      }
+      if (result.error) { alert(result.error.message); return; }
+      fechar();
+      await renderCofre(refContainer);
+    },
+  }, [
+    el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:.75rem' }, [
+      el('div', {}, [el('label', { class: 'novo-cerebro-label' }, 'Nome (ex.: OPENAI_API_KEY)'), inputNome]),
+      el('div', {}, [el('label', { class: 'novo-cerebro-label' }, 'Provedor'), selectProvedor]),
+    ]),
+    el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.75rem' }, [
+      el('div', {}, [el('label', { class: 'novo-cerebro-label' }, 'Escopo'), selectEscopo]),
+      el('div', {}, [el('label', { class: 'novo-cerebro-label' }, 'Onde vive'), selectOndeVive]),
+    ]),
+    el('label', { class: 'novo-cerebro-label', style: 'margin-top:.75rem' }, 'Descrição'),
+    inputDesc,
+    el('label', { class: 'novo-cerebro-label', style: 'margin-top:.75rem' }, id ? 'Novo valor (cola pra rotacionar — vazio mantém)' : 'Valor da chave'),
+    inputValor,
+    el('label', { class: 'novo-cerebro-label', style: 'margin-top:.75rem' }, 'Observações'),
+    inputObs,
+    el('label', { style: 'display:flex;align-items:center;gap:.5rem;margin-top:.75rem;font-size:.875rem;cursor:pointer' }, [
+      checkAtivo, el('span', {}, 'Ativa'),
+    ]),
+    el('div', { style: 'display:flex;gap:.5rem;justify-content:space-between;margin-top:1rem;align-items:center' }, [
+      id ? el('button', {
+        type: 'button', class: 'btn btn-ghost', style: 'color:var(--danger)',
+        onclick: async () => {
+          if (!confirm('Apagar essa chave do cofre? (não apaga do provedor — só do registro daqui)')) return;
+          const { error } = await sb.from('cofre_chaves').delete().eq('id', id);
+          if (error) { alert(error.message); return; }
+          fechar();
+          await renderCofre(refContainer);
+        },
+      }, 'Apagar') : el('span', {}),
+      el('div', { style: 'display:flex;gap:.5rem' }, [
+        el('button', { type: 'button', class: 'btn btn-ghost', onclick: fechar }, 'Cancelar'),
+        el('button', { type: 'submit', class: 'btn btn-primary' }, id ? 'Salvar' : 'Cadastrar'),
+      ]),
+    ]),
+  ]);
+
+  card.append(
+    el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem' }, [
+      el('div', {}, [
+        el('div', { style: 'font-family:var(--font-heading);font-weight:600;font-size:1rem' }, id ? 'Editar chave' : 'Nova chave no cofre'),
+        el('div', { style: 'font-size:.75rem;color:var(--fg-muted);margin-top:.125rem' }, 'O valor é criptografado em RLS. O painel só mostra os últimos 4 chars.'),
+      ]),
+      el('button', { class: 'modal-close', onclick: fechar }, '×'),
+    ]),
+    form,
+  );
+  back.append(card);
+  document.body.append(back);
+  requestAnimationFrame(() => back.classList.add('open'));
 }
 
 // ============================================================
