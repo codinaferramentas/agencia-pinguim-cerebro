@@ -374,6 +374,7 @@ async function abrirFormChave(id, refContainer) {
     class: 'cofre-form',
     onsubmit: async (e) => {
       e.preventDefault();
+      const btnSubmit = e.submitter;
       const payload = {
         nome: inputNome.value.trim(),
         provedor: selectProvedor.value,
@@ -383,14 +384,46 @@ async function abrirFormChave(id, refContainer) {
         observacoes: inputObs.value.trim(),
         ativo: checkAtivo.checked,
       };
-      if (inputValor.value.trim()) {
-        payload.valor_completo = inputValor.value.trim();
+      const novoValor = inputValor.value.trim();
+      if (novoValor) {
+        payload.valor_completo = novoValor;
         payload.ultima_rotacao = new Date().toISOString();
       }
+
+      // Validar chave contra o provedor antes de salvar (so OpenAI/Anthropic por enquanto)
+      if (novoValor && (payload.provedor === 'OpenAI' || payload.provedor === 'Anthropic')) {
+        if (btnSubmit) { btnSubmit.disabled = true; btnSubmit.textContent = 'Validando...'; }
+        try {
+          const { data: { session } } = await sb.auth.getSession();
+          const r = await fetch(`${window.__ENV__.SUPABASE_URL}/functions/v1/validar-chave`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'apikey': window.__ENV__.SUPABASE_ANON_KEY,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ provedor: payload.provedor, valor: novoValor }),
+          });
+          const data = await r.json();
+          if (!data.valido) {
+            if (btnSubmit) { btnSubmit.disabled = false; btnSubmit.textContent = id ? 'Salvar' : 'Cadastrar'; }
+            const seguir = confirm(`⚠ A chave foi REJEITADA por ${payload.provedor}:\n\n"${data.motivo}"\n\nSalvar mesmo assim? (não vai funcionar até você corrigir)`);
+            if (!seguir) return;
+          }
+        } catch (e2) {
+          // erro de rede / função fora — segue sem bloquear
+          console.warn('Validação não rodou:', e2);
+        }
+        if (btnSubmit) { btnSubmit.disabled = true; btnSubmit.textContent = 'Salvando...'; }
+      }
+
       let result;
       if (id) result = await sb.from('cofre_chaves').update(payload).eq('id', id);
       else result = await sb.from('cofre_chaves').insert(payload);
-      if (result.error) { alert(result.error.message); return; }
+      if (result.error) {
+        if (btnSubmit) { btnSubmit.disabled = false; btnSubmit.textContent = id ? 'Salvar' : 'Cadastrar'; }
+        alert(result.error.message); return;
+      }
       fechar();
       toast(id ? `✓ Chave ${payload.nome} atualizada. Sistema usa a nova em até 5 min.` : `✓ Chave ${payload.nome} cadastrada no cofre.`);
       await renderSeguranca();
