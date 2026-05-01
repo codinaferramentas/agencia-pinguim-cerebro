@@ -48,6 +48,7 @@ export async function renderSeguranca() {
     abaBtn('visao', 'Visão geral'),
     abaBtn('cofre', 'Cofre de chaves'),
     abaBtn('raio-x', 'Raio-X do banco'),
+    abaBtn('crons', 'Crons'),
     abaBtn('incidentes', 'Incidentes'),
     abaBtn('politicas', 'Políticas'),
     abaBtn('auditoria', 'Histórico'),
@@ -79,6 +80,7 @@ async function renderAba(qual, container) {
     if (qual === 'visao')      await renderVisaoGeral(container);
     else if (qual === 'cofre') await renderCofre(container);
     else if (qual === 'raio-x') await renderRaioX(container);
+    else if (qual === 'crons') await renderCrons(container);
     else if (qual === 'incidentes') await renderIncidentes(container);
     else if (qual === 'politicas') await renderPoliticas(container);
     else if (qual === 'auditoria') await renderAuditoria(container);
@@ -573,6 +575,112 @@ function fmtBytes(b) {
   if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
   if (b < 1024 * 1024 * 1024) return (b / 1024 / 1024).toFixed(2) + ' MB';
   return (b / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+}
+
+// ============================================================
+// CRONS — visibilidade dos jobs pg_cron
+// ============================================================
+async function renderCrons(container) {
+  container.innerHTML = '';
+  const sb = getSupabase();
+  if (!sb) { container.innerHTML = '<div class="seguranca-erro">Sem conexão.</div>'; return; }
+
+  const { data: crons, error } = await sb.rpc('listar_crons');
+  if (error) {
+    container.innerHTML = `<div class="seguranca-erro">Erro ao listar crons: ${escapeHtml(error.message)}</div>`;
+    return;
+  }
+
+  const lista = crons || [];
+  const proprios = lista.filter(c => c.schema_dono === 'pinguim');
+  const externos = lista.filter(c => c.schema_dono !== 'pinguim');
+
+  // Header com resumo
+  container.append(
+    el('div', { class: 'cofre-header' }, [
+      el('h3', {}, '⏱ Jobs agendados (pg_cron)'),
+      el('p', { style: 'margin:.25rem 0 0;font-size:.8125rem;color:var(--fg-muted)' },
+        `${proprios.length} cron${proprios.length === 1 ? '' : 's'} do Pinguim · ${externos.length} externo${externos.length === 1 ? '' : 's'} (não pertencem ao Pinguim OS — vivem no schema compartilhado).`),
+    ]),
+  );
+
+  if (lista.length === 0) {
+    container.append(el('div', { class: 'seguranca-empty' }, 'Nenhum job agendado.'));
+    return;
+  }
+
+  container.append(renderTabelaCrons('Crons do Pinguim', proprios, true));
+  if (externos.length > 0) {
+    container.append(renderTabelaCrons('Crons externos (schema compartilhado — não tocar)', externos, false));
+  }
+}
+
+function renderTabelaCrons(titulo, crons, isPinguim) {
+  const wrapper = el('div', { class: 'cofre-header', style: 'margin-top:1rem' });
+  wrapper.append(el('h4', { style: 'margin:0 0 .75rem;font-size:.95rem;color:var(--fg)' }, titulo));
+  if (crons.length === 0) {
+    wrapper.append(el('div', { class: 'seguranca-empty' }, 'Nenhum.'));
+    return wrapper;
+  }
+
+  const tabela = el('table', { class: 'seguranca-tabela' });
+  const thead = el('thead', {}, [el('tr', {}, [
+    el('th', {}, 'Job'),
+    el('th', {}, 'Frequência'),
+    el('th', {}, 'Última execução'),
+    el('th', {}, 'Status'),
+    el('th', {}, 'Ativo'),
+  ])]);
+  const tbody = el('tbody');
+
+  crons.forEach(c => {
+    const tr = el('tr');
+    tr.append(
+      el('td', {}, [
+        el('div', { style: 'font-weight:600;color:var(--fg)' }, c.jobname || `job ${c.jobid}`),
+        el('div', { style: 'font-size:.75rem;color:var(--fg-muted);font-family:var(--font-mono,monospace);margin-top:.25rem' },
+          (c.command || '').trim().slice(0, 80) + ((c.command || '').length > 80 ? '…' : '')),
+      ]),
+      el('td', {}, humanizarCron(c.schedule)),
+      el('td', {}, c.ultima_execucao ? formatarData(c.ultima_execucao) : '—'),
+      el('td', {}, [
+        el('span', {
+          class: 'seguranca-pill ' + (c.ultimo_status === 'succeeded' ? 'ok' : (c.ultimo_status ? 'erro' : 'neutra')),
+        }, c.ultimo_status || 'sem registro'),
+      ]),
+      el('td', {}, c.active ? '✅' : '⛔'),
+    );
+    tbody.append(tr);
+  });
+
+  tabela.append(thead, tbody);
+  wrapper.append(tabela);
+
+  if (!isPinguim) {
+    wrapper.append(el('p', { style: 'margin-top:.75rem;font-size:.8125rem;color:var(--fg-muted)' },
+      'Estes jobs pertencem a outro sistema que compartilha o banco. Aparecem aqui só pra visibilidade — não devem ser alterados pelo Pinguim OS.'));
+  }
+  return wrapper;
+}
+
+function humanizarCron(expr) {
+  if (!expr) return '—';
+  const e = expr.trim();
+  if (e === '* * * * *') return 'a cada 1 min';
+  if (/^\*\/\d+ \* \* \* \*$/.test(e)) return `a cada ${e.match(/\*\/(\d+)/)[1]} min`;
+  if (/^0 \* \* \* \*$/.test(e)) return 'a cada hora';
+  const m = e.match(/^(\d+) (\d+) \* \* \*$/);
+  if (m) return `diário ${m[2].padStart(2,'0')}:${m[1].padStart(2,'0')} UTC`;
+  return e;
+}
+
+function formatarData(iso) {
+  const d = new Date(iso);
+  const diff = Date.now() - d.getTime();
+  if (diff < 60000) return 'agora há pouco';
+  if (diff < 3600000) return `há ${Math.floor(diff / 60000)} min`;
+  if (diff < 86400000) return `há ${Math.floor(diff / 3600000)}h`;
+  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 // ============================================================

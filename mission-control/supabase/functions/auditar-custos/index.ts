@@ -2,9 +2,10 @@
 // Edge Function: auditar-custos
 // ========================================================================
 // Roda diario via cron. Agrega custos do dia a partir das fontes:
-//   - ingest_lotes.custo_usd (custo de cada pacote/URL)
-//   - chave_uso (proxy de invocacoes — sera mapeado pra custo OpenAI)
-//   - banco_metricas (custo Supabase = % plano usado)
+//   - ingest_lotes.custo_usd       (OpenAI dos pacotes ZIP / upload manual)
+//   - chave_uso                    (proxy de invocacoes OpenAI avulsas)
+//   - integracoes.custo_acumulado  (Apify e outras integracoes externas)
+//   - banco_metricas               (Supabase Pro: US$25/mes rateado por dia)
 //
 // Grava em pinguim.custos_diarios (idempotente: on conflict update).
 //
@@ -130,30 +131,82 @@ async function agregarDia(c: any, dia: string) {
   }
   stats.fontes_chave_uso = (usos || []).length;
 
-  // 3. Banco Supabase: % do plano (pega o snapshot mais recente do dia)
+  // 3. Apify (e outras integracoes externas) — diff diario do custo_acumulado
+  // Nao temos timestamp por chamada, so o acumulado. Pra rateio por dia,
+  // pegamos o delta entre o acumulado do dia anterior (registrado em metadata)
+  // e o acumulado atual. Se for primeira vez, registra o acumulado todo no dia atual.
+  const { data: integracoes } = await c.from('integracoes')
+    .select('slug, custo_acumulado_usd, total_chamadas, ultimo_uso')
+    .gt('custo_acumulado_usd', 0);
+
+  for (const integ of (integracoes || [])) {
+    // So contabiliza no dia em que a integracao foi efetivamente usada
+    if (!integ.ultimo_uso) continue;
+    const usoDia = new Date(integ.ultimo_uso).toISOString().slice(0, 10);
+    if (usoDia !== dia) continue;
+
+    // Pega ultima entrada da integracao em custos_diarios pra calcular delta
+    const { data: anteriores } = await c.from('custos_diarios')
+      .select('metadata')
+      .eq('provedor', integ.slug === 'apify' ? 'Apify' : integ.slug)
+      .eq('operacao', 'integracao')
+      .lt('dia', dia)
+      .order('dia', { ascending: false })
+      .limit(1);
+    const acumuladoAnterior = Number(anteriores?.[0]?.metadata?.acumulado_usd || 0);
+    const acumuladoAtual = Number(integ.custo_acumulado_usd || 0);
+    const deltaDia = Math.max(0, acumuladoAtual - acumuladoAnterior);
+
+    if (deltaDia > 0) {
+      await c.from('custos_diarios').upsert({
+        dia,
+        provedor: integ.slug === 'apify' ? 'Apify' : integ.slug,
+        operacao: 'integracao',
+        custo_usd: deltaDia,
+        qtd_eventos: integ.total_chamadas,
+        metadata: { acumulado_usd: acumuladoAtual, fonte: 'integracoes' },
+      }, { onConflict: 'dia,provedor,operacao' });
+      stats.custos_inseridos++;
+    }
+  }
+
+  // 4. Banco Supabase Pro: US$ 25/mes fixo, rateado por dia
+  // Pega o snapshot mais recente do dia pra mostrar % usado
   const { data: bancoMetric } = await c.from('banco_metricas')
     .select('tamanho_bytes, criado_em')
     .gte('criado_em', `${dia}T00:00:00Z`)
     .lt('criado_em', `${dia}T23:59:59Z`)
     .order('criado_em', { ascending: false })
     .limit(1);
-  if (bancoMetric && bancoMetric[0]) {
-    const totalBytes = Number(bancoMetric[0].tamanho_bytes || 0);
-    // Plano Free Supabase = 8GB ($0). Nao tem custo direto, mas guardamos
-    // o uso pra projecao. Operacao 'banco' com custo zero ate plano pago.
-    const PLANO_LIMITE_BYTES = 8 * 1024 * 1024 * 1024;
-    const pctPlano = PLANO_LIMITE_BYTES > 0 ? (totalBytes / PLANO_LIMITE_BYTES) * 100 : 0;
-    await c.from('custos_diarios').upsert({
-      dia,
-      provedor: 'Supabase',
-      operacao: 'banco',
-      custo_usd: 0, // plano Free, sem custo direto
-      qtd_eventos: 1,
-      metadata: { tamanho_bytes: totalBytes, pct_plano: pctPlano.toFixed(2) },
-    }, { onConflict: 'dia,provedor,operacao' });
-    stats.custos_inseridos++;
-    stats.fontes_banco = 1;
-  }
+
+  // Plano Pro Supabase: US$ 25/mes (assinatura + 8GB DB + 100GB egress + 50GB storage incluidos)
+  // Rateio diario = 25 / dias do mes
+  const SUPABASE_PRO_USD_MES = 25;
+  const dataDia = new Date(`${dia}T12:00:00Z`);
+  const diasNoMes = new Date(dataDia.getFullYear(), dataDia.getMonth() + 1, 0).getDate();
+  const custoSupabaseDia = SUPABASE_PRO_USD_MES / diasNoMes;
+
+  // Limites do plano Pro pra projecao (db_size, file_storage, etc)
+  const PLANO_DB_LIMITE_BYTES = 8 * 1024 * 1024 * 1024;
+  const tamanhoBytes = bancoMetric?.[0]?.tamanho_bytes ? Number(bancoMetric[0].tamanho_bytes) : 0;
+  const pctPlano = PLANO_DB_LIMITE_BYTES > 0 ? (tamanhoBytes / PLANO_DB_LIMITE_BYTES) * 100 : 0;
+
+  await c.from('custos_diarios').upsert({
+    dia,
+    provedor: 'Supabase',
+    operacao: 'banco',
+    custo_usd: custoSupabaseDia,
+    qtd_eventos: 1,
+    metadata: {
+      plano: 'Pro',
+      mensalidade_usd: SUPABASE_PRO_USD_MES,
+      dias_no_mes: diasNoMes,
+      tamanho_bytes: tamanhoBytes,
+      pct_db_incluido: pctPlano.toFixed(2),
+    },
+  }, { onConflict: 'dia,provedor,operacao' });
+  stats.custos_inseridos++;
+  stats.fontes_banco = 1;
 
   return stats;
 }

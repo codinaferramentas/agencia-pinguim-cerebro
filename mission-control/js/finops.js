@@ -208,15 +208,16 @@ async function renderBanco(container) {
 
   container.append(
     el('div', { class: 'finops-card-principal' }, [
-      el('div', { class: 'finops-eyebrow' }, 'Banco Supabase · plano Free'),
-      el('div', { class: 'finops-total-num' }, `${tamanhoMB.toFixed(2)} MB`),
-      el('div', { class: 'finops-total-brl' }, `de ${limiteMB.toFixed(0)} MB · ${pct.toFixed(2)}% do plano`),
+      el('div', { class: 'finops-eyebrow' }, 'Banco Supabase · plano Pro'),
+      el('div', { class: 'finops-total-num' }, 'US$ 25,00 / mês'),
+      el('div', { class: 'finops-total-brl' },
+        `${tamanhoMB.toFixed(2)} MB de ${limiteMB.toFixed(0)} MB incluídos · ${pct.toFixed(2)}% do plano`),
       el('div', { class: 'raiox-bar-bg' }, [
         el('div', { class: `raiox-bar-fg raiox-bar-${status}`, style: `width:${Math.min(100, pct)}%` }),
       ]),
       dados.projecao?.dias_para_estourar != null
         ? el('div', { class: 'finops-projecao' },
-            `📈 Estoura em ~${dados.projecao.dias_para_estourar} dias no ritmo atual`)
+            `📈 Banco estoura em ~${dados.projecao.dias_para_estourar} dias no ritmo atual (a partir daí: US$ 0,125 / GB extra).`)
         : el('div', { class: 'finops-projecao', style: 'opacity:.6' }, 'Histórico curto pra projeção.'),
     ]),
     el('div', { class: 'finops-secao' }, [
