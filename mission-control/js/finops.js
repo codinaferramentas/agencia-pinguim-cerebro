@@ -25,6 +25,136 @@ let aba = 'visao';
 const fmtUSD = (v) => 'US$ ' + Number(v || 0).toFixed(4);
 const fmtBRL = (v) => 'R$ ' + (Number(v || 0) * 5.1).toFixed(3);
 
+// ============================================================
+// PERIODO — estado por aba, persistido em localStorage
+// ============================================================
+const STORAGE_PREFIX = 'pinguim:finops:periodo:';
+const PRESETS = [
+  { key: '7d',     label: 'Últimos 7d' },
+  { key: '30d',    label: 'Últimos 30d' },
+  { key: 'mes',    label: 'Mês corrente' },
+  { key: 'ant',    label: 'Mês passado' },
+  { key: 'custom', label: 'Custom…' },
+];
+
+function periodoPadrao() { return { preset: '30d' }; }
+
+function carregarPeriodo(aba) {
+  try {
+    const raw = localStorage.getItem(STORAGE_PREFIX + aba);
+    if (!raw) return periodoPadrao();
+    const p = JSON.parse(raw);
+    if (!p.preset) return periodoPadrao();
+    return p;
+  } catch (_) { return periodoPadrao(); }
+}
+
+function salvarPeriodo(aba, periodo) {
+  try { localStorage.setItem(STORAGE_PREFIX + aba, JSON.stringify(periodo)); } catch (_) {}
+}
+
+// Resolve preset/datas customizadas em [inicio, fim] como string YYYY-MM-DD
+function resolverDatas(periodo) {
+  const hoje = new Date();
+  const fmt = (d) => d.toISOString().slice(0, 10);
+
+  if (periodo.preset === 'custom' && periodo.inicio && periodo.fim) {
+    return { inicio: periodo.inicio, fim: periodo.fim };
+  }
+
+  if (periodo.preset === '7d') {
+    const ini = new Date(hoje); ini.setDate(ini.getDate() - 6);
+    return { inicio: fmt(ini), fim: fmt(hoje) };
+  }
+  if (periodo.preset === 'mes') {
+    const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    return { inicio: fmt(ini), fim: fmt(hoje) };
+  }
+  if (periodo.preset === 'ant') {
+    const ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    const fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+    return { inicio: fmt(ini), fim: fmt(fim) };
+  }
+  // 30d (default)
+  const ini = new Date(hoje); ini.setDate(ini.getDate() - 29);
+  return { inicio: fmt(ini), fim: fmt(hoje) };
+}
+
+function rotuloPeriodo(periodo) {
+  const def = PRESETS.find(p => p.key === periodo.preset);
+  if (periodo.preset === 'custom' && periodo.inicio && periodo.fim) {
+    return `${formatarDataBR(periodo.inicio)} → ${formatarDataBR(periodo.fim)}`;
+  }
+  return def ? def.label : 'Últimos 30d';
+}
+
+function formatarDataBR(iso) {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y.slice(2)}`;
+}
+
+// Renderiza barra de chips + datepicker custom
+function renderSeletorPeriodo(abaAtual, container, onChange) {
+  const periodo = carregarPeriodo(abaAtual);
+  const wrap = el('div', { class: 'finops-periodo' });
+
+  const chipsRow = el('div', { class: 'finops-periodo-chips' });
+  PRESETS.forEach(p => {
+    chipsRow.append(el('button', {
+      class: 'finops-chip' + (periodo.preset === p.key ? ' active' : ''),
+      type: 'button',
+      onclick: () => {
+        if (p.key === 'custom') {
+          // Mantem custom ativo, mas precisa de datas — abre inputs
+          const novo = { preset: 'custom', inicio: periodo.inicio || resolverDatas(periodoPadrao()).inicio, fim: periodo.fim || resolverDatas(periodoPadrao()).fim };
+          salvarPeriodo(abaAtual, novo);
+        } else {
+          salvarPeriodo(abaAtual, { preset: p.key });
+        }
+        onChange();
+      },
+    }, p.label));
+  });
+  wrap.append(chipsRow);
+
+  // Datepicker custom (so aparece quando preset === 'custom')
+  if (periodo.preset === 'custom') {
+    const datas = resolverDatas(periodo);
+    const inpInicio = el('input', {
+      type: 'date',
+      class: 'finops-data-input',
+      value: datas.inicio,
+      onchange: (e) => {
+        const novo = { ...periodo, inicio: e.target.value };
+        salvarPeriodo(abaAtual, novo);
+        onChange();
+      },
+    });
+    const inpFim = el('input', {
+      type: 'date',
+      class: 'finops-data-input',
+      value: datas.fim,
+      onchange: (e) => {
+        const novo = { ...periodo, fim: e.target.value };
+        salvarPeriodo(abaAtual, novo);
+        onChange();
+      },
+    });
+    wrap.append(el('div', { class: 'finops-periodo-custom' }, [
+      el('span', { class: 'finops-periodo-label' }, 'De'),
+      inpInicio,
+      el('span', { class: 'finops-periodo-label' }, 'até'),
+      inpFim,
+    ]));
+  }
+
+  container.append(wrap);
+  return periodo;
+}
+
+// ============================================================
+// ENTRY POINT
+// ============================================================
 export async function renderFinOps() {
   const page = document.getElementById('page-finops');
   page.innerHTML = '';
@@ -43,7 +173,7 @@ export async function renderFinOps() {
       tab('tokens', 'Tokens IA'),
       tab('banco', 'Banco'),
       tab('alertas', 'Alertas'),
-      tab('historico', 'Histórico 30d'),
+      tab('historico', 'Histórico'),
     ]),
     el('div', { id: 'finops-conteudo' }),
   );
@@ -82,27 +212,38 @@ async function renderVisao(container) {
   const sb = getSupabase();
   if (!sb) return;
 
-  const { data, error } = await sb.rpc('custo_mes_corrente');
+  const periodo = renderSeletorPeriodo('visao', container, () => renderAba('visao', container));
+  const { inicio, fim } = resolverDatas(periodo);
+
+  const { data, error } = await sb.rpc('custo_periodo', { p_inicio: inicio, p_fim: fim });
   if (error) { container.append(el('div', { class: 'seguranca-erro' }, error.message)); return; }
   const m = data[0];
   const total = Number(m.total_usd);
-  const projecao = Number(m.projecao_fim_mes_usd);
+  const media = Number(m.media_dia_usd);
+  const projecao30 = Number(m.projecao_30_dias_usd);
   const porProvedor = m.por_provedor || {};
   const porOperacao = m.por_operacao || {};
 
-  // Card principal — total do mes + projecao
   const cardPrincipal = el('div', { class: 'finops-card-principal' }, [
-    el('div', { class: 'finops-eyebrow' }, `Mês corrente · dia ${m.dias_corridos} de ${m.dias_no_mes}`),
+    el('div', { class: 'finops-eyebrow' },
+      `${rotuloPeriodo(periodo)} · ${m.dias_periodo} dia${m.dias_periodo === 1 ? '' : 's'}`),
     el('div', { class: 'finops-total-num' }, fmtUSD(total)),
     el('div', { class: 'finops-total-brl' }, fmtBRL(total) + ' (~R$)'),
     el('div', { class: 'finops-projecao' }, [
-      el('span', {}, '📈 Projeção fim de mês: '),
-      el('strong', {}, fmtUSD(projecao)),
-      el('span', {}, ` (${fmtBRL(projecao)})`),
+      el('span', {}, `📊 Média ${fmtUSD(media)}/dia · `),
+      el('span', {}, `Projeção 30d: `),
+      el('strong', {}, fmtUSD(projecao30)),
     ]),
   ]);
 
-  // Cards por provedor
+  if (total === 0) {
+    container.append(cardPrincipal,
+      el('div', { class: 'seguranca-empty', style: 'margin-top:1rem' },
+        'Nenhum custo registrado neste período. Tente um intervalo maior ou verifique se o cron de FinOps já rodou hoje.'),
+    );
+    return;
+  }
+
   const cardsProvedor = el('div', { class: 'finops-grid' },
     Object.entries(porProvedor).sort((a, b) => Number(b[1]) - Number(a[1])).map(([prov, val]) => {
       const v = Number(val);
@@ -121,7 +262,6 @@ async function renderVisao(container) {
     })
   );
 
-  // Tabela por operação
   const tabelaOp = el('div', { class: 'finops-secao' }, [
     el('div', { class: 'finops-secao-titulo' }, '🎯 Por operação'),
     el('table', { class: 'finops-tabela' }, [
@@ -147,18 +287,23 @@ async function renderVisao(container) {
 async function renderTokens(container) {
   container.innerHTML = '';
   const sb = getSupabase();
-  const { data, error } = await sb.rpc('tokens_ia_mes');
+
+  const periodo = renderSeletorPeriodo('tokens', container, () => renderAba('tokens', container));
+  const { inicio, fim } = resolverDatas(periodo);
+
+  const { data, error } = await sb.rpc('tokens_ia_periodo', { p_inicio: inicio, p_fim: fim });
   if (error) { container.append(el('div', { class: 'seguranca-erro' }, error.message)); return; }
+
   if (!data || data.length === 0) {
     container.append(el('div', { class: 'seguranca-empty' },
-      'Sem registros de OpenAI/Anthropic neste mês ainda.'));
+      `Sem registros de OpenAI/Anthropic em ${rotuloPeriodo(periodo)}.`));
     return;
   }
   const total = data.reduce((s, r) => s + Number(r.total_usd), 0);
 
   container.append(
     el('div', { class: 'finops-card-principal' }, [
-      el('div', { class: 'finops-eyebrow' }, 'Tokens IA · mês corrente'),
+      el('div', { class: 'finops-eyebrow' }, `Tokens IA · ${rotuloPeriodo(periodo)}`),
       el('div', { class: 'finops-total-num' }, fmtUSD(total)),
       el('div', { class: 'finops-total-brl' }, fmtBRL(total) + ' (~R$)'),
       el('div', { class: 'finops-projecao' }, '🎙 JR Storment: "Custo direto do consumo de IA — quem paga é o consumidor."'),
@@ -183,12 +328,11 @@ async function renderTokens(container) {
 }
 
 // ============================================================
-// BANCO
+// BANCO — sempre estado atual, sem seletor
 // ============================================================
 async function renderBanco(container) {
   container.innerHTML = '';
   const sb = getSupabase();
-  // Reusa a função raio-x-banco já existente
   const { data: { session } } = await sb.auth.getSession();
   const r = await fetch(`${window.__ENV__.SUPABASE_URL}/functions/v1/raio-x-banco`, {
     method: 'POST',
@@ -247,7 +391,7 @@ function fmtBytes(b) {
 }
 
 // ============================================================
-// ALERTAS
+// ALERTAS — regras configuradas, sem seletor
 // ============================================================
 async function renderAlertas(container) {
   container.innerHTML = '';
@@ -281,22 +425,26 @@ async function renderAlertas(container) {
 }
 
 // ============================================================
-// HISTORICO 30 DIAS
+// HISTORICO — serie diaria do periodo escolhido
 // ============================================================
 async function renderHistorico(container) {
   container.innerHTML = '';
   const sb = getSupabase();
-  const { data, error } = await sb.rpc('custos_30_dias');
+
+  const periodo = renderSeletorPeriodo('historico', container, () => renderAba('historico', container));
+  const { inicio, fim } = resolverDatas(periodo);
+
+  const { data, error } = await sb.rpc('custos_serie', { p_inicio: inicio, p_fim: fim });
   if (error) { container.append(el('div', { class: 'seguranca-erro' }, error.message)); return; }
 
   const max = Math.max(...(data || []).map(d => Number(d.total_usd)), 0.001);
-  const total30 = (data || []).reduce((s, d) => s + Number(d.total_usd), 0);
+  const totalPeriodo = (data || []).reduce((s, d) => s + Number(d.total_usd), 0);
 
   container.append(
     el('div', { class: 'finops-card-principal' }, [
-      el('div', { class: 'finops-eyebrow' }, 'Últimos 30 dias · soma'),
-      el('div', { class: 'finops-total-num' }, fmtUSD(total30)),
-      el('div', { class: 'finops-total-brl' }, fmtBRL(total30)),
+      el('div', { class: 'finops-eyebrow' }, `${rotuloPeriodo(periodo)} · soma`),
+      el('div', { class: 'finops-total-num' }, fmtUSD(totalPeriodo)),
+      el('div', { class: 'finops-total-brl' }, fmtBRL(totalPeriodo)),
     ]),
     el('div', { class: 'finops-historico-grafico' },
       (data || []).map(d => {
@@ -314,7 +462,7 @@ async function renderHistorico(container) {
         el('th', { style: 'text-align:right' }, 'Custo'),
         el('th', { style: 'text-align:right' }, 'Provedores'),
       ])]),
-      el('tbody', {}, [...(data || [])].reverse().slice(0, 15).map(d => el('tr', {}, [
+      el('tbody', {}, [...(data || [])].reverse().slice(0, 31).map(d => el('tr', {}, [
         el('td', {}, d.dia),
         el('td', { style: 'text-align:right;font-family:var(--font-mono)' }, fmtUSD(d.total_usd)),
         el('td', { style: 'text-align:right;color:var(--fg-muted);font-size:.75rem' },

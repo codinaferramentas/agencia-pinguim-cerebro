@@ -13,7 +13,7 @@ import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=2026042
 import { renderIntegracoes } from './integracoes.js?v=20260425n';
 import { renderMapaSistema } from './mapa-sistema.js?v=20260428p';
 import { renderSeguranca } from './seguranca.js?v=20260501b';
-import { renderFinOps } from './finops.js?v=20260501a';
+import { renderFinOps } from './finops.js?v=20260501c';
 import { renderFunis } from './funis.js?v=20260428p';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);

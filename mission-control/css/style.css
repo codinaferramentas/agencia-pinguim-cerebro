@@ -2032,6 +2032,63 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
    ============================================================ */
 #page-finops { padding: 1.25rem 1.5rem; }
 #page-finops .seguranca-tabs { /* reusa estilo de tabs */ }
+
+/* Seletor de periodo (chips + datepicker custom) */
+.finops-periodo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.finops-periodo-chips {
+  display: flex;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+}
+.finops-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s;
+  white-space: nowrap;
+}
+.finops-chip:hover { border-color: var(--pc-400); color: var(--fg); }
+.finops-chip.active {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 14%, transparent);
+  color: var(--fg);
+}
+.finops-periodo-custom {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.finops-periodo-label {
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+}
+.finops-data-input {
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  font-size: 0.875rem;
+  font-family: inherit;
+}
+.finops-data-input:focus {
+  outline: none;
+  border-color: var(--brand);
+}
+
 .finops-card-principal {
   background: linear-gradient(135deg, var(--surface-2), var(--surface-3));
   border: 1px solid var(--border-subtle);
