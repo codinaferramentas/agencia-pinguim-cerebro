@@ -591,31 +591,27 @@ async function renderCrons(container) {
     return;
   }
 
-  const lista = crons || [];
-  const proprios = lista.filter(c => c.schema_dono === 'pinguim');
-  const externos = lista.filter(c => c.schema_dono !== 'pinguim');
+  // Mostra somente crons do Pinguim. Crons externos (schema compartilhado)
+  // ficam fora do painel pra evitar confusao com o que e nosso.
+  const proprios = (crons || []).filter(c => c.schema_dono === 'pinguim');
 
-  // Header com resumo
   container.append(
     el('div', { class: 'cofre-header' }, [
       el('h3', {}, '⏱ Jobs agendados (pg_cron)'),
       el('p', { style: 'margin:.25rem 0 0;font-size:.8125rem;color:var(--fg-muted)' },
-        `${proprios.length} cron${proprios.length === 1 ? '' : 's'} do Pinguim · ${externos.length} externo${externos.length === 1 ? '' : 's'} (não pertencem ao Pinguim OS — vivem no schema compartilhado).`),
+        `${proprios.length} cron${proprios.length === 1 ? '' : 's'} do Pinguim OS — rodam em horarios fixos pra manter auditoria, raio-X e FinOps em dia.`),
     ]),
   );
 
-  if (lista.length === 0) {
+  if (proprios.length === 0) {
     container.append(el('div', { class: 'seguranca-empty' }, 'Nenhum job agendado.'));
     return;
   }
 
   container.append(renderTabelaCrons('Crons do Pinguim', proprios, true));
-  if (externos.length > 0) {
-    container.append(renderTabelaCrons('Crons externos (schema compartilhado — não tocar)', externos, false));
-  }
 }
 
-function renderTabelaCrons(titulo, crons, isPinguim) {
+function renderTabelaCrons(titulo, crons) {
   const wrapper = el('div', { class: 'cofre-header', style: 'margin-top:1rem' });
   wrapper.append(el('h4', { style: 'margin:0 0 .75rem;font-size:.95rem;color:var(--fg)' }, titulo));
   if (crons.length === 0) {
@@ -655,11 +651,6 @@ function renderTabelaCrons(titulo, crons, isPinguim) {
 
   tabela.append(thead, tbody);
   wrapper.append(tabela);
-
-  if (!isPinguim) {
-    wrapper.append(el('p', { style: 'margin-top:.75rem;font-size:.8125rem;color:var(--fg-muted)' },
-      'Estes jobs pertencem a outro sistema que compartilha o banco. Aparecem aqui só pra visibilidade — não devem ser alterados pelo Pinguim OS.'));
-  }
   return wrapper;
 }
 
