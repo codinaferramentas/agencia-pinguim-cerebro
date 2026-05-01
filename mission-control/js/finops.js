@@ -27,9 +27,37 @@ let aba = 'visao';
 // muito pequenos (centavos de OpenAI) sem perder precisao.
 const _nfUSD = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 const _nfBRL = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const COTACAO_USD_BRL = 5.1;
+
+// Cotacao USD->BRL viva: carregada de pinguim.cotacao_atual no primeiro render.
+// Atualiza diariamente via Edge Function atualizar-cotacao (cron 06h UTC).
+let cotacaoCache = { valor: 5.10, fonte: 'fallback-estatico', capturado_em: null };
+
+async function carregarCotacao() {
+  try {
+    const sb = getSupabase();
+    if (!sb) return;
+    const { data, error } = await sb.rpc('cotacao_atual', { p_par: 'USD-BRL' });
+    if (error || !data || !data[0]) return;
+    cotacaoCache = {
+      valor: Number(data[0].valor),
+      fonte: data[0].fonte,
+      capturado_em: data[0].capturado_em,
+    };
+  } catch (_) { /* mantem fallback */ }
+}
+
 const fmtUSD = (v) => 'US$ ' + _nfUSD.format(Number(v || 0));
-const fmtBRL = (v) => 'R$ ' + _nfBRL.format(Number(v || 0) * COTACAO_USD_BRL);
+const fmtBRL = (v) => 'R$ ' + _nfBRL.format(Number(v || 0) * cotacaoCache.valor);
+
+function rotuloCotacao() {
+  if (cotacaoCache.fonte === 'fallback-estatico') return 'Cotacao estimada (5,10)';
+  const v = _nfBRL.format(cotacaoCache.valor);
+  if (cotacaoCache.capturado_em) {
+    const d = new Date(cotacaoCache.capturado_em);
+    return `Cotacao: ${v} (${cotacaoCache.fonte}, ${d.toLocaleDateString('pt-BR')})`;
+  }
+  return `Cotacao: ${v} (${cotacaoCache.fonte})`;
+}
 
 // ============================================================
 // PERIODO — estado por aba, persistido em localStorage
@@ -165,6 +193,10 @@ export async function renderFinOps() {
   const page = document.getElementById('page-finops');
   page.innerHTML = '';
 
+  // Carrega cotacao viva uma vez por sessao de render. Erro silencioso —
+  // se falhar, mantem o fallback 5,10 que ja esta no cache.
+  await carregarCotacao();
+
   page.append(
     el('div', { class: 'page-header' }, [
       el('div', {}, [
@@ -234,7 +266,7 @@ async function renderVisao(container) {
     el('div', { class: 'finops-eyebrow' },
       `${rotuloPeriodo(periodo)} · ${m.dias_periodo} dia${m.dias_periodo === 1 ? '' : 's'}`),
     el('div', { class: 'finops-total-num' }, fmtUSD(total)),
-    el('div', { class: 'finops-total-brl', title: 'Conversao estimada (cotacao 5,10)' }, fmtBRL(total)),
+    el('div', { class: 'finops-total-brl', title: rotuloCotacao() }, fmtBRL(total)),
     el('div', { class: 'finops-projecao' }, [
       el('span', {}, `📊 Média ${fmtUSD(media)}/dia · `),
       el('span', {}, `Projeção 30d: `),
@@ -311,7 +343,7 @@ async function renderTokens(container) {
     el('div', { class: 'finops-card-principal' }, [
       el('div', { class: 'finops-eyebrow' }, `Tokens IA · ${rotuloPeriodo(periodo)}`),
       el('div', { class: 'finops-total-num' }, fmtUSD(total)),
-      el('div', { class: 'finops-total-brl', title: 'Conversao estimada (cotacao 5,10)' }, fmtBRL(total)),
+      el('div', { class: 'finops-total-brl', title: rotuloCotacao() }, fmtBRL(total)),
       el('div', { class: 'finops-projecao' }, '🎙 JR Storment: "Custo direto do consumo de IA — quem paga é o consumidor."'),
     ]),
     el('table', { class: 'finops-tabela' }, [
