@@ -22,8 +22,14 @@ const el = (tag, attrs = {}, children = []) => {
 };
 
 let aba = 'visao';
-const fmtUSD = (v) => 'US$ ' + Number(v || 0).toFixed(4);
-const fmtBRL = (v) => 'R$ ' + (Number(v || 0) * 5.1).toFixed(3);
+
+// Formatadores pt-BR. Casas decimais escolhidas pra acomodar valores
+// muito pequenos (centavos de OpenAI) sem perder precisao.
+const _nfUSD = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+const _nfBRL = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const COTACAO_USD_BRL = 5.1;
+const fmtUSD = (v) => 'US$ ' + _nfUSD.format(Number(v || 0));
+const fmtBRL = (v) => 'R$ ' + _nfBRL.format(Number(v || 0) * COTACAO_USD_BRL);
 
 // ============================================================
 // PERIODO — estado por aba, persistido em localStorage
@@ -228,7 +234,7 @@ async function renderVisao(container) {
     el('div', { class: 'finops-eyebrow' },
       `${rotuloPeriodo(periodo)} · ${m.dias_periodo} dia${m.dias_periodo === 1 ? '' : 's'}`),
     el('div', { class: 'finops-total-num' }, fmtUSD(total)),
-    el('div', { class: 'finops-total-brl' }, fmtBRL(total) + ' (~R$)'),
+    el('div', { class: 'finops-total-brl', title: 'Conversao estimada (cotacao 5,10)' }, fmtBRL(total)),
     el('div', { class: 'finops-projecao' }, [
       el('span', {}, `📊 Média ${fmtUSD(media)}/dia · `),
       el('span', {}, `Projeção 30d: `),
@@ -305,7 +311,7 @@ async function renderTokens(container) {
     el('div', { class: 'finops-card-principal' }, [
       el('div', { class: 'finops-eyebrow' }, `Tokens IA · ${rotuloPeriodo(periodo)}`),
       el('div', { class: 'finops-total-num' }, fmtUSD(total)),
-      el('div', { class: 'finops-total-brl' }, fmtBRL(total) + ' (~R$)'),
+      el('div', { class: 'finops-total-brl', title: 'Conversao estimada (cotacao 5,10)' }, fmtBRL(total)),
       el('div', { class: 'finops-projecao' }, '🎙 JR Storment: "Custo direto do consumo de IA — quem paga é o consumidor."'),
     ]),
     el('table', { class: 'finops-tabela' }, [
