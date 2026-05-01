@@ -30,9 +30,9 @@ export async function gerar() {
           <ul class="docs-list">
             <li><strong>Aurora</strong> · Marketing — escreve copy, consulta persona, monta narrativas</li>
             <li><strong>Codina</strong> · Marketing IA — automatiza fluxos, otimiza CAC, cuida da stack técnica</li>
-            <li><strong>Zezinho</strong> · Comercial — gerencia pipeline, fecha venda, lida com objeções</li>
-            <li><strong>Dipsy</strong> · RH — entrevistas, contratos, cultura, avaliação</li>
-            <li><strong>Aranha</strong> · Financeiro — caixa, boleto, nota fiscal, orçamento</li>
+            <li><strong>Juliana</strong> · Comercial — gerencia pipeline, fecha venda, lida com objeções</li>
+            <li><strong>Ludmila</strong> · RH — entrevistas, contratos, cultura, avaliação</li>
+            <li><strong>Brenda</strong> · Financeiro — caixa, boleto, nota fiscal, orçamento</li>
             <li><strong>Luizinho</strong> · Atendimento — responde aluno, fecha ticket, resolve dúvida</li>
           </ul>
         `,
@@ -57,7 +57,7 @@ export async function gerar() {
         id: 'identidade',
         titulo: 'Identidade espelha a agência real',
         html: `
-          <p>Os nomes do Squad não são fictícios — são os mesmos da agência humana. Luiz, Pedro, Micha são sócios reais da Pinguim. Aurora, Codina, Zezinho, Dipsy, Aranha, Luizinho são personagens que representam funções reais.</p>
+          <p>Os nomes do Squad não são fictícios — são os mesmos da agência humana. Luiz, Pedro, Micha são sócios reais da Pinguim. Aurora, Codina, Juliana, Ludmila, Brenda, Luizinho são personagens que representam funções reais.</p>
           <p>Cada agente IA tem voz própria, treinada com o vocabulário real da pessoa correspondente. O Micha digital fala de Reels e lo-fi porque o Micha humano fala disso o dia todo. Isso cria <strong>identificação</strong> — sócios reconhecem a si mesmos na animação, time reconhece o tom de cada pessoa.</p>
           <p>Vira marketing interno do sistema. E externo: cliente que vê a animação entende imediatamente que isso aqui não é template genérico de SaaS.</p>
         `,

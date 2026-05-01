@@ -97,7 +97,7 @@ export async function gerar() {
           <ul class="docs-list">
             <li><strong>Persona</strong> — gerada e mantida automaticamente a partir do Cérebro</li>
             <li><strong>Copy e ofertas</strong> — agentes consultam antes de escrever (em construção)</li>
-            <li><strong>Scripts de venda</strong> — Zezinho usa as objeções recorrentes (em construção)</li>
+            <li><strong>Scripts de venda</strong> — Juliana usa as objeções recorrentes (em construção)</li>
             <li><strong>Atendimento</strong> — Luizinho responde aluno baseado nas dúvidas já mapeadas (em construção)</li>
             <li><strong>Decisões da Diretoria</strong> — sócios olham métricas reais do Cérebro pra decidir o que escalar</li>
           </ul>

@@ -1,7 +1,7 @@
 /* Mission Control — Roteiros do Squad Cyber
 
    Diferente dos roteiros padrao (squad-roteiros.js) que sao SEQUENCIAIS
-   (Luiz -> Aurora -> Dipsy), os roteiros Cyber sao PARALELOS — todos os
+   (Luiz -> Aurora -> Ludmila), os roteiros Cyber sao PARALELOS — todos os
    6 agentes ativam ao mesmo tempo, cada um cuidando da sua especialidade.
 
    Razao: assim e como seguranca real funciona. Red Team simula ataque

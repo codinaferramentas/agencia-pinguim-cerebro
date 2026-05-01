@@ -43,13 +43,13 @@ const AGENTS_DEF = [
   { id: 'codina',  name: 'Codina',  role: 'Marketing · IA',           emoji: '🤖', roomId: 'marketing',
     skin: '#fcd7b6', shirt: '#3b82f6', pants: '#1f2937', hair: '#2a1a0a',
     desk: { x: 200, y: 240 }, chair: { x: 200, y: 250 }, home: { x: 200, y: 250 } },
-  { id: 'zezinho', name: 'Zezinho', role: 'Comercial',                emoji: '📞', roomId: 'comercial',
+  { id: 'juliana', name: 'Juliana', role: 'Comercial',                emoji: '📞', roomId: 'comercial',
     skin: '#d4a07a', shirt: '#f472b6', pants: '#2a3040', hair: '#2a1a0a',
     desk: { x: 780, y: 170 }, chair: { x: 780, y: 200 }, home: { x: 780, y: 230 } },
-  { id: 'dipsy',   name: 'Dipsy',   role: 'RH',                       emoji: '👥', roomId: 'rh',
+  { id: 'ludmila', name: 'Ludmila', role: 'RH',                       emoji: '👥', roomId: 'rh',
     skin: '#fcd7b6', shirt: '#10b981', pants: '#1f2937', hair: '#6a4a2a',
     desk: { x: 160, y: 410 }, chair: { x: 160, y: 440 }, home: { x: 160, y: 470 } },
-  { id: 'aranha',  name: 'Aranha',  role: 'Financeiro',               emoji: '💼', roomId: 'financeiro',
+  { id: 'brenda',  name: 'Brenda',  role: 'Financeiro',               emoji: '💼', roomId: 'financeiro',
     skin: '#e8b48a', shirt: '#fbbf24', pants: '#2a3040', hair: '#0a0a0a',
     desk: { x: 470, y: 450 }, chair: { x: 470, y: 480 }, home: { x: 470, y: 510 } },
   { id: 'luizinho',name: 'Luizinho',role: 'Atendimento',              emoji: '💬', roomId: 'atendimento',
@@ -211,13 +211,13 @@ function drawFurniture(ctx) {
   // DIRETORIA (roxo) — mesa Finn + estantes de relatorios
   drawDesk(ctx, 440, 170, '#a78bfa'); drawChair(ctx, 440, 200, '#2a3040');
   drawBookshelf(ctx, 360, 130, '#a78bfa'); drawBookshelf(ctx, 570, 130, '#a78bfa'); drawPlant(ctx, 360, 250, 0.8);
-  // COMERCIAL (rosa) — mesa Zezinho + whiteboard de funil + impressora + planta
+  // COMERCIAL (rosa) — mesa Juliana + whiteboard de funil + impressora + planta
   drawDesk(ctx, 780, 170, '#f472b6'); drawChair(ctx, 780, 200, '#2a3040');
   drawWhiteboard(ctx, 690, 95, '#f472b6'); drawPrinter(ctx, 900, 100); drawPlant(ctx, 910, 250, 0.9);
-  // RH (verde) — mesa Dipsy + sofa + mesa reuniao + planta
+  // RH (verde) — mesa Ludmila + sofa + mesa reuniao + planta
   drawDesk(ctx, 160, 410, '#10b981'); drawChair(ctx, 160, 440, '#2a3040');
   drawSofa(ctx, 80, 530, '#3a5b2e'); drawTable(ctx, 80, 500); drawPlant(ctx, 270, 530, 1.0);
-  // FINANCEIRO (amarelo) — mesa Aranha + cooler + estante pastas + planta
+  // FINANCEIRO (amarelo) — mesa Brenda + cooler + estante pastas + planta
   drawDesk(ctx, 470, 450, '#fbbf24'); drawChair(ctx, 470, 480, '#2a3040');
   drawWaterCooler(ctx, 380, 470); drawBookshelf(ctx, 580, 460, '#fbbf24'); drawPlant(ctx, 380, 540, 0.8);
   // ATENDIMENTO (laranja) — mesa Byte + sofa espera cliente + mesa apoio
@@ -568,9 +568,9 @@ export function criarEngine(canvas) {
     aurora:  ['Persona...', '💡', 'Copy nova!', 'Testa isso', '✍', 'Hmm...', '📝', 'Qual dor?'],
     codina:  ['Automatiza', '🤖', 'Roda IA', 'Deploy ok', '⚙', 'Otimiza CAC', 'Stack nova', 'Edge function'],
     // Outros operacionais
-    zezinho: ['Fechou!', '📞', 'Alo?', 'Proposta...', '💼', 'Pipeline', '🎯', 'Ligando...'],
-    dipsy:   ['Contrato...', '👥', 'Entrevista', 'Avaliacao', '📋', 'Cultura!', 'Hmm...', '✅'],
-    aranha:  ['Caixa ok', '💰', 'Boleto...', 'Nota fiscal', '📑', 'Orcamento', 'Aprovado!', '💼'],
+    juliana: ['Fechou!', '📞', 'Alo?', 'Proposta...', '💼', 'Pipeline', '🎯', 'Ligando...'],
+    ludmila:   ['Contrato...', '👥', 'Entrevista', 'Avaliacao', '📋', 'Cultura!', 'Hmm...', '✅'],
+    brenda:  ['Caixa ok', '💰', 'Boleto...', 'Nota fiscal', '📑', 'Orcamento', 'Aprovado!', '💼'],
     luizinho:['Respondendo', '💬', 'Tudo ok!', 'Anotado', '🙂', 'Ticket...', 'Processando', '📩'],
   };
 

@@ -193,14 +193,14 @@ export async function roteiroAlimentarAvulso({ engine, log, setStatus, apiCall, 
 }
 
 /* ============================== ALIMENTAR CEREBRO — PACOTE (ZIP) ===========================
-   Protagonistas: Luiz (Diretoria) + Aurora (Marketing) + Dipsy (RH como revisora).
+   Protagonistas: Luiz (Diretoria) + Aurora (Marketing) + Ludmila (RH como revisora).
    Pacote com varios arquivos -> Luiz entrega pra Aurora -> Aurora processa em
-   ondas (vai a estante repetidamente) -> Dipsy revisa qualidade -> entrega.
+   ondas (vai a estante repetidamente) -> Ludmila revisa qualidade -> entrega.
    Tempo tipico: 30s a 5min
 */
 export async function roteiroAlimentarPacote({ engine, log, setStatus, apiCall, cerebroNome, totalArquivos }) {
   const { walkTo, say, throwPaper, setHolding, setState, setProtagonists } = engine;
-  setProtagonists(['luiz', 'aurora', 'dipsy']);
+  setProtagonists(['luiz', 'aurora', 'ludmila']);
 
   setStatus('🎯 Luiz recebeu um pacote inteiro pro Cerebro');
   log('Sistema', `Alimentar Cerebro ${cerebroNome} com pacote ZIP`, 'info');
@@ -252,40 +252,40 @@ export async function roteiroAlimentarPacote({ engine, log, setStatus, apiCall, 
   log('Aurora', 'Todos os lotes processados.', 'done');
   await delay(400);
 
-  // Aurora leva pra Dipsy revisar qualidade
-  setStatus('✍ Aurora pede revisao de qualidade pra Dipsy');
+  // Aurora leva pra Ludmila revisar qualidade
+  setStatus('✍ Aurora pede revisao de qualidade pra Ludmila');
   setHolding('aurora', true);
   setState('aurora', 'idle');
   await walkTo('aurora', 160, 440, 'idle');
-  say('aurora', 'Dipsy, valida?', 100);
-  log('Aurora → Dipsy', 'Revisao de qualidade do indexamento.', 'handoff');
+  say('aurora', 'Ludmila, valida?', 100);
+  log('Aurora → Ludmila', 'Revisao de qualidade do indexamento.', 'handoff');
   await delay(400);
   setHolding('aurora', false);
-  throwPaper('aurora', 'dipsy');
+  throwPaper('aurora', 'ludmila');
   await delay(500);
-  setHolding('dipsy', true);
+  setHolding('ludmila', true);
   walkTo('aurora', 100, 230, 'idle');
 
-  // Dipsy revisa
-  setStatus('👥 Dipsy revisa qualidade do indexamento');
-  setState('dipsy', 'working');
-  log('Dipsy', 'Verificando duplicatas, qualidade dos chunks, quarentena...', 'working');
+  // Ludmila revisa
+  setStatus('👥 Ludmila revisa qualidade do indexamento');
+  setState('ludmila', 'working');
+  log('Ludmila', 'Verificando duplicatas, qualidade dos chunks, quarentena...', 'working');
   await delay(1800);
-  log('Dipsy', 'Tudo OK. Pacote validado.', 'done');
+  log('Ludmila', 'Tudo OK. Pacote validado.', 'done');
 
-  // Dipsy entrega pra Luiz
-  setStatus('👥 Dipsy entrega o relatorio pra Luiz');
-  setHolding('dipsy', true);
-  setState('dipsy', 'idle');
-  await walkTo('dipsy', 440, 220, 'idle');
-  say('dipsy', 'Pacote aprovado!', 110);
-  log('Dipsy → Luiz', 'Pacote validado e disponivel no Cerebro.', 'handoff');
+  // Ludmila entrega pra Luiz
+  setStatus('👥 Ludmila entrega o relatorio pra Luiz');
+  setHolding('ludmila', true);
+  setState('ludmila', 'idle');
+  await walkTo('ludmila', 440, 220, 'idle');
+  say('ludmila', 'Pacote aprovado!', 110);
+  log('Ludmila → Luiz', 'Pacote validado e disponivel no Cerebro.', 'handoff');
   await delay(400);
-  setHolding('dipsy', false);
-  throwPaper('dipsy', 'luiz');
+  setHolding('ludmila', false);
+  throwPaper('ludmila', 'luiz');
   await delay(500);
   setHolding('luiz', true);
-  walkTo('dipsy', 160, 470, 'idle');
+  walkTo('ludmila', 160, 470, 'idle');
 
   setStatus('🎯 Pacote integrado ao Cerebro');
   await walkTo('luiz', 440, 200, 'working');

@@ -211,13 +211,13 @@ function drawFurniture(ctx) {
   // DIRETORIA (roxo) — mesa Finn + estantes de relatorios
   drawDesk(ctx, 440, 170, '#a78bfa'); drawChair(ctx, 440, 200, '#2a3040');
   drawBookshelf(ctx, 360, 130, '#a78bfa'); drawBookshelf(ctx, 570, 130, '#a78bfa'); drawPlant(ctx, 360, 250, 0.8);
-  // COMERCIAL (rosa) — mesa Zezinho + whiteboard de funil + impressora + planta
+  // COMERCIAL (rosa) — mesa Juliana + whiteboard de funil + impressora + planta
   drawDesk(ctx, 780, 170, '#f472b6'); drawChair(ctx, 780, 200, '#2a3040');
   drawWhiteboard(ctx, 690, 95, '#f472b6'); drawPrinter(ctx, 900, 100); drawPlant(ctx, 910, 250, 0.9);
-  // RH (verde) — mesa Dipsy + sofa + mesa reuniao + planta
+  // RH (verde) — mesa Ludmila + sofa + mesa reuniao + planta
   drawDesk(ctx, 160, 410, '#10b981'); drawChair(ctx, 160, 440, '#2a3040');
   drawSofa(ctx, 80, 530, '#3a5b2e'); drawTable(ctx, 80, 500); drawPlant(ctx, 270, 530, 1.0);
-  // FINANCEIRO (amarelo) — mesa Aranha + cooler + estante pastas + planta
+  // FINANCEIRO (amarelo) — mesa Brenda + cooler + estante pastas + planta
   drawDesk(ctx, 470, 450, '#fbbf24'); drawChair(ctx, 470, 480, '#2a3040');
   drawWaterCooler(ctx, 380, 470); drawBookshelf(ctx, 580, 460, '#fbbf24'); drawPlant(ctx, 380, 540, 0.8);
   // ATENDIMENTO (laranja) — mesa Byte + sofa espera cliente + mesa apoio
