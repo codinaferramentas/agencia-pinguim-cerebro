@@ -2577,6 +2577,87 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
 .cp-evento-data { margin-left: auto; }
 .cp-evento-titulo { color: var(--fg); }
 
+/* Webhooks tab */
+.cp-webhook-url-wrap {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  align-items: stretch;
+}
+.cp-webhook-url {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-3, rgba(255,255,255,0.04));
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+.cp-webhook-url:focus { outline: none; border-color: var(--brand); }
+
+.cp-webhook-log {
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  padding: 0.625rem 0.875rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.8125rem;
+}
+.cp-webhook-log-ok { border-left-color: #10b981; }
+.cp-webhook-log-erro { border-left-color: #ef4444; }
+.cp-webhook-log-head {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+}
+.cp-webhook-status {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.cp-webhook-status.status-ok { background: rgba(16,185,129,0.18); color: #10b981; }
+.cp-webhook-status.status-erro { background: rgba(239,68,68,0.18); color: #ef4444; }
+.cp-webhook-meta { color: var(--fg-muted); font-size: 0.75rem; }
+.cp-webhook-meta strong { color: var(--fg); font-family: var(--font-mono); }
+.cp-webhook-data { margin-left: auto; color: var(--fg-muted); font-size: 0.75rem; }
+.cp-webhook-toggle {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.cp-webhook-toggle:hover { color: var(--fg); border-color: var(--pc-400); }
+.cp-webhook-erro {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  background: rgba(239,68,68,0.08);
+  border-radius: 4px;
+  color: #f87171;
+  font-size: 0.75rem;
+}
+.cp-webhook-payload {
+  margin: 0.625rem 0 0;
+  padding: 0.75rem;
+  background: var(--surface-3, rgba(0,0,0,0.3));
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--fg);
+  max-height: 400px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ============================================================
    SQUAD CYBER MODAL — animacao de auditoria
    ============================================================ */

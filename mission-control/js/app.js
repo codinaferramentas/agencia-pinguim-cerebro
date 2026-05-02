@@ -15,7 +15,7 @@ import { renderMapaSistema } from './mapa-sistema.js?v=20260428p';
 import { renderSeguranca } from './seguranca.js?v=20260501b';
 import { renderFinOps } from './finops.js?v=20260501e';
 import { renderFunis } from './funis.js?v=20260428p';
-import { renderCustomerProfile } from './customer-profile.js?v=20260502a';
+import { renderCustomerProfile } from './customer-profile.js?v=20260502b';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));

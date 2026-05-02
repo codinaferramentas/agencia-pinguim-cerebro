@@ -25,6 +25,7 @@ const el = (tag, attrs = {}, children = []) => {
 };
 
 const PAGE_SIZE = 50;
+let aba = 'lista';     // 'lista' | 'webhooks'
 let estado = {
   busca: '',
   status: null,        // null | 'lead' | 'cliente' | 'ex-cliente'
@@ -65,14 +66,44 @@ export async function renderCustomerProfile() {
           'Memória viva de cada lead/cliente. Alimentada por Clint, onboarding e eventos comportamentais. Conhecimento que o agente comercial usa pra atender com contexto.'),
       ]),
     ]),
-    el('div', { id: 'cp-stats', class: 'cp-stats' }),
-    el('div', { id: 'cp-filtros', class: 'cp-filtros' }),
-    el('div', { id: 'cp-conteudo', class: 'cp-conteudo' }),
+    el('div', { class: 'seguranca-tabs' }, [
+      tabBtn('lista', 'Customer Profiles'),
+      tabBtn('webhooks', 'Webhooks'),
+    ]),
+    el('div', { id: 'cp-tab-conteudo' }),
     el('div', { id: 'cp-detalhe', class: 'cp-detalhe' }),
   );
 
-  await Promise.all([carregarStats(), carregarLista(true)]);
-  renderFiltros();
+  await renderAba();
+}
+
+function tabBtn(id, label) {
+  return el('button', {
+    class: 'seguranca-tab' + (aba === id ? ' active' : ''),
+    type: 'button',
+    onclick: async () => {
+      aba = id;
+      await renderCustomerProfile();
+    },
+  }, label);
+}
+
+async function renderAba() {
+  const cont = document.getElementById('cp-tab-conteudo');
+  if (!cont) return;
+  cont.innerHTML = '';
+
+  if (aba === 'lista') {
+    cont.append(
+      el('div', { id: 'cp-stats', class: 'cp-stats' }),
+      el('div', { id: 'cp-filtros', class: 'cp-filtros' }),
+      el('div', { id: 'cp-conteudo', class: 'cp-conteudo' }),
+    );
+    await Promise.all([carregarStats(), carregarLista(true)]);
+    renderFiltros();
+  } else if (aba === 'webhooks') {
+    await renderWebhooks(cont);
+  }
 }
 
 async function carregarStats() {
@@ -344,4 +375,121 @@ async function abrirDetalhe(email) {
           ]))),
     ]),
   );
+}
+
+// ============================================================
+// WEBHOOKS — monitora pings recebidos do Clint (e futuras integracoes)
+// ============================================================
+const WEBHOOK_URL = 'https://wmelierxzpjamiofeemh.supabase.co/functions/v1/webhook-clint?token=1INd2zLQm7TdiYPtsHSoOafy-f_o54Ov';
+
+async function renderWebhooks(container) {
+  const sb = getSupabase();
+
+  container.append(
+    el('div', { class: 'cofre-header', style: 'margin-bottom:1rem' }, [
+      el('h3', {}, '🔌 Webhook do Clint — Fase 1 (Monitor)'),
+      el('p', { style: 'margin:.5rem 0 0;font-size:.875rem;color:var(--fg-muted)' },
+        'Cole esta URL na configuração de Integração do Clint, em cada produto. Aceita "negócio criado" e "mudança de etapa". Por enquanto só recebe e loga — sem processar dado. Quando o primeiro evento real chegar, ajustamos o parser e ligamos no Customer Profile.'),
+      el('div', { class: 'cp-webhook-url-wrap' }, [
+        el('input', {
+          type: 'text',
+          class: 'cp-webhook-url',
+          value: WEBHOOK_URL,
+          readonly: 'readonly',
+          onclick: (e) => e.target.select(),
+        }),
+        el('button', {
+          class: 'btn btn-ghost',
+          onclick: async () => {
+            try {
+              await navigator.clipboard.writeText(WEBHOOK_URL);
+              alert('URL copiada!');
+            } catch { /* ignore */ }
+          },
+        }, '📋 Copiar'),
+      ]),
+    ]),
+    el('div', { id: 'webhook-stats', class: 'cp-stats', style: 'margin-bottom:1rem' }),
+    el('div', { id: 'webhook-acoes', style: 'display:flex;gap:.5rem;margin-bottom:.75rem' }, [
+      el('button', {
+        class: 'btn btn-ghost',
+        onclick: async () => { await renderWebhooks(container.replaceChildren ? (container.innerHTML = '', container) : container); },
+      }, '↻ Atualizar'),
+    ]),
+    el('div', { id: 'webhook-logs-lista' }),
+  );
+
+  // Stats
+  const { data: stats } = await sb.rpc('stats_webhook_logs', { p_origem: 'clint' });
+  const s = stats || {};
+  document.getElementById('webhook-stats')?.replaceChildren(
+    statCardSimples('📥', 'Total recebido', s.total || 0),
+    statCardSimples('📅', 'Hoje', s.hoje || 0),
+    statCardSimples('✅', 'OK (24h)', s.ok_24h || 0),
+    statCardSimples('⚠', 'Erros (24h)', s.erro_24h || 0),
+    statCardSimples('🕒', 'Último ping', s.ultimo ? formatarData(s.ultimo) : 'nunca'),
+  );
+
+  // Lista de logs
+  const { data: logs, error } = await sb.rpc('listar_webhook_logs', { p_origem: 'clint', p_limit: 50 });
+  const lista = document.getElementById('webhook-logs-lista');
+  if (!lista) return;
+
+  if (error) {
+    lista.replaceChildren(el('div', { class: 'seguranca-erro' }, error.message));
+    return;
+  }
+
+  if (!logs || logs.length === 0) {
+    lista.replaceChildren(el('div', { class: 'seguranca-empty' },
+      'Nenhum ping recebido ainda. Configure a integração no Clint usando a URL acima e o primeiro evento aparece aqui em segundos.'));
+    return;
+  }
+
+  lista.replaceChildren(...logs.map(log => renderLogCard(log)));
+}
+
+function statCardSimples(icon, label, valor) {
+  return el('div', { class: 'cp-stat-card' }, [
+    el('div', { class: 'cp-stat-icon' }, icon),
+    el('div', { class: 'cp-stat-info' }, [
+      el('div', { class: 'cp-stat-label' }, label),
+      el('div', { class: 'cp-stat-valor' }, String(valor)),
+    ]),
+  ]);
+}
+
+function renderLogCard(log) {
+  const ok = log.status_resposta < 300;
+  const card = el('div', {
+    class: 'cp-webhook-log' + (ok ? ' cp-webhook-log-ok' : ' cp-webhook-log-erro'),
+  });
+
+  let payloadAberto = false;
+  const payloadDiv = el('pre', { class: 'cp-webhook-payload' });
+  payloadDiv.style.display = 'none';
+  payloadDiv.textContent = log.payload ? JSON.stringify(log.payload, null, 2) : '(sem payload)';
+
+  card.append(
+    el('div', { class: 'cp-webhook-log-head' }, [
+      el('span', { class: 'cp-webhook-status', class: `cp-webhook-status status-${ok ? 'ok' : 'erro'}` },
+        String(log.status_resposta)),
+      el('span', { class: 'cp-webhook-meta' }, [
+        el('strong', {}, log.endpoint),
+        el('span', {}, ` · ${log.metodo} · ${log.duracao_ms}ms`),
+      ]),
+      el('span', { class: 'cp-webhook-data' }, formatarData(log.recebido_em)),
+      el('button', {
+        class: 'cp-webhook-toggle',
+        onclick: () => {
+          payloadAberto = !payloadAberto;
+          payloadDiv.style.display = payloadAberto ? 'block' : 'none';
+        },
+      }, '› ver payload'),
+    ]),
+    log.erro ? el('div', { class: 'cp-webhook-erro' }, log.erro) : null,
+    payloadDiv,
+  );
+
+  return card;
 }
