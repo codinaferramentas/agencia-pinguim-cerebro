@@ -9,12 +9,13 @@ import { renderCrons } from './crons.js?v=20260421p';
 import { renderSkills, abrirSkillDetalhe } from './skills.js?v=20260427o';
 import { renderStub } from './stubs.js?v=20260421p';
 import { iconeNode } from './icone.js?v=20260425g';
-import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260428a';
+import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260502a';
 import { renderIntegracoes } from './integracoes.js?v=20260425n';
 import { renderMapaSistema } from './mapa-sistema.js?v=20260428p';
 import { renderSeguranca } from './seguranca.js?v=20260501b';
 import { renderFinOps } from './finops.js?v=20260501e';
 import { renderFunis } from './funis.js?v=20260428p';
+import { renderCustomerProfile } from './customer-profile.js?v=20260502a';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
@@ -85,6 +86,7 @@ async function navegar(pageSlug, { forcarRender = true } = {}) {
       case 'qualidade': await renderQualidade(); break;
       case 'seguranca': await renderSeguranca(); break;
       case 'finops':    await renderFinOps(); break;
+      case 'customer-profile': await renderCustomerProfile(); break;
       default:
         if (STUB_PAGES.includes(pageSlug)) renderStub(pageSlug);
     }
@@ -219,13 +221,14 @@ function persistNavOpen() {
 }
 
 const NAV_PRIMARY = [
-  { slug: 'cerebros',    label: 'Cérebros',    icon: '⚛',  tree: true,  treeLoader: () => loadCerebrosTree() },
-  { slug: 'skills',      label: 'Skills',      icon: '🛠', tree: true,  treeLoader: () => loadSkillsTree() },
-  { slug: 'personas',    label: 'Personas',    icon: '👤', tree: true,  treeLoader: () => loadPersonasTree() },
-  { slug: 'funis',       label: 'Funis',       icon: '🎯', tree: false },
-  { slug: 'finops',      label: 'FinOps',      icon: '💰', tree: false },
-  { slug: 'seguranca',   label: 'Segurança',   icon: '🛡', tree: false },
-  { slug: 'integracoes', label: 'Integrações', icon: '🔌', tree: false },
+  { slug: 'cerebros',    label: 'Cérebros',         icon: '⚛',  tree: true,  treeLoader: () => loadCerebrosTree() },
+  { slug: 'skills',      label: 'Skills',           icon: '🛠', tree: true,  treeLoader: () => loadSkillsTree() },
+  { slug: 'personas',    label: 'Personas',         icon: '👤', tree: true,  treeLoader: () => loadPersonasTree() },
+  { slug: 'customer-profile', label: 'Customer Profile', icon: '🪪', tree: false },
+  { slug: 'funis',       label: 'Funis',            icon: '🎯', tree: false },
+  { slug: 'finops',      label: 'FinOps',           icon: '💰', tree: false },
+  { slug: 'seguranca',   label: 'Segurança',        icon: '🛡', tree: false },
+  { slug: 'integracoes', label: 'Integrações',      icon: '🔌', tree: false },
 ];
 
 /**
