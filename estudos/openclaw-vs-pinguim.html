@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>OpenClaw vs Pinguim OS — Estudo comparativo (v2)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#0a0a0a;
+    --bg-2:#121212;
+    --bg-3:#1a1a1a;
+    --line:#262626;
+    --line-2:#333;
+    --text:#ededed;
+    --text-2:#a3a3a3;
+    --text-3:#737373;
+    --accent:#E85C00;
+    --accent-soft:rgba(232,92,0,.12);
+    --good:#4ade80;
+    --bad:#f87171;
+    --warn:#fbbf24;
+    --neutral:#94a3b8;
+    --radius:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Geist',system-ui,sans-serif;font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  code,pre,.mono{font-family:'Geist Mono',ui-monospace,monospace}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1080px;margin:0 auto;padding:48px 32px 96px}
+  header.hero{padding-bottom:32px;border-bottom:1px solid var(--line)}
+  .eyebrow{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--text-3);font-weight:500}
+  h1{font-size:40px;line-height:1.15;font-weight:700;margin:8px 0 12px;letter-spacing:-.02em}
+  h2{font-size:24px;font-weight:600;margin:48px 0 16px;letter-spacing:-.01em;border-bottom:1px solid var(--line);padding-bottom:8px}
+  h3{font-size:17px;font-weight:600;margin:24px 0 8px;color:var(--text)}
+  h4{font-size:14px;font-weight:600;margin:16px 0 6px;color:var(--text-2);text-transform:uppercase;letter-spacing:.06em}
+  p{color:var(--text);margin:0 0 12px}
+  .lede{font-size:17px;color:var(--text-2);max-width:720px}
+  .meta{display:flex;gap:24px;flex-wrap:wrap;color:var(--text-3);font-size:13px;margin-top:20px}
+  .meta b{color:var(--text-2);font-weight:500}
+  .panel{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin:16px 0}
+  .panel.accent{border-left:3px solid var(--accent)}
+  .panel.warn{border-left:3px solid var(--warn)}
+  .panel.good{border-left:3px solid var(--good)}
+  .panel.bad{border-left:3px solid var(--bad)}
+  .panel h3:first-child{margin-top:0}
+  .panel h4:first-child{margin-top:0}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  @media(max-width:760px){.grid-2,.grid-3{grid-template-columns:1fr}}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin:16px 0;background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--bg-3);color:var(--text-2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+  tr:last-child td{border-bottom:none}
+  td.eixo{font-weight:600;color:var(--text);width:20%}
+  .tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500;letter-spacing:.02em;font-family:'Geist Mono',monospace}
+  .tag.win{background:rgba(74,222,128,.15);color:#86efac}
+  .tag.lose{background:rgba(248,113,113,.15);color:#fca5a5}
+  .tag.tie{background:rgba(148,163,184,.18);color:#cbd5e1}
+  .tag.partial{background:rgba(251,191,36,.15);color:#fcd34d}
+  .status{display:inline-block;padding:1px 8px;border-radius:3px;font-size:11px;font-weight:600;font-family:'Geist Mono',monospace;letter-spacing:.04em}
+  .status.prod{background:rgba(74,222,128,.12);color:#86efac;border:1px solid rgba(74,222,128,.3)}
+  .status.cons{background:rgba(251,191,36,.12);color:#fcd34d;border:1px solid rgba(251,191,36,.3)}
+  .status.plan{background:rgba(148,163,184,.12);color:#cbd5e1;border:1px solid rgba(148,163,184,.3)}
+  .verdict{margin-top:8px;font-size:13px;color:var(--text-2)}
+  ul{margin:8px 0 12px;padding-left:20px}
+  li{margin-bottom:6px;color:var(--text)}
+  .source{font-size:12px;color:var(--text-3);font-family:'Geist Mono',monospace}
+  .footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-size:12px;color:var(--text-3)}
+  .toc{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);padding:12px 0;margin-bottom:32px;z-index:10}
+  .toc ul{display:flex;gap:18px;flex-wrap:wrap;list-style:none;margin:0;padding:0;font-size:13px}
+  .toc a{color:var(--text-2)}
+  .toc a:hover{color:var(--accent)}
+  .pill{display:inline-block;background:var(--accent-soft);color:var(--accent);padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;font-family:'Geist Mono',monospace}
+  blockquote{border-left:3px solid var(--line-2);margin:12px 0;padding:4px 16px;color:var(--text-2);font-style:italic}
+  .score-box{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:24px 0}
+  .score-card{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius);padding:20px;text-align:center}
+  .score-card .num{font-size:42px;font-weight:700;letter-spacing:-.02em}
+  .score-card .label{font-size:12px;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-top:4px}
+  .score-card.pinguim{border-color:var(--accent);background:linear-gradient(180deg,rgba(232,92,0,.04),transparent)}
+  .score-card.pinguim .num{color:var(--accent)}
+  hr{border:none;border-top:1px solid var(--line);margin:32px 0}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text-2);margin-bottom:8px;align-items:center}
+  .changelog{background:var(--bg-3);border:1px solid var(--line-2);border-radius:var(--radius);padding:16px 20px;margin:16px 0;font-size:13px;color:var(--text-2)}
+  .changelog b{color:var(--accent)}
+  .num-counter{font-size:28px;font-weight:700;color:var(--accent);letter-spacing:-.02em}
+  .num-counter-label{font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;display:block;margin-top:2px}
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:16px 0}
+  .stat-grid > div{background:var(--bg-3);border:1px solid var(--line);border-radius:8px;padding:14px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Estudo interno · v2 · Não vai pra documentação</div>
+  <h1>OpenClaw <span style="color:var(--text-3)">vs</span> Pinguim OS</h1>
+  <p class="lede">Análise honesta — agora completa: Cérebros, Clones, Squads, Soluções, Multi-tenant, Anatomia do Agente, EPP, Mapa do Sistema. v1 foi rasa, olhou só código rodando. v2 olha a arquitetura inteira (em produção + em construção + planejado).</p>
+  <div class="meta">
+    <span><b>Data:</b> 2026-05-01</span>
+    <span><b>Autor:</b> André + Claude</span>
+    <span><b>Versão:</b> 2 (revisão após crítica)</span>
+    <span><b>Eixos:</b> 12 técnicos + cenário</span>
+  </div>
+  <div class="changelog">
+    <b>v2:</b> incluí Cérebros (4 famílias + RAG vetorial), Clones (103 em produção, 12 squads canônicas), Anatomia do Agente (7 MDs + 5 fontes vivas + EPP), Squads e Soluções, Mapa do Sistema, Funis (3 camadas), Painel/Mission Control (15 rotas), Multi-tenant ({Cliente} OS), Framework de Construção do Agente. v1 não tinha nada disso e era injusta com o Pinguim.<br/>
+    <b>v2.1:</b> seção nova sobre "Canais" — desmistificando a propaganda de OpenClaw conectando Instagram/Email "nativamente" (são plugins terceiros — Composio MCP — não magia do framework).
+  </div>
+</header>
+
+<nav class="toc">
+  <ul>
+    <li><a href="#tldr">TL;DR</a></li>
+    <li><a href="#oque-cada">O que é cada um</a></li>
+    <li><a href="#numeros">Números do Pinguim</a></li>
+    <li><a href="#tabela">Tabela 12 eixos</a></li>
+    <li><a href="#cerebros">Cérebros</a></li>
+    <li><a href="#clones">Clones</a></li>
+    <li><a href="#anatomia">Anatomia do Agente</a></li>
+    <li><a href="#squads">Squads + Soluções</a></li>
+    <li><a href="#multitenant">Multi-tenant</a></li>
+    <li><a href="#multiagente">Multi-agente</a></li>
+    <li><a href="#telegram">Telegram</a></li>
+    <li><a href="#canais">Aba Canais (Insta/Email)</a></li>
+    <li><a href="#cenario">E se migrássemos?</a></li>
+    <li><a href="#veredito">Veredito</a></li>
+    <li><a href="#fontes">Fontes</a></li>
+  </ul>
+</nav>
+
+<section id="tldr">
+  <h2>TL;DR</h2>
+  <div class="panel accent">
+    <p><b>OpenClaw é framework de agente pessoal multi-canal.</b> Open-source, self-hosted, ótimo pra rodar 1–10 agentes na sua casa, falando contigo via Telegram/WhatsApp/Discord. Cada agente tem soul.md + identity.md + auth isolado + modelo próprio. Deterministic routing. Sem RAG vetorial nativo, sem cofre, sem FinOps, sem painel, sem multi-tenant, sem Cérebros, sem Clones, sem Funis, sem Persona versionada, sem Squad operacional, sem Solução combinável, sem template de cliente, sem Mapa, sem EPP. <i>É infra de mensageria com personalidade.</i></p>
+    <p><b>Pinguim OS é sistema operacional de agência de IA.</b> Vai muito além de "agente que conversa". É arquitetura em 4 camadas (Captação → Cérebros → Inteligência → Entrega) + 2 transversais (Segurança, FinOps), com pilares próprios: <b>Cérebros vetoriais em 4 famílias</b> (9 Internos + 5 Metodologias + Externos + 103 Clones), <b>Anatomia do Agente</b> (7 MDs + 5 fontes vivas + estado runtime + EPP), <b>Funis</b> (construtor visual + chave por agente), <b>Persona versionada</b>, <b>Cofre canônico</b>, <b>FinOps</b> com rateio por agente, <b>painel com 15 rotas</b>, <b>template de novo cliente pronto pra clonar</b> (Pinguim é o primeiro {Cliente} OS, próximo é qualquer agência Dolphin). E tem o <b>EPP</b> — agente que evolui a cada uso, não chatbot que responde estático.</p>
+    <p><b>Veredito:</b> A comparação é entre <i>uma faca afiada</i> (OpenClaw) e <i>uma cozinha completa</i> (Pinguim OS). OpenClaw é parte do que Pinguim OS é. <b>Adicionar canal Telegram ao Pinguim &lt; 1 sprint.</b> Reconstruir Cérebros + Clones + Funis + Persona versionada + Cofre + FinOps + Mapa + Painel + Template de cliente em cima do OpenClaw &gt; 6 meses. <b>Migrar é trade ruim. Roubar 3 ideias do OpenClaw e plugar como canal a mais é o movimento certo.</b></p>
+  </div>
+  <div class="score-box">
+    <div class="score-card">
+      <div class="num">2 / 12</div>
+      <div class="label">Eixos onde OpenClaw ganha</div>
+    </div>
+    <div class="score-card pinguim">
+      <div class="num">9 / 12</div>
+      <div class="label">Eixos onde Pinguim ganha</div>
+    </div>
+  </div>
+  <p style="font-size:13px;color:var(--text-3);text-align:center;margin-top:-12px">1 eixo empate. Placar v1 era 5×3 — distorcido por olhar só o código rodando hoje.</p>
+</section>
+
+<section id="oque-cada">
+  <h2>O que é cada um (descrição honesta)</h2>
+
+  <div class="grid-2">
+    <div class="panel">
+      <h3>OpenClaw</h3>
+      <p><b>Framework open-source self-hosted</b>, lançado em 2026. Arquitetura: Gateway (escuta canais) → Agent (cérebro LLM) → Skills (capacidades modulares) → Memory (persistente entre sessões). Modelos diferentes por agente, auth isolado, bot-to-bot opt-in. Roda local (Mac Mini M4) ou VPS. Multi-agente é roteamento determinístico (canal × peer × agentId), <b>não orquestrador inteligente</b>. Comunidade BR forte, conteúdo abundante.</p>
+      <p><b>O que ele NÃO promete:</b> RAG vetorial, painel visual, cofre central, FinOps, multi-tenant, anatomia padrão de agente, biblioteca de personagens pré-prontos, funil visual, template de cliente, escalabilidade pra agência. Isso é tudo do operador construir.</p>
+      <p class="source">docs.openclaw.ai · openclaw.ia.br · github.com/raulvidis/openclaw-multi-agent-kit</p>
+    </div>
+
+    <div class="panel" style="border-left:3px solid var(--accent)">
+      <h3>Pinguim OS</h3>
+      <p><b>Sistema operacional de agência de IA</b>, em construção desde 2026-04. <b>Não é chatbot, não é construtor genérico.</b> É arquitetura completa: 4 camadas de fluxo + 2 transversais, 6 pilares operacionais (Cérebros, Personas, Skills, Funis, Segurança, FinOps), Anatomia do Agente canônica (7 MDs + 5 fontes vivas + EPP), 103 Clones em produção, 27 agentes Pinguim mapeados, 15 rotas no painel, template pronto pra replicar pra novo cliente.</p>
+      <p><b>Pinguim é o primeiro cliente.</b> O sistema foi desenhado desde o início pra ser replicável: "{Cliente} OS" — Acme OS, Beta OS, qualquer agência Dolphin. Conteúdo do Cérebro muda, paleta visual muda, agentes mudam. <b>Estrutura, motor RAG, padrão de banco, anatomia — não mudam.</b></p>
+      <p class="source">c:\Squad — repo + ANATOMIA-AGENTE.md + Mapa do Sistema + TEMPLATE-NOVO-CLIENTE/</p>
+    </div>
+  </div>
+</section>
+
+<section id="numeros">
+  <h2>Números do Pinguim OS hoje</h2>
+  <p>Pra ancorar a comparação em fato, não em sensação:</p>
+  <div class="stat-grid">
+    <div><div class="num-counter">103</div><span class="num-counter-label">Clones em produção</span></div>
+    <div><div class="num-counter">12</div><span class="num-counter-label">Squads canônicas</span></div>
+    <div><div class="num-counter">9</div><span class="num-counter-label">Cérebros internos</span></div>
+    <div><div class="num-counter">5</div><span class="num-counter-label">Metodologias curadas</span></div>
+    <div><div class="num-counter">27</div><span class="num-counter-label">Agentes Pinguim</span></div>
+    <div><div class="num-counter">7</div><span class="num-counter-label">MDs por agente</span></div>
+    <div><div class="num-counter">15</div><span class="num-counter-label">Rotas no painel</span></div>
+    <div><div class="num-counter">30+</div><span class="num-counter-label">Tabelas com RLS</span></div>
+    <div><div class="num-counter">6</div><span class="num-counter-label">Pilares operacionais</span></div>
+    <div><div class="num-counter">3</div><span class="num-counter-label">Leis do EPP</span></div>
+  </div>
+  <p style="font-size:13px;color:var(--text-3)">Todos verificados no repo c:\Squad. Não inflados.</p>
+</section>
+
+<section id="tabela">
+  <h2>Comparativo por eixo (12 eixos)</h2>
+  <p class="legend">
+    <span class="tag win">PINGUIM</span> Pinguim ganha
+    <span class="tag lose">OPENCLAW</span> OpenClaw ganha
+    <span class="tag tie">EMPATE</span> Empate técnico
+    &nbsp;|&nbsp;
+    <span class="status prod">EM PRODUÇÃO</span>
+    <span class="status cons">EM CONSTRUÇÃO</span>
+    <span class="status plan">PLANEJADO</span>
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Eixo</th><th style="width:30%">OpenClaw</th><th style="width:35%">Pinguim OS</th><th style="width:13%">Ganha</th></tr>
+    </thead>
+    <tbody>
+
+      <tr>
+        <td class="eixo">1. Cérebros / RAG vetorial</td>
+        <td>Memory persistente, mas sem RAG nativo. Coordenação via arquivos MD compartilhados (<code>THESIS.md</code>, <code>SIGNALS.md</code>). Sem chunks, sem embeddings, sem busca semântica.</td>
+        <td><span class="status prod">PRODUÇÃO</span> 4 famílias (Internos/Externos/Metodologias/Clones), engine RAG comum (chunks 500-800 tokens, IVF index, embedding 3-small), busca semântica visível no painel, edição guiada, versionamento, alimentação por modo (avulso/pacote/automático em construção). Onívoro: PDF, áudio, vídeo, HTML, Vision OCR, Whisper.</td>
+        <td><span class="tag win">PINGUIM</span></td>
+      </tr>
+
+      <tr>
+        <td class="eixo">2. Clones / biblioteca de voz</td>
+        <td>Não existe conceito. Cada agente tem soul.md próprio que o operador escreve.</td>
+        <td><span class="status prod">PRODUÇÃO</span> 103 Clones em 12 squads canônicas (3 Sócios + 100 Especialistas: Advisory 10, Copywriters 24, Storytellers 12, Traffic 7, Design 8, Data 6, Deep Research 10, FinOps 4, Legal 3, Cybersecurity 6, Translate 7, Creator Pro 3). SOULs ricos (4.7–7.4k chars) com frameworks reais. Edição guiada (8 campos), versionamento, alimentação por fonte adicional. Selecionável por agente em AGENT-CARD.</td>
+        <td><span class="tag win">PINGUIM</span></td>
+      </tr>
+
+      <tr>
+        <td class="eixo">3. Anatomia do agente</td>
+        <td>2 templates: SOUL.md + IDENTITY.md (no kit comunitário com 10 personalidades). Sem framework canônico publicado.</td>
+        <td><span class="status prod">PRODUÇÃO</span> 7 MDs (IDENTITY/SOUL/AGENTS/TOOLS/SYSTEM-PROMPT/AGENT-CARD/APRENDIZADOS) + 5 fontes vivas (Cérebro/Persona/Skill/Clone/Funil) + estado runtime no banco + EPP obrigatório (3 perguntas). AGENT-CARD com contrato de 7 campos. Anti-padrões explícitos. Framework de 5 fases (Coletar→Criar→Conectar→Entregar→Evoluir), velocidade-alvo 1 agente/dia.</td>
+        <td><span class="tag win">PINGUIM</span></td>
+      </tr>
+
+      <tr>
+        <td class="eixo">4. Multi-agente / orquestração</td>
+        <td><span class="status prod">PRODUÇÃO</span> Routing determinístico (canal × peer × agentId). Bot-to-bot opt-in via <code>sessions_send</code>. MarshalBot mencionado mas sem detalhe técnico. Limitação Telegram: bots não veem mensagens uns dos outros.</td>
+        <td><span class="status cons">CONSTRUÇÃO</span> Chief documentado como orquestrador, handoff obrigatório no AGENTS.md. Padrão de Squad real (mini-agência por tipo de produto/estratégia). Implementação atual = via prompt + LLM, não dispatch automático. Orquestração inteligente é roadmap.</td>
+        <td><span class="tag lose">OPENCLAW</span><div class="verdict">OpenClaw entrega routing pronto. Pinguim tem padrão melhor mas o código de dispatch automático ainda não existe.</div></td>
+      </tr>
+
+      <tr>
+        <td class="eixo">5. Canais (TG/WA/Discord)</td>
+        <td><span class="status prod">PRODUÇÃO</span> Out-of-the-box: bindings nativos pros 4 canais. Supergroup Telegram com tópicos.</td>
+        <td><span class="status cons">CONSTRUÇÃO</span> Discord: varrição automática rodando (Captação). WA/Telegram: schema com enum <code>canal_tipo</code>, plano declarado, zero implementação de webhook hoje.</td>
+        <td><span class="tag lose">OPENCLAW</span><div class="verdict">Diferença gritante. OpenClaw resolve em horas, Pinguim em ~1 sprint.</div></td>
+      </tr>
+
+      <tr>
+        <td class="eixo">6. Persona / versionamento</td>
+        <td>Não existe.</td>
+        <td><span class="status prod">PRODUÇÃO</span> Persona com 11 blocos, derivada do Cérebro, versionada (Opção B: só versiona se muda), UI de histórico/comparação/restauração. Padrão reutilizável pra outros objetos.</td>
+        <td><span class="tag win">PINGUIM</span></td>
+      </tr>
+
+      <tr>
+        <td class="eixo">7. Funis (estratégia comercial)</td>
+        <td>Não existe.</td>
+        <td><span class="status prod">PRODUÇÃO</span> Construtor visual drag-to-connect. Múltiplas saídas/entradas, condicionais, bloqueio de loop. Chave de habilitação por agente (SDR vê seus, Co-piloto vê os dele). 2 camadas em produção (visual + estratégica). Operacional (agentes consumindo em runtime) <span class="status cons">CONSTRUÇÃO</span>.</td>
+        <td><span class="tag win">PINGUIM</span></td>
+      </tr>
+
+      <tr>
+        <td class="eixo">8. FinOps</td>
+        <td>Cada agente pode usar modelo diferente. Mas sem rateio, sem projeção, sem alerta, sem cron de auditoria. Custo é problema do operador.</td>
+        <td><span class="status prod">PRODUÇÃO</span> <code>custos_diarios</code> + <code>agente_execucoes</code> (por agente/operação/dia/provedor). RPC <code>custo_mes_corrente()</code>. Edge <code>auditar-custos</code> em cron 5h UTC. UI 5 abas. Alertas em 4 tipos.</td>
+        <td><span class="tag win">PINGUIM</span></td>
+      </tr>
+
+      <tr>
+        <td class="eixo">9. Segurança / RLS / Cofre</td>
+        <td>Auth por agente em <code>auth-profiles.json</code> isolado. Doc oficial admite "<i>not a hard sandbox</i>". DM access control global por conta WA.</td>
+        <td><span class="status prod">PRODUÇÃO</span> Cofre canônico (RLS, cache 5min, rotação central, 5 Edges + ingest consomem via RPC). RLS em 30/30 tabelas. Squad Cyber (6 conselheiros) auditando, princípio obrigatório por feature nova. Painel /seguranca com 6 abas + aba Crons.</td>
+        <td><span class="tag win">PINGUIM</span></td>
+      </tr>
+
+      <tr>
+        <td class="eixo">10. Painel / produto vendável</td>
+        <td>Não existe. É CLI + JSON + arquivos. Operador é dev.</td>
+        <td><span class="status prod">PRODUÇÃO</span> 15 rotas (Mapa do Sistema, Cérebros, Personas, Funis, Agentes, Skills, Docs, Integrações, FinOps, Segurança, Crons, Operação…). Animação Squad pixel-art. Tree views. Documentação educacional integrada (15 docs sobre arquitetura, RAG, Funis, EPP). <b>É experiência de marca, não dashboard genérico.</b></td>
+        <td><span class="tag win">PINGUIM</span></td>
+      </tr>
+
+      <tr>
+        <td class="eixo">11. Multi-tenant / replicabilidade</td>
+        <td>É open-source self-hosted: cada usuário roda o seu. Sem provisionamento de cliente, sem template de agência, sem isolamento por tenant. <i>É produto pra quem opera ele mesmo.</i></td>
+        <td><span class="status prod">PRODUÇÃO</span> <code>TEMPLATE-NOVO-CLIENTE/</code> pasta pronta + GUIA-IMPLEMENTACAO.md. 6 fases de implementação. Mesma engine RAG, mesma estrutura, mesmos 7 MDs. Muda só conteúdo. Padrão "{Cliente} OS". <span class="status cons">CONSTRUÇÃO</span> provisionamento automático multi-cliente simultâneo.</td>
+        <td><span class="tag win">PINGUIM</span><div class="verdict">Eixo decisivo. Pinguim foi desenhado pra virar produto de agência. OpenClaw nunca foi.</div></td>
+      </tr>
+
+      <tr>
+        <td class="eixo">12. Lock-in / portabilidade</td>
+        <td>Open-source. Roda em qualquer hardware. Trocar modelo = editar config. Lock-in baixíssimo.</td>
+        <td>Lock-in real em Supabase + Vercel + OpenAI. Cofre canônico ajuda a rotacionar provedor sem deploy, mas a stack é nossa.</td>
+        <td><span class="tag lose">OPENCLAW</span><div class="verdict">Honestidade: OpenClaw vence aqui, com folga.</div></td>
+      </tr>
+
+    </tbody>
+  </table>
+
+  <p style="color:var(--text-2);font-size:14px"><b>Placar:</b> Pinguim 9 × OpenClaw 2 × 1 empate. <i>E o peso dos eixos não é igual</i> — quando você soma "Cérebros + Clones + Anatomia do Agente + Painel + Multi-tenant", está somando o que faz Pinguim OS ser produto. OpenClaw não tem nada disso e não está no roadmap.</p>
+</section>
+
+<section id="cerebros">
+  <h2>Cérebros — o coração do sistema</h2>
+  <p>Esse é o eixo que mais ficou de fora da v1. Cérebros não são "memória de chatbot". É infraestrutura de inteligência.</p>
+
+  <div class="grid-2">
+    <div class="panel">
+      <h4>OpenClaw — Memory</h4>
+      <ul>
+        <li>"Memory armazena informações de forma persistente entre sessões" (doc oficial)</li>
+        <li>Onde fica: <i>doc oficial não diz</i></li>
+        <li>Como é compartilhada: arquivos MD no workspace (<code>THESIS.md</code>, <code>SIGNALS.md</code>, <code>FEEDBACK-LOG.md</code>)</li>
+        <li>RAG vetorial: <b>não documentado</b></li>
+        <li>Categorias / famílias de memória: <b>não existe</b></li>
+        <li>Curadoria, ingest engine, vetorização automática: <b>não existe</b></li>
+      </ul>
+    </div>
+
+    <div class="panel" style="border-left:3px solid var(--accent)">
+      <h4>Pinguim OS — Cérebros (4 famílias)</h4>
+      <ul>
+        <li><b>Internos:</b> 9 ativos (Elo, ProAlt, Lira, Taurus, Orion + outros). 1 por produto.</li>
+        <li><b>Externos:</b> Concorrentes mapeados. Em tração.</li>
+        <li><b>Metodologias:</b> 5 curadas (SPIN, Sandler, Challenger, Voss, MEDDIC). Switch on/off por agente.</li>
+        <li><b>Clones:</b> 103 (3 Sócios + 100 Especialistas em 12 squads).</li>
+        <li><b>Engine única:</b> chunks 500-800 tokens → embeddings text-embedding-3-small → IVF index → busca semântica top-k.</li>
+        <li><b>Onívoro:</b> TXT, MD, PDF, PNG/JPG (Vision OCR), MP3/M4A (Whisper), YouTube (legendas), Instagram/TikTok (Apify), HTML.</li>
+        <li><b>3 modos de alimentação:</b> Avulso, Pacote ZIP (ondas), Automático (Discord cron).</li>
+        <li><b>Edição:</b> Editar fonte revetoriza automaticamente. Histórico. Quarentena de arquivos que falharam.</li>
+        <li><b>Consumo visível:</b> barra de busca semântica no painel, mostra relevância % por chunk.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="panel good">
+    <p><b>Por que isso importa pra comparação:</b> Cérebros são o que faz agente Pinguim ter <i>contexto profundo do produto, do mercado e da voz das pessoas</i> sem inflar o prompt e sem custo proibitivo. Um agente comercial Pinguim consulta Elo (Cérebro Interno) + SPIN (Metodologia) + Hormozi/Bencivenga (Clones) + Persona do aluno alvo, tudo via RAG, e gera copy técnica + voz da casa em &lt;5s. <b>Reproduzir isso em cima do OpenClaw é um projeto de meses</b> — embedding pipeline, vector store, ingest engine, ondas, edição, vetorização incremental, painel.</p>
+  </div>
+</section>
+
+<section id="clones">
+  <h2>Clones — biblioteca de voz pré-carregada</h2>
+  <p>OpenClaw não tem nada parecido. Vale entender o que Pinguim tem aqui porque é diferencial estrutural.</p>
+
+  <div class="panel">
+    <h3>O que é um Clone (não confundir com Agente)</h3>
+    <p><b>Agente = tem missão própria.</b> Recebe pedido, executa, entrega. <b>Clone = não tem missão.</b> É matéria-prima de personalidade que agentes consomem pra "soar como" alguém específico. Subtipo de Cérebro com mesma engine RAG. Vive como row em <code>pinguim.produtos</code> (categoria=clone). Em disco: SOUL.md versionado em git.</p>
+  </div>
+
+  <h3>2 famílias × 12 squads canônicas</h3>
+  <table>
+    <tr><th>Squad</th><th>Quantidade</th><th>Exemplos</th></tr>
+    <tr><td>Sócios Pinguim</td><td>3</td><td>Luiz, Micha, Pedro (alimentação manual pelos sócios)</td></tr>
+    <tr><td>Advisory Board</td><td>10</td><td>Dalio, Munger, Naval, Thiel, Hoffman, Sinek, Brené Brown, Lencioni, Sivers, Chouinard</td></tr>
+    <tr><td>Copywriters</td><td>24</td><td>Hormozi, Halbert, Bencivenga, Ogilvy, Schwartz, Hopkins, Sugarman, Kennedy, Brunson, Walker, Koe…</td></tr>
+    <tr><td>Storytellers</td><td>12</td><td>Campbell, Miller, Klaff, Hall, Snyder, Duarte, Coyne, Harmon…</td></tr>
+    <tr><td>Traffic Masters</td><td>7</td><td>Sobral, Pittman, Kusmich, Mandalia, Aslam, Burns, Breeze</td></tr>
+    <tr><td>Design</td><td>8</td><td>Chris Do, Neumeier, Draplin, Brad Frost, Galloway…</td></tr>
+    <tr><td>Data</td><td>6</td><td>Kaushik, Fader, Sean Ellis, Mehta, Spinks, Wes Kao</td></tr>
+    <tr><td>Deep Research</td><td>10</td><td>Kahneman, Klein, Ioannidis, Sackett, Cochrane…</td></tr>
+    <tr><td>FinOps</td><td>4</td><td>Storment, Quinn, Mansoor, Fuller</td></tr>
+    <tr><td>Legal</td><td>3</td><td>Brad Feld, Ken Adams, Pierpaolo Bottini</td></tr>
+    <tr><td>Cybersecurity</td><td>6</td><td>Peter Kim, Georgia Weidman, Jim Manico, Carey, Sanders, Santos</td></tr>
+    <tr><td>Translate</td><td>7</td><td>Vermeer, Nord, Nida, House, Baker, Pym, Venuti</td></tr>
+    <tr><td>Creator Pro</td><td>3</td><td>Alan Nicolas, Pedro Valerio, Thiago Finch</td></tr>
+    <tr><td><b>Total</b></td><td><b>103</b></td><td>SOULs ricos (4.7–7.4k chars cada) — frameworks reais, não bio</td></tr>
+  </table>
+
+  <div class="panel good">
+    <p><b>Diferencial absurdo:</b> agente comercial Pinguim recebe pedido "escreva copy pro Elo" → carrega SOUL do Hormozi (estrutura de oferta) + Bencivenga (gancho) + Settle (cadência) + Luiz (voz da casa) + Cérebro do Elo + Persona do aluno → gera copy. <b>Cliente Dolphin novo recebe esse acervo de 100 especialistas no dia 1.</b> No OpenClaw, é pesquisar/escrever/curar 100 SOUL.md à mão.</p>
+  </div>
+</section>
+
+<section id="anatomia">
+  <h2>Anatomia do Agente Pinguim — o framework</h2>
+
+  <div class="panel">
+    <h3>OpenClaw</h3>
+    <p>2 arquivos por agente: <code>SOUL.md</code> + <code>IDENTITY.md</code>. No kit comunitário do raulvidis, há 10 templates de personalidade (Orchestrator, Coding, QA, DevOps, Research, Growth, Content, Community, LeadGen, Ops). Sem framework canônico publicado.</p>
+  </div>
+
+  <div class="panel" style="border-left:3px solid var(--accent)">
+    <h3>Pinguim OS — Anatomia canônica</h3>
+    <h4>Identidade em disco (7 MDs versionados em git)</h4>
+    <ul>
+      <li><code>IDENTITY.md</code> — cartão de visita</li>
+      <li><code>SOUL.md</code> — alma, tom, valores, limites</li>
+      <li><code>AGENTS.md</code> — regras operacionais, escopo</li>
+      <li><code>TOOLS.md</code> — ferramentas conectadas</li>
+      <li><code>SYSTEM-PROMPT.md</code> — prompt final</li>
+      <li><code>AGENT-CARD.md</code> — contrato de 7 campos</li>
+      <li><code>APRENDIZADOS.md</code> — feedback vivo, lido em toda execução</li>
+    </ul>
+
+    <h4>5 fontes vivas (consultadas em runtime)</h4>
+    <ol>
+      <li>Cérebro do produto (RAG)</li>
+      <li>Persona do aluno alvo</li>
+      <li>Skill (receita reutilizável)</li>
+      <li>Clone (voz)</li>
+      <li>Funil (estratégia comercial executável)</li>
+    </ol>
+
+    <h4>Estado runtime (banco)</h4>
+    <p>Tabela <code>pinguim.agentes</code>: status (planejado/em_criacao/em_teste/em_producao/pausado), modelo, modelo_fallback, canais, limite_execucoes_dia, kill_switch. Tabela <code>pinguim.agente_execucoes</code>: input/output/contexto_usado/custo/latência/tokens.</p>
+
+    <h4>EPP — 3 leis obrigatórias</h4>
+    <ul>
+      <li><span class="status prod">PRODUÇÃO</span> Lei 1: Captação alimenta o Cérebro</li>
+      <li><span class="status cons">CONSTRUÇÃO</span> Lei 2: Output aprovado vira referência</li>
+      <li><span class="status plan">PLANEJADO</span> Lei 3: Feedback humano vira contexto</li>
+    </ul>
+
+    <h4>AGENT-CARD (7 campos obrigatórios)</h4>
+    <p>Missão · Entrada · Saída · Limites · Handoff · Critério qualidade · Métrica sucesso (numérica)</p>
+
+    <h4>Framework de construção (5 fases, 1 agente/dia)</h4>
+    <p>Coletar → Criar → Conectar → Entregar → Evoluir. Anti-padrões explícitos: ❌ tabela por tipo de agente · ❌ personalidade no banco · ❌ agente sem APRENDIZADOS · ❌ AGENT-CARD &lt; 7 campos · ❌ sem handoff · ❌ sem métrica numérica.</p>
+  </div>
+
+  <div class="panel good">
+    <p><b>Por que ganha:</b> Pinguim trata agente como peça de engenharia, não como persona simpática. O EPP é particularmente diferencial — <i>"Agente Pinguim ≠ Chatbot. Chatbot responde. Agente evolui."</i> Sem retreino, sem custo extra: cada execução logada + feedback humano alimentando próximo prompt = agente fica melhor a cada uso.</p>
+  </div>
+</section>
+
+<section id="squads">
+  <h2>Squads + Soluções — como organizar centenas de agentes</h2>
+  <p>Esse foi o ponto que você levantou: "Luiz propôs +300 agentes. Marketing tem agente de conteúdo, de análise de campanha… vamos ter estrutura inteligente." Vamos olhar.</p>
+
+  <div class="grid-2">
+    <div class="panel">
+      <h4>OpenClaw</h4>
+      <p>Kit comunitário do raulvidis tem 10 personalidades como template (Orchestrator, Coding, QA, DevOps, Research, Growth, Content, Community, LeadGen, Ops). Não há catálogo de squads, não há combinação de squads pra solução. Cada operador estrutura o seu como quiser.</p>
+    </div>
+
+    <div class="panel" style="border-left:3px solid var(--accent)">
+      <h4>Pinguim OS — Squads padrão (cliente escolhe)</h4>
+      <ul>
+        <li><b>Pessoais</b> — 1 por sócio/líder, canivete suíço</li>
+        <li><b>Orquestrador (Chief)</b> — distribui pedido complexo</li>
+        <li><b>Áreas</b> (8) — Comercial, Financeiro, Jurídico, Tributário, CS, Produtos, Dados, RH</li>
+        <li><b>Marketing</b> (8) — Estrategista, Copy, Designer, Social Media, Tráfego, Vídeo, Automações, Gestor Projetos</li>
+        <li><b>YouTube</b> — canal, SEO, thumbnails, roteiros</li>
+        <li><b>Suporte</b> (por produto) — Roteador + especialista por produto</li>
+        <li><b>Estrategistas</b> (por produto) — Conhecem produto+funil+campanha</li>
+      </ul>
+      <p>Hoje na Pinguim: 27 agentes mapeados (1 Chief + 8 áreas + 8 marketing + 1 YouTube + 4 pessoais + 5 suporte + 2 estrategistas).</p>
+    </div>
+  </div>
+
+  <h3>Soluções (combinação de squads pra um caso de uso)</h3>
+  <div class="panel warn">
+    <p><b>Ainda não está formalizado como conceito,</b> mas está implícito na arquitetura — e é exatamente o que você descreveu: <i>"solução comercial que trabalha pré-venda, durante venda e pós-venda — squad específico pra isso"</i>.</p>
+    <p>No padrão Pinguim, isso vira: <b>Solução Comercial</b> = combinação de agentes (SDR pré-venda, Co-piloto durante venda, Analista pós-call) + Cérebros relevantes (produto + metodologia) + Clones (Hormozi pra oferta + Bencivenga pra gancho + Voss pra negociação) + Funil específico (Lançamento Elo Q2). Tudo já existe como peça. Falta empacotar como "Solução X" como objeto formal.</p>
+    <p><b>Recomendação pro estudo:</b> tratar Solução como entidade real no banco (<code>pinguim.solucoes</code> com lista de agentes + cérebros + clones + funis envolvidos). É próximo passo natural.</p>
+  </div>
+</section>
+
+<section id="multitenant">
+  <h2>Multi-tenant / replicabilidade — Pinguim como produto Dolphin</h2>
+  <p>Esse é o ponto que você bateu mais forte: <i>"se eu rodar isso pra outro cliente, é só replicar?"</i> A análise da v1 não tocou nisso. É decisivo.</p>
+
+  <div class="grid-2">
+    <div class="panel bad">
+      <h4>OpenClaw</h4>
+      <p>É open-source self-hosted: cada usuário roda sua instância no seu hardware/VPS. <b>Não foi desenhado pra rodar dezenas de clientes simultâneos.</b> Não tem template de cliente, não tem provisionamento, não tem isolamento por tenant. Se você (Dolphin) quiser vender OpenClaw pra 50 agências, você é o operador de 50 instalações. Cada instalação é 1 dia + suporte vitalício.</p>
+    </div>
+
+    <div class="panel good">
+      <h4>Pinguim OS</h4>
+      <p>Foi desenhado <b>desde o início</b> pra ser replicável. <code>TEMPLATE-NOVO-CLIENTE/</code> é pasta pronta com estrutura padrão + GUIA-IMPLEMENTACAO.md. Padrão "{Cliente} OS" — Pinguim é o primeiro, próximo é qualquer agência Dolphin.</p>
+      <ul>
+        <li>Mesma engine RAG</li>
+        <li>Mesma estrutura de pastas</li>
+        <li>Mesmos 7 MDs por agente</li>
+        <li>Mesmo padrão de banco (tabelas genéricas)</li>
+        <li>Mesma anatomia, mesmo EPP, mesmo Mapa do Sistema</li>
+      </ul>
+      <p><b>Muda apenas:</b> conteúdo dos Cérebros (produtos do cliente) + paleta visual (CSS vars multi-tenant ready) + agentes específicos do cliente.</p>
+    </div>
+  </div>
+
+  <div class="panel warn">
+    <p><b>Honestidade:</b> o <b>provisionamento automático</b> de novo {Cliente} OS (criar projeto Vercel + schema isolado Supabase + fork de repo + popular contexto inicial em &lt;1h) ainda <span class="status cons">EM CONSTRUÇÃO</span>. Hoje é processo manual seguindo o GUIA. Mas a fundação está pronta. Em OpenClaw, essa fundação não existe nem no roadmap.</p>
+  </div>
+</section>
+
+<section id="multiagente">
+  <h2>Multi-agente — o eixo onde OpenClaw realmente entrega hoje</h2>
+  <p>Sendo justo: nesse eixo OpenClaw está à frente <i>operacionalmente</i>. Vale entender o que e como.</p>
+
+  <h3>O que OpenClaw faz HOJE</h3>
+  <ul>
+    <li><b>Routing determinístico:</b> mensagem chega → bindings decide qual agente responde (peer ID exato &gt; parent peer &gt; guild &gt; default).</li>
+    <li><b>Modelos diferentes por agente:</b> Opus pro orquestrador, Haiku pros workers. Nativo no config.</li>
+    <li><b>Bot-to-bot:</b> existe via <code>sessions_send</code>, off by default, allowlist explícita.</li>
+    <li><b>Shared context:</b> via arquivos MD compartilhados no workspace (<code>THESIS.md</code>, <code>SIGNALS.md</code>, <code>FEEDBACK-LOG.md</code>).</li>
+    <li><b>Limitação Telegram (não-OpenClaw):</b> "Telegram bots cannot see each other's messages."</li>
+  </ul>
+
+  <h3>O que isso significa</h3>
+  <p>OpenClaw é <b>menos sofisticado do que parece</b>. Não há orquestrador inteligente — há matching. MarshalBot é mencionado mas a doc oficial não detalha mecanismo. Coordenação real é via arquivos MD compartilhados — <i>exatamente o padrão que Pinguim já usa</i> (cofre, ANATOMIA-AGENTE, APRENDIZADOS por agente).</p>
+
+  <h3>O que falta no Pinguim pra empatar (e quanto custa)</h3>
+  <ul>
+    <li>Edge Function de webhook por canal (Telegram + Discord + WA via Z-API/Evolution).</li>
+    <li>Tabela <code>pinguim.bindings</code> (canal, peer_id, agente_slug) — &lt;100 linhas SQL.</li>
+    <li>Função de dispatch que resolve binding → chama LLM com prompt do agente + Cérebro relevante via RAG.</li>
+    <li><b>Estimativa: 1 sprint pra paridade funcional + Pinguim já entra com cofre + RLS + FinOps + RAG vetorial + Clones.</b> OpenClaw nunca terá isso sem ser reconstruído.</li>
+  </ul>
+
+  <div class="panel accent">
+    <p><b>Conclusão honesta:</b> Pinguim não tem multi-canal hoje. Mas o que precisa pra ter é &lt;1 sprint, e quando tiver vai estar muito acima do OpenClaw porque o resto da plataforma é maior.</p>
+  </div>
+</section>
+
+<section id="telegram">
+  <h2>Caso específico: Clone de sócio via Telegram</h2>
+  <p>Caso que você levantou — cada sócio (Luiz, Micha, Pedro) com bot Telegram do clone, conversando com o sistema.</p>
+
+  <div class="grid-2">
+    <div class="panel">
+      <h4>OpenClaw</h4>
+      <ul>
+        <li>1 bot Telegram por sócio (token separado)</li>
+        <li>Cada bot vira 1 <code>agentId</code> diferente</li>
+        <li>SOUL.md por agente (escrito do zero)</li>
+        <li>Consultar sistema / Cérebros do produto: skill custom HTTP, não tem nativo</li>
+        <li>Voz autêntica do Luiz/Micha/Pedro: você que escreve manualmente</li>
+        <li>FinOps dos 3 clones: você que se vira</li>
+        <li>Versionar a voz do clone quando mudar: você que se vira</li>
+      </ul>
+    </div>
+    <div class="panel" style="border-left:3px solid var(--accent)">
+      <h4>Pinguim OS (com canal Telegram adicionado)</h4>
+      <ul>
+        <li>1 Edge Function de webhook do Telegram, 1 bot por sócio</li>
+        <li>Cada bot já tem <code>agente_slug</code> com Persona + Cérebro + Skill <code>buscar-cerebro</code> + <b>Clone do sócio já em produção</b></li>
+        <li>Voz autêntica: <b>já existe</b> — Clones dos 3 sócios no acervo (Micha → Reels/Stories; Luiz → mini-agências; Pedro → infra)</li>
+        <li>Consultar sistema: trivial — agente está <i>dentro</i> do sistema</li>
+        <li>FinOps: cada chamada já entra em <code>agente_execucoes</code> auditável</li>
+        <li>Segurança: <code>cerebros_permitidos</code> + RLS controlam o que cada Clone-sócio acessa</li>
+        <li>Versionamento da voz: já existe (histórico do SOUL com motivo)</li>
+      </ul>
+    </div>
+  </div>
+  <div class="panel good">
+    <p><b>Conclusão:</b> No OpenClaw, esse caso de uso começa do zero. No Pinguim, 80% já está construído (Clones dos sócios + Cérebros + RAG + FinOps + Segurança), falta só o canal Telegram (~1 sprint).</p>
+  </div>
+</section>
+
+<section id="canais">
+  <h2>Aba "Canais" — Instagram, Email, WhatsApp (desmistificando a propaganda)</h2>
+  <p>Vi propaganda de curso de OpenClaw mostrando o painel com aba <b>Canais</b> conectando Instagram, Email, WhatsApp como se fosse mágica nativa. Vale separar o que é real do que é marketing.</p>
+
+  <h3>Lista oficial de canais nativos do OpenClaw</h3>
+  <p>Mais de 20 canais de mensageria <i>são</i> nativos: <b>WhatsApp, Telegram, Discord, Slack, Google Chat, Signal, iMessage, BlueBubbles, IRC, Microsoft Teams, Matrix, Feishu, LINE, Mattermost, Nextcloud Talk, Nostr, Synology Chat, Tlon, Twitch, Zalo, WeChat, QQ, WebChat.</b></p>
+
+  <div class="panel warn">
+    <p><b>Mas Instagram e Email/Gmail NÃO estão na lista oficial de canais nativos.</b> O que existe pra esses dois:</p>
+    <ul>
+      <li><b>Instagram:</b> integração via plugin <a href="https://composio.dev/toolkits/instagram/framework/openclaw">Composio</a> (terceiro) ou via MCP. É <i>tool</i>, não <i>channel</i>. Permite ler DMs, mandar DM, pegar mídia da conta — tudo pela Graph API da Meta.</li>
+      <li><b>Gmail/Email:</b> via <code>gogcli</code> (skill do ClawHub) ou via Composio MCP. IMAP/SMTP polling ou API com OAuth. <b>Limitação real documentada:</b> "Gmail's automated abuse detection can flag agent behavior as suspicious. If Google thinks you are a bot, your account gets banned."</li>
+    </ul>
+  </div>
+
+  <h3>Conclusão sobre a propaganda</h3>
+  <p>O cara provavelmente tem mesmo a aba "Canais" mostrando Insta + Email + WhatsApp conectados — <b>mas Insta e Email não são "magia do OpenClaw"</b>, são plugins de terceiros (Composio) consumindo a Graph API da Meta e a Gmail API. <b>Qualquer sistema (incluindo o Pinguim) pode plugar essas mesmas APIs com o mesmo trabalho.</b> Não tem nada que só o OpenClaw faz.</p>
+
+  <h3>Como Pinguim faz isso hoje (e como deveria fazer)</h3>
+  <div class="grid-2">
+    <div class="panel">
+      <h4>Hoje no Pinguim — Captação</h4>
+      <p>Apify lê Instagram/TikTok como <b>fonte de Cérebro</b> (varrição de páginas de venda, comentários, reels). É entrada unidirecional pra alimentar conhecimento, não conversa bidirecional.</p>
+      <p class="source">cerebro/integracoes/* + ingest-engine</p>
+    </div>
+    <div class="panel" style="border-left:3px solid var(--accent)">
+      <h4>O que falta — Aba "Canais"</h4>
+      <p>Sidebar nova com cards conectáveis (igual o cara mostrou). Cada canal = Edge Function de webhook + token salvo no <b>Cofre canônico</b> + binding pra <code>agente_slug</code>:</p>
+      <ul>
+        <li><b>Telegram</b> — bot API, mais fácil, 1º a fazer</li>
+        <li><b>WhatsApp</b> — Z-API ou Evolution API (Baileys), QR pareamento</li>
+        <li><b>Discord</b> — Bot API + Gateway (já temos Discord como Captação, dá pra reusar)</li>
+        <li><b>Instagram DM</b> — Graph API da Meta (precisa conta business + revisão Meta)</li>
+        <li><b>Email/Gmail</b> — Gmail API com OAuth (com cuidado pro abuse detection)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="panel good">
+    <p><b>Diferencial Pinguim aqui:</b> quando o canal estiver plugado, o agente que responde já tem Cérebro vetorial + Clone do sócio + Persona + Funil + FinOps medindo custo da resposta + RLS protegendo dado. <b>No OpenClaw o canal está pronto mas o resto fica por sua conta.</b></p>
+  </div>
+
+  <h3>Recomendação</h3>
+  <p>Quando entrar em construção, <b>aba "Canais"</b> no sidebar do Pinguim seguindo padrão visual do cara da propaganda (cards conectáveis com status verde/cinza). Ordem sugerida pelo custo/benefício:</p>
+  <ol>
+    <li><b>Telegram</b> (1 dia, bot API trivial) → caso de teste com Clones dos sócios</li>
+    <li><b>Discord I/O</b> (já temos como Captação, falta só responder) → 2-3 dias</li>
+    <li><b>WhatsApp</b> via Z-API (5-7 dias, QR + sandbox)</li>
+    <li><b>Email/Gmail</b> (~1 semana, com cuidado anti-ban)</li>
+    <li><b>Instagram DM</b> (depende de aprovação Meta, 2-4 semanas calendário)</li>
+  </ol>
+</section>
+
+<section id="cenario">
+  <h2>Cenário: e se a gente migrasse pro OpenClaw?</h2>
+
+  <div class="grid-2">
+    <div class="panel good">
+      <h4>Ganhos</h4>
+      <ul>
+        <li>Multi-canal pronto (TG/WA/Discord) em ~2 semanas</li>
+        <li>Bindings determinísticos prontos</li>
+        <li>Auth por agente isolado nativo</li>
+        <li>Comunidade BR ativa</li>
+        <li>Open-source, baixo lock-in</li>
+      </ul>
+    </div>
+    <div class="panel bad">
+      <h4>Perdas</h4>
+      <ul>
+        <li><b>Cérebros vetoriais</b> em 4 famílias com RAG semântico — não existe equivalente, projeto de meses</li>
+        <li><b>103 Clones em 12 squads canônicas</b> com SOULs ricos — todo conteúdo precisa ser reformatado pro padrão OpenClaw</li>
+        <li><b>Anatomia do agente</b> (7 MDs + 5 fontes vivas + EPP + AGENT-CARD) — substituída por 2 MDs simples</li>
+        <li><b>Cofre canônico</b> — vira auth-profiles.json em disco. Sem rotação, sem RLS</li>
+        <li><b>FinOps</b> com rateio por agente/dia/operação + projeção + cron — perdido</li>
+        <li><b>Persona</b> com 11 blocos + versionamento + UI de comparação — não existe</li>
+        <li><b>Funis</b> com construtor visual + chave por agente + dado estruturado consultável — não existe</li>
+        <li><b>Painel Mission Control</b> com 15 rotas + Mapa do Sistema + animação Squad — perdido</li>
+        <li><b>EPP</b> — premissa filosófica + estrutura técnica de evolução — não existe</li>
+        <li><b>Multi-tenant / Template de cliente</b> — não existe</li>
+        <li><b>30+ tabelas com RLS + Squad Cyber auditando</b> — perdido</li>
+        <li><b>Animação Squad pixel-art</b> + identidade visual Pinguim — perdido</li>
+        <li><b>Pinguim OS deixa de ser produto vendável</b> e vira CLI + JSON</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="panel warn">
+    <p><b>Veredito do cenário:</b> migração é trade <i>muito</i> ruim. Você ganha 1–2 sprints de canal de mensageria e perde a fundação inteira do que faz Pinguim ser produto. <b>O movimento certo é hibridizar</b> — roubar do OpenClaw o que ele faz melhor (multi-canal + bindings + credencial isolada por agente) e implementar como módulo do Pinguim.</p>
+  </div>
+</section>
+
+<section id="veredito">
+  <h2>Veredito final</h2>
+
+  <div class="panel accent">
+    <h3>Resposta pra quem disser "se você fizesse no OpenClaw era melhor"</h3>
+    <p style="font-size:16px">"OpenClaw é <b>framework de agente pessoal multi-canal</b>. Pinguim OS é <b>sistema operacional de agência</b>. Comparar é como comparar uma faca afiada com uma cozinha completa — a faca é boa pro que faz, mas não substitui a cozinha. <b>O que OpenClaw entrega out-of-the-box (Telegram/WA/Discord) é &lt;1 sprint pra plugar no Pinguim.</b> O que Pinguim tem (Cérebros vetoriais em 4 famílias, 103 Clones em 12 squads, Anatomia do Agente com 7 MDs + 5 fontes vivas + EPP, Funis visuais, Persona versionada, Cofre canônico, FinOps com rateio, Multi-tenant ready, Painel com 15 rotas, Mapa do Sistema) é projeto de 6+ meses pra reconstruir em cima de OpenClaw. <b>E sem isso, OpenClaw não vira produto comercial, vira computador pessoal do dono.</b>"</p>
+  </div>
+
+  <h3>3 ideias do OpenClaw que vale a pena copiar</h3>
+  <ol>
+    <li><b><code>pinguim.bindings</code></b> — tabela de roteamento determinístico (canal × peer × agente_slug) com lookup &lt;100 linhas SQL.</li>
+    <li><b>Modelos diferentes por agente</b> — formalizar como padrão (campo já existe em <code>pinguim.agentes</code>, falta usar de forma deliberada: Opus pro orquestrador, Haiku pros workers).</li>
+    <li><b>Allowlist explícita pra agente-fala-com-agente</b> — quando esse caso surgir, tratar como opt-in seguro, não default.</li>
+  </ol>
+
+  <h3>Próximo passo lógico no Pinguim (não decisão pra hoje)</h3>
+  <ul>
+    <li>1º canal externo: <b>Telegram</b>. Caso de teste perfeito: bot do Clone do Micha + bot do Clone do Luiz + bot do Clone do Pedro, todos consultando os Cérebros via <code>buscar-cerebro</code>. Mostra a tese e usa 80% do que já existe.</li>
+    <li>Depois disso: <b>orquestrador real</b> — Edge Function de dispatch + <code>pinguim.bindings</code> + Chief decidindo pra qual agente especialista rotear, com logging em <code>agente_execucoes</code>.</li>
+    <li>Em paralelo: <b>formalizar Solução</b> como entidade (tabela <code>pinguim.solucoes</code> com agentes + cérebros + clones + funis empacotados pra um caso de uso, ex: Solução Comercial pré/durante/pós-venda).</li>
+  </ul>
+
+  <h3>Onde OpenClaw realmente ganha (admitir é honestidade)</h3>
+  <ul>
+    <li><b>Time-to-market</b> pra agente pessoal multi-canal. 1 dia vs 1 sprint.</li>
+    <li><b>Lock-in baixíssimo.</b> Open-source, self-hosted. Pinguim depende de Supabase + Vercel + OpenAI.</li>
+    <li><b>Comunidade BR</b>. Mais material em pt-BR pronto, mais case, mais influencer falando. Pinguim é trabalho silencioso (por enquanto).</li>
+  </ul>
+
+  <h3>Onde Pinguim vence sem chance de empate</h3>
+  <ul>
+    <li><b>Produto comercial vendável</b>: Pinguim OS é experiência de marca; OpenClaw é CLI.</li>
+    <li><b>Conteúdo proprietário</b>: 103 Clones + 9 Cérebros Internos + 5 Metodologias é acervo que custou meses pra construir. Cliente Dolphin novo recebe isso no dia 1.</li>
+    <li><b>Multi-tenant ready</b>: TEMPLATE-NOVO-CLIENTE existe; OpenClaw nunca foi desenhado pra isso.</li>
+    <li><b>Anatomia + EPP</b>: agente que evolui a cada uso, com framework de construção em 5 fases. OpenClaw não tem premissa equivalente.</li>
+    <li><b>Painel + Mapa + Animação Squad</b>: pitch visual pronto. OpenClaw não tem.</li>
+  </ul>
+
+  <div class="panel accent" style="margin-top:32px">
+    <h3>Conclusão final</h3>
+    <p><b>Não migrar.</b> Não há ganho líquido. Tudo que OpenClaw entrega de bom dá pra plugar no Pinguim em &lt;1 sprint. O que Pinguim tem (e o que vai construir nos próximos meses pra completar a visão) é insubstituível e não está no roadmap do OpenClaw.</p>
+    <p>A análise da v1 estava errada por olhar só o <i>código rodando hoje</i>. A foto correta inclui a <i>arquitetura</i> e o <i>roadmap</i> — porque é isso que define se um produto comercial é viável, não o estado parcial dele em uma sprint específica. Nesse olhar completo, Pinguim OS está em outro plano.</p>
+  </div>
+</section>
+
+<section id="fontes">
+  <h2>Fontes consultadas</h2>
+  <h4>OpenClaw — canais</h4>
+  <ul>
+    <li><a href="https://composio.dev/toolkits/instagram/framework/openclaw">composio.dev — Instagram MCP via Composio</a> (plugin terceiro, não nativo)</li>
+    <li><a href="https://www.getopenclaw.ai/help/email-gmail-integration">getopenclaw.ai — Email/Gmail integration guide</a> (gogcli skill)</li>
+    <li><a href="https://openclaw-ai.com/en/channels/">openclaw-ai.com/en/channels</a> — lista oficial de 20+ canais nativos (Insta e Gmail NÃO listados)</li>
+    <li><a href="https://www.globalbuilders.club/blog/openclaw-integrations-guide">globalbuilders.club — guia integrações OpenClaw</a></li>
+  </ul>
+  <h4>OpenClaw — geral</h4>
+  <ul>
+    <li><a href="https://docs.openclaw.ai/concepts/multi-agent">docs.openclaw.ai/concepts/multi-agent</a> — orquestração e bindings</li>
+    <li><a href="https://openclaw.ia.br/glossario/orquestracao-de-agentes/">openclaw.ia.br/glossario/orquestracao-de-agentes</a> — MarshalBot, gateway, agent, skills, memory</li>
+    <li><a href="https://github.com/raulvidis/openclaw-multi-agent-kit">github.com/raulvidis/openclaw-multi-agent-kit</a> — kit prod com 10 agentes em Telegram supergroup</li>
+    <li><a href="https://www.distrito.me/blog/o-que-e-openclaw-guia-completo-agente-ia-autonomo-local">distrito.me — guia OpenClaw</a></li>
+    <li><a href="https://lumadock.com/tutorials/openclaw-multi-agent-setup">lumadock — multi-agent setup tutorial</a></li>
+    <li><a href="https://medium.com/@vasu7yadav/openclaw-multi-agent-system-build-a-telegram-openrouter-setup-in-5-clear-steps-0c8533929625">Medium — Telegram + OpenRouter em 5 passos</a></li>
+    <li><a href="https://developer.nvidia.com/blog/build-a-secure-always-on-local-ai-agent-with-nvidia-nemoclaw-and-openclaw/">NVIDIA blog — local agent com NemoClaw</a></li>
+  </ul>
+  <h4>Pinguim OS — repo c:\Squad</h4>
+  <ul>
+    <li><code>ANATOMIA-AGENTE.md</code> — fonte canônica do agente</li>
+    <li><code>FRAMEWORK-IMPLEMENTACAO.md</code> — framework de construção</li>
+    <li><code>TEMPLATE-NOVO-CLIENTE/</code> — template de replicabilidade</li>
+    <li><code>mission-control/js/mapa-sistema.js</code> — Mapa do Sistema (4 camadas + 2 transversais)</li>
+    <li><code>mission-control/js/docs/cerebros.js</code> — doc de Cérebros</li>
+    <li><code>mission-control/js/docs/clones.js</code> — doc de Clones</li>
+    <li><code>mission-control/js/docs/funis.js</code> — doc de Funis</li>
+    <li><code>mission-control/js/docs/arquitetura.js</code> — doc de arquitetura</li>
+    <li><code>mission-control/supabase/functions/</code> — Edge Functions (buscar-cerebro, ingest, auditar-custos…)</li>
+    <li>Auto-memória <code>~/.claude/projects/c--Squad/memory/</code> — 60+ memórias persistentes</li>
+  </ul>
+</section>
+
+<div class="footer">
+  Estudo interno · v2 (2026-05-01) · Não está em <code>/docs</code> nem versionado · Local: <code>c:\Squad\estudos\openclaw-vs-pinguim.html</code><br/>
+  v1 era injusta com Pinguim por olhar só código rodando. v2 olha arquitetura completa (produção + construção + planejado).
+</div>
+
+</div>
+</body>
+</html>
