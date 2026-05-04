@@ -147,7 +147,7 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { font-family: var(--font-body); font-size: 16px; }
+html { font-family: var(--font-body); font-size: 16px; color-scheme: dark; }
 
 body {
   background: var(--surface-1);
@@ -2583,6 +2583,37 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); opacity: 1; }
 }
 .cofre-status-ativa  { background: rgba(16,185,129,0.18); color: #10b981; }
 .cofre-status-inativa{ background: rgba(245,158,11,0.18); color: #f59e0b; }
+
+/* CLINT MAPEAMENTO — selects dark mode */
+.cm-select-decisao,
+.cm-select-cerebro {
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  font-size: 0.8125rem;
+  font-family: inherit;
+  cursor: pointer;
+  min-width: 120px;
+}
+.cm-select-cerebro { min-width: 200px; }
+.cm-select-decisao:focus,
+.cm-select-cerebro:focus {
+  outline: none;
+  border-color: var(--brand);
+}
+.cm-select-decisao:disabled,
+.cm-select-cerebro:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+/* As options herdam fundo do sistema, mas forcamos dark via color-scheme */
+.cm-select-decisao option,
+.cm-select-cerebro option {
+  background: var(--surface-2);
+  color: var(--fg);
+}
 
 /* RAIO-X */
 .raiox-head {
