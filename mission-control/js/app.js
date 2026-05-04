@@ -224,16 +224,10 @@ function persistNavOpen() {
 }
 
 const NAV_PRIMARY = [
-  // Pilares principais (em cima)
-  { slug: 'cerebros',    label: 'Cérebros',         icon: '⚛',  tree: true,  treeLoader: () => loadCerebrosTree() },
-  { slug: 'skills',      label: 'Skills',           icon: '🛠', tree: true,  treeLoader: () => loadSkillsTree() },
-  { slug: 'personas',    label: 'Personas',         icon: '👤', tree: true,  treeLoader: () => loadPersonasTree() },
-  { slug: 'funis',       label: 'Funis',            icon: '🎯', tree: false },
-  // Operacao (em baixo, perto do rodape)
-  { divider: true, label: 'Operação' },
-  { slug: 'finops',      label: 'FinOps',           icon: '💰', tree: false },
-  { slug: 'seguranca',   label: 'Segurança',        icon: '🛡', tree: false },
-  { slug: 'integracoes', label: 'Integrações',      icon: '🔌', tree: false },
+  { slug: 'cerebros',    label: 'Cérebros',    icon: '⚛',  tree: true,  treeLoader: () => loadCerebrosTree() },
+  { slug: 'skills',      label: 'Skills',      icon: '🛠', tree: true,  treeLoader: () => loadSkillsTree() },
+  { slug: 'personas',    label: 'Personas',    icon: '👤', tree: true,  treeLoader: () => loadPersonasTree() },
+  { slug: 'funis',       label: 'Funis',       icon: '🎯', tree: false },
 ];
 
 /**
@@ -271,14 +265,6 @@ async function renderNavTree() {
   list.innerHTML = '';
 
   for (const nav of NAV_PRIMARY) {
-    if (nav.divider) {
-      const sep = el('div', { class: 'nav-divider', title: nav.label }, [
-        el('span', { class: 'nav-divider-label' }, nav.label || ''),
-      ]);
-      list.appendChild(sep);
-      continue;
-    }
-
     if (!nav.tree) {
       const item = el('button', {
         class: 'nav-item' + (paginaAtual === nav.slug ? ' active' : ''),
