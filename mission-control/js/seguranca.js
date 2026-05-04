@@ -297,6 +297,7 @@ async function renderCofre(container) {
     el('thead', {}, [
       el('tr', {}, [
         el('th', {}, 'Nome'),
+        el('th', {}, 'Status'),
         el('th', {}, 'Provedor'),
         el('th', {}, 'Escopo'),
         el('th', {}, 'Onde vive'),
@@ -307,6 +308,14 @@ async function renderCofre(container) {
     ]),
     el('tbody', {}, (data || []).map(v => el('tr', {}, [
       el('td', { class: 'cofre-nome' }, v.nome),
+      el('td', {}, [
+        el('span', {
+          class: 'cofre-status ' + (v.ativo ? 'cofre-status-ativa' : 'cofre-status-inativa'),
+          title: v.ativo
+            ? 'Chave ativa — Edge Functions conseguem ler.'
+            : 'Chave inativa — get_chave retorna null. Edite e marque "Chave ativa".',
+        }, v.ativo ? '● ativa' : '○ inativa'),
+      ]),
       el('td', {}, [el('span', { class: `cofre-provedor cofre-provedor-${(v.provedor || '').toLowerCase()}` }, v.provedor)]),
       el('td', {}, [el('span', { class: `cofre-escopo cofre-escopo-${v.escopo}` }, v.escopo)]),
       el('td', { style: 'font-size:.75rem;color:var(--fg-muted)' }, v.onde_vive),
@@ -314,7 +323,7 @@ async function renderCofre(container) {
       el('td', { class: 'cofre-data' },
         v.ultima_rotacao
           ? `há ${v.dias_desde_ultima_rotacao}d`
-          : (v.ativo ? 'nunca' : 'inativa')),
+          : (v.ativo ? 'nunca' : '—')),
       el('td', {}, [
         el('button', {
           class: 'btn btn-ghost', style: 'font-size:.7rem;padding:.25rem .5rem',

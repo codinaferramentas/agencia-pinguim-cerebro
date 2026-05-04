@@ -12,7 +12,7 @@ import { iconeNode } from './icone.js?v=20260425g';
 import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260502a';
 import { renderIntegracoes } from './integracoes.js?v=20260425n';
 import { renderMapaSistema } from './mapa-sistema.js?v=20260428p';
-import { renderSeguranca } from './seguranca.js?v=20260502c';
+import { renderSeguranca } from './seguranca.js?v=20260502d';
 import { renderFinOps } from './finops.js?v=20260501e';
 import { renderFunis } from './funis.js?v=20260428p';
 
