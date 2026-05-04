@@ -73,13 +73,6 @@ export const DOCS_CATALOGO = [
     secao: 'Módulos',
   },
   {
-    slug: 'customer-profile',
-    titulo: 'Customer Profile',
-    descricao: 'Memória viva de cada lead/cliente. 5ª família conceitual de Cérebro. Sabe pra quem vendemos: compras, eventos, onboarding, LTV, health score. Infraestrutura transversal consumida por SDR, Closer e Growth Squad.',
-    meta: '6 min · módulo principal',
-    secao: 'Módulos',
-  },
-  {
     slug: 'rag',
     titulo: 'RAG e consumo de tokens',
     descricao: 'Como o sistema reduz custo de IA usando recuperação contextual. As três portas de entrada e as cinco regras de ouro pra manter o consumo sob controle.',

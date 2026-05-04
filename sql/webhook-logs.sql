@@ -1,8 +1,9 @@
 -- =====================================================================
 -- webhook_logs — toda chamada recebida em qualquer webhook do Pinguim
 -- =====================================================================
--- Fase 1 do Customer Profile: capturar payloads brutos pra entender
--- formato real do Clint antes de escrever parser.
+-- Captura payloads brutos de webhooks (Clint hoje, outros adapters depois).
+-- Serve como sinal de atividade pra coleta de Inteligencia Viva por Cerebro.
+-- Customer Profile foi removido em 2026-05-02 (pivot conceitual).
 --
 -- Mantem ultimos 1000 registros (cleanup manual ou cron futuro).
 -- =====================================================================
