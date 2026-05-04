@@ -168,20 +168,20 @@ serve(async (req) => {
       await sleep(RATE_DELAY_MS);
     }
 
-    // Persiste os agregados (UPSERT — acumula se rodar de novo)
+    // Persiste os agregados — usa RPC que SOMA contadores (nao substitui).
+    // Critico pra processamento em ondas: cada onda ve so seus produtos,
+    // sem RPC o segundo upsert sobrescreveria o primeiro.
     let inseridos = 0;
-    let atualizados = 0;
     for (const [nome, acc] of mapa.entries()) {
-      const { error: errUp } = await c.from('clint_produto_mapeamento').upsert({
-        nome_clint: nome,
-        qtd_contatos: acc.qtd_total,
-        qtd_contatos_12m: acc.qtd_12m,
-        primeiro_visto_em: acc.primeiro_visto,
-        ultimo_visto_em: acc.ultimo_visto,
-        atualizado_em: new Date().toISOString(),
-      }, { onConflict: 'nome_clint', ignoreDuplicates: false });
+      const { error: errUp } = await c.rpc('acumular_clint_produto', {
+        p_nome: nome,
+        p_qtd_total: acc.qtd_total,
+        p_qtd_12m: acc.qtd_12m,
+        p_primeiro_visto: acc.primeiro_visto,
+        p_ultimo_visto: acc.ultimo_visto,
+      });
       if (errUp) {
-        erros.push(`upsert ${nome}: ${errUp.message}`);
+        erros.push(`acumular ${nome}: ${errUp.message}`);
       } else {
         inseridos++;
       }
