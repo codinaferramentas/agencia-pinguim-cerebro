@@ -10,11 +10,12 @@ import { renderSkills, abrirSkillDetalhe } from './skills.js?v=20260427o';
 import { renderStub } from './stubs.js?v=20260421p';
 import { iconeNode } from './icone.js?v=20260425g';
 import { renderDocs, renderDocDetalhe, DOCS_CATALOGO } from './docs.js?v=20260502a';
-import { renderIntegracoes } from './integracoes.js?v=20260425n';
+import { renderIntegracoes } from './integracoes.js?v=20260504a';
 import { renderMapaSistema } from './mapa-sistema.js?v=20260428p';
 import { renderSeguranca } from './seguranca.js?v=20260502d';
 import { renderFinOps } from './finops.js?v=20260501e';
 import { renderFunis } from './funis.js?v=20260428p';
+import { renderClintMapeamento } from './clint-mapeamento.js?v=20260504a';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
@@ -85,6 +86,7 @@ async function navegar(pageSlug, { forcarRender = true } = {}) {
       case 'qualidade': await renderQualidade(); break;
       case 'seguranca': await renderSeguranca(); break;
       case 'finops':    await renderFinOps(); break;
+      case 'clint-mapeamento': await renderClintMapeamento(); break;
       default:
         if (STUB_PAGES.includes(pageSlug)) renderStub(pageSlug);
     }
@@ -93,6 +95,9 @@ async function navegar(pageSlug, { forcarRender = true } = {}) {
     page.innerHTML = `<div style="padding:2rem;color:var(--status-alerta)">Erro: ${err.message}</div>`;
   }
 }
+
+// Exposto pra outros modulos que precisam navegar (ex: card de Clint em Integracoes)
+window.__navegar = navegar;
 
 function isMobile() {
   return window.matchMedia('(max-width: 768px)').matches;

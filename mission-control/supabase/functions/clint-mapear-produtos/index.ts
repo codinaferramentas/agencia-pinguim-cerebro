@@ -90,10 +90,13 @@ serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   const modo: string = body.modo || 'amostra';
   const paginaInicial: number = Math.max(1, Number(body.pagina_inicial || 1));
-  // Edge function timeout = 150s. Com rate 200ms + ~200ms por request,
-  // cada pagina leva ~400ms. 150s / 400ms = 375 paginas seguras por chamada.
-  // Pra ter margem, paramos em 300 paginas por invocacao.
-  const limitePaginas = modo === 'amostra' ? 5 : 300;
+  // Edge function timeout efetivo ~120s. Cada pagina leva ~3s na pratica
+  // (Clint API lento). Paramos quando passar de 100s pra ter margem
+  // de gravar resposta.
+  const limitePaginas = modo === 'amostra' ? 5 : 99999;
+  // Tempo max de processamento. Edge function timeout ~150s, deixamos 80s pra
+  // garantir margem de grilhar upserts no banco + responder antes do timeout.
+  const tempoMaxMs = modo === 'amostra' ? 60000 : 80000;
 
   let token: string;
   try {
@@ -126,7 +129,7 @@ serve(async (req) => {
   const erros: string[] = [];
 
   try {
-    while (pagina < paginaInicialEfetiva + limitePaginas) {
+    while (pagina < paginaInicialEfetiva + limitePaginas && (Date.now() - inicio) < tempoMaxMs) {
       const url = `https://api.clint.digital/v1/contacts?limit=${PAGE_SIZE}&page=${pagina}`;
       const r = await fetch(url, {
         headers: { 'api-token': token, 'Accept': 'application/json' },

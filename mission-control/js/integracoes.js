@@ -66,6 +66,24 @@ export async function renderIntegracoes() {
 
   page.appendChild(wrap);
 
+  // Card fixo: Clint (CRM) — leva pra tela de mapeamento de produtos
+  wrap.appendChild(el('div', { class: 'cofre-header', style: 'margin-bottom:1rem;cursor:pointer' }, [
+    el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:1rem' }, [
+      el('div', {}, [
+        el('h3', { style: 'margin:0' }, '🔌 Clint — CRM'),
+        el('p', { style: 'margin:.25rem 0 0;font-size:.875rem;color:var(--fg-muted)' },
+          'Webhook recebe eventos em tempo real. API tem 134k contatos pra coletar Inteligência Viva por Cérebro — começa pelo de-para de produtos.'),
+      ]),
+      el('button', {
+        class: 'btn btn-primary',
+        onclick: () => {
+          location.hash = '#clint-mapeamento';
+          if (window.__navegar) window.__navegar('clint-mapeamento');
+        },
+      }, '→ Mapeamento de Produtos'),
+    ]),
+  ]));
+
   const lista = el('div', { class: 'integracoes-grid' });
   wrap.appendChild(lista);
   lista.appendChild(el('div', { style: 'padding:2rem;color:var(--fg-muted);text-align:center' }, 'Carregando…'));
