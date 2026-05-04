@@ -348,7 +348,22 @@ async function abrirFormChave(id, refContainer) {
   const inputNome = el('input', { type: 'text', class: 'novo-cerebro-input', placeholder: 'Ex.: OPENAI_API_KEY', required: 'required' });
   inputNome.value = valoresAtuais.nome || '';
   const selectProvedor = el('select', { class: 'novo-cerebro-input' });
-  ['OpenAI', 'Anthropic', 'Google', 'Perplexity', 'Supabase', 'Vercel', 'GitHub', 'Stripe', 'Discord', 'Twilio', 'Email', 'Outro']
+  // Lista deve incluir todos provedores ja cadastrados no cofre + comuns.
+  // Sempre adicionar aqui ANTES de inserir registro novo no cofre com provedor diferente,
+  // senao a edicao posterior cai no primeiro item (bug 2026-05-02 — cliente Clint).
+  // O default "Outro" e a saida de emergencia.
+  const PROVEDORES_LISTA = [
+    'OpenAI', 'Anthropic', 'Google', 'Perplexity',
+    'Supabase', 'Vercel', 'GitHub',
+    'Clint', 'HubSpot', 'RD Station', 'ActiveCampaign', 'Pipedrive', 'Hotmart',
+    'Stripe', 'Discord', 'Twilio', 'Email',
+    'Pinguim', 'Outro',
+  ];
+  // Garante que o provedor atual aparece mesmo se nao estiver na lista canonica
+  if (valoresAtuais.provedor && !PROVEDORES_LISTA.includes(valoresAtuais.provedor)) {
+    PROVEDORES_LISTA.push(valoresAtuais.provedor);
+  }
+  PROVEDORES_LISTA
     .forEach(p => { const o = el('option', { value: p }, p); if (p === valoresAtuais.provedor) o.selected = true; selectProvedor.append(o); });
   const selectEscopo = el('select', { class: 'novo-cerebro-input' });
   [['public', 'public — exposto ao front'], ['secret', 'secret — só backend'], ['admin', 'admin — service_role / root']]
