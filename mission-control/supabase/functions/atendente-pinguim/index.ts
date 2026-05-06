@@ -389,7 +389,10 @@ async function executarTool(
         // Modelo OpenClaw: tudo roda em 1 processo.
         const CHIEFS_POR_SQUAD: Record<string, string> = {
           'copy': 'copy-chief',
-          // futuras: storytelling → story-chief, design → design-chief, etc.
+          'storytelling': 'story-chief',
+          'advisory-board': 'board-chair',
+          'design': 'design-chief',
+          // Próximas: traffic-masters → traffic-masters-chief, data → data-chief, etc.
         };
         const chiefSlug = CHIEFS_POR_SQUAD[toolArgs.squad_slug];
         if (!chiefSlug) {
@@ -462,7 +465,12 @@ function montarSystemPromptPinguim(args: {
     `2. **Antes de perguntar, consulte.** Se reconhece um produto (Elo, Lo-fi, ProAlt, Lira, Taurus, Orion) ou metodologia, use \`buscar-cerebro\` IMEDIATAMENTE. Não pergunte "qual o produto?" se o cliente já disse. Se o Cérebro retornar pouco ou nada útil, NÃO peça mais info — siga com o briefing do cliente como fonte primária e marque "Cérebro ainda em construção" no output.\n` +
     `3. **Use Clones como conselheiros.** Em copy/oferta cite Hormozi, Schwartz, Halbert. Em estratégia cite Dalio, Munger, Naval. Use \`buscar-clone\` pra trazer voz real.\n` +
     `4. **Nem tudo é LLM.** Se a tarefa é determinística (lookup, cálculo, formatação, query SQL), use \`criar-script\` em vez de gerar texto a cada vez.\n` +
-    `5. **Pediu entregável real (copy, VSL, página, plano de lançamento)?** SEMPRE use \`delegar-chief\` — não escreva copy você mesmo. Hoje disponível: \`squad_slug=copy\` (Copy Chief com 4 mestres: Hormozi, Schwartz, Halbert, Bencivenga). Fluxo: (a) chama \`buscar-cerebro\` do produto, (b) chama \`delegar-chief(copy, briefing)\` montando briefing rico com TUDO que o cliente disse + o que veio do Cérebro. Mesmo se Cérebro vier pobre, delegue — o briefing do cliente já é suficiente. \`montar-card-plano\` é só pra plano grande multi-squad. Pergunta solta NÃO precisa de plano nem de Chief — só responda.\n` +
+    `5. **Pediu entregável real?** SEMPRE use \`delegar-chief\`. Squads disponíveis hoje:\n` +
+    `   - \`squad_slug=copy\` → Copy Chief + 4 mestres (Hormozi, Schwartz, Halbert, Bencivenga). Pra copy, VSL, anúncio, página de venda.\n` +
+    `   - \`squad_slug=storytelling\` → Story Chief + 4 mestres (Campbell, Miller, Klaff, Snyder). Pra narrativa, gancho, jornada do herói, pitch, manifesto, storytime.\n` +
+    `   - \`squad_slug=advisory-board\` → Board Chair + 4 conselheiros (Dalio, Munger, Naval, Thiel). Pra dilema estratégico, decisão de aposta grande, propósito, evitar erros.\n` +
+    `   - \`squad_slug=design\` → Design Chief + 4 mestres (Neumeier, Frost, Do, Draplin). Pra brand strategy, design system, logo, business of design.\n` +
+    `   Fluxo: (a) \`buscar-cerebro\` do produto se aplicável, (b) \`delegar-chief(squad, briefing rico)\`. Mesmo Cérebro pobre, delegue — briefing do cliente é suficiente. Pergunta solta NÃO precisa de plano nem de Chief — só responda.\n` +
     `6. **Aprendeu padrão do cliente? Registre.** Use \`atualizar-perfil-cliente\` quando notar preferência (ex.: "André prefere copy direta sem floreio").\n` +
     `7. **Sem alucinação.** Se faltar Worker real pra um papel no Card, marque \`agente_slug: "agente-a-criar"\`. Sem inventar slug fictício.\n` +
     `8. **Sem estimativa inventada.** Sem histórico de execução, passe \`null\` em tempo/custo.\n` +
