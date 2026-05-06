@@ -8287,6 +8287,96 @@ body.mapa-apresentacao .mapa-prova-card-texto { font-size: 0.9375rem; }
   50% { opacity: 1; }
 }
 
+/* Pinguim — produtos detectados (Cérebro consultado) */
+.conversa-produtos-detectados {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  padding: 0.35rem 0.5rem;
+  background: rgba(232, 92, 0, 0.06);
+  border: 1px solid rgba(232, 92, 0, 0.2);
+  border-radius: 6px;
+  margin-top: 0.4rem;
+}
+.conversa-produtos-label {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.conversa-produto-chip {
+  font-family: var(--font-mono);
+  background: var(--accent);
+  color: #fff;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+}
+
+/* Pinguim — script gerado pelo agente */
+.conversa-scripts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+.conversa-script-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.conversa-script-head {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.5rem 0.7rem;
+  background: var(--surface-3, var(--surface-2));
+  border-bottom: 1px solid var(--border);
+}
+.conversa-script-tag {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  background: var(--accent);
+  color: #fff;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  letter-spacing: 0.06em;
+}
+.conversa-script-obj {
+  font-size: 0.85rem;
+  color: var(--fg);
+}
+.conversa-script-code {
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  background: #0d0d0d;
+  color: #c9d1d9;
+  overflow-x: auto;
+  white-space: pre;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.conversa-script-howto {
+  padding: 0.4rem 0.7rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  border-top: 1px solid var(--border);
+}
+.conversa-script-aviso {
+  padding: 0.4rem 0.7rem;
+  font-size: 0.72rem;
+  color: #f59e0b;
+  border-top: 1px solid var(--border);
+  background: rgba(245, 158, 11, 0.05);
+}
+
 .conversa-input {
   border-top: 1px solid var(--border);
   padding: 0.85rem 1rem;

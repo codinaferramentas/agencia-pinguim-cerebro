@@ -60,12 +60,12 @@ export async function renderAgentes() {
       el('div', {}, [
         el('h1', { class: 'page-title' }, 'Agentes'),
         el('div', { class: 'page-subtitle' },
-          'Catálogo, conversa com Chief, Project Board e execuções. EPP ativo desde v1.'),
+          'Catálogo, conversa com Pinguim, Project Board e execuções. EPP ativo desde v1.'),
       ]),
     ]),
     el('div', { class: 'seguranca-tabs' }, [
       tab('catalogo', 'Catálogo'),
-      tab('conversar', '💬 Conversar com Chief'),
+      tab('conversar', '💬 Conversar com Pinguim'),
       tab('board', '🗂 Project Board'),
       tab('execucoes', '📊 Execuções'),
     ]),
@@ -223,6 +223,7 @@ async function hidratarConversaDoBanco() {
     papel: m.papel,
     conteudo: m.conteudo,
     plano_card: m.artefatos?.tipo === 'card_plano_missao' ? m.artefatos.card : null,
+    scripts: (m.artefatos?.tipo === 'scripts' ? m.artefatos.scripts : m.artefatos?.scripts) || [],
   }));
 }
 
@@ -237,13 +238,13 @@ async function renderConversar(container) {
 
   const layout = el('div', { class: 'agentes-conversa' }, [
     el('div', { class: 'conversa-cabec' }, [
-      el('div', { class: 'agente-avatar agente-avatar-grande' }, '🧭'),
+      el('div', { class: 'agente-avatar agente-avatar-grande' }, '🐧'),
       el('div', { class: 'conversa-cabec-info' }, [
-        el('div', { class: 'conversa-cabec-nome' }, 'Chief — Orquestrador Geral'),
+        el('div', { class: 'conversa-cabec-nome' }, 'Pinguim — Atendente'),
         el('div', { class: 'conversa-cabec-sub' },
           casoAtivo
             ? `Caso aberto · ${String(casoAtivo).slice(0, 8)}`
-            : 'Sem caso aberto. Mande sua primeira mensagem pra começar.'),
+            : 'Sem caso aberto. Diz qual produto/tema (Elo, Lo-fi, ProAlt...) e o que quer fazer.'),
       ]),
       el('button', {
         class: 'btn',
@@ -258,10 +259,10 @@ async function renderConversar(container) {
     el('div', { id: 'conversa-mensagens', class: 'conversa-mensagens' },
       mensagensVisuais.length === 0
         ? [el('div', { class: 'conversa-vazia' }, [
-            el('div', { class: 'conversa-vazia-icon' }, '🧭'),
-            el('div', {}, 'Comece um caso. Ex: "Preciso de uma VSL pro ProAlt." '),
+            el('div', { class: 'conversa-vazia-icon' }, '🐧'),
+            el('div', {}, 'Comece um caso. Ex: "Página do Desafio Lo-fi de junho."'),
             el('div', { class: 'conversa-vazia-hint' },
-              'Chief vai consultar Cérebro, escolher squad e te apresentar o Card Plano da Missão pra aprovação.'),
+              'Pinguim consulta Cérebro automático ao reconhecer produto, traz Clones como conselheiros, e só monta plano de squad quando há entregável real.'),
           ])]
         : mensagensVisuais.map(m => mensagemBubble(m))
     ),
@@ -307,10 +308,16 @@ async function renderConversar(container) {
 function mensagemBubble(m) {
   const isHumano = m.papel === 'humano';
   return el('div', { class: `conversa-bolha conversa-bolha-${isHumano ? 'humano' : 'chief'}` }, [
-    !isHumano ? el('div', { class: 'conversa-bolha-avatar' }, '🧭') : null,
+    !isHumano ? el('div', { class: 'conversa-bolha-avatar' }, '🐧') : null,
     el('div', { class: 'conversa-bolha-corpo' }, [
       m.conteudo
         ? el('div', { class: 'conversa-bolha-texto' }, m.conteudo)
+        : null,
+      Array.isArray(m.produtos_detectados) && m.produtos_detectados.length > 0
+        ? renderProdutosDetectados(m.produtos_detectados)
+        : null,
+      Array.isArray(m.scripts) && m.scripts.length > 0
+        ? renderScripts(m.scripts)
         : null,
       m.plano_card
         ? renderCardPlanoMissao(m.plano_card, m.uso)
@@ -320,6 +327,31 @@ function mensagemBubble(m) {
         : null,
     ].filter(Boolean)),
   ].filter(Boolean));
+}
+
+function renderProdutosDetectados(produtos) {
+  return el('div', { class: 'conversa-produtos-detectados' }, [
+    el('span', { class: 'conversa-produtos-label' }, 'Cérebros consultados:'),
+    ...produtos.map(p => el('span', { class: 'conversa-produto-chip' },
+      `${p.cerebro_slug} · ${(p.confianca * 100).toFixed(0)}%`)),
+  ]);
+}
+
+function renderScripts(scripts) {
+  return el('div', { class: 'conversa-scripts' },
+    scripts.map(s => el('div', { class: 'conversa-script-card' }, [
+      el('div', { class: 'conversa-script-head' }, [
+        el('span', { class: 'conversa-script-tag' }, s.linguagem),
+        el('span', { class: 'conversa-script-obj' }, s.objetivo),
+      ]),
+      el('pre', { class: 'conversa-script-code' }, s.codigo),
+      s.como_executar
+        ? el('div', { class: 'conversa-script-howto' }, `▶ ${s.como_executar}`)
+        : null,
+      el('div', { class: 'conversa-script-aviso' },
+        '⚠ Script gerado pelo Pinguim. Revise antes de executar.'),
+    ].filter(Boolean)))
+  );
 }
 
 function formatarUso(uso) {
@@ -423,9 +455,9 @@ async function enviarMensagem(texto) {
   // Indicador de "Chief pensando"
   const lista = document.getElementById('conversa-mensagens');
   const pensando = el('div', { class: 'conversa-bolha conversa-bolha-chief conversa-pensando' }, [
-    el('div', { class: 'conversa-bolha-avatar' }, '🧭'),
+    el('div', { class: 'conversa-bolha-avatar' }, '🐧'),
     el('div', { class: 'conversa-bolha-corpo' }, [
-      el('div', { class: 'conversa-pensando-pulse' }, 'Chief pensando · consultando Cérebro · montando squad...'),
+      el('div', { class: 'conversa-pensando-pulse' }, 'Pinguim pensando · consultando Cérebro · trazendo Clones...'),
     ]),
   ]);
   if (lista) {
@@ -439,7 +471,7 @@ async function enviarMensagem(texto) {
     const { data: { session } } = await sb.auth.getSession();
     if (!session) throw new Error('Sessão expirada — refaça login');
 
-    const url = `${window.__ENV__.SUPABASE_URL}/functions/v1/chief-orquestrar`;
+    const url = `${window.__ENV__.SUPABASE_URL}/functions/v1/atendente-pinguim`;
     const resp = await fetch(url, {
       method: 'POST',
       headers: {
@@ -466,6 +498,8 @@ async function enviarMensagem(texto) {
       papel: 'chief',
       conteudo: data.resposta,
       plano_card: data.plano_card,
+      scripts: data.scripts || [],
+      produtos_detectados: data.produtos_detectados || [],
       uso: data.uso,
     });
   } catch (e) {
@@ -536,7 +570,7 @@ async function renderExecucoes(container) {
 
   if (!execs || execs.length === 0) {
     container.append(el('div', { class: 'seguranca-empty' },
-      'Nenhuma execução ainda. Mande uma mensagem pro Chief na aba Conversar pra gerar a primeira.'));
+      'Nenhuma execução ainda. Mande uma mensagem pro Pinguim na aba Conversar pra gerar a primeira.'));
     return;
   }
 
