@@ -183,10 +183,57 @@ function statusLabel(s) {
 }
 
 // =====================================================
+// Carrega último caso aberto + suas mensagens do banco.
+// Roda 1x quando a aba Conversar é aberta E ainda não há caso em memória.
+// =====================================================
+async function hidratarConversaDoBanco() {
+  // Se já tem caso na memória da sessão, não sobrescreve.
+  if (casoAtivo && mensagensVisuais.length > 0) return;
+
+  const sb = getSupabase();
+  if (!sb) return;
+
+  // Pega o caso_id mais recente do tenant/cliente atual.
+  const { data: ultimas } = await sb
+    .from('conversas')
+    .select('caso_id, criado_em')
+    .eq('tenant_id', TENANT_PADRAO)
+    .eq('cliente_id', CLIENTE_PADRAO)
+    .not('caso_id', 'is', null)
+    .order('criado_em', { ascending: false })
+    .limit(1);
+
+  const caso = ultimas?.[0]?.caso_id;
+  if (!caso) return;
+
+  // Carrega últimas 20 mensagens do caso, ordem cronológica
+  const { data: msgs } = await sb
+    .from('conversas')
+    .select('papel, conteudo, artefatos, criado_em')
+    .eq('tenant_id', TENANT_PADRAO)
+    .eq('cliente_id', CLIENTE_PADRAO)
+    .eq('caso_id', caso)
+    .order('criado_em', { ascending: true })
+    .limit(20);
+
+  if (!msgs || msgs.length === 0) return;
+
+  casoAtivo = caso;
+  mensagensVisuais = msgs.map(m => ({
+    papel: m.papel,
+    conteudo: m.conteudo,
+    plano_card: m.artefatos?.tipo === 'card_plano_missao' ? m.artefatos.card : null,
+  }));
+}
+
+// =====================================================
 // CONVERSAR COM CHIEF
 // =====================================================
 async function renderConversar(container) {
   container.innerHTML = '';
+
+  // Hidrata do banco se for 1ª abertura da sessão (caso e mensagens vazios).
+  await hidratarConversaDoBanco();
 
   const layout = el('div', { class: 'agentes-conversa' }, [
     el('div', { class: 'conversa-cabec' }, [
@@ -278,6 +325,12 @@ function mensagemBubble(m) {
 function formatarUso(uso) {
   if (!uso) return '';
   const partes = [];
+  if (uso.modelo === 'rota:script') {
+    // Resposta canned (saudação/agradecimento). Custo zero.
+    partes.push('script · sem LLM · US$ 0,00');
+    if (uso.latencia_total_ms) partes.push(`${(uso.latencia_total_ms / 1000).toFixed(1)}s`);
+    return partes.join(' · ');
+  }
   if (uso.modelo) partes.push(uso.modelo.replace('openai:', ''));
   if (uso.custo_usd != null) partes.push(`${fmtUSD(uso.custo_usd)} (${fmtBRL(uso.custo_usd)})`);
   if (uso.cache_hit_pct > 0) partes.push(`cache ${uso.cache_hit_pct}%`);
@@ -327,11 +380,17 @@ function renderCardPlanoMissao(card, uso) {
       el('div', { class: 'card-plano-estim' }, [
         el('div', {}, [
           el('div', { class: 'card-plano-label' }, 'Tempo estimado'),
-          el('div', { class: 'card-plano-num' }, formatarTempo(card.estimativa_minutos)),
+          el('div', { class: 'card-plano-num' },
+            card.estimativa_minutos == null
+              ? 'sem histórico'
+              : formatarTempo(card.estimativa_minutos)),
         ]),
         el('div', {}, [
           el('div', { class: 'card-plano-label' }, 'Custo estimado'),
-          el('div', { class: 'card-plano-num' }, fmtUSD(card.estimativa_custo_usd)),
+          el('div', { class: 'card-plano-num' },
+            card.estimativa_custo_usd == null
+              ? 'sem histórico'
+              : fmtUSD(card.estimativa_custo_usd)),
         ]),
       ]),
       el('div', { class: 'card-plano-pergunta' }, card.pergunta_aprovacao || 'Posso seguir?'),

@@ -136,15 +136,61 @@ const CHIEF_TOOLS = [
               required: ['ordem', 'acao'],
             },
           },
-          estimativa_minutos: { type: 'number' },
-          estimativa_custo_usd: { type: 'number' },
+          estimativa_minutos: {
+            type: ['number', 'null'],
+            description: 'NULL se não houver histórico de execuções suficiente. NÃO invente número.',
+          },
+          estimativa_custo_usd: {
+            type: ['number', 'null'],
+            description: 'NULL se não houver histórico de execuções suficiente. NÃO invente número.',
+          },
           pergunta_aprovacao: { type: 'string', description: 'pergunta direta pra cliente aprovar', default: 'Posso seguir, ou quer ajustar?' },
         },
-        required: ['diagnostico', 'squad', 'proximos_passos', 'estimativa_minutos', 'estimativa_custo_usd'],
+        required: ['diagnostico', 'squad', 'proximos_passos'],
       },
     },
   },
 ];
+
+// =====================================================
+// Roteador determinístico: small-talk vs trabalho real
+// Princípio script-vs-LLM (feedback_script_vs_llm.md): saudação não passa por gpt-5.
+// =====================================================
+type Roteamento =
+  | { tipo: 'saudacao'; resposta: string }
+  | { tipo: 'agradecimento'; resposta: string }
+  | { tipo: 'trabalho_curto' } // 1 frase ambígua → modelo mini
+  | { tipo: 'trabalho_completo' }; // pedido com substância → modelo padrão
+
+function rotear(mensagem: string, historicoLen: number): Roteamento {
+  const m = mensagem.trim().toLowerCase().replace(/[!?.,]+$/g, '');
+  const palavras = m.split(/\s+/).filter(Boolean).length;
+
+  // Saudações puras (apenas no início da conversa — sem histórico)
+  const SAUDACOES = /^(oi|olá|ola|opa|eai|e ai|bom dia|boa tarde|boa noite|hey|hi|hello)$/;
+  const PERG_BEM = /^(tudo bem|tudo certo|td bem|tudo joia|beleza|como vai|como você está)\??$/;
+  if (historicoLen === 0 && (SAUDACOES.test(m) || PERG_BEM.test(m))) {
+    return {
+      tipo: 'saudacao',
+      resposta:
+        'Oi! Eu sou o Chief, orquestrador da squad Pinguim. Pra abrir um caso, me conta: ' +
+        'qual produto/área (ex.: ProAlt, Elo, Lo-fi), o que você quer entregar e até quando. ' +
+        'Eu monto o briefing, escolho a squad e te apresento o Plano da Missão pra aprovação.',
+    };
+  }
+
+  const AGRADECIMENTOS = /^(obrigado|obrigada|valeu|vlw|ok|certo|tranquilo|beleza)$/;
+  if (AGRADECIMENTOS.test(m)) {
+    return { tipo: 'agradecimento', resposta: 'Tranquilo. Quando precisar, é só chamar.' };
+  }
+
+  // Mensagem curta sem histórico → ainda usa LLM, mas modelo mini
+  if (historicoLen === 0 && palavras <= 6) {
+    return { tipo: 'trabalho_curto' };
+  }
+
+  return { tipo: 'trabalho_completo' };
+}
 
 // =====================================================
 // Resolve solicitante: lê pinguim.perfis pelo id
@@ -165,23 +211,28 @@ async function resolverSolicitante(solicitanteId: string | null): Promise<{ slug
 // =====================================================
 // Top agentes relevantes via RAG sobre capabilities
 // (Por enquanto: simples filtro — RAG semântico será Bloco 3.5)
+//
+// IMPORTANTE: só conta agentes REAIS no banco (não inventa). Se não tem
+// nenhum Worker construído ainda, retorna [] e o Chief é orientado a NÃO
+// alucinar squad — ele propõe Clones como conselheiros ou marca papéis
+// como "agente a criar".
 // =====================================================
 async function topAgentesRelevantes(
   _casoDescricao: string,
   topK = 8,
-): Promise<Array<{ slug: string; nome: string; capabilities: string[]; proposito: string }>> {
-  // V1: retorna agentes em produção da mesma squad. RAG semântico vem depois.
+): Promise<Array<{ slug: string; nome: string; capabilities: string[]; proposito: string; status: string }>> {
   const { data } = await sb()
     .from('agentes')
     .select('slug, nome, capabilities, proposito, status')
     .neq('slug', 'chief')
-    .in('status', ['em_producao', 'em_teste', 'em_criacao'])
+    .in('status', ['em_producao', 'em_teste'])
     .limit(topK);
   return (data || []).map((a: any) => ({
     slug: a.slug,
     nome: a.nome,
     capabilities: Array.isArray(a.capabilities) ? a.capabilities : [],
     proposito: a.proposito || '',
+    status: a.status,
   }));
 }
 
@@ -294,28 +345,11 @@ serve(async (req) => {
 
   const tInicio = Date.now();
   try {
-    // 1. Carrega Chief
+    // 1. Carrega Chief (sempre — é leve, 1 row do banco)
     const chief = await carregarAgente('chief');
 
-    // 2. Memória individual
-    const { aprendizados, perfilSolicitante } = await carregarMemoriaIndividual(
-      chief.id,
-      solicitante_id || null,
-    );
-
-    // 3. Resolve solicitante
-    const solicitante = await resolverSolicitante(solicitante_id || null);
-
-    // 4. Caso ID
+    // 2. Caso ID + persistência da mensagem do humano (sempre — barato, importante pra histórico)
     const casoId = await obterOuCriarCasoId(tenant_id, cliente_id, casoIdInput || null);
-
-    // 5. Histórico recente
-    const historico = await carregarHistorico(tenant_id, cliente_id, casoId, 20);
-
-    // 6. Top agentes relevantes
-    const topAgentes = await topAgentesRelevantes(mensagem, 8);
-
-    // 7. Insere mensagem do humano em conversas
     await sb().from('conversas').insert({
       tenant_id,
       cliente_id,
@@ -325,8 +359,61 @@ serve(async (req) => {
       conteudo: mensagem,
     });
 
-    // 8. Monta system prompt
-    const systemPrompt = montarSystemPrompt({
+    // 3. Histórico recente (precisa pro roteador decidir se é 1ª msg ou refinamento)
+    const historico = await carregarHistorico(tenant_id, cliente_id, casoId, 20);
+
+    // =====================================================
+    // 4. ROTEADOR — script vs LLM (princípio script-vs-LLM)
+    //    Saudação/agradecimento NUNCA passa por gpt-5.
+    // =====================================================
+    const rota = rotear(mensagem, historico.length);
+
+    if (rota.tipo === 'saudacao' || rota.tipo === 'agradecimento') {
+      // Resposta canned — custo zero, latência <100ms
+      await sb().from('conversas').insert({
+        tenant_id, cliente_id, agente_id: chief.id, caso_id: casoId,
+        papel: 'chief', conteudo: rota.resposta,
+      });
+      return jsonResp({
+        ok: true,
+        caso_id: casoId,
+        resposta: rota.resposta,
+        plano_card: null,
+        tools_executadas: [],
+        uso: {
+          modelo: 'rota:script',
+          tokens_in: 0, tokens_out: 0, tokens_cached: 0,
+          cache_hit_pct: 0, custo_usd: 0,
+          tool_rounds: 0, latencia_llm_ms: 0,
+          latencia_total_ms: Date.now() - tInicio,
+        },
+      });
+    }
+
+    // =====================================================
+    // 5. Pipeline LLM (mensagens com substância)
+    // =====================================================
+
+    // Memória individual (Tier 1 + Tier 2)
+    const { aprendizados, perfilSolicitante } = await carregarMemoriaIndividual(
+      chief.id, solicitante_id || null,
+    );
+
+    // Resolve solicitante
+    const solicitante = await resolverSolicitante(solicitante_id || null);
+
+    // Top agentes relevantes — só conta agentes REAIS em produção/teste.
+    // Se vazio, o system prompt já instrui o Chief a NÃO inventar squad.
+    const topAgentes = await topAgentesRelevantes(mensagem, 8);
+
+    // Modelo: trabalho curto vai pro mini (50x mais barato).
+    // Trabalho completo usa o modelo configurado no banco (gpt-5).
+    const modeloEfetivo = rota.tipo === 'trabalho_curto'
+      ? 'openai:gpt-5-mini'
+      : chief.modelo;
+
+    // Monta system prompt + guardrails dinâmicos
+    let systemPrompt = montarSystemPrompt({
       agente: chief,
       aprendizados,
       perfilSolicitante,
@@ -335,8 +422,40 @@ serve(async (req) => {
       topAgentesRelevantes: topAgentes,
     });
 
-    // 9. Monta messages do LLM (histórico + nova mensagem)
-    // Formato OpenAI: system, user/assistant history, user nova mensagem
+    // Guardrail anti-alucinação: explícito e dinâmico
+    const guardrail: string[] = [];
+    if (topAgentes.length === 0) {
+      guardrail.push(
+        '\n## ⚠ ESTADO ATUAL DA SQUAD\n' +
+        'Hoje VOCÊ É O ÚNICO AGENTE construído no banco. Não existem Workers reais ainda.\n' +
+        '**REGRAS DUROS:**\n' +
+        '- NÃO invente nomes de agentes (ex.: "ux-writer", "copywriter-ptbr") como se já existissem.\n' +
+        '- Se o caso pede uma squad, proponha papéis genéricos marcados como "agente a criar".\n' +
+        '- Você pode citar Clones (fontes de voz, ex.: Hormozi, Schwartz) como CONSELHEIROS, não como Workers.\n' +
+        '- Para 1ª mensagem de caso novo, FAÇA 3-5 PERGUNTAS de briefing antes de gerar plano.\n'
+      );
+    } else {
+      const slugsReais = topAgentes.map(a => a.slug).join(', ');
+      guardrail.push(
+        `\n## ⚠ AGENTES REAIS DISPONÍVEIS\nSquad só pode conter slugs desta lista: [${slugsReais}].\n` +
+        'Qualquer outro slug é INVENÇÃO. Se faltar papel, marque "agente a criar".\n'
+      );
+    }
+    guardrail.push(
+      '\n## ⚠ ESTIMATIVAS\n' +
+      'Você NÃO TEM histórico de execuções pra estimar tempo/custo de squad. ' +
+      'Em `montar-card-plano`, passe `estimativa_minutos: null` e `estimativa_custo_usd: null`. ' +
+      'Mentir números aqui (ex.: "7h", "US$ 480") quebra confiança do cliente.\n'
+    );
+    guardrail.push(
+      '\n## ⚠ BRIEFING DIRIGIDO\n' +
+      'Para caso novo (sem histórico), NÃO gere plano direto. Faça primeiro 3-5 perguntas curtas ' +
+      'pra fechar: produto/área, objetivo concreto, prazo, restrições, referências. ' +
+      'Plano só vem DEPOIS do humano responder. Se o humano já mandou tudo na 1ª msg, pode pular.\n'
+    );
+    systemPrompt += guardrail.join('');
+
+    // Messages: histórico + nova msg
     const llmMessages: any[] = historico.map((h) => ({
       role: h.papel === 'humano' ? 'user' : 'assistant',
       content: h.conteudo,
@@ -361,12 +480,12 @@ serve(async (req) => {
       rounds = round + 1;
       const llmResp = await chamarLLM(
         {
-          modelo: chief.modelo,
+          modelo: modeloEfetivo,
           systemPrompt,
           messages: llmMessages,
           tools: CHIEF_TOOLS,
           temperatura: chief.temperatura ?? 0.4,
-          maxTokens: 4096,
+          maxTokens: rota.tipo === 'trabalho_curto' ? 512 : 4096,
         },
         'chief-orquestrar',
       );
