@@ -215,6 +215,326 @@ export function montarSystemPrompt(input: MontarPromptInput): string {
 }
 
 // =====================================================
+// Tools que orquestradores de squad usam (delegar mestre + consolidar).
+// Compartilhado entre agente-executar (HTTP) e atendente-pinguim (inline).
+// =====================================================
+export const TOOLS_ORQUESTRADOR_SQUAD = [
+  {
+    type: 'function',
+    function: {
+      name: 'delegar-mestre',
+      description: 'Invoca um mestre da squad pra executar parte do trabalho. Devolve a contribuicao estruturada do mestre.',
+      parameters: {
+        type: 'object',
+        properties: {
+          mestre_slug: { type: 'string', description: 'slug do mestre (ex.: alex-hormozi, eugene-schwartz, gary-halbert, gary-bencivenga)' },
+          briefing: { type: 'string', description: 'briefing claro pro mestre — objetivo, publico, parametros' },
+          parte: { type: 'string', description: 'parte do roteiro (gancho, desenvolvimento, completo)', default: 'completo' },
+        },
+        required: ['mestre_slug', 'briefing'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'consolidar-roteiro',
+      description: 'Consolida contribuicoes dos mestres em copy/roteiro final. Use DEPOIS de invocar 1-2 mestres. Termina o orquestrador.',
+      parameters: {
+        type: 'object',
+        properties: {
+          objetivo: { type: 'string' },
+          publico_consciencia: { type: 'string' },
+          mestres_usados: { type: 'array', items: { type: 'string' } },
+          justificativa: { type: 'string' },
+          copy_final: {
+            type: 'object',
+            properties: {
+              gancho: { type: 'string' },
+              desenvolvimento: { type: 'string' },
+              virada: { type: 'string' },
+              cta: { type: 'string' },
+              metodo_anotado: { type: 'string' },
+            },
+          },
+        },
+        required: ['objetivo', 'mestres_usados', 'justificativa', 'copy_final'],
+      },
+    },
+  },
+];
+
+export function ehOrquestrador(agente: AgenteRow): boolean {
+  return Array.isArray(agente.ferramentas) && agente.ferramentas.includes('delegar-mestre');
+}
+
+export function formatarConsolidadoMd(card: any): string {
+  if (!card) return '';
+  const partes: string[] = [];
+  if (card.objetivo) partes.push(`**Objetivo:** ${card.objetivo}`);
+  if (card.publico_consciencia) partes.push(`**Público (consciência):** ${card.publico_consciencia}`);
+  if (Array.isArray(card.mestres_usados)) partes.push(`**Mestres usados:** ${card.mestres_usados.join(', ')}`);
+  if (card.justificativa) partes.push(`**Justificativa:** ${card.justificativa}`);
+  partes.push('');
+  if (card.copy_final) {
+    const c = card.copy_final;
+    if (c.gancho) partes.push(`### [GANCHO]\n${c.gancho}`);
+    if (c.desenvolvimento) partes.push(`### [DESENVOLVIMENTO]\n${c.desenvolvimento}`);
+    if (c.virada) partes.push(`### [VIRADA]\n${c.virada}`);
+    if (c.cta) partes.push(`### [CTA]\n${c.cta}`);
+    if (c.metodo_anotado) partes.push(`\n_${c.metodo_anotado}_`);
+  }
+  return partes.join('\n\n');
+}
+
+// =====================================================
+// Schema obrigatório de saída pros Workers (R8 — sem blob)
+// =====================================================
+export const SCHEMA_RESPOSTA_WORKER = `
+Sua resposta DEVE ser JSON valido com esta estrutura:
+
+{
+  "tipo": "<copy|pagina|relatorio|plano|outro>",
+  "titulo": "<titulo curto>",
+  "conteudo_estruturado": { /* estrutura tipada do entregavel */ },
+  "conteudo_md": "<versao markdown legivel>",
+  "nota_de_dissenso": null
+}
+
+REGRAS:
+- conteudo_estruturado e OBRIGATORIO (sem blob de texto).
+- Se briefing contradiz seu APRENDIZADOS, preencha nota_de_dissenso e retorne sem gerar entregavel.
+`;
+
+// =====================================================
+// EXECUTOR INLINE — modelo OpenClaw real.
+// Carrega agente do banco, executa LLM (com loop tool calling se for orquestrador),
+// retorna resultado estruturado. NÃO faz fetch HTTP entre Edge Functions.
+//
+// Tools resolvidas inline:
+// - delegar-mestre → chamada recursiva ao próprio executarAgenteInline
+// - consolidar-roteiro → terminal, captura card
+// - buscar-cerebro → consulta direta ao banco (será injetada pelo chamador)
+//
+// Resultado: 1 processo, N chamadas OpenAI sequenciais, sem timeout HTTP.
+// =====================================================
+export interface ExecutarInlineInput {
+  agente_slug: string;
+  briefing: string;
+  tenant_id: string;
+  cliente_id: string;
+  caso_id?: string | null;
+  solicitante_id?: string | null;
+  contexto_extra?: any;
+}
+
+export interface ExecutarInlineOutput {
+  ok: boolean;
+  agente_slug: string;
+  orquestrador: boolean;
+  conteudo_md: string;
+  conteudo_estruturado: any;
+  titulo: string;
+  tipo: string;
+  mestres_invocados: Array<{ slug: string; titulo?: string; uso?: any }>;
+  uso: {
+    modelo: string;
+    tokens_in: number;
+    tokens_out: number;
+    tokens_cached: number;
+    custo_usd: number;
+    latencia_ms: number;
+  };
+  pausou_em_dissenso?: boolean;
+  nota_de_dissenso?: any;
+  entregavel_id?: string | null;
+}
+
+export async function executarAgenteInline(input: ExecutarInlineInput): Promise<ExecutarInlineOutput> {
+  const { agente_slug, briefing, tenant_id, cliente_id, caso_id, solicitante_id, contexto_extra } = input;
+  const tInicio = Date.now();
+
+  const agente = await carregarAgente(agente_slug);
+  const { aprendizados, perfilSolicitante } = await carregarMemoriaIndividual(
+    agente.id, solicitante_id || cliente_id,
+  );
+
+  const orquestrador = ehOrquestrador(agente);
+
+  let systemPrompt = montarSystemPrompt({
+    agente, aprendizados, perfilSolicitante,
+    solicitanteSlug: null, historico: [],
+  });
+  if (!orquestrador) systemPrompt += '\n\n' + SCHEMA_RESPOSTA_WORKER;
+
+  let userMsg = `## Briefing\n${briefing}`;
+  if (contexto_extra) {
+    userMsg += `\n\n## Contexto extra\n${typeof contexto_extra === 'string' ? contexto_extra : JSON.stringify(contexto_extra)}`;
+  }
+
+  let totalTokensIn = 0, totalTokensOut = 0, totalTokensCached = 0, totalLatenciaMs = 0;
+  let modeloUsadoFinal = '';
+  const mestresInvocados: Array<{ slug: string; titulo?: string; uso?: any }> = [];
+
+  if (orquestrador) {
+    const llmMessages: any[] = [{ role: 'user', content: userMsg }];
+    let consolidadoCard: any = null;
+    let respostaTexto = '';
+    const MAX_ROUNDS = 4;
+
+    for (let round = 0; round <= MAX_ROUNDS; round++) {
+      const llmResp = await chamarLLM({
+        modelo: agente.modelo || 'openai:gpt-4o',
+        systemPrompt,
+        messages: llmMessages,
+        tools: TOOLS_ORQUESTRADOR_SQUAD,
+        temperatura: agente.temperatura ?? 0.5,
+        maxTokens: 4096,
+      }, `agente-${agente_slug}`);
+
+      totalTokensIn += llmResp.tokensIn;
+      totalTokensOut += llmResp.tokensOut;
+      totalTokensCached += llmResp.tokensCached;
+      totalLatenciaMs += llmResp.latenciaMs;
+      modeloUsadoFinal = llmResp.modeloUsado;
+
+      if (!llmResp.toolCalls || llmResp.toolCalls.length === 0) {
+        respostaTexto = llmResp.content;
+        break;
+      }
+
+      llmMessages.push({
+        role: 'assistant',
+        content: llmResp.content || null,
+        tool_calls: llmResp.toolCalls.map(tc => ({
+          id: tc.id, type: 'function',
+          function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+        })),
+      });
+
+      let temConsolidado = false;
+      for (const tc of llmResp.toolCalls) {
+        if (tc.name === 'consolidar-roteiro') {
+          consolidadoCard = tc.arguments;
+          temConsolidado = true;
+        }
+      }
+
+      for (const tc of llmResp.toolCalls) {
+        let resultado: any;
+        if (tc.name === 'delegar-mestre') {
+          // Recursão inline — sem fetch HTTP
+          const sub = await executarAgenteInline({
+            agente_slug: tc.arguments.mestre_slug,
+            briefing: tc.arguments.briefing + (tc.arguments.parte && tc.arguments.parte !== 'completo' ? `\n\nParte: ${tc.arguments.parte}` : ''),
+            tenant_id, cliente_id, caso_id, solicitante_id,
+          });
+          mestresInvocados.push({ slug: tc.arguments.mestre_slug, titulo: sub.titulo, uso: sub.uso });
+          // Acumula custo dos mestres no Chief
+          totalTokensIn += sub.uso.tokens_in;
+          totalTokensOut += sub.uso.tokens_out;
+          totalTokensCached += sub.uso.tokens_cached;
+          totalLatenciaMs += sub.uso.latencia_ms;
+          resultado = {
+            ok: sub.ok,
+            mestre: tc.arguments.mestre_slug,
+            titulo: sub.titulo,
+            conteudo: sub.conteudo_estruturado,
+            uso: sub.uso,
+          };
+        } else if (tc.name === 'consolidar-roteiro') {
+          resultado = { status: 'card_capturado' };
+        } else {
+          resultado = { error: `Tool '${tc.name}' nao suportada por orquestrador inline` };
+        }
+        llmMessages.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: JSON.stringify(resultado),
+        });
+      }
+
+      if (temConsolidado) break;
+    }
+
+    const custoUSD = calcularCustoUSD(modeloUsadoFinal, totalTokensIn, totalTokensOut, totalTokensCached);
+    return {
+      ok: true,
+      agente_slug,
+      orquestrador: true,
+      conteudo_md: consolidadoCard ? formatarConsolidadoMd(consolidadoCard) : respostaTexto,
+      conteudo_estruturado: consolidadoCard || { conteudo_md: respostaTexto },
+      titulo: consolidadoCard?.objetivo || 'Roteiro consolidado',
+      tipo: 'orquestracao-copy',
+      mestres_invocados: mestresInvocados,
+      uso: {
+        modelo: modeloUsadoFinal,
+        tokens_in: totalTokensIn,
+        tokens_out: totalTokensOut,
+        tokens_cached: totalTokensCached,
+        custo_usd: Number(custoUSD.toFixed(6)),
+        latencia_ms: totalLatenciaMs,
+      },
+      entregavel_id: null,
+    };
+  }
+
+  // Worker simples (mestre individual): 1 chamada, JSON estruturado
+  const llmResp = await chamarLLM({
+    modelo: agente.modelo || 'openai:gpt-4o',
+    systemPrompt,
+    messages: [{ role: 'user', content: userMsg }],
+    temperatura: agente.temperatura ?? 0.6,
+    maxTokens: 2048,
+  }, `agente-${agente_slug}`);
+
+  totalTokensIn = llmResp.tokensIn;
+  totalTokensOut = llmResp.tokensOut;
+  totalTokensCached = llmResp.tokensCached;
+  totalLatenciaMs = llmResp.latenciaMs;
+  modeloUsadoFinal = llmResp.modeloUsado;
+
+  let respObj: any;
+  try {
+    const txt = llmResp.content.trim();
+    const jsonMatch = txt.match(/```json\s*([\s\S]*?)```/) || txt.match(/(\{[\s\S]*\})/);
+    const jsonStr = jsonMatch ? jsonMatch[1] : txt;
+    respObj = JSON.parse(jsonStr);
+  } catch {
+    respObj = {
+      tipo: 'texto',
+      titulo: agente.nome,
+      conteudo_estruturado: { raw: llmResp.content },
+      conteudo_md: llmResp.content,
+      nota_de_dissenso: null,
+    };
+  }
+
+  const custoUSD = calcularCustoUSD(modeloUsadoFinal, totalTokensIn, totalTokensOut, totalTokensCached);
+  return {
+    ok: true,
+    agente_slug,
+    orquestrador: false,
+    conteudo_md: respObj.conteudo_md || llmResp.content,
+    conteudo_estruturado: respObj.conteudo_estruturado || respObj,
+    titulo: respObj.titulo || agente.nome,
+    tipo: respObj.tipo || 'texto',
+    mestres_invocados: [],
+    uso: {
+      modelo: modeloUsadoFinal,
+      tokens_in: totalTokensIn,
+      tokens_out: totalTokensOut,
+      tokens_cached: totalTokensCached,
+      custo_usd: Number(custoUSD.toFixed(6)),
+      latencia_ms: totalLatenciaMs,
+    },
+    pausou_em_dissenso: !!respObj.nota_de_dissenso,
+    nota_de_dissenso: respObj.nota_de_dissenso || undefined,
+    entregavel_id: null,
+  };
+}
+
+// =====================================================
 // Log de execução
 // =====================================================
 export interface LogExecucao {

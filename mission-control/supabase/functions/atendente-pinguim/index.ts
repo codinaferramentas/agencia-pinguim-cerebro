@@ -31,6 +31,7 @@ import {
   logarCustoFinOps,
   logarTool,
   calcularCustoUSD,
+  executarAgenteInline,
 } from '../_shared/agente.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -384,50 +385,34 @@ async function executarTool(
         break;
       }
       case 'delegar-chief': {
-        // Delega pra Chief de squad-conselheira (copy, storytelling, design...)
-        // Mapeia squad_slug → agente_slug do Chief.
+        // Delega pra Chief de squad-conselheira INLINE (mesmo processo, sem HTTP).
+        // Modelo OpenClaw: tudo roda em 1 processo.
         const CHIEFS_POR_SQUAD: Record<string, string> = {
           'copy': 'copy-chief',
-          // Adicionar outras squads conforme forem implementadas:
-          // 'storytelling': 'story-chief',
-          // 'design': 'design-chief',
-          // 'traffic-masters': 'traffic-masters-chief',
+          // futuras: storytelling → story-chief, design → design-chief, etc.
         };
         const chiefSlug = CHIEFS_POR_SQUAD[toolArgs.squad_slug];
         if (!chiefSlug) {
           resultado = {
-            error: `Squad '${toolArgs.squad_slug}' ainda não tem Chief implementado. Hoje disponíveis: ${Object.keys(CHIEFS_POR_SQUAD).join(', ')}`,
+            error: `Squad '${toolArgs.squad_slug}' ainda nao tem Chief implementado. Hoje disponiveis: ${Object.keys(CHIEFS_POR_SQUAD).join(', ')}`,
           };
           break;
         }
-        const r = await fetch(`${SUPABASE_URL}/functions/v1/agente-executar`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            agente_slug: chiefSlug,
-            tenant_id: ctx.tenant_id,
-            cliente_id: ctx.cliente_id,
-            solicitante_id: ctx.solicitante_id,
-            briefing: toolArgs.briefing,
-          }),
+        const sub = await executarAgenteInline({
+          agente_slug: chiefSlug,
+          briefing: toolArgs.briefing,
+          tenant_id: ctx.tenant_id,
+          cliente_id: ctx.cliente_id,
+          solicitante_id: ctx.solicitante_id,
         });
-        const data = await r.json();
-        if (!r.ok) {
-          resultado = { error: data.detalhe || data.error || `agente-executar ${r.status}` };
-          break;
-        }
         resultado = {
-          ok: true,
+          ok: sub.ok,
           chief: chiefSlug,
           squad: toolArgs.squad_slug,
-          entregavel_id: data.entregavel_id,
-          conteudo_md: data.conteudo_md,
-          conteudo_estruturado: data.conteudo_estruturado,
-          mestres_invocados: data.mestres_invocados,
-          uso: data.uso,
+          conteudo_md: sub.conteudo_md,
+          conteudo_estruturado: sub.conteudo_estruturado,
+          mestres_invocados: sub.mestres_invocados,
+          uso: sub.uso,
         };
         break;
       }
