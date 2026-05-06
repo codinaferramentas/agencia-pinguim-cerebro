@@ -250,28 +250,29 @@ async function renderConversar(container) {
       el('div', { class: 'conversa-cabec-info' }, [
         el('div', { class: 'conversa-cabec-nome' }, 'Pinguim — Atendente'),
         el('div', { class: 'conversa-cabec-sub' },
-          casoAtivo
-            ? `Caso aberto · ${String(casoAtivo).slice(0, 8)}`
-            : 'Sem caso aberto. Diz qual produto/tema (Elo, Lo-fi, ProAlt...) e o que quer fazer.'),
+          mensagensVisuais.length === 0
+            ? 'Conta o que você precisa. Eu consulto Cérebros, trago Clones, entrego.'
+            : `${mensagensVisuais.length} mensagem${mensagensVisuais.length === 1 ? '' : 's'} nesta conversa`),
       ]),
       el('button', {
         class: 'btn',
         type: 'button',
+        title: 'Limpa a tela e começa nova conversa (histórico continua salvo no banco)',
         onclick: () => {
           casoAtivo = null;
           mensagensVisuais = [];
-          conversaJaHidratada = true; // não ressuscitar caso antigo do banco
+          conversaJaHidratada = true;
           renderAba('conversar');
         },
-      }, '+ Novo caso'),
+      }, 'Nova conversa'),
     ]),
     el('div', { id: 'conversa-mensagens', class: 'conversa-mensagens' },
       mensagensVisuais.length === 0
         ? [el('div', { class: 'conversa-vazia' }, [
             el('div', { class: 'conversa-vazia-icon' }, '🐧'),
-            el('div', {}, 'Comece um caso. Ex: "Página do Desafio Lo-fi de junho."'),
+            el('div', {}, 'Diz aí.'),
             el('div', { class: 'conversa-vazia-hint' },
-              'Pinguim consulta Cérebro automático ao reconhecer produto, traz Clones como conselheiros, e só monta plano de squad quando há entregável real.'),
+              'Eu reconheço Cérebro de produto, trago Clones como conselheiros, e só monto plano quando tem entregável real.'),
           ])]
         : mensagensVisuais.map(m => mensagemBubble(m))
     ),
@@ -289,17 +290,18 @@ async function renderConversar(container) {
       el('textarea', {
         id: 'conversa-textarea',
         class: 'conversa-textarea',
-        placeholder: 'Descreva o caso, faça uma pergunta ou peça refinamento...',
+        placeholder: 'Conta o que você precisa. Eu cuido do resto.',
         rows: '3',
         onkeydown: (e) => {
-          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+          // Enter envia. Shift+Enter quebra linha.
+          if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
             e.preventDefault();
             e.target.form.requestSubmit();
           }
         },
       }),
       el('div', { class: 'conversa-input-rodape' }, [
-        el('div', { class: 'conversa-hint' }, 'Ctrl+Enter pra enviar'),
+        el('div', { class: 'conversa-hint' }, 'Enter envia · Shift+Enter quebra linha'),
         el('button', { class: 'btn btn-primary', type: 'submit' }, 'Enviar →'),
       ]),
     ]),

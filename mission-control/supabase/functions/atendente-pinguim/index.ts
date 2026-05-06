@@ -68,48 +68,6 @@ async function requireAuth(req: Request): Promise<boolean> {
 }
 
 // =====================================================
-// Roteador determinístico interno (script — sem LLM)
-// Princípio: nem tudo é LLM. Saudação/agradecimento = resposta canned.
-// =====================================================
-type Roteamento =
-  | { tipo: 'saudacao'; resposta: string }
-  | { tipo: 'agradecimento'; resposta: string }
-  | { tipo: 'llm' };
-
-function roteador(mensagem: string, historicoLen: number): Roteamento {
-  const m = mensagem.trim().toLowerCase().replace(/[!?.,]+$/g, '');
-
-  // Saudação pura — responde canned independente de histórico.
-  // Se o cliente manda só "oi" no meio da conversa, ainda é saudação e
-  // ainda merece resposta barata (não vale gastar gpt-4o pra "oi novamente").
-  const SAUDACAO = /^(oi|olá|ola|opa|eai|e ai|bom dia|boa tarde|boa noite|hey|hi|hello)$/;
-  const PERG_BEM = /^(tudo bem|tudo certo|td bem|tudo joia|beleza|como vai|como você está)\??$/;
-  if (SAUDACAO.test(m) || PERG_BEM.test(m)) {
-    // 1ª mensagem do caso: resposta de boas-vindas com prompt de produto.
-    // Mensagem repetida no meio: resposta curta, sem ficar empurrando o mesmo prompt.
-    if (historicoLen === 0) {
-      return {
-        tipo: 'saudacao',
-        resposta:
-          'Oi! Sou o Pinguim 🐧, seu atendente. Pra eu ajudar de verdade, me conta: ' +
-          'qual produto/tema (Elo, Lo-fi, ProAlt, Lira, Taurus, Orion) e o que você quer fazer. ' +
-          'Eu consulto o Cérebro do produto e te respondo com contexto real.',
-      };
-    }
-    return {
-      tipo: 'saudacao',
-      resposta: 'Oi de novo. Me diz qual produto/tema você quer trabalhar agora.',
-    };
-  }
-
-  const AGRADECIMENTO = /^(obrigado|obrigada|valeu|vlw|ok|certo|tranquilo|beleza|de boa)$/;
-  if (AGRADECIMENTO.test(m)) {
-    return { tipo: 'agradecimento', resposta: 'Tranquilo. Quando precisar, é só chamar.' };
-  }
-  return { tipo: 'llm' };
-}
-
-// =====================================================
 // Detector semântico de produto (script — sem LLM)
 // Mapeia palavras-chave → slug do Cérebro. Se bate, força buscar-cerebro
 // ANTES do LLM responder. Resolve o bug "Chief perguntou qual o produto?"
@@ -438,14 +396,15 @@ function montarSystemPromptPinguim(args: {
   partes.push(
     `Você é o **Pinguim 🐧** — atendente único do Pinguim OS.\n\n` +
     `## Como você opera (regra dura)\n` +
-    `1. **Antes de perguntar, consulte.** Se reconhece um produto (Elo, Lo-fi, ProAlt, Lira, Taurus, Orion) ou metodologia, use \`buscar-cerebro\` IMEDIATAMENTE. Não pergunte "qual o produto?" se o cliente já disse.\n` +
-    `2. **Use Clones como conselheiros.** Em copy/oferta cite Hormozi, Schwartz, Halbert. Em estratégia cite Dalio, Munger, Naval. Use \`buscar-clone\` pra trazer voz real.\n` +
-    `3. **Nem tudo é LLM.** Se a tarefa é determinística (lookup, cálculo, formatação, query SQL), use \`criar-script\` em vez de gerar texto a cada vez.\n` +
-    `4. **Plano só com entregável real.** \`montar-card-plano\` é pra quando o caso pede copy/página/vídeo/lançamento concreto. Pergunta solta NÃO precisa de plano — só responda.\n` +
-    `5. **Aprendeu padrão do cliente? Registre.** Use \`atualizar-perfil-cliente\` quando notar preferência (ex.: "André prefere copy direta sem floreio").\n` +
-    `6. **Sem alucinação.** Se faltar Worker real pra um papel no Card, marque \`agente_slug: "agente-a-criar"\`. Sem inventar slug fictício.\n` +
-    `7. **Sem estimativa inventada.** Sem histórico de execução, passe \`null\` em tempo/custo.\n` +
-    `8. **Tom:** direto sem ser seco. Frases curtas. Verbos no presente.\n`
+    `1. **Saudação ou pergunta solta = resposta CURTA.** "oi", "boa tarde", "tudo bem?" → resposta de 1 linha, calorosa, sem encher de prompt. NÃO chame nenhuma tool pra saudação. NÃO empurre lista de produtos a cada "oi". Conversa natural primeiro, contexto depois.\n` +
+    `2. **Antes de perguntar, consulte.** Se reconhece um produto (Elo, Lo-fi, ProAlt, Lira, Taurus, Orion) ou metodologia, use \`buscar-cerebro\` IMEDIATAMENTE. Não pergunte "qual o produto?" se o cliente já disse.\n` +
+    `3. **Use Clones como conselheiros.** Em copy/oferta cite Hormozi, Schwartz, Halbert. Em estratégia cite Dalio, Munger, Naval. Use \`buscar-clone\` pra trazer voz real.\n` +
+    `4. **Nem tudo é LLM.** Se a tarefa é determinística (lookup, cálculo, formatação, query SQL), use \`criar-script\` em vez de gerar texto a cada vez.\n` +
+    `5. **Plano só com entregável real.** \`montar-card-plano\` é pra quando o caso pede copy/página/vídeo/lançamento concreto. Pergunta solta NÃO precisa de plano — só responda.\n` +
+    `6. **Aprendeu padrão do cliente? Registre.** Use \`atualizar-perfil-cliente\` quando notar preferência (ex.: "André prefere copy direta sem floreio").\n` +
+    `7. **Sem alucinação.** Se faltar Worker real pra um papel no Card, marque \`agente_slug: "agente-a-criar"\`. Sem inventar slug fictício.\n` +
+    `8. **Sem estimativa inventada.** Sem histórico de execução, passe \`null\` em tempo/custo.\n` +
+    `9. **Tom:** direto sem ser seco. Frases curtas. Verbos no presente. Lembre do contexto da conversa toda — não comece do zero a cada turno.\n`
   );
 
   if (produtosDetectados.length > 0) {
@@ -507,34 +466,9 @@ serve(async (req) => {
     });
 
     // =====================================================
-    // 4. ROTEADOR INTERNO (script — sem LLM)
-    // =====================================================
-    const rota = roteador(mensagem, historico.length);
-
-    if (rota.tipo === 'saudacao' || rota.tipo === 'agradecimento') {
-      await sb().from('conversas').insert({
-        tenant_id, cliente_id, agente_id: pinguim.id, caso_id: casoId,
-        papel: 'chief', conteudo: rota.resposta,
-      });
-      return jsonResp({
-        ok: true,
-        caso_id: casoId,
-        resposta: rota.resposta,
-        plano_card: null,
-        tools_executadas: [],
-        produtos_detectados: [],
-        uso: {
-          modelo: 'rota:script',
-          tokens_in: 0, tokens_out: 0, tokens_cached: 0,
-          cache_hit_pct: 0, custo_usd: 0,
-          tool_rounds: 0, latencia_llm_ms: 0,
-          latencia_total_ms: Date.now() - tInicio,
-        },
-      });
-    }
-
-    // =====================================================
-    // 5. Detector semântico de produto (script — sem LLM)
+    // 4. Detector semântico de produto (script — determinístico de verdade)
+    //    Conversa natural sempre vai pro LLM. Só detecção de palavra-chave
+    //    de produto é script (resolve "Lo-fi → consulta automática Cérebro").
     // =====================================================
     const produtosDetectados = detectarProduto(mensagem);
 
@@ -557,7 +491,21 @@ serve(async (req) => {
     llmMessages.push({ role: 'user', content: mensagem });
 
     // =====================================================
-    // 8. Loop LLM com tools
+    // 8. Escolha do modelo (heurística simples sem listar palavra-chave)
+    //    - Mensagem curta + sem produto detectado + cedo na conversa → mini
+    //    - Resto → gpt-4o (raciocínio + tools)
+    //    - Quando chave Anthropic estiver no cofre, troca pra Sonnet 4.6
+    // =====================================================
+    const palavras = mensagem.trim().split(/\s+/).filter(Boolean).length;
+    const usarMini = palavras <= 8
+      && produtosDetectados.length === 0
+      && historico.length <= 4;
+    const modeloEscolhido = usarMini
+      ? (pinguim.modelo_fallback || 'openai:gpt-4o-mini')
+      : pinguim.modelo;
+
+    // =====================================================
+    // 9. Loop LLM com tools
     // =====================================================
     let totalTokensIn = 0, totalTokensOut = 0, totalTokensCached = 0;
     let totalLatenciaMs = 0;
@@ -572,12 +520,12 @@ serve(async (req) => {
       rounds = round + 1;
       const llmResp = await chamarLLM(
         {
-          modelo: pinguim.modelo, // openai:gpt-4o
+          modelo: modeloEscolhido,
           systemPrompt,
           messages: llmMessages,
           tools: TOOLS,
           temperatura: pinguim.temperatura ?? 0.4,
-          maxTokens: 2048,
+          maxTokens: usarMini ? 512 : 2048,
         },
         'atendente-pinguim',
       );
