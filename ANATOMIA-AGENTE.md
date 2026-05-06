@@ -18,9 +18,9 @@ Cada agente mora no próprio diretório:
 /agentes/<categoria>/<slug-do-agente>/
 ```
 
-E contém **6 arquivos MD obrigatórios** + **1 arquivo vivo de aprendizado**:
+E contém **6 arquivos MD obrigatórios** + **2 estruturas vivas de memória individual**:
 
-| Arquivo | O que é |
+| Arquivo / Pasta | O que é |
 |---|---|
 | `IDENTITY.md` | Nome, emoji, resumo de 1 parágrafo. Cartão de visita. |
 | `SOUL.md` | Personalidade, tom de voz, valores, limites de linguagem. É a alma — não confundir com regras operacionais. |
@@ -28,7 +28,10 @@ E contém **6 arquivos MD obrigatórios** + **1 arquivo vivo de aprendizado**:
 | `TOOLS.md` | Ferramentas e APIs conectadas ao agente (lista com link/endpoint/auth). |
 | `SYSTEM-PROMPT.md` | Prompt final que vai pro LLM como `role: system`. Consolida o que está nos outros MDs em texto corrido. |
 | `AGENT-CARD.md` | Contrato operacional de 7 campos (ver seção 3). |
-| `APRENDIZADOS.md` | Arquivo vivo — cada feedback recebido vira uma linha aqui. Lido em toda execução. |
+| `APRENDIZADOS.md` | **Memória individual ATIVA desde v1.** Aprendizados gerais do agente, agregados entre clientes. Lido em toda execução. Crescido por destilação automática (cron) quando padrão se repete entre 3+ clientes. |
+| `perfis/<cliente_slug>.md` | **Memória individual por cliente.** Pasta criada on-demand. Cada cliente que o agente atende gera 1 arquivo. O que esse cliente já me ensinou (ex: "prefere copy curta sem exclamação"). Lido em toda execução cujo `cliente` casar. |
+
+**Regra dura:** memória individual nasce ATIVA na v1 do agente. Não é "implementa depois quando der dor". Sem `APRENDIZADOS.md` + `perfis/` vivos, o agente não cumpre EPP — vira chatbot caro. Ver memória `project_memoria_individual_dna_agente.md` (2026-05-05) pra contexto da decisão.
 
 **Por que MD em disco e não tudo em banco?**
 - Versionamento grátis via git (cada commit = uma "versão" do agente).
@@ -74,6 +77,48 @@ create table agente_execucoes (
 ```
 
 **Regra de ouro do banco:** uma tabela de agentes, uma tabela de execuções. Não criar tabela nova por tipo de agente. Escala pra centenas de agentes sem mexer em schema.
+
+### 1.3. Tabelas de memória conversacional (orquestrador + entregáveis)
+
+Além das duas tabelas acima, o sistema tem mais 3 tabelas genéricas que servem **toda a frota de agentes**, não uma por agente:
+
+```sql
+-- Histórico cliente↔Chief (uma linha por mensagem)
+create table conversas (
+  id uuid primary key,
+  cliente_id uuid not null,
+  agente_id uuid references agentes(id),     -- normalmente o Chief
+  papel text not null,                        -- 'humano' | 'chief' | 'sistema'
+  conteudo text not null,
+  artefatos jsonb,                            -- estruturas embutidas (planos, refs)
+  criado_em timestamptz default now()
+);
+
+-- Entregáveis versionados (a copy, a página, o relatório, etc)
+create table entregaveis (
+  id uuid primary key,
+  cliente_id uuid not null,
+  agente_que_fez uuid references agentes(id), -- worker que produziu
+  tipo text not null,                         -- 'copy' | 'pagina' | 'relatorio' | ...
+  titulo text,
+  conteudo text not null,
+  versao int not null default 1,
+  parent_id uuid references entregaveis(id),  -- versão anterior (se for revisão)
+  criado_em timestamptz default now()
+);
+
+-- Memória individual por cliente (espelho banco do `perfis/<cliente>.md`)
+create table aprendizados_cliente_agente (
+  agente_id uuid references agentes(id),
+  cliente_id uuid not null,
+  conteudo_md text not null,                  -- mesmo texto do perfis/<cliente>.md
+  versao int not null default 1,
+  atualizado_em timestamptz default now(),
+  primary key (agente_id, cliente_id)
+);
+```
+
+`APRENDIZADOS.md` (geral, agregado entre clientes) também tem espelho no banco — `aprendizados_agente`. **Banco é fonte da verdade. Disco (`.md`) é espelho versionado em git** — auditável e legível por humano. Sync banco→disco roda 1x/dia ou on-demand pelo painel.
 
 ---
 
@@ -151,23 +196,39 @@ Se ao desenhar um agente você não consegue responder essas 3 perguntas, **ele 
 2. **Como o agente recebe feedback?** (👍/👎/edit/comentário do usuário)
 3. **Como o feedback afeta execuções futuras?** (aparece como contexto na próxima chamada)
 
-### Mecanismo concreto
+### Mecanismo concreto — duas camadas de memória individual
 
-O feedback vive como **arquivo MD dentro do próprio agente**, não como linha em tabela:
+O feedback vive como **arquivo MD dentro do próprio agente**, em duas camadas:
 
-- `APRENDIZADOS.md` no diretório do agente.
-- Cada feedback vira uma linha no formato:
-  > *"Em [data] o usuário editou [trecho X] para [Y] porque [motivo]. Aplicar padrão similar em [contexto futuro]."*
-- **Antes de cada execução**, o agente lê o próprio `APRENDIZADOS.md` e injeta no prompt como "aprendizados anteriores".
-- Versionamento vem de graça via git — cada commit no MD é uma versão do agente (v1.0, v1.1, v1.2...).
-- **Zero tabela nova** pra feedback. Escala pra centenas de agentes — são só pastas com um MD a mais.
+**Camada 1 — APRENDIZADOS.md (geral, agregado entre clientes)**
+- Lições que valem pra qualquer cliente que esse agente atender.
+- Crescido por **destilação automática** (cron 1x/dia): quando padrão se repete em 3+ perfis de cliente diferentes, vira lição agregada.
+- Exemplo: *"Padrão observado: copy com bullets curtos converte melhor que parágrafos longos em landing pages."*
+
+**Camada 2 — perfis/<cliente_slug>.md (específico por cliente)**
+- O que ESTE cliente já me ensinou, individualmente.
+- Crescido em tempo real, a cada execução com feedback humano.
+- Exemplo: *"Cliente Luiz prefere copy sem exclamação (corrigiu 4x desde 2026-04-12)."*
+
+**Antes de cada execução**, o agente lê:
+1. `APRENDIZADOS.md` próprio (geral)
+2. `perfis/<cliente_atual>.md` (específico do cliente do caso, se existir)
+
+Ambos entram no system prompt como "memória do agente".
+
+**Depois de cada execução**, o curador valida output. Se humano dá feedback → agente destila em 1 linha → grava em `perfis/<cliente_atual>.md`. Cron diário promove padrões repetidos pra `APRENDIZADOS.md`.
+
+Versionamento vem de graça via git — cada commit nos MDs é uma versão do agente. **Banco é fonte da verdade** (espelho ativo em `aprendizados_agente` + `aprendizados_cliente_agente`); **disco é espelho legível** sincronizado por cron/painel.
 
 ### O que fica no banco vs no MD
 
 | Tipo de dado | Onde |
 |---|---|
 | Log de execução (custo, latência, tokens) | Banco — `agente_execucoes` |
-| Feedback qualitativo (o que melhorar) | MD — `APRENDIZADOS.md` |
+| Histórico cliente↔Chief | Banco — `conversas` |
+| Entregáveis versionados (copy, página, etc) | Banco — `entregaveis` |
+| Aprendizado geral do agente (entre clientes) | MD — `APRENDIZADOS.md` (espelho banco em `aprendizados_agente`) |
+| Aprendizado específico de cada cliente | MD — `perfis/<cliente>.md` (espelho banco em `aprendizados_cliente_agente`) |
 | Identidade (personalidade, escopo) | MD — `SOUL.md`, `AGENTS.md` |
 | Estado atual (modelo, status, kill switch) | Banco — `agentes` |
 
@@ -204,6 +265,8 @@ Só depois começar a escrever os MDs.
 - ❌ Criar tabela nova no banco pra cada tipo de agente
 - ❌ Guardar personalidade/regras no banco (isso é MD, em git)
 - ❌ Fazer agente sem `APRENDIZADOS.md` ("a gente adiciona depois")
+- ❌ Fazer agente sem estrutura `perfis/` (memória individual por cliente é DNA, não opcional)
+- ❌ Worker stateless puro ("aprende depois quando der dor") — viola EPP, vira chatbot caro
 - ❌ Misturar `SOUL.md` (personalidade) com `AGENTS.md` (regras operacionais) — são coisas diferentes
 - ❌ AGENT-CARD com menos de 7 campos preenchidos
 - ❌ Agente sem `handoff` definido — vai travar e ninguém sabe pra onde escalar
