@@ -78,18 +78,30 @@ type Roteamento =
 
 function roteador(mensagem: string, historicoLen: number): Roteamento {
   const m = mensagem.trim().toLowerCase().replace(/[!?.,]+$/g, '');
-  // Saudação só se não há histórico (evita bug do "oi" no meio da conversa)
+
+  // Saudação pura — responde canned independente de histórico.
+  // Se o cliente manda só "oi" no meio da conversa, ainda é saudação e
+  // ainda merece resposta barata (não vale gastar gpt-4o pra "oi novamente").
   const SAUDACAO = /^(oi|olá|ola|opa|eai|e ai|bom dia|boa tarde|boa noite|hey|hi|hello)$/;
   const PERG_BEM = /^(tudo bem|tudo certo|td bem|tudo joia|beleza|como vai|como você está)\??$/;
-  if (historicoLen === 0 && (SAUDACAO.test(m) || PERG_BEM.test(m))) {
+  if (SAUDACAO.test(m) || PERG_BEM.test(m)) {
+    // 1ª mensagem do caso: resposta de boas-vindas com prompt de produto.
+    // Mensagem repetida no meio: resposta curta, sem ficar empurrando o mesmo prompt.
+    if (historicoLen === 0) {
+      return {
+        tipo: 'saudacao',
+        resposta:
+          'Oi! Sou o Pinguim 🐧, seu atendente. Pra eu ajudar de verdade, me conta: ' +
+          'qual produto/tema (Elo, Lo-fi, ProAlt, Lira, Taurus, Orion) e o que você quer fazer. ' +
+          'Eu consulto o Cérebro do produto e te respondo com contexto real.',
+      };
+    }
     return {
       tipo: 'saudacao',
-      resposta:
-        'Oi! Sou o Pinguim 🐧, seu atendente. Pra eu ajudar de verdade, me conta: ' +
-        'qual produto/tema (Elo, Lo-fi, ProAlt, Lira, Taurus, Orion) e o que você quer fazer. ' +
-        'Eu consulto o Cérebro do produto e te respondo com contexto real.',
+      resposta: 'Oi de novo. Me diz qual produto/tema você quer trabalhar agora.',
     };
   }
+
   const AGRADECIMENTO = /^(obrigado|obrigada|valeu|vlw|ok|certo|tranquilo|beleza|de boa)$/;
   if (AGRADECIMENTO.test(m)) {
     return { tipo: 'agradecimento', resposta: 'Tranquilo. Quando precisar, é só chamar.' };
