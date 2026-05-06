@@ -220,26 +220,40 @@ const TOOLS = [
 ];
 
 // =====================================================
-// Resolve cerebro_slug → cerebro_id (UUID) na tabela pinguim.produtos
+// Resolve cerebro_slug → cerebros.id (UUID).
+// Schema: pinguim.produtos.id ←→ pinguim.cerebros.produto_id ←→ cerebros.id ←→ cerebro_fontes.cerebro_id
+// O Edge Function buscar-cerebro espera o ID da tabela `cerebros`, NÃO de `produtos`.
 // =====================================================
 async function resolverCerebroId(slug: string): Promise<string | null> {
-  const { data } = await sb()
+  const { data: produto } = await sb()
     .from('produtos')
     .select('id')
     .eq('slug', slug)
     .maybeSingle();
-  return data?.id || null;
+  if (!produto?.id) return null;
+  const { data: cerebro } = await sb()
+    .from('cerebros')
+    .select('id')
+    .eq('produto_id', produto.id)
+    .maybeSingle();
+  return cerebro?.id || null;
 }
 
 async function resolverCloneId(slug: string): Promise<string | null> {
   const slugNormalizado = slug.startsWith('clone-') ? slug : `clone-${slug.replace(/^clone-/, '')}`;
-  const { data } = await sb()
+  const { data: produto } = await sb()
     .from('produtos')
     .select('id')
     .eq('slug', slugNormalizado)
     .eq('categoria', 'clone')
     .maybeSingle();
-  return data?.id || null;
+  if (!produto?.id) return null;
+  const { data: cerebro } = await sb()
+    .from('cerebros')
+    .select('id')
+    .eq('produto_id', produto.id)
+    .maybeSingle();
+  return cerebro?.id || null;
 }
 
 // =====================================================
