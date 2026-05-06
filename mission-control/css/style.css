@@ -7953,6 +7953,65 @@ body.mapa-apresentacao .mapa-prova-card-texto { font-size: 0.9375rem; }
 }
 
 /* ============================================================
+   NAV DESTAQUE — Agentes em destaque acima dos pilares
+   ============================================================ */
+.nav-destaque {
+  padding: 0.5rem 0.5rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.4rem;
+}
+.nav-item-destaque {
+  position: relative;
+  background: linear-gradient(135deg, rgba(232, 92, 0, 0.12), rgba(232, 92, 0, 0.04));
+  border: 1px solid rgba(232, 92, 0, 0.35);
+  border-radius: 8px;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--fg);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+.nav-item-destaque:hover {
+  background: linear-gradient(135deg, rgba(232, 92, 0, 0.2), rgba(232, 92, 0, 0.08));
+  border-color: var(--pc, #E85C00);
+}
+.nav-item-destaque.active {
+  background: var(--pc, #E85C00);
+  border-color: var(--pc, #E85C00);
+  color: #fff;
+}
+.nav-item-destaque.active .nav-destaque-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+.nav-destaque-badge {
+  margin-left: auto;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: rgba(232, 92, 0, 0.25);
+  color: var(--pc, #E85C00);
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+}
+/* Esconde badge quando sidebar tá recolhida */
+.app.nav-collapsed .nav-destaque-badge,
+.app.nav-collapsed .nav-item-destaque .nav-label {
+  display: none;
+}
+.app.nav-collapsed .nav-destaque {
+  padding: 0.5rem 0.4rem;
+}
+.app.nav-collapsed .nav-item-destaque {
+  justify-content: center;
+  padding: 0.5rem;
+}
+
+/* ============================================================
    AGENTES — tela operacional (4 abas)
    ============================================================ */
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pinguim OS</title>
-<link rel="stylesheet" href="css/style.css?v=20260506a">
+<link rel="stylesheet" href="css/style.css?v=20260506b">
 </head>
 <body>
 <!-- Botao hamburger (so mobile) -->
@@ -27,6 +27,14 @@
         </div>
       </div>
       <button id="nav-collapse" class="nav-collapse-btn" type="button" title="Recolher (Ctrl+B)" aria-label="Recolher">‹‹</button>
+    </div>
+
+    <div class="nav-destaque">
+      <button class="nav-item nav-item-destaque" data-page="agentes" type="button" title="Agentes — Chief, squads e execuções">
+        <span class="nav-icon">🧭</span>
+        <span class="nav-label">Agentes</span>
+        <span class="nav-destaque-badge">Chief</span>
+      </button>
     </div>
 
     <div class="nav-list" id="nav-list">
@@ -130,7 +138,7 @@
   const ok = await guard();
   if (ok) {
     await import('./js/sb-client.js?v=20260430k');
-    await import('./js/app.js?v=20260506a');
+    await import('./js/app.js?v=20260506b');
     const btn = document.getElementById('nav-logout');
     if (btn) btn.addEventListener('click', logout);
   }

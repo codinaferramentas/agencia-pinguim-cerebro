@@ -147,8 +147,8 @@ function setupNav() {
     }
   });
 
-  // ---- Footer items (Documentacao) ----
-  $$('.nav-footer .nav-item').forEach(item => {
+  // ---- Footer items (Documentacao) + Destaque (Agentes) ----
+  $$('.nav-footer .nav-item, .nav-destaque .nav-item').forEach(item => {
     item.addEventListener('click', async () => {
       const slug = item.dataset.page;
       if (slug) {
