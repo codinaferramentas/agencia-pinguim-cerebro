@@ -180,6 +180,21 @@ const TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'delegar-chief',
+      description: 'Delega trabalho especialista pra Chief de uma squad-conselheira. Use quando o caso pede entregavel real do dominio dela. Ex.: pedido de copy → squad_slug=copy (Copy Chief vai escolher 1-2 mestres e devolver copy consolidada).',
+      parameters: {
+        type: 'object',
+        properties: {
+          squad_slug: { type: 'string', description: 'slug da squad-conselheira (hoje disponivel: copy)' },
+          briefing: { type: 'string', description: 'briefing completo: produto, objetivo, publico, tom, prazo, parametros. Inclua resumo do Cerebro do produto se ja consultou.' },
+        },
+        required: ['squad_slug', 'briefing'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'montar-card-plano',
       description: 'Monta Card de Plano da Missao quando o caso pede entregavel real (copy, pagina, video, plano de lancamento) que vai precisar de Worker(s) especialista(s). NAO use pra responder pergunta simples — so quando ha entregavel concreto a delegar.',
       parameters: {
@@ -368,6 +383,54 @@ async function executarTool(
         };
         break;
       }
+      case 'delegar-chief': {
+        // Delega pra Chief de squad-conselheira (copy, storytelling, design...)
+        // Mapeia squad_slug → agente_slug do Chief.
+        const CHIEFS_POR_SQUAD: Record<string, string> = {
+          'copy': 'copy-chief',
+          // Adicionar outras squads conforme forem implementadas:
+          // 'storytelling': 'story-chief',
+          // 'design': 'design-chief',
+          // 'traffic-masters': 'traffic-masters-chief',
+        };
+        const chiefSlug = CHIEFS_POR_SQUAD[toolArgs.squad_slug];
+        if (!chiefSlug) {
+          resultado = {
+            error: `Squad '${toolArgs.squad_slug}' ainda não tem Chief implementado. Hoje disponíveis: ${Object.keys(CHIEFS_POR_SQUAD).join(', ')}`,
+          };
+          break;
+        }
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/agente-executar`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            agente_slug: chiefSlug,
+            tenant_id: ctx.tenant_id,
+            cliente_id: ctx.cliente_id,
+            solicitante_id: ctx.solicitante_id,
+            briefing: toolArgs.briefing,
+          }),
+        });
+        const data = await r.json();
+        if (!r.ok) {
+          resultado = { error: data.detalhe || data.error || `agente-executar ${r.status}` };
+          break;
+        }
+        resultado = {
+          ok: true,
+          chief: chiefSlug,
+          squad: toolArgs.squad_slug,
+          entregavel_id: data.entregavel_id,
+          conteudo_md: data.conteudo_md,
+          conteudo_estruturado: data.conteudo_estruturado,
+          mestres_invocados: data.mestres_invocados,
+          uso: data.uso,
+        };
+        break;
+      }
       case 'montar-card-plano': {
         // Terminal — pro loop saber que é hora de parar
         resultado = { status: 'card_capturado', card: toolArgs };
@@ -414,7 +477,7 @@ function montarSystemPromptPinguim(args: {
     `2. **Antes de perguntar, consulte.** Se reconhece um produto (Elo, Lo-fi, ProAlt, Lira, Taurus, Orion) ou metodologia, use \`buscar-cerebro\` IMEDIATAMENTE. Não pergunte "qual o produto?" se o cliente já disse.\n` +
     `3. **Use Clones como conselheiros.** Em copy/oferta cite Hormozi, Schwartz, Halbert. Em estratégia cite Dalio, Munger, Naval. Use \`buscar-clone\` pra trazer voz real.\n` +
     `4. **Nem tudo é LLM.** Se a tarefa é determinística (lookup, cálculo, formatação, query SQL), use \`criar-script\` em vez de gerar texto a cada vez.\n` +
-    `5. **Plano só com entregável real.** \`montar-card-plano\` é pra quando o caso pede copy/página/vídeo/lançamento concreto. Pergunta solta NÃO precisa de plano — só responda.\n` +
+    `5. **Pediu entregável real (copy, VSL, página, plano de lançamento)?** Use \`delegar-chief\` pra mandar pra squad-conselheira certa. Hoje disponível: \`squad_slug=copy\` (Copy Chief com 4 mestres: Hormozi, Schwartz, Halbert, Bencivenga). Faça primeiro \`buscar-cerebro\` do produto envolvido e inclua o resumo no briefing. \`montar-card-plano\` é só pra plano grande multi-squad. Pergunta solta NÃO precisa de plano nem de Chief — só responda.\n` +
     `6. **Aprendeu padrão do cliente? Registre.** Use \`atualizar-perfil-cliente\` quando notar preferência (ex.: "André prefere copy direta sem floreio").\n` +
     `7. **Sem alucinação.** Se faltar Worker real pra um papel no Card, marque \`agente_slug: "agente-a-criar"\`. Sem inventar slug fictício.\n` +
     `8. **Sem estimativa inventada.** Sem histórico de execução, passe \`null\` em tempo/custo.\n` +

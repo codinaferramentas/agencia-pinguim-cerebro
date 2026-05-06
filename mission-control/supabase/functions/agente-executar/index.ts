@@ -75,6 +75,79 @@ async function requireAuth(req: Request): Promise<boolean> {
 }
 
 // =====================================================
+// Tools que orquestradores de squad (ex.: copy-chief) podem usar.
+// Quando o agente tem 'delegar-mestre' nas ferramentas, ativamos loop tool-calling.
+// =====================================================
+const TOOLS_ORQUESTRADOR = [
+  {
+    type: 'function',
+    function: {
+      name: 'delegar-mestre',
+      description: 'Invoca um mestre da squad pra executar parte do trabalho. Devolve a contribuição estruturada do mestre.',
+      parameters: {
+        type: 'object',
+        properties: {
+          mestre_slug: { type: 'string', description: 'slug do mestre (ex.: alex-hormozi, eugene-schwartz, gary-halbert, gary-bencivenga)' },
+          briefing: { type: 'string', description: 'briefing claro pro mestre — objetivo, público, parâmetros específicos' },
+          parte: { type: 'string', description: 'qual parte do roteiro ele faz (ex.: "gancho", "desenvolvimento", "completo")', default: 'completo' },
+        },
+        required: ['mestre_slug', 'briefing'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'consolidar-roteiro',
+      description: 'Consolida as contribuições dos mestres invocados em copy/roteiro final. Use DEPOIS de invocar 1-2 mestres. Termina o trabalho do orquestrador.',
+      parameters: {
+        type: 'object',
+        properties: {
+          objetivo: { type: 'string' },
+          publico_consciencia: { type: 'string', description: 'nivel de consciencia identificado' },
+          mestres_usados: { type: 'array', items: { type: 'string' } },
+          justificativa: { type: 'string', description: 'por que esses mestres foram escolhidos' },
+          copy_final: {
+            type: 'object',
+            properties: {
+              gancho: { type: 'string' },
+              desenvolvimento: { type: 'string' },
+              virada: { type: 'string' },
+              cta: { type: 'string' },
+              metodo_anotado: { type: 'string', description: 'linha final tipo MÉTODO: ...' },
+            },
+          },
+        },
+        required: ['objetivo', 'mestres_usados', 'justificativa', 'copy_final'],
+      },
+    },
+  },
+];
+
+function ehOrquestrador(agente: any): boolean {
+  return Array.isArray(agente.ferramentas) && agente.ferramentas.includes('delegar-mestre');
+}
+
+function formatarConsolidadoMd(card: any): string {
+  if (!card) return '';
+  const partes: string[] = [];
+  if (card.objetivo) partes.push(`**Objetivo:** ${card.objetivo}`);
+  if (card.publico_consciencia) partes.push(`**Público (consciência):** ${card.publico_consciencia}`);
+  if (Array.isArray(card.mestres_usados)) partes.push(`**Mestres usados:** ${card.mestres_usados.join(', ')}`);
+  if (card.justificativa) partes.push(`**Justificativa:** ${card.justificativa}`);
+  partes.push('');
+  if (card.copy_final) {
+    const c = card.copy_final;
+    if (c.gancho) partes.push(`### [GANCHO]\n${c.gancho}`);
+    if (c.desenvolvimento) partes.push(`### [DESENVOLVIMENTO]\n${c.desenvolvimento}`);
+    if (c.virada) partes.push(`### [VIRADA]\n${c.virada}`);
+    if (c.cta) partes.push(`### [CTA]\n${c.cta}`);
+    if (c.metodo_anotado) partes.push(`\n_${c.metodo_anotado}_`);
+  }
+  return partes.join('\n\n');
+}
+
+// =====================================================
 // Schema obrigatório de saída pros Workers (R8 — sem blob)
 // =====================================================
 const SCHEMA_RESPOSTA_WORKER = `
@@ -124,8 +197,8 @@ serve(async (req) => {
   if (!agente_slug || !tenant_id || !cliente_id || !briefing) {
     return jsonResp({ error: 'Faltam: agente_slug, tenant_id, cliente_id, briefing' }, 400);
   }
-  if (agente_slug === 'chief') {
-    return jsonResp({ error: 'Use /chief-orquestrar pro Chief, não /agente-executar' }, 400);
+  if (agente_slug === 'pinguim') {
+    return jsonResp({ error: 'Use /atendente-pinguim pro agente principal, não /agente-executar' }, 400);
   }
 
   const tInicio = Date.now();
@@ -150,17 +223,21 @@ serve(async (req) => {
       entregavelOrigem = data;
     }
 
-    // 4. Monta system prompt
+    // 4. É orquestrador (tem delegar-mestre nas ferramentas)? Loop tool calling.
+    //    Senão, chamada simples e parse de JSON estruturado.
+    const orquestrador = ehOrquestrador(worker);
+
+    // 5. Monta system prompt (sem schema rígido pra orquestrador, com schema pro worker simples)
     const systemPrompt = montarSystemPrompt({
       agente: worker,
       aprendizados,
       perfilSolicitante,
       solicitanteSlug: null,
       historico: [],
-    }) + '\n\n' + SCHEMA_RESPOSTA_WORKER;
+    }) + (orquestrador ? '' : '\n\n' + SCHEMA_RESPOSTA_WORKER);
 
-    // 5. Monta mensagem do user
-    let userMsg = `## Briefing do Chief\n${briefing}`;
+    // 6. User message
+    let userMsg = `## Briefing\n${briefing}`;
     if (entregavelOrigem) {
       userMsg += `\n\n## Entregável de origem (versão ${entregavelOrigem.versao})\nTipo: ${entregavelOrigem.tipo}\nTítulo: ${entregavelOrigem.titulo}\n\n${entregavelOrigem.conteudo_md || JSON.stringify(entregavelOrigem.conteudo_estruturado, null, 2)}`;
     }
@@ -168,58 +245,171 @@ serve(async (req) => {
       userMsg += `\n\n## Contexto extra\n${typeof contexto_extra === 'string' ? contexto_extra : JSON.stringify(contexto_extra)}`;
     }
 
-    // 6. Chama LLM (modelo do Worker, pode ser mais barato que Chief)
-    const llmResp = await chamarLLM({
-      modelo: worker.modelo || 'openai:gpt-5-mini',
-      systemPrompt,
-      messages: [{ role: 'user', content: userMsg }],
-      temperatura: worker.temperatura ?? 0.6,
-      maxTokens: 8192,
-    }, `agente-${agente_slug}`);
+    // 7. Loop tool calling se orquestrador, senão chamada simples
+    let totalTokensIn = 0, totalTokensOut = 0, totalTokensCached = 0, totalLatenciaMs = 0;
+    let modeloUsadoFinal = '';
+    let respostaFinal: any = null;
+    let consolidadoCard: any = null;
+    let mestresInvocados: Array<{ slug: string; output: any; uso: any }> = [];
 
-    // 7. Parse JSON de resposta (com fallback robusto)
-    let respObj: any = null;
-    try {
-      // Tenta extrair JSON do response (LLM às vezes envolve em markdown)
-      const txt = llmResp.content.trim();
-      const jsonMatch = txt.match(/```json\s*([\s\S]*?)```/) || txt.match(/(\{[\s\S]*\})/);
-      const jsonStr = jsonMatch ? jsonMatch[1] : txt;
-      respObj = JSON.parse(jsonStr);
-    } catch (e) {
-      // Worker não devolveu JSON válido — registra e retorna como blob (degradação graceful)
-      respObj = {
-        tipo: 'erro_parse',
-        titulo: 'Worker não retornou JSON estruturado',
-        conteudo_estruturado: { raw: llmResp.content },
-        conteudo_md: llmResp.content,
+    if (orquestrador) {
+      const llmMessages: any[] = [{ role: 'user', content: userMsg }];
+      const MAX_ROUNDS = 4;
+
+      for (let round = 0; round <= MAX_ROUNDS; round++) {
+        const llmResp = await chamarLLM({
+          modelo: worker.modelo || 'openai:gpt-4o',
+          systemPrompt,
+          messages: llmMessages,
+          tools: TOOLS_ORQUESTRADOR,
+          temperatura: worker.temperatura ?? 0.5,
+          maxTokens: 4096,
+        }, `agente-${agente_slug}`);
+
+        totalTokensIn += llmResp.tokensIn;
+        totalTokensOut += llmResp.tokensOut;
+        totalTokensCached += llmResp.tokensCached;
+        totalLatenciaMs += llmResp.latenciaMs;
+        modeloUsadoFinal = llmResp.modeloUsado;
+
+        if (!llmResp.toolCalls || llmResp.toolCalls.length === 0) {
+          // Sem tool calls — output direto
+          respostaFinal = { conteudo_md: llmResp.content };
+          break;
+        }
+
+        // Adiciona assistant com tool_calls
+        llmMessages.push({
+          role: 'assistant',
+          content: llmResp.content || null,
+          tool_calls: llmResp.toolCalls.map(tc => ({
+            id: tc.id, type: 'function',
+            function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+          })),
+        });
+
+        let temConsolidado = false;
+        for (const tc of llmResp.toolCalls) {
+          if (tc.name === 'consolidar-roteiro') {
+            consolidadoCard = tc.arguments;
+            temConsolidado = true;
+          }
+        }
+
+        for (const tc of llmResp.toolCalls) {
+          let resultado: any;
+          if (tc.name === 'delegar-mestre') {
+            // Chamada recursiva ao próprio agente-executar
+            const r = await fetch(`${SUPABASE_URL}/functions/v1/agente-executar`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                agente_slug: tc.arguments.mestre_slug,
+                tenant_id, cliente_id, caso_id,
+                solicitante_id,
+                briefing: tc.arguments.briefing + (tc.arguments.parte ? `\n\nParte: ${tc.arguments.parte}` : ''),
+              }),
+            });
+            const data = await r.json();
+            mestresInvocados.push({ slug: tc.arguments.mestre_slug, output: data, uso: data?.uso });
+            resultado = {
+              ok: data.ok,
+              mestre: tc.arguments.mestre_slug,
+              entregavel_id: data.entregavel_id,
+              titulo: data.titulo,
+              conteudo: data.conteudo_estruturado,
+              uso: data.uso,
+            };
+          } else if (tc.name === 'consolidar-roteiro') {
+            resultado = { status: 'card_capturado' };
+          } else {
+            resultado = { error: `Tool '${tc.name}' não suportada por orquestrador` };
+          }
+          llmMessages.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: JSON.stringify(resultado),
+          });
+        }
+
+        if (temConsolidado) break;
+        if (round === MAX_ROUNDS) {
+          respostaFinal = { conteudo_md: llmResp.content || '[Limite de rounds]' };
+        }
+      }
+
+      respostaFinal = {
+        tipo: 'orquestracao-copy',
+        titulo: consolidadoCard?.objetivo || 'Roteiro consolidado',
+        conteudo_estruturado: consolidadoCard || respostaFinal,
+        conteudo_md: consolidadoCard ? formatarConsolidadoMd(consolidadoCard) : (respostaFinal?.conteudo_md || ''),
         nota_de_dissenso: null,
       };
+    } else {
+      // Worker simples (mestre individual): 1 chamada, JSON estruturado
+      const llmResp = await chamarLLM({
+        modelo: worker.modelo || 'openai:gpt-4o',
+        systemPrompt,
+        messages: [{ role: 'user', content: userMsg }],
+        temperatura: worker.temperatura ?? 0.6,
+        maxTokens: 4096,
+      }, `agente-${agente_slug}`);
+
+      totalTokensIn = llmResp.tokensIn;
+      totalTokensOut = llmResp.tokensOut;
+      totalTokensCached = llmResp.tokensCached;
+      totalLatenciaMs = llmResp.latenciaMs;
+      modeloUsadoFinal = llmResp.modeloUsado;
+
+      // Wrap pra reuso da lógica de parse abaixo
+      var llmResp_legacy = llmResp;
     }
 
-    // 8. Loga execução (com tokens cached)
+    // 8. Parse: orquestrador já tem respostaFinal preenchido. Worker simples precisa parsear.
+    let respObj: any = null;
+    if (orquestrador) {
+      respObj = respostaFinal;
+    } else {
+      try {
+        const txt = llmResp_legacy.content.trim();
+        const jsonMatch = txt.match(/```json\s*([\s\S]*?)```/) || txt.match(/(\{[\s\S]*\})/);
+        const jsonStr = jsonMatch ? jsonMatch[1] : txt;
+        respObj = JSON.parse(jsonStr);
+      } catch (e) {
+        respObj = {
+          tipo: 'erro_parse',
+          titulo: 'Worker não retornou JSON estruturado',
+          conteudo_estruturado: { raw: llmResp_legacy.content },
+          conteudo_md: llmResp_legacy.content,
+          nota_de_dissenso: null,
+        };
+      }
+    }
+
+    // 9. Loga execução (consolidado se foi orquestrador)
     await logarExecucao({
       agenteId: worker.id,
       input: { briefing, entregavel_origem_id, contexto_extra },
       output: respObj,
-      modelo: llmResp.modeloUsado,
-      tokensIn: llmResp.tokensIn,
-      tokensOut: llmResp.tokensOut,
-      tokensCached: llmResp.tokensCached,
-      latenciaMs: llmResp.latenciaMs,
+      modelo: modeloUsadoFinal,
+      tokensIn: totalTokensIn,
+      tokensOut: totalTokensOut,
+      tokensCached: totalTokensCached,
+      latenciaMs: totalLatenciaMs,
     });
 
-    // 9. Loga custo FinOps (com desconto de cache)
-    const custoUSD = calcularCustoUSD(llmResp.modeloUsado, llmResp.tokensIn, llmResp.tokensOut, llmResp.tokensCached);
+    // 10. Loga custo FinOps
+    const custoUSD = calcularCustoUSD(modeloUsadoFinal, totalTokensIn, totalTokensOut, totalTokensCached);
     await logarCustoFinOps({
       agenteSlug: agente_slug,
-      modelo: llmResp.modeloUsado,
+      modelo: modeloUsadoFinal,
       custoUSD,
-      tokensIn: llmResp.tokensIn,
-      tokensOut: llmResp.tokensOut,
-      tokensCached: llmResp.tokensCached,
+      tokensIn: totalTokensIn,
+      tokensOut: totalTokensOut,
+      tokensCached: totalTokensCached,
     });
 
-    // 10. Se Worker pausou em dissenso → não cria entregável, retorna nota
+    // 11. Se Worker pausou em dissenso → não cria entregável, retorna nota
     if (respObj.nota_de_dissenso) {
       return jsonResp({
         ok: true,
@@ -228,12 +418,12 @@ serve(async (req) => {
         worker_id: worker.id,
         worker_slug: agente_slug,
         uso: {
-          modelo: llmResp.modeloUsado,
-          tokens_in: llmResp.tokensIn,
-          tokens_out: llmResp.tokensOut,
-          tokens_cached: llmResp.tokensCached,
+          modelo: modeloUsadoFinal,
+          tokens_in: totalTokensIn,
+          tokens_out: totalTokensOut,
+          tokens_cached: totalTokensCached,
           custo_usd: Number(custoUSD.toFixed(6)),
-          latencia_ms: llmResp.latenciaMs,
+          latencia_ms: totalLatenciaMs,
         },
       });
     }
@@ -274,17 +464,20 @@ serve(async (req) => {
       versao: novoEntregavel.versao,
       parent_id: parent_id || null,
       conteudo_estruturado: respObj.conteudo_estruturado,
+      conteudo_md: respObj.conteudo_md,
       titulo: respObj.titulo,
       tipo: respObj.tipo,
       worker_slug: agente_slug,
+      orquestrador,
+      mestres_invocados: mestresInvocados.map(m => ({ slug: m.slug, entregavel_id: m.output?.entregavel_id, custo_usd: m.uso?.custo_usd })),
       uso: {
-        modelo: llmResp.modeloUsado,
-        tokens_in: llmResp.tokensIn,
-        tokens_out: llmResp.tokensOut,
-        tokens_cached: llmResp.tokensCached,
-        cache_hit_pct: llmResp.tokensIn > 0 ? Number(((llmResp.tokensCached / llmResp.tokensIn) * 100).toFixed(1)) : 0,
+        modelo: modeloUsadoFinal,
+        tokens_in: totalTokensIn,
+        tokens_out: totalTokensOut,
+        tokens_cached: totalTokensCached,
+        cache_hit_pct: totalTokensIn > 0 ? Number(((totalTokensCached / totalTokensIn) * 100).toFixed(1)) : 0,
         custo_usd: Number(custoUSD.toFixed(6)),
-        latencia_ms: llmResp.latenciaMs,
+        latencia_ms: totalLatenciaMs,
         latencia_total_ms: Date.now() - tInicio,
       },
     });
