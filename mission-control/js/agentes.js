@@ -35,6 +35,9 @@ let aba = 'catalogo';
 // Conversa ativa (caso_id) e histórico em memória
 let casoAtivo = null;
 let mensagensVisuais = []; // [{ papel, conteudo, plano_card?, uso? }]
+// Hidrata do banco apenas 1x por sessão. Quando usuário clica "+ Novo caso",
+// marca como hidratado pra não ressuscitar caso antigo no próximo render.
+let conversaJaHidratada = false;
 
 // Tenant e cliente padrão (Pinguim usa o próprio painel)
 // Quando virar multi-tenant real, vem do contexto do usuário logado.
@@ -187,6 +190,11 @@ function statusLabel(s) {
 // Roda 1x quando a aba Conversar é aberta E ainda não há caso em memória.
 // =====================================================
 async function hidratarConversaDoBanco() {
+  // Hidrata só 1x por sessão. Se já rodou, não mexe (mesmo se memória estiver vazia).
+  // Isso evita ressuscitar caso antigo quando usuário clica "+ Novo caso".
+  if (conversaJaHidratada) return;
+  conversaJaHidratada = true;
+
   // Se já tem caso na memória da sessão, não sobrescreve.
   if (casoAtivo && mensagensVisuais.length > 0) return;
 
@@ -252,6 +260,7 @@ async function renderConversar(container) {
         onclick: () => {
           casoAtivo = null;
           mensagensVisuais = [];
+          conversaJaHidratada = true; // não ressuscitar caso antigo do banco
           renderAba('conversar');
         },
       }, '+ Novo caso'),
