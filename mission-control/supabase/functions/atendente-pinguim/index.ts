@@ -480,15 +480,19 @@ serve(async (req) => {
     // 1. Carrega Pinguim do banco (1 row, leve)
     const pinguim = await carregarAgente('pinguim');
 
-    // 2. Caso ID + persiste mensagem do humano
+    // 2. Caso ID
     const casoId = casoIdInput || crypto.randomUUID();
+
+    // 3. Histórico ANTES de persistir a nova mensagem.
+    //    Se persistir antes, o roteador vê historicoLen=1 sempre e nunca cai
+    //    em "saudacao" → "oi" passa pro LLM. Bug visto em produção 2026-05-06.
+    const historico = await carregarHistorico(tenant_id, cliente_id, casoId, 20);
+
+    // 4. Persiste mensagem do humano (depois de ler o histórico)
     await sb().from('conversas').insert({
       tenant_id, cliente_id, agente_id: pinguim.id, caso_id: casoId,
       papel: 'humano', conteudo: mensagem,
     });
-
-    // 3. Histórico (precisa pro roteador decidir se é 1ª msg)
-    const historico = await carregarHistorico(tenant_id, cliente_id, casoId, 20);
 
     // =====================================================
     // 4. ROTEADOR INTERNO (script — sem LLM)
