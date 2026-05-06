@@ -209,6 +209,7 @@ export async function renderFinOps() {
     el('div', { class: 'seguranca-tabs' }, [
       tab('visao', 'Visão geral'),
       tab('tokens', 'Tokens IA'),
+      tab('por-agente', 'Por agente'),
       tab('banco', 'Banco'),
       tab('alertas', 'Alertas'),
       tab('historico', 'Histórico'),
@@ -234,6 +235,7 @@ async function renderAba(qual, container) {
   try {
     if (qual === 'visao') await renderVisao(container);
     else if (qual === 'tokens') await renderTokens(container);
+    else if (qual === 'por-agente') await renderPorAgente(container);
     else if (qual === 'banco') await renderBanco(container);
     else if (qual === 'alertas') await renderAlertas(container);
     else if (qual === 'historico') await renderHistorico(container);
@@ -507,6 +509,116 @@ async function renderHistorico(container) {
           Object.keys(d.por_provedor || {}).join(', ') || '—'),
       ]))),
     ]),
+  );
+}
+
+// ============================================================
+// POR AGENTE — custo agregado por agente lendo agente_execucoes
+// ============================================================
+async function renderPorAgente(container) {
+  container.innerHTML = '';
+  const sb = getSupabase();
+  if (!sb) return;
+
+  const periodo = renderSeletorPeriodo('por-agente', container, () => renderAba('por-agente', container));
+  const { inicio, fim } = resolverDatas(periodo);
+
+  // Busca direto da tabela. Volume baixo nos primeiros meses.
+  // Quando passar de 10k execuções viramos numa view materializada.
+  const inicioISO = `${inicio}T00:00:00Z`;
+  const fimISO = `${fim}T23:59:59Z`;
+  const { data: execs, error } = await sb
+    .from('agente_execucoes')
+    .select('agente_id, custo_usd, latencia_ms, tokens_entrada, tokens_saida, tokens_cached, created_at')
+    .gte('created_at', inicioISO)
+    .lte('created_at', fimISO);
+
+  if (error) { container.append(el('div', { class: 'seguranca-erro' }, error.message)); return; }
+
+  if (!execs || execs.length === 0) {
+    container.append(el('div', { class: 'seguranca-empty' },
+      'Nenhuma execução de agente neste período. Mande mensagem pro Chief em Agentes → Conversar.'));
+    return;
+  }
+
+  // Agrega por agente_id
+  const agg = new Map();
+  for (const e of execs) {
+    const a = agg.get(e.agente_id) || {
+      agente_id: e.agente_id, qtd: 0, custo: 0, lat: 0, tokensIn: 0, tokensOut: 0, tokensCached: 0,
+    };
+    a.qtd += 1;
+    a.custo += Number(e.custo_usd || 0);
+    a.lat += Number(e.latencia_ms || 0);
+    a.tokensIn += Number(e.tokens_entrada || 0);
+    a.tokensOut += Number(e.tokens_saida || 0);
+    a.tokensCached += Number(e.tokens_cached || 0);
+    agg.set(e.agente_id, a);
+  }
+
+  // Resolve nomes
+  const ids = [...agg.keys()];
+  const { data: agentes } = await sb.from('agentes').select('id, slug, nome, avatar, modelo').in('id', ids);
+  const mapAg = new Map((agentes || []).map(a => [a.id, a]));
+
+  const linhas = [...agg.values()].sort((a, b) => b.custo - a.custo);
+  const total = linhas.reduce((s, r) => s + r.custo, 0);
+  const totalIn = linhas.reduce((s, r) => s + r.tokensIn, 0);
+  const totalCached = linhas.reduce((s, r) => s + r.tokensCached, 0);
+  const cacheGlobal = totalIn > 0 ? (totalCached / totalIn * 100) : 0;
+
+  container.append(
+    el('div', { class: 'finops-card-principal' }, [
+      el('div', { class: 'finops-eyebrow' }, `Custo por agente · ${rotuloPeriodo(periodo)}`),
+      el('div', { class: 'finops-total-num' }, fmtUSD(total)),
+      el('div', { class: 'finops-total-brl', title: rotuloCotacao() }, fmtBRL(total)),
+      el('div', { class: 'finops-projecao' },
+        `📊 ${linhas.length} agente${linhas.length === 1 ? '' : 's'} · ${execs.length} execuç${execs.length === 1 ? 'ão' : 'ões'} · cache hit médio: ${cacheGlobal.toFixed(1)}%`),
+    ]),
+    el('table', { class: 'finops-tabela' }, [
+      el('thead', {}, [el('tr', {}, [
+        el('th', {}, 'Agente'),
+        el('th', { style: 'text-align:right' }, 'Execuções'),
+        el('th', { style: 'text-align:right' }, 'Tokens in/out'),
+        el('th', { style: 'text-align:right' }, 'Cache'),
+        el('th', { style: 'text-align:right' }, 'Latência média'),
+        el('th', { style: 'text-align:right' }, 'Custo'),
+        el('th', { style: 'text-align:right' }, '%'),
+      ])]),
+      el('tbody', {},
+        linhas.map(r => {
+          const ag = mapAg.get(r.agente_id);
+          const cachePct = r.tokensIn > 0 ? (r.tokensCached / r.tokensIn * 100) : 0;
+          const latMedia = r.qtd > 0 ? r.lat / r.qtd / 1000 : 0;
+          const pctTotal = total > 0 ? (r.custo / total * 100) : 0;
+          return el('tr', {}, [
+            el('td', {}, [
+              el('span', { class: 'mini-avatar' }, ag?.avatar || '?'),
+              ' ',
+              el('strong', {}, ag?.nome || ag?.slug || r.agente_id.slice(0, 8)),
+              ag?.modelo
+                ? el('span', { style: 'color:var(--fg-muted);margin-left:.5rem;font-size:.85em' }, ag.modelo.replace('openai:', ''))
+                : null,
+            ].filter(Boolean)),
+            el('td', { style: 'text-align:right;color:var(--fg-muted)' }, r.qtd.toLocaleString('pt-BR')),
+            el('td', { style: 'text-align:right;font-family:var(--font-mono);color:var(--fg-muted)' },
+              `${r.tokensIn.toLocaleString('pt-BR')} / ${r.tokensOut.toLocaleString('pt-BR')}`),
+            el('td', { style: 'text-align:right' },
+              cachePct > 0
+                ? el('span', { class: 'finops-pct-badge', style: 'background:rgba(34,197,94,.15);color:#22c55e' },
+                    cachePct.toFixed(0) + '%')
+                : '—'),
+            el('td', { style: 'text-align:right;color:var(--fg-muted)' },
+              latMedia > 0 ? `${latMedia.toFixed(1)}s` : '—'),
+            el('td', { style: 'text-align:right;font-family:var(--font-mono)' }, fmtUSD(r.custo)),
+            el('td', { style: 'text-align:right' },
+              [el('span', { class: 'finops-pct-badge' }, pctTotal.toFixed(1) + '%')]),
+          ]);
+        })
+      ),
+    ]),
+    el('div', { class: 'finops-nota' },
+      'Custo lido direto de pinguim.agente_execucoes (registro por chamada LLM, com desconto de prompt cache aplicado).'),
   );
 }
 

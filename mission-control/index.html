@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pinguim OS</title>
-<link rel="stylesheet" href="css/style.css?v=20260504d">
+<link rel="stylesheet" href="css/style.css?v=20260506a">
 </head>
 <body>
 <!-- Botao hamburger (so mobile) -->
@@ -130,7 +130,7 @@
   const ok = await guard();
   if (ok) {
     await import('./js/sb-client.js?v=20260430k');
-    await import('./js/app.js?v=20260430k');
+    await import('./js/app.js?v=20260506a');
     const btn = document.getElementById('nav-logout');
     if (btn) btn.addEventListener('click', logout);
   }

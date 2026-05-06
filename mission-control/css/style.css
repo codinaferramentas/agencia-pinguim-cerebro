@@ -7951,3 +7951,512 @@ body.mapa-apresentacao .mapa-prova-card-texto { font-size: 0.9375rem; }
   .mapa-hero-pulse-valor { font-size: 3.5rem; }
   .mapa-prova-card { width: 260px; }
 }
+
+/* ============================================================
+   AGENTES — tela operacional (4 abas)
+   ============================================================ */
+
+/* Stats no topo (catalog + execuções) */
+.agentes-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.agentes-stat {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+}
+.agentes-stat-num {
+  font-size: 1.75rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--fg);
+  line-height: 1.1;
+}
+.agentes-stat-label {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 0.25rem;
+}
+
+/* Grid de cards do catálogo */
+.agentes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+}
+
+.agente-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  transition: border-color 0.15s ease;
+}
+.agente-card:hover {
+  border-color: var(--border-strong, var(--pc));
+}
+
+.agente-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.agente-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+.agente-avatar-grande {
+  width: 56px;
+  height: 56px;
+  font-size: 1.75rem;
+}
+.agente-card-title { flex: 1; min-width: 0; }
+.agente-card-nome {
+  font-weight: 600;
+  color: var(--fg);
+  font-size: 0.95rem;
+}
+.agente-card-slug {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  margin-top: 0.15rem;
+}
+
+.agente-badge {
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--fg-muted);
+}
+.agente-badge-em_producao { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+.agente-badge-em_teste    { background: rgba(234, 179, 8, 0.15);  color: #eab308; }
+.agente-badge-em_criacao  { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+.agente-badge-pausado     { background: rgba(239, 68, 68, 0.15);  color: #ef4444; }
+
+.agente-card-missao {
+  font-size: 0.85rem;
+  color: var(--fg-soft, var(--fg));
+  line-height: 1.45;
+}
+.agente-card-meta {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+}
+.agente-card-modelo {
+  background: var(--surface-2);
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+}
+
+.agente-card-caps-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+.agente-cap-chip {
+  font-size: 0.7rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+}
+
+/* Avatar pequeno (tabelas) */
+.mini-avatar {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  text-align: center;
+  line-height: 22px;
+  font-size: 0.85rem;
+  vertical-align: middle;
+}
+.nowrap { white-space: nowrap; }
+
+/* ============================================================
+   CONVERSAR COM CHIEF — chat ao vivo
+   ============================================================ */
+
+.agentes-conversa {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 240px);
+  min-height: 480px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.conversa-cabec {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.conversa-cabec-info { flex: 1; min-width: 0; }
+.conversa-cabec-nome {
+  font-weight: 600;
+  color: var(--fg);
+}
+.conversa-cabec-sub {
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  margin-top: 0.15rem;
+  font-family: var(--font-mono);
+}
+
+.conversa-mensagens {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.conversa-vazia {
+  margin: auto;
+  text-align: center;
+  color: var(--fg-muted);
+  max-width: 460px;
+}
+.conversa-vazia-icon {
+  font-size: 3rem;
+  margin-bottom: 0.85rem;
+  opacity: 0.6;
+}
+.conversa-vazia-hint {
+  font-size: 0.85rem;
+  margin-top: 0.6rem;
+  opacity: 0.75;
+}
+
+.conversa-bolha {
+  display: flex;
+  gap: 0.65rem;
+  max-width: 82%;
+  align-items: flex-start;
+}
+.conversa-bolha-humano {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+.conversa-bolha-chief { align-self: flex-start; }
+
+.conversa-bolha-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.conversa-bolha-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.conversa-bolha-texto {
+  background: var(--surface-2);
+  padding: 0.7rem 0.95rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--fg);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.conversa-bolha-humano .conversa-bolha-texto {
+  background: var(--pc, #E85C00);
+  color: #fff;
+}
+
+.conversa-bolha-uso {
+  font-size: 0.7rem;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  padding: 0 0.25rem;
+}
+
+.conversa-pensando-pulse {
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+  font-style: italic;
+  animation: conversa-pulse 1.6s ease-in-out infinite;
+}
+@keyframes conversa-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.conversa-input {
+  border-top: 1px solid var(--border);
+  padding: 0.85rem 1rem;
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.conversa-textarea {
+  width: 100%;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.65rem 0.85rem;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+  min-height: 60px;
+}
+.conversa-textarea:focus {
+  outline: none;
+  border-color: var(--pc, #E85C00);
+}
+.conversa-input-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.conversa-hint {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+}
+
+/* ============================================================
+   CARD PLANO DA MISSÃO
+   ============================================================ */
+
+.card-plano {
+  background: linear-gradient(145deg, var(--surface-2), var(--surface-1));
+  border: 1px solid var(--pc, #E85C00);
+  border-radius: 12px;
+  padding: 1.1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 2px 14px rgba(232, 92, 0, 0.12);
+}
+
+.card-plano-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.75rem;
+}
+.card-plano-titulo {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--fg);
+}
+.card-plano-uso {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--fg-muted);
+}
+
+.card-plano-secao { display: flex; flex-direction: column; gap: 0.5rem; }
+.card-plano-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+  font-weight: 500;
+}
+.card-plano-diag {
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--fg);
+}
+
+.card-plano-squad {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.55rem;
+}
+.card-plano-membro {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.card-plano-membro-papel {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--fg);
+}
+.card-plano-membro-slug {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--pc, #E85C00);
+}
+.card-plano-membro-just {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--fg-muted);
+}
+
+.card-plano-passos {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--fg);
+}
+.card-plano-passos li {
+  margin-bottom: 0.3rem;
+}
+.card-plano-passo-dep {
+  font-family: var(--font-mono);
+  font-size: 0.75em;
+  color: var(--fg-muted);
+}
+
+.card-plano-rodape {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.85rem;
+}
+.card-plano-estim {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.card-plano-num {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--fg);
+  margin-top: 0.1rem;
+}
+.card-plano-pergunta {
+  font-size: 0.95rem;
+  color: var(--fg);
+  font-style: italic;
+}
+.card-plano-acoes {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* ============================================================
+   PROJECT BOARD — placeholder até Workers rodarem
+   ============================================================ */
+
+.board-aviso {
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  color: #eab308;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1.25rem;
+  font-size: 0.85rem;
+}
+
+.project-board {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+.board-coluna {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.board-coluna-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.board-coluna-titulo {
+  font-weight: 600;
+  color: var(--fg);
+}
+.board-coluna-sub {
+  font-size: 0.7rem;
+  color: var(--fg-muted);
+  flex: 1 1 100%;
+}
+.board-coluna-count {
+  font-family: var(--font-mono);
+  background: var(--surface-2);
+  color: var(--fg-muted);
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  margin-left: auto;
+}
+.board-coluna-vazia {
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+  padding: 1.5rem 0.5rem;
+  font-style: italic;
+}
+
+@media (max-width: 1100px) {
+  .project-board { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+  .project-board { grid-template-columns: 1fr; }
+  .agentes-conversa { height: calc(100vh - 200px); }
+  .conversa-bolha { max-width: 95%; }
+  .card-plano-estim { grid-template-columns: 1fr; }
+}

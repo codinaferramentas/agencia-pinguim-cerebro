@@ -1085,26 +1085,10 @@ async function renderOperacao() {
 }
 
 async function renderAgentes() {
-  const page = $('#page-agentes');
-  page.innerHTML = '';
-  const op = await fetchOperacaoData();
-
-  page.append(
-    el('div', { class: 'page-header' }, [
-      el('div', {}, [
-        el('h1', { class: 'page-title' }, 'Agentes'),
-        el('div', { class: 'page-subtitle' }, 'Catálogo de agentes — missão, entrada, saída, modelo, squad'),
-      ]),
-    ]),
-    el('div', { class: 'agent-cards-grid', style: 'padding:0' },
-      op.agentes.length === 0
-        ? [el('div', { class: 'stub-screen' }, [
-            el('h2', {}, 'Nenhum agente cadastrado'),
-            el('p', {}, 'Agentes aparecem aqui depois do seed do Supabase ou dos JSONs locais.')
-          ])]
-        : op.agentes.map(a => renderAgentCard(a))
-    )
-  );
+  // Tela operacional dos Agentes Pinguim. Módulo dedicado js/agentes.js
+  // com 4 abas (Catálogo / Conversar com Chief / Project Board / Execuções).
+  const mod = await import('./agentes.js?v=20260506a');
+  await mod.renderAgentes();
 }
 
 function renderAgentCard(a) {
