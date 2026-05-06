@@ -230,8 +230,10 @@ async function hidratarConversaDoBanco() {
   mensagensVisuais = msgs.map(m => ({
     papel: m.papel,
     conteudo: m.conteudo,
-    plano_card: m.artefatos?.tipo === 'card_plano_missao' ? m.artefatos.card : null,
-    scripts: (m.artefatos?.tipo === 'scripts' ? m.artefatos.scripts : m.artefatos?.scripts) || [],
+    plano_card: m.artefatos?.card_plano_missao || (m.artefatos?.tipo === 'card_plano_missao' ? m.artefatos.card : null),
+    scripts: m.artefatos?.scripts || [],
+    squads_consultadas: m.artefatos?.squads_consultadas || [],
+    produtos_detectados: m.artefatos?.produtos_detectados || [],
   }));
 }
 
@@ -327,6 +329,9 @@ function mensagemBubble(m) {
       Array.isArray(m.produtos_detectados) && m.produtos_detectados.length > 0
         ? renderProdutosDetectados(m.produtos_detectados)
         : null,
+      Array.isArray(m.squads_consultadas) && m.squads_consultadas.length > 0
+        ? renderSquadsConsultadas(m.squads_consultadas)
+        : null,
       Array.isArray(m.scripts) && m.scripts.length > 0
         ? renderScripts(m.scripts)
         : null,
@@ -345,6 +350,17 @@ function renderProdutosDetectados(produtos) {
     el('span', { class: 'conversa-produtos-label' }, 'Cérebros consultados:'),
     ...produtos.map(p => el('span', { class: 'conversa-produto-chip' },
       `${p.cerebro_slug} · ${(p.confianca * 100).toFixed(0)}%`)),
+  ]);
+}
+
+function renderSquadsConsultadas(squads) {
+  return el('div', { class: 'conversa-produtos-detectados' }, [
+    el('span', { class: 'conversa-produtos-label' }, 'Squad → Mestres invocados:'),
+    ...squads.flatMap(s => [
+      el('span', { class: 'conversa-produto-chip', style: 'background: var(--surface-3, #2a2a2a); border: 1px solid var(--accent);' },
+        `${s.squad}`),
+      ...(s.mestres || []).map(m => el('span', { class: 'conversa-produto-chip' }, m)),
+    ]),
   ]);
 }
 
@@ -511,6 +527,7 @@ async function enviarMensagem(texto) {
       plano_card: data.plano_card,
       scripts: data.scripts || [],
       produtos_detectados: data.produtos_detectados || [],
+      squads_consultadas: data.squads_consultadas || [],
       uso: data.uso,
     });
   } catch (e) {

@@ -279,7 +279,12 @@ async function executarTool(
   toolName: string,
   toolArgs: any,
   agenteId: string,
-  ctx: { tenant_id: string; cliente_id: string; solicitante_id: string | null },
+  ctx: {
+    tenant_id: string;
+    cliente_id: string;
+    solicitante_id: string | null;
+    squadsConsultadas?: Array<{ squad: string; chief: string; mestres: string[] }>;
+  },
 ): Promise<string> {
   const tInicio = Date.now();
   let resultado: any;
@@ -408,6 +413,14 @@ async function executarTool(
           cliente_id: ctx.cliente_id,
           solicitante_id: ctx.solicitante_id,
         });
+        // Acumula visibilidade pro Atendente devolver pro frontend
+        if (ctx.squadsConsultadas) {
+          ctx.squadsConsultadas.push({
+            squad: toolArgs.squad_slug,
+            chief: chiefSlug,
+            mestres: (sub.mestres_invocados || []).map((m: any) => m.slug),
+          });
+        }
         resultado = {
           ok: sub.ok,
           chief: chiefSlug,
@@ -465,12 +478,14 @@ function montarSystemPromptPinguim(args: {
     `2. **Antes de perguntar, consulte.** Se reconhece um produto (Elo, Lo-fi, ProAlt, Lira, Taurus, Orion) ou metodologia, use \`buscar-cerebro\` IMEDIATAMENTE. Não pergunte "qual o produto?" se o cliente já disse. Se o Cérebro retornar pouco ou nada útil, NÃO peça mais info — siga com o briefing do cliente como fonte primária e marque "Cérebro ainda em construção" no output.\n` +
     `3. **Use Clones como conselheiros.** Em copy/oferta cite Hormozi, Schwartz, Halbert. Em estratégia cite Dalio, Munger, Naval. Use \`buscar-clone\` pra trazer voz real.\n` +
     `4. **Nem tudo é LLM.** Se a tarefa é determinística (lookup, cálculo, formatação, query SQL), use \`criar-script\` em vez de gerar texto a cada vez.\n` +
-    `5. **Pediu entregável real?** SEMPRE use \`delegar-chief\`. Squads disponíveis hoje:\n` +
-    `   - \`squad_slug=copy\` → Copy Chief + 4 mestres (Hormozi, Schwartz, Halbert, Bencivenga). Pra copy, VSL, anúncio, página de venda.\n` +
-    `   - \`squad_slug=storytelling\` → Story Chief + 4 mestres (Campbell, Miller, Klaff, Snyder). Pra narrativa, gancho, jornada do herói, pitch, manifesto, storytime.\n` +
-    `   - \`squad_slug=advisory-board\` → Board Chair + 4 conselheiros (Dalio, Munger, Naval, Thiel). Pra dilema estratégico, decisão de aposta grande, propósito, evitar erros.\n` +
-    `   - \`squad_slug=design\` → Design Chief + 4 mestres (Neumeier, Frost, Do, Draplin). Pra brand strategy, design system, logo, business of design.\n` +
-    `   Fluxo: (a) \`buscar-cerebro\` do produto se aplicável, (b) \`delegar-chief(squad, briefing rico)\`. Mesmo Cérebro pobre, delegue — briefing do cliente é suficiente. Pergunta solta NÃO precisa de plano nem de Chief — só responda.\n` +
+    `4.5. **APÓS \`delegar-chief\`:** o Chief devolve um \`conteudo_md\` estruturado com a entrega completa. Sua resposta DEVE incluir esse \`conteudo_md\` INTEGRALMENTE, sem resumir, sem cortar, sem reescrever. Você só pode adicionar 1-2 linhas curtas antes ou depois (saudação ou pergunta de refinamento). NUNCA condense o output do Chief — quem pediu quer ver o entregável completo.\n` +
+    `5. **REGRA CRÍTICA — quando delegar para uma squad-conselheira:**\n` +
+    `   Você NUNCA escreve copy, narrativa, conselho estratégico ou direção visual sozinho. SEMPRE delega via \`delegar-chief\`. Mapeamento obrigatório (escolha pela natureza do pedido, NÃO pela palavra "copy"):\n` +
+    `   - **Pedido de copy / VSL / anúncio / página de venda / texto de conversão** → \`delegar-chief(copy, briefing)\` (Hormozi, Schwartz, Halbert, Bencivenga).\n` +
+    `   - **Pedido de história / narrativa / gancho / jornada / pitch / manifesto / storytime / abertura de VSL** → \`delegar-chief(storytelling, briefing)\` (Campbell, Miller, Klaff, Snyder).\n` +
+    `   - **Pedido de conselho estratégico / dilema de decisão / divergência entre sócios / dúvida de propósito / aposta grande / evitar erro** → \`delegar-chief(advisory-board, briefing)\` (Dalio, Munger, Naval, Thiel).\n` +
+    `   - **Pedido de identidade visual / logo / paleta / design system / brand strategy / direção visual / criativo** → \`delegar-chief(design, briefing)\` (Neumeier, Frost, Do, Draplin).\n` +
+    `   Fluxo: (a) se houver produto reconhecido, \`buscar-cerebro\` primeiro; (b) **OBRIGATORIAMENTE** \`delegar-chief\` da squad certa, montando briefing rico com TUDO que o cliente disse + contexto do Cérebro. Mesmo Cérebro pobre, delegue. SÓ responda direto se for pergunta factual sobre o sistema (ex.: "quem é você?", "quantos cérebros têm?"). Em DÚVIDA, delegue — nunca escreva entregável criativo você mesmo.\n` +
     `6. **Aprendeu padrão do cliente? Registre.** Use \`atualizar-perfil-cliente\` quando notar preferência (ex.: "André prefere copy direta sem floreio").\n` +
     `7. **Sem alucinação.** Se faltar Worker real pra um papel no Card, marque \`agente_slug: "agente-a-criar"\`. Sem inventar slug fictício.\n` +
     `8. **Sem estimativa inventada.** Sem histórico de execução, passe \`null\` em tempo/custo.\n` +
@@ -582,6 +597,7 @@ serve(async (req) => {
     let toolsExecutadas: string[] = [];
     let planoCard: any = null;
     let scripts: any[] = [];
+    let squadsConsultadas: Array<{ squad: string; chief: string; mestres: string[] }> = [];
     let respostaTexto = '';
     let modeloUsado = '';
     let rounds = 0;
@@ -636,6 +652,7 @@ serve(async (req) => {
       for (const tc of llmResp.toolCalls) {
         const resultado = await executarTool(tc.name, tc.arguments, pinguim.id, {
           tenant_id, cliente_id, solicitante_id: solicitante_id || null,
+          squadsConsultadas,
         });
         toolsExecutadas.push(tc.name);
         llmMessages.push({
@@ -690,12 +707,16 @@ serve(async (req) => {
     }
 
     // 10. Persiste resposta
+    const artefatos: any = {};
+    if (planoCard) artefatos.card_plano_missao = planoCard;
+    if (scripts.length > 0) artefatos.scripts = scripts;
+    if (squadsConsultadas.length > 0) artefatos.squads_consultadas = squadsConsultadas;
+    if (produtosDetectados.length > 0) artefatos.produtos_detectados = produtosDetectados;
+
     await sb().from('conversas').insert({
       tenant_id, cliente_id, agente_id: pinguim.id, caso_id: casoId,
       papel: 'chief', conteudo: respostaTexto,
-      artefatos: planoCard
-        ? { tipo: 'card_plano_missao', card: planoCard, scripts }
-        : (scripts.length > 0 ? { tipo: 'scripts', scripts } : null),
+      artefatos: Object.keys(artefatos).length > 0 ? artefatos : null,
     });
 
     return jsonResp({
@@ -706,6 +727,7 @@ serve(async (req) => {
       scripts,
       tools_executadas: toolsExecutadas,
       produtos_detectados: produtosDetectados,
+      squads_consultadas: squadsConsultadas,
       uso: {
         modelo: modeloUsado,
         tokens_in: totalTokensIn,

@@ -352,7 +352,7 @@ export interface ExecutarInlineOutput {
 
 export async function executarAgenteInline(input: ExecutarInlineInput): Promise<ExecutarInlineOutput> {
   const { agente_slug, briefing, tenant_id, cliente_id, caso_id, solicitante_id, contexto_extra } = input;
-  const tInicio = Date.now();
+  const tInicioFn = Date.now();
 
   const agente = await carregarAgente(agente_slug);
   const { aprendizados, perfilSolicitante } = await carregarMemoriaIndividual(
@@ -458,13 +458,36 @@ export async function executarAgenteInline(input: ExecutarInlineInput): Promise<
     }
 
     const custoUSD = calcularCustoUSD(modeloUsadoFinal, totalTokensIn, totalTokensOut, totalTokensCached);
+    const conteudoMd = consolidadoCard ? formatarConsolidadoMd(consolidadoCard) : respostaTexto;
+    const conteudoEstr = consolidadoCard || { conteudo_md: respostaTexto };
+
+    // Loga execução do Chief em pinguim.agente_execucoes
+    await logarExecucao({
+      agenteId: agente.id,
+      input: { briefing, contexto_extra },
+      output: { tipo: 'orquestracao-copy', conteudo_md: conteudoMd, mestres: mestresInvocados.map(m => m.slug) },
+      modelo: modeloUsadoFinal,
+      tokensIn: totalTokensIn,
+      tokensOut: totalTokensOut,
+      tokensCached: totalTokensCached,
+      latenciaMs: totalLatenciaMs,
+    });
+    await logarCustoFinOps({
+      agenteSlug: agente_slug,
+      modelo: modeloUsadoFinal,
+      custoUSD,
+      tokensIn: totalTokensIn,
+      tokensOut: totalTokensOut,
+      tokensCached: totalTokensCached,
+    });
+
     return {
       ok: true,
       agente_slug,
       orquestrador: true,
-      conteudo_md: consolidadoCard ? formatarConsolidadoMd(consolidadoCard) : respostaTexto,
-      conteudo_estruturado: consolidadoCard || { conteudo_md: respostaTexto },
-      titulo: consolidadoCard?.objetivo || 'Roteiro consolidado',
+      conteudo_md: conteudoMd,
+      conteudo_estruturado: conteudoEstr,
+      titulo: consolidadoCard?.objetivo || agente.nome,
       tipo: 'orquestracao-copy',
       mestres_invocados: mestresInvocados,
       uso: {
@@ -511,6 +534,26 @@ export async function executarAgenteInline(input: ExecutarInlineInput): Promise<
   }
 
   const custoUSD = calcularCustoUSD(modeloUsadoFinal, totalTokensIn, totalTokensOut, totalTokensCached);
+
+  await logarExecucao({
+    agenteId: agente.id,
+    input: { briefing, contexto_extra },
+    output: respObj,
+    modelo: modeloUsadoFinal,
+    tokensIn: totalTokensIn,
+    tokensOut: totalTokensOut,
+    tokensCached: totalTokensCached,
+    latenciaMs: totalLatenciaMs,
+  });
+  await logarCustoFinOps({
+    agenteSlug: agente_slug,
+    modelo: modeloUsadoFinal,
+    custoUSD,
+    tokensIn: totalTokensIn,
+    tokensOut: totalTokensOut,
+    tokensCached: totalTokensCached,
+  });
+
   return {
     ok: true,
     agente_slug,
