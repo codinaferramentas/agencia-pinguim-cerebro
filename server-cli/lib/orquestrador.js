@@ -190,18 +190,13 @@ function runMestreClaudeCLI(systemPrompt, briefing, opts = {}) {
 // ============================================================
 const _cacheSystemPrompt = new Map();
 
-async function carregarSystemPromptMestre(slug) {
-  if (_cacheSystemPrompt.has(slug)) {
-    return _cacheSystemPrompt.get(slug);
-  }
-
+// Helper SQL — reusa credenciais do .env.local
+async function rodarSQL(sql) {
   const projectRef = ENV_LOCAL.SUPABASE_PROJECT_REF || process.env.SUPABASE_PROJECT_REF;
   const accessToken = ENV_LOCAL.SUPABASE_ACCESS_TOKEN || process.env.SUPABASE_ACCESS_TOKEN;
   if (!projectRef || !accessToken) {
     throw new Error('SUPABASE_PROJECT_REF/SUPABASE_ACCESS_TOKEN nao definidos em .env.local');
   }
-
-  const sql = `SELECT system_prompt FROM pinguim.agentes WHERE slug = '${slug}';`;
   const r = await fetch(
     `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
     {
@@ -213,13 +208,296 @@ async function carregarSystemPromptMestre(slug) {
       body: JSON.stringify({ query: sql }),
     }
   );
-  const data = await r.json();
+  return r.json();
+}
+
+async function carregarSystemPromptMestre(slug) {
+  if (_cacheSystemPrompt.has(slug)) {
+    return _cacheSystemPrompt.get(slug);
+  }
+
+  const data = await rodarSQL(`SELECT system_prompt FROM pinguim.agentes WHERE slug = '${slug}';`);
   if (!Array.isArray(data) || !data[0]?.system_prompt) {
     throw new Error(`mestre ${slug} sem system_prompt no banco`);
   }
 
   _cacheSystemPrompt.set(slug, data[0].system_prompt);
   return data[0].system_prompt;
+}
+
+// ============================================================
+// V2.5 — MESTRES DINAMICOS
+// Le clones recomendados da Skill, valida no banco, distribui blocos
+// por afinidade. Fallback hardcoded preservado pra todo edge case.
+// ============================================================
+
+// Normaliza texto pra slug kebab-case sem acento.
+// Ex: "Identificação da Dor / Problema" -> "identificacao-da-dor-problema"
+function normalizarSlugBloco(texto) {
+  if (!texto) return '';
+  return texto
+    .toString()
+    .normalize('NFD')                       // separa acento
+    .replace(/[̀-ͯ]/g, '')        // remove acento
+    .toLowerCase()
+    .replace(/[^a-z0-9\s/-]/g, '')          // mantem letra/numero/espaco/barra/hifen
+    .replace(/[\s/]+/g, '-')                // espaco/barra -> hifen
+    .replace(/-+/g, '-')                    // colapsa hifens
+    .replace(/^-|-$/g, '');                 // tira hifen das pontas
+}
+
+// Mapa de afinidade — qual mestre cobre qual TIPO de bloco.
+// Inclusivo (mestre pode aparecer em N blocos), ordem importa pro desempate.
+// Slugs sao kebab-case e batem com saida de normalizarSlugBloco().
+const AFINIDADE_MESTRE_POR_BLOCO = {
+  // Aberturas + fechamentos pessoais — voz humana
+  'above-the-fold':                ['gary-halbert', 'john-carlton'],
+  'headline':                      ['gary-halbert', 'john-carlton'],
+  'sub-headline':                  ['gary-halbert', 'john-carlton'],
+  'opening':                       ['gary-halbert', 'john-carlton'],
+  'cta-repetido':                  ['gary-halbert', 'john-carlton'],
+  'ps':                            ['gary-halbert', 'john-carlton'],
+
+  // Dor + jornada do leitor
+  'identificacao-da-dor-problema': ['gary-halbert', 'eugene-schwartz'],
+  'identificacao-da-dor':          ['gary-halbert', 'eugene-schwartz'],
+  'identificacao-dor':             ['gary-halbert', 'eugene-schwartz'],
+  'apresentacao-do-criador':       ['gary-halbert', 'john-carlton'],
+
+  // Mecanismo + consciencia + produto
+  'apresentacao-do-mecanismo-unico': ['eugene-schwartz', 'todd-brown', 'stefan-georgi'],
+  'mecanismo-unico':                 ['eugene-schwartz', 'todd-brown', 'stefan-georgi'],
+  'por-que-outras-solucoes-falharam': ['eugene-schwartz', 'gary-bencivenga'],
+  'por-que-outras-falham':            ['eugene-schwartz', 'gary-bencivenga'],
+  'apresentacao-do-produto-metodo':   ['eugene-schwartz', 'russell-brunson'],
+  'apresentacao-do-produto':          ['eugene-schwartz', 'russell-brunson'],
+  'promessa-expandida':               ['eugene-schwartz', 'gary-halbert'],
+  'para-quem-e-pra-quem-nao-e':       ['eugene-schwartz', 'dan-kennedy'],
+
+  // Persuasao + prova + bullets
+  'bullets-de-fascinacao':         ['gary-bencivenga'],
+  'bullets-fascinacao':            ['gary-bencivenga'],
+  'prova-social':                  ['gary-bencivenga'],
+  'prova-social-pesada':           ['gary-bencivenga'],
+  'faq-vendedora':                 ['alex-hormozi', 'gary-bencivenga'],
+
+  // Oferta + valor + urgencia
+  'stack-de-bonus':                ['alex-hormozi', 'dan-kennedy'],
+  'stack-bonus':                   ['alex-hormozi', 'dan-kennedy'],
+  'oferta':                        ['alex-hormozi', 'dan-kennedy'],
+  'oferta-principal':              ['alex-hormozi', 'dan-kennedy'],
+  'garantia':                      ['alex-hormozi', 'dan-kennedy'],
+  'risk-reversal':                 ['dan-kennedy', 'alex-hormozi'],
+
+  // VSL + roteiro
+  'vsl':                           ['jon-benson', 'russell-brunson'],
+  'roteiro-video':                 ['jon-benson', 'russell-brunson'],
+  'video-de-vendas':               ['jon-benson', 'russell-brunson'],
+};
+
+// Foco padrao do mestre quando nao ha bloco-especifico no mapa.
+const FOCO_PADRAO_POR_MESTRE = {
+  'gary-halbert':       'opening pessoal, voz primeira pessoa, especificidade brutal, P.S. matador',
+  'eugene-schwartz':    'calibrar nivel de consciencia da persona, mecanismo unico nomeavel',
+  'gary-bencivenga':    'persuasao com prova, bullets que prendem sem entregar solucao',
+  'alex-hormozi':       'Value Equation, Grand Slam Offer, especificidade numerica',
+  'dan-kennedy':        'Godfather Offer, urgencia genuina, risk reversal pesado',
+  'john-carlton':       'voz rocker, anti-corporativo, narrativa de underdog',
+  'russell-brunson':    'Hook Story Offer, palco, apresentacao em camadas',
+  'jon-benson':         'estrutura de VSL classica, call-out + agitacao + solucao',
+  'stefan-georgi':      'metodo RMBC — Research Mechanism Belief Close',
+  'todd-brown':         'metodo E5 — Big Idea + Promise + Mechanism + Proof + Plan',
+};
+
+// Lista hardcoded de fallback — usada quando nao da pra ler clones da Skill.
+// Mesma distribuicao que rodava antes da V2.5 (validada em prod).
+const MESTRES_FALLBACK_HARDCODED = [
+  {
+    mestre: 'gary-halbert',
+    blocos: ['ABOVE-THE-FOLD (headline + sub-headline + CTA)', 'IDENTIFICACAO-DOR (quadro vivido da persona)', 'P.S. (recap + ultimo gatilho)'],
+    foco: FOCO_PADRAO_POR_MESTRE['gary-halbert'],
+  },
+  {
+    mestre: 'eugene-schwartz',
+    blocos: ['POR-QUE-OUTRAS-SOLUCOES-FALHAM', 'MECANISMO-UNICO (apresentacao do metodo)', 'APRESENTACAO-PRODUTO'],
+    foco: FOCO_PADRAO_POR_MESTRE['eugene-schwartz'],
+  },
+  {
+    mestre: 'gary-bencivenga',
+    blocos: ['BULLETS-DE-FASCINACAO (10-15 bullets)', 'PROVA-SOCIAL (3 tipos: depoimento, numero, autoridade)'],
+    foco: FOCO_PADRAO_POR_MESTRE['gary-bencivenga'],
+  },
+  {
+    mestre: 'alex-hormozi',
+    blocos: ['STACK-DE-BONUS (5 bonus, total declarado 4-5x preco)', 'OFERTA (preco + parcelamento)', 'GARANTIA (tripla)', 'FAQ-VENDEDORA (5-6 perguntas)'],
+    foco: FOCO_PADRAO_POR_MESTRE['alex-hormozi'],
+  },
+];
+
+// Acha a Skill principal pelo conteudo bruto que `buscar-skill.sh` retornou.
+// Formato esperado: '## <slug>\n**Nome:** ...\n**Familia:** X | **Formato:** Y | **Score:** N\n...'.
+// Pega a primeira ocorrencia (que ja vem ordenada por score DESC).
+function extrairSkillPrincipal(conteudoSkill) {
+  if (!conteudoSkill || typeof conteudoSkill !== 'string') return null;
+  const slugMatch = conteudoSkill.match(/^##\s+([a-z0-9-]+)/m);
+  if (!slugMatch) return null;
+  const scoreMatch = conteudoSkill.match(/\*\*Score:\*\*\s*(\d+)/);
+  const familiaMatch = conteudoSkill.match(/\*\*Familia:\*\*\s*([^\s|]+)/);
+  return {
+    slug: slugMatch[1],
+    score: scoreMatch ? parseInt(scoreMatch[1], 10) : null,
+    familia: familiaMatch ? familiaMatch[1] : null,
+  };
+}
+
+// Le clones recomendados da Skill no banco.
+// Schema atual de pinguim.skills tem coluna dedicada `clones text[]`.
+// Se um dia a coluna virar JSON (spec agentskills.io tem clones em
+// metadata.pinguim.clones), trocar a query aqui.
+async function carregarClonesDaSkill(skillSlug) {
+  try {
+    const data = await rodarSQL(
+      `SELECT clones FROM pinguim.skills WHERE slug = '${skillSlug}' LIMIT 1;`
+    );
+    if (!Array.isArray(data) || !data[0]) return [];
+    const lista = data[0].clones;
+    if (!Array.isArray(lista)) return [];
+    return lista.filter(s => typeof s === 'string' && s.trim().length > 0);
+  } catch (e) {
+    return [];
+  }
+}
+
+// Le conteudo_md da Skill e extrai blocos da secao `## Receita`.
+// Aceita 2 formatos (sao os que existem nas 46 skills atuais):
+//   (A) lista numerada bold: `1. **Nome do bloco** — descricao`
+//   (B) sub-headers numerados: `### 1. Nome do bloco (descricao)`
+// Quando ambos coexistem na mesma Receita, formato A vence (mais especifico).
+async function carregarBlocosDaSkill(skillSlug) {
+  try {
+    const data = await rodarSQL(
+      `SELECT conteudo_md FROM pinguim.skills WHERE slug = '${skillSlug}' LIMIT 1;`
+    );
+    const md = data?.[0]?.conteudo_md;
+    if (!md) return [];
+
+    // Pega trecho entre `## Receita` (ou variantes) e proximo `## ` no mesmo nivel
+    const receitaMatch = md.match(/##\s+Receita[\s\S]*?(?=\n##\s[^#]|$)/i);
+    if (!receitaMatch) return [];
+    const receita = receitaMatch[0];
+
+    const blocos = [];
+
+    // Formato A: `\d+. **Nome**` — descricao depois de `—` ou `-` opcional
+    const reA = /^\s*\d+\.\s*\*\*([^*]+)\*\*\s*[—\-:]?\s*(.*)$/gm;
+    let m;
+    while ((m = reA.exec(receita)) !== null) {
+      const nome = m[1].trim();
+      const desc = (m[2] || '').trim();
+      blocos.push({
+        nomeOriginal: nome,
+        slug: normalizarSlugBloco(nome),
+        descricao: desc,
+      });
+    }
+
+    // Formato B: `### \d+. Nome (descricao)` — usado quando a Skill subdivide
+    // a Receita em sub-headers numerados (ex: above-the-fold, faq-vendedora).
+    // So usa se formato A nao deu nada.
+    if (blocos.length === 0) {
+      const reB = /^###\s+\d+\.\s+([^\n(]+?)(?:\s*\(([^)]+)\))?\s*$/gm;
+      while ((m = reB.exec(receita)) !== null) {
+        const nome = m[1].trim();
+        const desc = (m[2] || '').trim();
+        blocos.push({
+          nomeOriginal: nome,
+          slug: normalizarSlugBloco(nome),
+          descricao: desc,
+        });
+      }
+    }
+
+    return blocos;
+  } catch (e) {
+    return [];
+  }
+}
+
+// Filtra clones contra a tabela pinguim.agentes — so devolve os que existem
+// e tem system_prompt populado (mestre operacional).
+async function validarMestresPopulados(slugs) {
+  if (!Array.isArray(slugs) || slugs.length === 0) return [];
+  const lista = slugs.map(s => `'${s.replace(/'/g, "''")}'`).join(',');
+  try {
+    const data = await rodarSQL(
+      `SELECT slug FROM pinguim.agentes WHERE slug IN (${lista}) AND system_prompt IS NOT NULL AND length(system_prompt) > 100;`
+    );
+    if (!Array.isArray(data)) return [];
+    const validados = new Set(data.map(r => r.slug));
+    // Preserva ordem original de `slugs` (importante pro desempate)
+    return slugs.filter(s => validados.has(s));
+  } catch (e) {
+    return [];
+  }
+}
+
+// Distribui blocos da Skill entre mestres validados por afinidade,
+// usando algoritmo "menos carregado".
+// Para cada bloco em ordem da Skill:
+//   - mestres aptos = AFINIDADE[bloco] ∩ mestresValidados
+//   - se vazio: aptos = mestresValidados (fallback generico)
+//   - escolhe o de menor carga atual; empate = ordem do mapa de afinidade
+// Retorna array no formato esperado pelo pipeline:
+//   [{ mestre, blocos: [...nomesOriginais], foco }]
+function distribuirBlocosPorAfinidade(blocos, mestresValidados) {
+  const carga = {};
+  mestresValidados.forEach(m => { carga[m] = 0; });
+
+  const atribuicao = {};
+  mestresValidados.forEach(m => { atribuicao[m] = []; });
+
+  const blocosFallbackGenerico = [];
+
+  for (const bloco of blocos) {
+    const candidatosMapa = AFINIDADE_MESTRE_POR_BLOCO[bloco.slug] || [];
+    let aptos = candidatosMapa.filter(m => mestresValidados.includes(m));
+    let usouFallback = false;
+
+    if (aptos.length === 0) {
+      aptos = [...mestresValidados];
+      usouFallback = true;
+      blocosFallbackGenerico.push(bloco.slug);
+    }
+
+    if (aptos.length === 0) continue;
+
+    // Escolhe o menos carregado; desempate = ordem original em `aptos`
+    let escolhido = aptos[0];
+    let menorCarga = carga[escolhido];
+    for (const m of aptos) {
+      if (carga[m] < menorCarga) {
+        escolhido = m;
+        menorCarga = carga[m];
+      }
+    }
+    carga[escolhido]++;
+
+    const linha = bloco.descricao
+      ? `${bloco.nomeOriginal} — ${bloco.descricao}`
+      : bloco.nomeOriginal;
+    atribuicao[escolhido].push(linha + (usouFallback ? ' [bloco generico]' : ''));
+  }
+
+  // Formata pra pipeline. So inclui mestre que recebeu pelo menos 1 bloco.
+  const distribuicao = mestresValidados
+    .filter(m => atribuicao[m].length > 0)
+    .map(m => ({
+      mestre: m,
+      blocos: atribuicao[m],
+      foco: FOCO_PADRAO_POR_MESTRE[m] || 'aplique seu metodo nos blocos atribuidos',
+    }));
+
+  return { distribuicao, blocosFallbackGenerico };
 }
 
 // ============================================================
@@ -264,8 +542,22 @@ async function pipelineCriativo({ message, log }) {
     );
   }
 
-  // Skill: keyword da mensagem
-  const skillQuery = message.match(/p[aá]gina de venda|vsl|email|an[uú]ncio|hook|headline|oferta/i)?.[0] || 'copy';
+  // Skill: keyword da mensagem.
+  // Uso termos simples (1 palavra) que casam ILIKE no slug/familia das skills.
+  // Ex: "p[aá]gina de venda" virava "%pagina de venda%" — nao casa "anatomia-pagina-vendas".
+  // Quebro em palavras-chave isoladas, prefiro a mais especifica.
+  function escolherSkillQuery(msg) {
+    const m = msg.toLowerCase();
+    if (/\bvsl\b|video.{0,8}venda/.test(m)) return 'vsl';
+    if (/\bheadline\b/.test(m)) return 'headline';
+    if (/\boferta\b|stack|garantia|grand slam/.test(m)) return 'oferta';
+    if (/p[aá]gina|salesletter|carta de venda|pagina-vendas/i.test(m)) return 'pagina';
+    if (/email|e-mail|sequ[eê]ncia/i.test(m)) return 'email';
+    if (/an[uú]ncio|criativo/i.test(m)) return 'anuncio';
+    if (/hook|gancho/i.test(m)) return 'hook';
+    return 'copy';
+  }
+  const skillQuery = escolherSkillQuery(message);
   consultas.push(
     rodarScript(path.join(scriptsDir, 'buscar-skill.sh'), [skillQuery], { timeout: 15_000 })
       .then(r => ({ tipo: 'skill', ok: true, conteudo: r.slice(0, 4000) }))
@@ -286,37 +578,75 @@ ${fontes.map(f => f.ok
 `;
 
   // ============================================================
-  // Etapa 2 — Decidir mestres por bloco
+  // Etapa 2 — V2.5: decidir mestres dinamicamente a partir da Skill
   // ============================================================
-  // Pra V2.2.2 — distribuicao default da pagina de venda.
-  // Cada mestre cobre 2-4 blocos relacionados.
-  const mestresPorBloco = [
-    {
-      mestre: 'gary-halbert',
-      blocos: ['ABOVE-THE-FOLD (headline + sub-headline + CTA)', 'IDENTIFICACAO-DOR (quadro vivido da persona)', 'P.S. (recap + ultimo gatilho)'],
-      foco: 'opening pessoal e fechamento. Voz primeira pessoa, especificidade brutal.'
-    },
-    {
-      mestre: 'eugene-schwartz',
-      blocos: ['POR-QUE-OUTRAS-SOLUCOES-FALHAM', 'MECANISMO-UNICO (apresentacao do metodo)', 'APRESENTACAO-PRODUTO'],
-      foco: 'calibrar nivel de consciencia da persona. Mecanismo unico nomeavel.'
-    },
-    {
-      mestre: 'gary-bencivenga',
-      blocos: ['BULLETS-DE-FASCINACAO (10-15 bullets)', 'PROVA-SOCIAL (3 tipos: depoimento, numero, autoridade)'],
-      foco: 'persuasao com prova. Bullets que prendem sem entregar solucao.'
-    },
-    {
-      mestre: 'alex-hormozi',
-      blocos: ['STACK-DE-BONUS (5 bonus, total declarado 4-5x preco)', 'OFERTA (preco + parcelamento)', 'GARANTIA (tripla)', 'FAQ-VENDEDORA (5-6 perguntas)'],
-      foco: 'Value Equation, Grand Slam Offer. Especificidade numerica sem inventar dado.'
-    },
-  ];
+  // Le clones recomendados da Skill principal (primeira do `buscar-skill.sh`,
+  // que ja vem ordenada por score DESC), valida no banco, distribui blocos
+  // por afinidade. Fallback hardcoded preservado em todo edge case.
+  const fonteSkill = fontes.find(f => f.tipo === 'skill' && f.ok);
+  const skillPrincipal = fonteSkill ? extrairSkillPrincipal(fonteSkill.conteudo) : null;
+
+  let mestresPorBloco;
+  let fonteDecisao = 'fallback'; // 'skill' | 'fallback'
+  let skillUsada = null;
+  let mestresValidados = [];
+  let mestresIgnorados = [];
+  let blocosFallbackGenerico = [];
+  let blocosTotal = 0;
+
+  if (skillPrincipal) {
+    log(`Skill escolhida: ${skillPrincipal.slug} (score ${skillPrincipal.score ?? '?'}, familia ${skillPrincipal.familia ?? '?'})`);
+    skillUsada = skillPrincipal;
+
+    const clones = await carregarClonesDaSkill(skillPrincipal.slug);
+    if (clones.length > 0) {
+      log(`Skill recomenda ${clones.length} clones: [${clones.join(', ')}]`);
+      mestresValidados = await validarMestresPopulados(clones);
+      mestresIgnorados = clones.filter(c => !mestresValidados.includes(c));
+
+      if (mestresValidados.length > 0) {
+        log(`${mestresValidados.length} mestres populados em pinguim.agentes: [${mestresValidados.join(', ')}]${mestresIgnorados.length ? ` (gap: ${mestresIgnorados.join(', ')})` : ''}`);
+
+        const blocos = await carregarBlocosDaSkill(skillPrincipal.slug);
+        blocosTotal = blocos.length;
+
+        if (blocos.length > 0) {
+          log(`Skill tem ${blocos.length} blocos. Distribuindo por afinidade...`);
+          const r = distribuirBlocosPorAfinidade(blocos, mestresValidados);
+          mestresPorBloco = r.distribuicao;
+          blocosFallbackGenerico = r.blocosFallbackGenerico;
+          if (mestresPorBloco.length > 0) {
+            const resumo = mestresPorBloco.map(m => `${m.mestre.split('-')[0]}(${m.blocos.length})`).join(', ');
+            log(`distribuicao: ${resumo}`);
+            if (blocosFallbackGenerico.length > 0) {
+              log(`${blocosFallbackGenerico.length} bloco(s) sem afinidade no mapa, atribuidos por menor carga: [${blocosFallbackGenerico.join(', ')}]`);
+            }
+            fonteDecisao = 'skill';
+          } else {
+            log(`distribuicao vazia (nenhum mestre recebeu bloco) — caindo pro fallback hardcoded`);
+          }
+        } else {
+          log(`Skill sem blocos extraiveis do conteudo_md — caindo pro fallback hardcoded`);
+        }
+      } else {
+        log(`nenhum dos ${clones.length} clones recomendados esta populado no banco — caindo pro fallback hardcoded`);
+      }
+    } else {
+      log(`Skill ${skillPrincipal.slug} sem clones recomendados — caindo pro fallback hardcoded`);
+    }
+  } else {
+    log(`nao foi possivel identificar Skill principal — caindo pro fallback hardcoded`);
+  }
+
+  if (fonteDecisao === 'fallback') {
+    mestresPorBloco = MESTRES_FALLBACK_HARDCODED;
+    log(`fallback ativo: 4 mestres hardcoded [${mestresPorBloco.map(m => m.mestre).join(', ')}]`);
+  }
 
   // ============================================================
-  // Etapa 3 — Disparar 4 mestres em PARALELO
+  // Etapa 3 — Disparar mestres em PARALELO (N variavel)
   // ============================================================
-  log(`disparando 4 mestres em paralelo (allSettled — 1 trava nao bloqueia outros)...`);
+  log(`disparando ${mestresPorBloco.length} mestre(s) em paralelo (allSettled — 1 trava nao bloqueia outros)...`);
   const t_mestres_0 = Date.now();
 
   // Timeout duro do POOL inteiro: 120s. Se algum mestre nao responder ate la,
@@ -363,7 +693,7 @@ Devolva CADA BLOCO separado por cabeçalho \`### NOME-DO-BLOCO\`. Em markdown.`;
   const settled = await Promise.allSettled(racedPromises);
   const resultados = settled.map(s => s.status === 'fulfilled' ? s.value : { mestre: 'desconhecido', ok: false, erro: String(s.reason) });
   const dur_total_mestres = ((Date.now() - t_mestres_0) / 1000).toFixed(1);
-  log(`4 mestres em paralelo terminaram em ${dur_total_mestres}s`);
+  log(`${mestresPorBloco.length} mestre(s) em paralelo terminaram em ${dur_total_mestres}s`);
 
   // ============================================================
   // Etapa 4 — Consolidar output
@@ -371,10 +701,12 @@ Devolva CADA BLOCO separado por cabeçalho \`### NOME-DO-BLOCO\`. Em markdown.`;
   const sucessos = resultados.filter(r => r.ok);
   const falhas = resultados.filter(r => !r.ok);
 
+  const skillAplicada = skillUsada?.slug || 'nao-identificada';
   let consolidado = `# Copy — ${message.slice(0, 60)}
 
 **Squad:** copy
-**Skill aplicada:** anatomia-pagina-vendas-longa
+**Skill aplicada:** ${skillAplicada}
+**Decisao de mestres:** ${fonteDecisao}${fonteDecisao === 'fallback' ? ' (4 hardcoded)' : ` (${mestresValidados.length} validados, ${blocosTotal} blocos)`}
 **Mestres usados:** ${sucessos.map(r => r.mestre).join(', ')}
 **Tempo total dos mestres (paralelo):** ${dur_total_mestres}s
 
@@ -410,6 +742,13 @@ Devolva CADA BLOCO separado por cabeçalho \`### NOME-DO-BLOCO\`. Em markdown.`;
       mestres_paralelo_s: parseFloat(dur_total_mestres),
       mestres_sucesso: sucessos.length,
       mestres_falha: falhas.length,
+      mestres_total: mestresPorBloco.length,
+      mestres_usados: mestresPorBloco.map(m => m.mestre),
+      mestres_ignorados: mestresIgnorados, // recomendados pela Skill mas nao populados
+      fonte_decisao: fonteDecisao,         // 'skill' | 'fallback'
+      skill_usada: skillUsada,             // { slug, score, familia } ou null
+      blocos_total: blocosTotal,
+      blocos_fallback_generico: blocosFallbackGenerico,
       fontes_consultadas: fontes.length,
       fontes_gap: gaps.length,
     },
