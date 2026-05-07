@@ -21,6 +21,10 @@ const {
   similaridadeOutputs,
   detectarPapelEContexto,
 } = require('./lib/verificador');
+const {
+  ehPedidoCriativoGrande,
+  pipelineCriativo,
+} = require('./lib/orquestrador');
 
 const app = express();
 const PORT = 3737;
@@ -111,7 +115,36 @@ app.post('/api/chat', async (req, res) => {
     console.log(`[${new Date().toISOString()}] thread=${thread_id} pergunta: ${message.slice(0, 80)}`);
 
     // ============================================================
-    // EPP — Camadas 1 + 2 (Verifier + Reflection)
+    // DESVIO — Pedido criativo grande pula CLI e vai pro orquestrador Node
+    // (delegacao real em paralelo, sem bash aninhado).
+    // ============================================================
+    if (ehPedidoCriativoGrande(message)) {
+      console.log(`  [orquestrador] pedido criativo detectado — pulando CLI direto`);
+      const log = (msg) => console.log(`  [orquestrador] ${msg}`);
+      const resultadoPipe = await pipelineCriativo({ message, log });
+
+      const respostaPipe = resultadoPipe.conteudo;
+      threads[thread_id].push({ role: 'assistant', content: respostaPipe });
+
+      const dur = ((Date.now() - t0) / 1000).toFixed(1);
+      console.log(`  -> pipeline criativo finalizou em ${dur}s | mestres: ${resultadoPipe.metricas.mestres_sucesso}/${resultadoPipe.metricas.mestres_sucesso + resultadoPipe.metricas.mestres_falha} | tempo paralelo: ${resultadoPipe.metricas.mestres_paralelo_s}s`);
+
+      return res.json({
+        thread_id,
+        content: respostaPipe,
+        duracao_s: parseFloat(dur),
+        epp: {
+          verifier_aprovou: null,
+          verifier_pulado: true, // pipeline ja tem validacao propria
+          reflection_round: 0,
+          problemas_encontrados: [],
+        },
+        pipeline: resultadoPipe.metricas,
+      });
+    }
+
+    // ============================================================
+    // EPP — Camadas 1 + 2 (Verifier + Reflection) — caminho normal
     // ============================================================
     const ctx = detectarPapelEContexto(message);
     let resposta = await runClaudeCLI(prompt);
