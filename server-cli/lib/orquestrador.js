@@ -61,6 +61,18 @@ function detectarProduto(message) {
 }
 
 // ============================================================
+// Converte path Windows (C:\Squad\...) pra POSIX (/c/Squad/...)
+// pra bash do Git Bash entender. Pass-through em Linux/Mac.
+// ============================================================
+function toPosixPath(p) {
+  if (process.platform !== 'win32') return p;
+  // C:\Squad\server-cli\scripts\foo.sh -> /c/Squad/server-cli/scripts/foo.sh
+  return p
+    .replace(/\\/g, '/')
+    .replace(/^([A-Za-z]):/, (_, letra) => `/${letra.toLowerCase()}`);
+}
+
+// ============================================================
 // Roda 1 script bash e retorna stdout. Timeout granular.
 // ============================================================
 function rodarScript(scriptPath, args, opts = {}) {
@@ -69,7 +81,8 @@ function rodarScript(scriptPath, args, opts = {}) {
     delete env.CLAUDECODE;
     delete env.CLAUDE_CODE_ENTRYPOINT;
 
-    const proc = spawn('bash', [scriptPath, ...args], {
+    const scriptPosix = toPosixPath(scriptPath);
+    const proc = spawn('bash', [scriptPosix, ...args], {
       cwd: opts.cwd || path.dirname(scriptPath),
       env,
       shell: false,
@@ -249,8 +262,21 @@ ${fontes.map(f => f.ok
   // ============================================================
   // Etapa 3 — Disparar 4 mestres em PARALELO
   // ============================================================
-  log(`disparando 4 mestres em paralelo...`);
+  log(`disparando 4 mestres em paralelo (allSettled — 1 trava nao bloqueia outros)...`);
   const t_mestres_0 = Date.now();
+
+  // Timeout duro do POOL inteiro: 120s. Se algum mestre nao responder ate la,
+  // ele entra como erro e o pipeline segue com os que responderam.
+  const TIMEOUT_POOL_MS = 120_000;
+
+  function comTimeout(promise, timeoutMs, mestreSlug) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`timeout ${(timeoutMs / 1000).toFixed(0)}s — pool inteiro`)), timeoutMs)
+      ),
+    ]).catch(e => ({ mestre: mestreSlug, ok: false, erro: e.message, timeout: true }));
+  }
 
   const mestresPromises = mestresPorBloco.map(async (m, i) => {
     const t_m0 = Date.now();
@@ -266,7 +292,7 @@ ${m.foco}
 
 Devolva CADA BLOCO separado por cabeçalho \`### NOME-DO-BLOCO\`. Em markdown.`;
 
-      const output = await runMestreClaudeCLI(systemPrompt, briefingDoMestre, { timeout: 90_000 });
+      const output = await runMestreClaudeCLI(systemPrompt, briefingDoMestre, { timeout: 110_000 });
       const dur = ((Date.now() - t_m0) / 1000).toFixed(1);
       log(`  mestre ${m.mestre} respondeu em ${dur}s (${output.length} chars)`);
       return { mestre: m.mestre, ok: true, output, dur_s: parseFloat(dur) };
@@ -277,7 +303,11 @@ Devolva CADA BLOCO separado por cabeçalho \`### NOME-DO-BLOCO\`. Em markdown.`;
     }
   });
 
-  const resultados = await Promise.all(mestresPromises);
+  // allSettled: nunca trava. Cada mestre pode falhar isoladamente.
+  // Race contra timeout de pool: garante que pipeline NAO ultrapassa 75s nos mestres.
+  const racedPromises = mestresPromises.map((p, i) => comTimeout(p, TIMEOUT_POOL_MS, mestresPorBloco[i].mestre));
+  const settled = await Promise.allSettled(racedPromises);
+  const resultados = settled.map(s => s.status === 'fulfilled' ? s.value : { mestre: 'desconhecido', ok: false, erro: String(s.reason) });
   const dur_total_mestres = ((Date.now() - t_mestres_0) / 1000).toFixed(1);
   log(`4 mestres em paralelo terminaram em ${dur_total_mestres}s`);
 
