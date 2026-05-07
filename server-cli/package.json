@@ -1,0 +1,16 @@
+{
+  "name": "atendente-pinguim-cli",
+  "version": "0.1.0",
+  "description": "Atendente Pinguim rodando via Claude CLI local (assinatura Max). V1 — prova de pipeline.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
