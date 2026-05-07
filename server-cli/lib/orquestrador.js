@@ -184,25 +184,30 @@ function runMestreClaudeCLI(systemPrompt, briefing, opts = {}) {
 }
 
 // ============================================================
-// Carrega system_prompt do mestre via Supabase API.
+// Cache em RAM dos system_prompts dos mestres.
+// Carrega 1x por slug e reutiliza em todas as chamadas seguintes.
+// Invalida no restart do servidor.
 // ============================================================
-async function carregarSystemPromptMestre(slug) {
-  const envPath = path.join(__dirname, '..', '..', '.env.local');
-  if (!fs.existsSync(envPath)) throw new Error('.env.local nao encontrado');
+const _cacheSystemPrompt = new Map();
 
-  const env = {};
-  for (const line of fs.readFileSync(envPath, 'utf-8').split('\n')) {
-    const m = line.match(/^([A-Z_]+)=(.*)$/);
-    if (m) env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+async function carregarSystemPromptMestre(slug) {
+  if (_cacheSystemPrompt.has(slug)) {
+    return _cacheSystemPrompt.get(slug);
+  }
+
+  const projectRef = ENV_LOCAL.SUPABASE_PROJECT_REF || process.env.SUPABASE_PROJECT_REF;
+  const accessToken = ENV_LOCAL.SUPABASE_ACCESS_TOKEN || process.env.SUPABASE_ACCESS_TOKEN;
+  if (!projectRef || !accessToken) {
+    throw new Error('SUPABASE_PROJECT_REF/SUPABASE_ACCESS_TOKEN nao definidos em .env.local');
   }
 
   const sql = `SELECT system_prompt FROM pinguim.agentes WHERE slug = '${slug}';`;
   const r = await fetch(
-    `https://api.supabase.com/v1/projects/${env.SUPABASE_PROJECT_REF}/database/query`,
+    `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
     {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${env.SUPABASE_ACCESS_TOKEN}`,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ query: sql }),
@@ -212,6 +217,8 @@ async function carregarSystemPromptMestre(slug) {
   if (!Array.isArray(data) || !data[0]?.system_prompt) {
     throw new Error(`mestre ${slug} sem system_prompt no banco`);
   }
+
+  _cacheSystemPrompt.set(slug, data[0].system_prompt);
   return data[0].system_prompt;
 }
 
