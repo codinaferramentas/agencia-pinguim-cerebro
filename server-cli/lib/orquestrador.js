@@ -66,11 +66,40 @@ function detectarProduto(message) {
 // ============================================================
 function toPosixPath(p) {
   if (process.platform !== 'win32') return p;
-  // C:\Squad\server-cli\scripts\foo.sh -> /c/Squad/server-cli/scripts/foo.sh
   return p
     .replace(/\\/g, '/')
     .replace(/^([A-Za-z]):/, (_, letra) => `/${letra.toLowerCase()}`);
 }
+
+// ============================================================
+// Resolve qual bash usar — IMPORTANTE no Windows!
+// WSL bash (em \WindowsApps) NAO enxerga C:\ direto, precisa /mnt/c/
+// Git Bash enxerga /c/ corretamente.
+// Forcar Git Bash quando em Windows.
+// ============================================================
+function resolverBashExe() {
+  if (process.platform !== 'win32') return 'bash';
+
+  // Caminhos comuns do Git Bash no Windows
+  const candidatos = [
+    'C:\\Program Files\\Git\\usr\\bin\\bash.exe',
+    'C:\\Program Files\\Git\\bin\\bash.exe',
+    'C:\\Program Files (x86)\\Git\\usr\\bin\\bash.exe',
+    process.env.PROGRAMFILES + '\\Git\\usr\\bin\\bash.exe',
+  ];
+
+  for (const c of candidatos) {
+    try {
+      if (c && fs.existsSync(c)) return c;
+    } catch (_) { /* ignore */ }
+  }
+
+  // Fallback: 'bash' (pode pegar WSL — vai dar erro de path, mas registra)
+  console.warn('[orquestrador] AVISO: Git Bash nao encontrado, usando bash do PATH (pode ser WSL)');
+  return 'bash';
+}
+
+const BASH_EXE = resolverBashExe();
 
 // ============================================================
 // Roda 1 script bash e retorna stdout. Timeout granular.
@@ -82,7 +111,7 @@ function rodarScript(scriptPath, args, opts = {}) {
     delete env.CLAUDE_CODE_ENTRYPOINT;
 
     const scriptPosix = toPosixPath(scriptPath);
-    const proc = spawn('bash', [scriptPosix, ...args], {
+    const proc = spawn(BASH_EXE, [scriptPosix, ...args], {
       cwd: opts.cwd || path.dirname(scriptPath),
       env,
       shell: false,
