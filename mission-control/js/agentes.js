@@ -276,7 +276,7 @@ async function renderConversar(container) {
             el('div', { class: 'conversa-vazia-hint' },
               'Eu reconheço Cérebro de produto, trago Clones como conselheiros, e só monto plano quando tem entregável real.'),
           ])]
-        : mensagensVisuais.map(m => mensagemBubble(m))
+        : mensagensVisuais.map((m, i) => mensagemBubble(m, i))
     ),
     el('form', {
       class: 'conversa-input',
@@ -318,7 +318,7 @@ async function renderConversar(container) {
   }, 50);
 }
 
-function mensagemBubble(m) {
+function mensagemBubble(m, idx) {
   const isHumano = m.papel === 'humano';
   return el('div', { class: `conversa-bolha conversa-bolha-${isHumano ? 'humano' : 'chief'}` }, [
     !isHumano ? el('div', { class: 'conversa-bolha-avatar' }, '🐧') : null,
@@ -341,8 +341,111 @@ function mensagemBubble(m) {
       m.uso && !m.plano_card
         ? el('div', { class: 'conversa-bolha-uso' }, formatarUso(m.uso))
         : null,
+      // Feedback EPP — só pra mensagens do Chief que não foram saudação canned
+      !isHumano && m.uso && m.uso.modelo !== 'rota:script' && !m.feedback_dado
+        ? renderFeedbackBotoes(idx)
+        : !isHumano && m.feedback_dado
+          ? el('div', { class: 'conversa-feedback-dado' }, `Feedback registrado: ${m.feedback_dado}`)
+          : null,
     ].filter(Boolean)),
   ].filter(Boolean));
+}
+
+function renderFeedbackBotoes(idx) {
+  return el('div', { class: 'conversa-feedback' }, [
+    el('button', {
+      class: 'conversa-feedback-btn conversa-feedback-aprovou',
+      type: 'button',
+      title: 'Ficou bom',
+      onclick: () => enviarFeedback(idx, 'aprovou'),
+    }, '👍'),
+    el('button', {
+      class: 'conversa-feedback-btn conversa-feedback-rejeitou',
+      type: 'button',
+      title: 'Não foi isso — refazer',
+      onclick: () => enviarFeedback(idx, 'rejeitou'),
+    }, '👎'),
+    el('button', {
+      class: 'conversa-feedback-btn conversa-feedback-refinou',
+      type: 'button',
+      title: 'Refinar (ajuste algo específico)',
+      onclick: () => enviarFeedback(idx, 'refinou'),
+    }, '✏️'),
+  ]);
+}
+
+async function enviarFeedback(idx, tipo) {
+  const msgChief = mensagensVisuais[idx];
+  if (!msgChief) return;
+  // Procura a última mensagem do humano antes desta
+  let msgHumano = null;
+  for (let i = idx - 1; i >= 0; i--) {
+    if (mensagensVisuais[i].papel === 'humano') {
+      msgHumano = mensagensVisuais[i];
+      break;
+    }
+  }
+  if (!msgHumano) {
+    alert('Não achei o pedido original.');
+    return;
+  }
+
+  let comentario = '';
+  if (tipo === 'rejeitou' || tipo === 'refinou') {
+    const placeholder = tipo === 'rejeitou'
+      ? 'O que estava errado? (ex.: "delegou squad errada", "inventou preço", "ficou genérico")'
+      : 'Que ajuste você quer? (ex.: "tom mais provocativo", "mais curto", "outro mestre")';
+    comentario = prompt(placeholder) || '';
+    if (!comentario.trim()) return;
+  }
+
+  // Marca otimisticamente
+  msgChief.feedback_dado = tipo + (comentario ? ` — "${comentario.slice(0, 60)}"` : '');
+  await renderAba('conversar');
+
+  try {
+    const sb = getSupabase();
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) throw new Error('Sessão expirada');
+
+    const url = `${window.__ENV__.SUPABASE_URL}/functions/v1/feedback-pinguim`;
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': window.__ENV__.SUPABASE_ANON_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        tenant_id: TENANT_PADRAO,
+        cliente_id: CLIENTE_PADRAO,
+        caso_id: casoAtivo,
+        mensagem_humana: msgHumano.conteudo,
+        mensagem_agente: msgChief.conteudo,
+        tipo,
+        comentario,
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detalhe || data.error || `HTTP ${resp.status}`);
+
+    // Se rejeitou/refinou, adiciona nova resposta refeita
+    if (data.proxima_resposta) {
+      mensagensVisuais.push({
+        papel: 'chief',
+        conteudo: data.proxima_resposta,
+        uso: data.uso,
+        refeito_por_feedback: tipo,
+        verifier_problemas: data.verifier_problemas || [],
+        reflection_rounds: data.reflection_rounds || 0,
+      });
+    }
+  } catch (e) {
+    msgChief.feedback_dado = null;
+    alert(`Erro ao enviar feedback: ${e.message}`);
+  } finally {
+    await renderAba('conversar');
+  }
 }
 
 function renderProdutosDetectados(produtos) {
