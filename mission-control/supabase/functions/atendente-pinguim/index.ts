@@ -150,6 +150,50 @@ const TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'buscar-skill',
+      description: 'Busca Skills (receitas executaveis "como fazer X") aplicaveis ao pedido. Use ANTES de delegar pro Chief — Skill traz estrutura/formato esperado + Clones recomendados. Match por keyword: "pagina de venda" -> anatomia-pagina-vendas-longa; "VSL" -> jon-benson-vsl; "headline" -> above-the-fold; "oferta" -> hormozi-grand-slam-offer; "lancamento" -> formula-de-lancamento.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'palavra-chave do formato/entregavel pedido (ex: "pagina de venda", "VSL", "email lancamento", "hook reels")' },
+          familia: { type: 'string', description: 'familia opcional pra filtrar (copywriting, pagina-vendas, oferta, vsl, conteudo, etc)' },
+          top_k: { type: 'number', default: 4 },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'buscar-persona',
+      description: 'Carrega o dossie 11 blocos da Persona vinculada ao Cerebro do produto. Use ANTES de delegar copy/conteudo — sem Persona o mestre opera no escuro. Se Persona nao existir, retorna gap declarado.',
+      parameters: {
+        type: 'object',
+        properties: {
+          produto_slug: { type: 'string', description: 'slug do produto (ex: elo, proalt, lyra)' },
+        },
+        required: ['produto_slug'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'buscar-funil',
+      description: 'Carrega etapas do funil ativo do produto. Use quando o pedido depende de etapa (frio vs lista quente, pre vs pos-decisao). Se Funil nao existir, retorna gap declarado.',
+      parameters: {
+        type: 'object',
+        properties: {
+          produto_slug: { type: 'string', description: 'slug do produto' },
+        },
+        required: ['produto_slug'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'atualizar-perfil-cliente',
       description: 'Adiciona linha em APRENDIZADOS Tier 2 (perfil do cliente atual). Use quando aprender padrao/preferencia do cliente que vale lembrar (ex.: "André prefere copy direta sem floreio").',
       parameters: {
@@ -361,6 +405,188 @@ async function executarTool(
         };
         break;
       }
+      case 'buscar-skill': {
+        // Busca Skills no banco por keyword + opcional familia.
+        // Retorna receita (descricao + corpo + clones) + recomendacao de uso.
+        const query = (toolArgs.query || '').toLowerCase().trim();
+        const familia = toolArgs.familia;
+        const topK = toolArgs.top_k || 4;
+
+        // Tokeniza query removendo stopwords curtas
+        const STOPWORDS = new Set(['de', 'da', 'do', 'pra', 'para', 'em', 'no', 'na', 'o', 'a', 'os', 'as', 'um', 'uma']);
+        const tokens = query.split(/\s+/).filter(t => t.length >= 3 && !STOPWORDS.has(t));
+
+        // Skills "ancora" — quando o usuario pede um formato GERAL, retorna estas primeiro
+        // (e nao auxiliares como above-the-fold, que sao parte da pagina mas nao a pagina inteira)
+        const ANCORAS_POR_KEYWORD: Record<string, string[]> = {
+          'pagina': ['anatomia-pagina-vendas-longa', 'anatomia-pagina-low-ticket', 'anatomia-pagina-high-ticket'],
+          'venda': ['anatomia-pagina-vendas-longa', 'anatomia-pagina-low-ticket', 'anatomia-pagina-high-ticket'],
+          'vsl': ['jon-benson-vsl', 'vsl-classico-aida'],
+          'video': ['jon-benson-vsl', 'vsl-classico-aida'],
+          'lancamento': ['formula-de-lancamento', 'jeff-walker-product-launch'],
+          'oferta': ['hormozi-grand-slam-offer', 'kennedy-godfather-offer'],
+          'headline': ['above-the-fold'],
+          'reels': ['hook-curiosidade', 'hook-resultado-rapido'],
+          'tiktok': ['hook-curiosidade', 'hook-resultado-rapido'],
+          'email': ['halbert-a-pile'],
+          'persona': ['gerar-persona-11-blocos'],
+          'webinar': ['brunson-perfect-webinar'],
+        };
+
+        // Identifica keywords-ancora presentes na query
+        const ancorasAtivadas = new Set<string>();
+        for (const tok of tokens) {
+          for (const [kw, slugs] of Object.entries(ANCORAS_POR_KEYWORD)) {
+            if (tok.includes(kw) || kw.includes(tok)) {
+              slugs.forEach(s => ancorasAtivadas.add(s));
+            }
+          }
+        }
+
+        let q = sb()
+          .from('skills')
+          .select('slug, nome, descricao, conteudo_md, familia, formato, clones')
+          .eq('status', 'em_construcao')
+          .limit(topK * 5);
+        if (familia) q = q.eq('familia', familia);
+
+        const { data: skills, error } = await q;
+        if (error) throw error;
+
+        // Match por relevancia + boost pra Skills-ancora
+        const scored = (skills || [])
+          .map((s: any) => {
+            let score = 0;
+            const slugLower = s.slug.toLowerCase();
+            const descLower = (s.descricao || '').toLowerCase();
+            const famLower = (s.familia || '').toLowerCase();
+
+            // Match por token (mais granular que substring inteira)
+            for (const tok of tokens) {
+              if (slugLower.includes(tok)) score += 3;
+              if (descLower.includes(tok)) score += 2;
+              if (famLower.includes(tok)) score += 1;
+            }
+            // Fallback: query inteira ainda conta (pega multi-palavra)
+            if (slugLower.includes(query)) score += 2;
+            if (descLower.includes(query)) score += 1;
+
+            // Boost forte pra Skills-ancora ativadas
+            if (ancorasAtivadas.has(s.slug)) score += 10;
+
+            // Boost pra formato 'template' (Skills de estrutura completa) vs 'framework' (auxiliares)
+            // quando query menciona formato concreto (pagina, vsl, lancamento)
+            const isFormatoConcreto = tokens.some(t => ['pagina', 'venda', 'vsl', 'lancamento', 'webinar', 'email'].includes(t));
+            if (isFormatoConcreto && s.formato === 'template') score += 2;
+
+            return { ...s, score };
+          })
+          .filter((s: any) => s.score > 0)
+          .sort((a: any, b: any) => b.score - a.score)
+          .slice(0, topK);
+
+        if (scored.length === 0) {
+          resultado = {
+            ok: false,
+            mensagem: `Nenhuma Skill encontrada pra "${query}"${familia ? ` na familia ${familia}` : ''}. Catalogo tem 46 skills — talvez a keyword esteja muito especifica. Tenta sinonimo (ex: "VSL" em vez de "video de venda").`,
+            skills_encontradas: [],
+          };
+          break;
+        }
+
+        resultado = {
+          ok: true,
+          query,
+          skills_encontradas: scored.map((s: any) => ({
+            slug: s.slug,
+            nome: s.nome,
+            descricao: s.descricao,
+            familia: s.familia,
+            formato: s.formato,
+            clones_recomendados: s.clones || [],
+            receita_md: s.conteudo_md?.slice(0, 3500), // cap pra nao explodir contexto
+          })),
+        };
+        break;
+      }
+      case 'buscar-persona': {
+        const slug = toolArgs.produto_slug;
+        const { data: produto } = await sb()
+          .from('produtos')
+          .select('id, nome')
+          .eq('slug', slug)
+          .maybeSingle();
+        if (!produto?.id) {
+          resultado = { error: `Produto '${slug}' nao encontrado.` };
+          break;
+        }
+        const { data: cerebro } = await sb()
+          .from('cerebros')
+          .select('id')
+          .eq('produto_id', produto.id)
+          .maybeSingle();
+        if (!cerebro?.id) {
+          resultado = { error: `Produto ${slug} sem Cerebro vinculado.`, gap: true };
+          break;
+        }
+        const { data: persona } = await sb()
+          .from('personas')
+          .select('identidade, rotina, nivel_consciencia, jobs_to_be_done, vozes_cabeca, desejos_reais, crencas_limitantes, dores_latentes, objecoes_compra, vocabulario, onde_vive, versao')
+          .eq('cerebro_id', cerebro.id)
+          .maybeSingle();
+        if (!persona) {
+          resultado = {
+            ok: false,
+            gap: true,
+            mensagem: `Persona NAO existe pra ${produto.nome}. Output sera mais generico — recomenda popular Persona antes de venda real.`,
+          };
+          break;
+        }
+        // Conta blocos preenchidos
+        const blocos = ['identidade', 'rotina', 'nivel_consciencia', 'jobs_to_be_done', 'vozes_cabeca', 'desejos_reais', 'crencas_limitantes', 'dores_latentes', 'objecoes_compra', 'vocabulario', 'onde_vive'];
+        const preenchidos = blocos.filter(b => persona[b] && Object.keys(persona[b]).length > 0);
+        resultado = {
+          ok: true,
+          produto_slug: slug,
+          versao: persona.versao,
+          blocos_preenchidos: preenchidos.length,
+          blocos_total: 11,
+          persona,
+        };
+        break;
+      }
+      case 'buscar-funil': {
+        const slug = toolArgs.produto_slug;
+        const { data: produto } = await sb()
+          .from('produtos')
+          .select('id, nome')
+          .eq('slug', slug)
+          .maybeSingle();
+        if (!produto?.id) {
+          resultado = { error: `Produto '${slug}' nao encontrado.` };
+          break;
+        }
+        const { data: etapas } = await sb()
+          .from('funil_etapas')
+          .select('id, nome, ordem, descricao, copy_alvo')
+          .eq('produto_id', produto.id)
+          .order('ordem', { ascending: true });
+        if (!etapas || etapas.length === 0) {
+          resultado = {
+            ok: false,
+            gap: true,
+            mensagem: `Funil NAO mapeado pra ${produto.nome} (0 etapas no banco). Mestre assume etapa neutra OU produz versao dupla (frio + quente).`,
+          };
+          break;
+        }
+        resultado = {
+          ok: true,
+          produto_slug: slug,
+          total_etapas: etapas.length,
+          etapas,
+        };
+        break;
+      }
       case 'atualizar-perfil-cliente': {
         // Append em pinguim.aprendizados_cliente_agente (Tier 2)
         const linha = `- ${toolArgs.aprendizado}${toolArgs.contexto ? ` (${toolArgs.contexto})` : ''} [${new Date().toISOString().slice(0, 10)}]`;
@@ -490,6 +716,15 @@ function montarSystemPromptPinguim(args: {
     `3. **Use Clones como conselheiros.** Em copy/oferta cite Hormozi, Schwartz, Halbert. Em estratégia cite Dalio, Munger, Naval. Use \`buscar-clone\` pra trazer voz real.\n` +
     `4. **Nem tudo é LLM.** Se a tarefa é determinística (lookup, cálculo, formatação, query SQL), use \`criar-script\` em vez de gerar texto a cada vez.\n` +
     `4.5. **APÓS \`delegar-chief\`:** o Chief devolve um \`conteudo_md\` estruturado com a entrega completa. Sua resposta DEVE incluir esse \`conteudo_md\` INTEGRALMENTE, sem resumir, sem cortar, sem reescrever. Você só pode adicionar 1-2 linhas curtas antes ou depois (saudação ou pergunta de refinamento). NUNCA condense o output do Chief — quem pediu quer ver o entregável completo.\n` +
+    `4.7. **REGRA DURA — montar BRIEFING RICO antes de \`delegar-chief\`:**\n` +
+    `   Antes de delegar, você OBRIGATORIAMENTE consulta as 5 fontes vivas (anatomia do agente Pinguim). Ordem de execução:\n` +
+    `   (a) \`buscar-cerebro\` — se reconhece produto, busca o quê do produto.\n` +
+    `   (b) \`buscar-persona(produto_slug)\` — quem compra o produto. SE retornar gap=true, declare "Persona em construção" no briefing — não pule.\n` +
+    `   (c) \`buscar-skill(query="<formato pedido>")\` — receita de COMO fazer + Clones recomendados. Match keyword: "página de venda" → anatomia-pagina-vendas-longa; "VSL" → jon-benson-vsl; "headline" → above-the-fold; "oferta" → hormozi-grand-slam-offer; "lançamento" → formula-de-lancamento; "hook reels" → hook-curiosidade.\n` +
+    `   (d) \`buscar-funil(produto_slug)\` — etapa do funil (frio vs quente). Opcional pra copy isolada; obrigatório pra lançamento/sequência.\n` +
+    `   (e) \`buscar-clone\` — só se Skill recomendou clones específicos E você quer trazer voz literal antes de delegar (raro — geralmente o Chief carrega os Clones via Skill).\n` +
+    `   Depois \`delegar-chief\` com briefing que **inclui resultados de TODAS as consultas** (Cérebro + Persona + Skill + Funil), declarando explicitamente qualquer gap encontrado.\n` +
+    `   ⚠ **NÃO delegar com briefing pobre.** Briefing pobre = output genérico. Sempre as 5 fontes (mesmo que algumas declarem gap).\n` +
     `5. **REGRA CRÍTICA — quando delegar para uma squad-conselheira:**\n` +
     `   Você NUNCA escreve copy, narrativa, conselho estratégico ou direção visual sozinho. SEMPRE delega via \`delegar-chief\`. Mapeamento por NATUREZA do entregável (use a palavra-chave dominante do pedido):\n` +
     `   - **Designer / identidade visual / logo / paleta / brand / layout / direção visual / criativo / arte / mockup / wireframe** → \`delegar-chief(design, briefing)\` (Neumeier, Frost, Do, Draplin).\n` +

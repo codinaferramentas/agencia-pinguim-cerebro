@@ -239,26 +239,31 @@ export const TOOLS_ORQUESTRADOR_SQUAD = [
     type: 'function',
     function: {
       name: 'consolidar-roteiro',
-      description: 'Consolida contribuicoes dos mestres em copy/roteiro final. Use DEPOIS de invocar 1-2 mestres. Termina o orquestrador.',
+      description: 'Consolida contribuicoes dos mestres em entregavel final. Use DEPOIS de invocar 1-2+ mestres. Termina o orquestrador. ESTRUTURA dos blocos vem da SKILL recebida no briefing — NAO ha template fixo. Pagina de venda longa tem 12-15 blocos; VSL tem 5-7; email tem 3; hook tem 1.',
       parameters: {
         type: 'object',
         properties: {
           objetivo: { type: 'string' },
-          publico_consciencia: { type: 'string' },
+          publico_consciencia: { type: 'string', description: 'nivel Schwartz dominante' },
           mestres_usados: { type: 'array', items: { type: 'string' } },
-          justificativa: { type: 'string' },
-          copy_final: {
-            type: 'object',
-            properties: {
-              gancho: { type: 'string' },
-              desenvolvimento: { type: 'string' },
-              virada: { type: 'string' },
-              cta: { type: 'string' },
-              metodo_anotado: { type: 'string' },
+          skill_aplicada: { type: 'string', description: 'slug da Skill principal usada (ex: anatomia-pagina-vendas-longa). Vem do briefing.' },
+          justificativa: { type: 'string', description: 'por que essa Skill + esses mestres pra esse pedido' },
+          blocos: {
+            type: 'array',
+            description: 'lista de blocos do entregavel, na ordem que a Skill define. Cada bloco tem nome (vem da Skill) e conteudo (escrito pelo mestre). Exemplos de nome de bloco: "above-the-fold", "headline", "promessa-expandida", "identificacao-da-dor", "mecanismo-unico", "prova-social", "stack-de-bonus", "garantia", "faq", "ps", "gancho", "desenvolvimento", "virada", "cta". USE OS NOMES QUE A SKILL PEDIR.',
+            items: {
+              type: 'object',
+              properties: {
+                nome: { type: 'string', description: 'nome do bloco (vem da Skill)' },
+                conteudo: { type: 'string', description: 'conteudo do bloco escrito pelo mestre' },
+                mestre: { type: 'string', description: 'slug do mestre que escreveu (opcional)' },
+              },
+              required: ['nome', 'conteudo'],
             },
           },
+          metodo_anotado: { type: 'string', description: 'nota interna sobre metodo aplicado' },
         },
-        required: ['objetivo', 'mestres_usados', 'justificativa', 'copy_final'],
+        required: ['objetivo', 'mestres_usados', 'justificativa', 'blocos'],
       },
     },
   },
@@ -274,16 +279,27 @@ export function formatarConsolidadoMd(card: any): string {
   if (card.objetivo) partes.push(`**Objetivo:** ${card.objetivo}`);
   if (card.publico_consciencia) partes.push(`**Público (consciência):** ${card.publico_consciencia}`);
   if (Array.isArray(card.mestres_usados)) partes.push(`**Mestres usados:** ${card.mestres_usados.join(', ')}`);
+  if (card.skill_aplicada) partes.push(`**Skill aplicada:** ${card.skill_aplicada}`);
   if (card.justificativa) partes.push(`**Justificativa:** ${card.justificativa}`);
   partes.push('');
+  // Formato novo — blocos dirigidos pela Skill
+  if (Array.isArray(card.blocos) && card.blocos.length > 0) {
+    for (const b of card.blocos) {
+      if (!b?.conteudo) continue;
+      const titulo = b.nome ? `### ${b.nome.toUpperCase()}` : '###';
+      const assinatura = b.mestre ? ` _(${b.mestre})_` : '';
+      partes.push(`${titulo}${assinatura}\n\n${b.conteudo}`);
+    }
+  }
+  // Formato antigo — compat reversa pra agentes que ainda devolvem copy_final
   if (card.copy_final) {
     const c = card.copy_final;
     if (c.gancho) partes.push(`### [GANCHO]\n${c.gancho}`);
     if (c.desenvolvimento) partes.push(`### [DESENVOLVIMENTO]\n${c.desenvolvimento}`);
     if (c.virada) partes.push(`### [VIRADA]\n${c.virada}`);
     if (c.cta) partes.push(`### [CTA]\n${c.cta}`);
-    if (c.metodo_anotado) partes.push(`\n_${c.metodo_anotado}_`);
   }
+  if (card.metodo_anotado) partes.push(`\n_${card.metodo_anotado}_`);
   return partes.join('\n\n');
 }
 
