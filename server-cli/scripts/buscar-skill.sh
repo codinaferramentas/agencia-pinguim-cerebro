@@ -14,10 +14,17 @@ if [ -z "$QUERY" ]; then
   exit 1
 fi
 
-ENV_FILE="$(dirname "$0")/../../.env.local"
-set -a
-source "$ENV_FILE"
-set +a
+if [ -z "$SUPABASE_PROJECT_REF" ] || [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+  if [ -f "/c/Squad/.env.local" ]; then
+    set -a
+    . "/c/Squad/.env.local"
+    set +a
+  fi
+fi
+if [ -z "$SUPABASE_PROJECT_REF" ]; then
+  echo "ERRO: SUPABASE_PROJECT_REF nao definido." >&2
+  exit 1
+fi
 
 # Match SQL com ranking simples
 FAMILIA_FILTER=""

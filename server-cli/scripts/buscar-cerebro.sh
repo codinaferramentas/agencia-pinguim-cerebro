@@ -14,15 +14,21 @@ if [ -z "$CEREBRO_SLUG" ] || [ -z "$QUERY" ]; then
   exit 1
 fi
 
-# Carrega credenciais do .env.local da raiz do projeto
-ENV_FILE="$(dirname "$0")/../../.env.local"
-if [ ! -f "$ENV_FILE" ]; then
-  echo "ERRO: .env.local nao encontrado em $ENV_FILE" >&2
+# Credenciais ja vem do ambiente (Node injeta as vars de .env.local).
+# Se rodar standalone, exportar antes: export $(grep -v '^#' /c/Squad/.env.local | xargs)
+if [ -z "$SUPABASE_PROJECT_REF" ] || [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+  # Fallback: tenta carregar /c/Squad/.env.local diretamente
+  if [ -f "/c/Squad/.env.local" ]; then
+    set -a
+    . "/c/Squad/.env.local"
+    set +a
+  fi
+fi
+
+if [ -z "$SUPABASE_PROJECT_REF" ] || [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+  echo "ERRO: SUPABASE_PROJECT_REF/SUPABASE_ACCESS_TOKEN nao definidos." >&2
   exit 1
 fi
-set -a
-source "$ENV_FILE"
-set +a
 
 # 1. Resolver cerebro_slug -> cerebro_id via API SQL
 RESOLVE_SQL=$(cat <<EOF

@@ -102,11 +102,29 @@ function resolverBashExe() {
 const BASH_EXE = resolverBashExe();
 
 // ============================================================
+// Carrega .env.local UMA vez no boot e injeta como env var nos scripts.
+// Resolve dois problemas de uma vez:
+//  1. Scripts nao precisam de dirname/source pra carregar .env
+//  2. Funciona em qualquer cwd
+// ============================================================
+function carregarEnvLocal() {
+  const envPath = path.join(__dirname, '..', '..', '.env.local');
+  if (!fs.existsSync(envPath)) return {};
+  const result = {};
+  for (const line of fs.readFileSync(envPath, 'utf-8').split('\n')) {
+    const m = line.match(/^([A-Z_]+)=(.*)$/);
+    if (m) result[m[1]] = m[2].replace(/^["']|["']$/g, '');
+  }
+  return result;
+}
+const ENV_LOCAL = carregarEnvLocal();
+
+// ============================================================
 // Roda 1 script bash e retorna stdout. Timeout granular.
 // ============================================================
 function rodarScript(scriptPath, args, opts = {}) {
   return new Promise((resolve, reject) => {
-    const env = { ...process.env };
+    const env = { ...process.env, ...ENV_LOCAL };
     delete env.CLAUDECODE;
     delete env.CLAUDE_CODE_ENTRYPOINT;
 
