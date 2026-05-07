@@ -32,15 +32,6 @@ const COL = {
   acentoPinguim: '#E85C00',
 };
 
-// ============================== MESAS DOS MESTRES ==============================
-// 4 mesas alinhadas no centro do salão. Cada mestre tem sua "estação".
-const MESAS_MESTRES = [
-  { id: 'halbert',    nome: 'HALBERT',    x: 180, y: 380, accent: '#dc2626' },
-  { id: 'schwartz',   nome: 'SCHWARTZ',   x: 380, y: 380, accent: '#475569' },
-  { id: 'bencivenga', nome: 'BENCIVENGA', x: 580, y: 380, accent: '#2563eb' },
-  { id: 'hormozi',    nome: 'HORMOZI',    x: 780, y: 380, accent: '#0a0a0a' },
-];
-
 // ============================== FONTES VIVAS ==============================
 // 4 fontes "objetos" na parede do fundo (5ª fonte = os Clones, que entram depois).
 // Fontes maiores que antes (~1.6x) — mais legíveis e dão peso visual ao topo.
@@ -51,35 +42,113 @@ const FONTES = [
   { id: 'funil',   nome: 'FUNIL',   x: 825, y: 145, tipo: 'mapa',    emoji: '🎯' },
 ];
 
-// ============================== AGENTES ==============================
-// Atendente Pinguim + 4 mestres. Mestres começam fora da tela (entram pela direita).
-const AGENTES_DEF = [
-  // Atendente — pinguim de fato (sprite especial)
-  { id: 'atendente', nome: 'Atendente', papel: 'Pinguim · Orquestrador',
-    tipoSprite: 'pinguim',
-    home: { x: 480, y: 540 } },
+// ============================== MESTRES — IDENTIDADE VISUAL ==============================
+// V2.5 — Pipeline criativo dinamico. Skill recomenda N mestres (1-6 no canvas);
+// motor monta MESAS_MESTRES e AGENTES_DEF a partir dos slugs vindos do backend.
+// Mapa estatico com identidade de TODOS os mestres copy populados — sprite + cores
+// + acessorio + papel. Adicionar mestre novo = nova entrada aqui (ver dividas V3
+// pra mover sprite pro banco).
+//
+// IMPORTANTE: ids tem que casar EXATAMENTE com os slugs em pinguim.agentes (banco).
+const MESTRES_DEF = {
+  'gary-halbert':    { nomeCurto: 'Halbert',    papel: 'Direct Mail · Lendário',
+    skin: '#fcd7b6', shirt: '#ffffff', pants: '#1f2937', hair: '#3a1f0a',
+    acessorio: 'charuto',  accent: '#dc2626' },
+  'eugene-schwartz': { nomeCurto: 'Schwartz',   papel: 'Breakthrough · 5 Stages',
+    skin: '#e8b48a', shirt: '#475569', pants: '#1a1f2e', hair: '#1a0f08',
+    acessorio: 'oculos',   accent: '#475569' },
+  'gary-bencivenga': { nomeCurto: 'Bencivenga', papel: 'Persuasão · Bullets',
+    skin: '#fcd7b6', shirt: '#2563eb', pants: '#1f2937', hair: '#4a2a0a',
+    acessorio: 'lapis',    accent: '#2563eb' },
+  'alex-hormozi':    { nomeCurto: 'Hormozi',    papel: 'Grand Slam Offer',
+    skin: '#e8b48a', shirt: '#0a0a0a', pants: '#1f2937', hair: 'careca',
+    acessorio: 'fone',     accent: '#0a0a0a' },
+  // V2.5 — 4 mestres novos, vibe distinta
+  'dan-kennedy':     { nomeCurto: 'Kennedy',    papel: 'Godfather Offer · Direct Response',
+    skin: '#fcd7b6', shirt: '#7c2d12', pants: '#3a2814', hair: '#a08060',
+    acessorio: 'chapeu',   accent: '#7c2d12' },
+  'john-carlton':    { nomeCurto: 'Carlton',    papel: 'Maverick · Anti-Corporativo',
+    skin: '#e8b48a', shirt: '#7f1d1d', pants: '#1f2937', hair: '#1a0f08',
+    acessorio: 'bandana',  accent: '#7f1d1d' },
+  'russell-brunson': { nomeCurto: 'Brunson',    papel: 'Hook Story Offer · Palco',
+    skin: '#fcd7b6', shirt: '#dc2626', pants: '#1f2937', hair: '#3a1f0a',
+    acessorio: 'microfone', accent: '#dc2626' },
+  'jon-benson':      { nomeCurto: 'Benson',     papel: 'VSL Pioneer',
+    skin: '#e8b48a', shirt: '#0a0a0a', pants: '#1f2937', hair: 'careca',
+    acessorio: 'monitor',  accent: '#374151' },
+};
 
-  // Mestres — humanos, cada um com identidade visual própria
-  { id: 'halbert',    nome: 'Halbert',    papel: 'Direct Mail · Lendário',
-    tipoSprite: 'humano', skin: '#fcd7b6', shirt: '#ffffff', pants: '#1f2937', hair: '#3a1f0a',
-    acessorio: 'charuto',
-    home: { x: 180, y: 430 } },
-  { id: 'schwartz',   nome: 'Schwartz',   papel: 'Breakthrough · 5 Stages',
-    tipoSprite: 'humano', skin: '#e8b48a', shirt: '#475569', pants: '#1a1f2e', hair: '#1a0f08',
-    acessorio: 'oculos',
-    home: { x: 380, y: 430 } },
-  { id: 'bencivenga', nome: 'Bencivenga', papel: 'Persuasão · Bullets',
-    tipoSprite: 'humano', skin: '#fcd7b6', shirt: '#2563eb', pants: '#1f2937', hair: '#4a2a0a',
-    acessorio: 'lapis',
-    home: { x: 580, y: 430 } },
-  { id: 'hormozi',    nome: 'Hormozi',    papel: 'Grand Slam Offer',
-    tipoSprite: 'humano', skin: '#e8b48a', shirt: '#0a0a0a', pants: '#1f2937', hair: 'careca',
-    acessorio: 'fone',
-    home: { x: 780, y: 430 } },
-];
+// Lista default — usada quando backend nao manda mestres (fallback hardcoded V2.4).
+const MESTRES_DEFAULT = ['gary-halbert', 'eugene-schwartz', 'gary-bencivenga', 'alex-hormozi'];
+
+// Limite visual do canvas (960px de largura). Backend processa todos os mestres,
+// mas frontend so renderiza ate 6 mesas pra nao atropelar sprites.
+const LIMITE_VISUAL_MESTRES = 6;
 
 // Posição de entrada dos mestres (fora da tela, à direita)
 const POSICAO_ENTRADA = { x: 1020, y: 490 };
+
+// Calcula MESAS_MESTRES + AGENTES_DEF a partir de uma lista de slugs.
+// Retorna tambem `mestresCortados` se passou do limite visual.
+function montarLayoutMestres(slugsDoBackend) {
+  const slugs = (Array.isArray(slugsDoBackend) && slugsDoBackend.length > 0)
+    ? slugsDoBackend
+    : MESTRES_DEFAULT;
+
+  // Filtra slugs desconhecidos (nao tem identidade visual definida)
+  const slugsValidos = slugs.filter(s => MESTRES_DEF[s]);
+  const slugsDesconhecidos = slugs.filter(s => !MESTRES_DEF[s]);
+
+  // Aplica limite visual
+  const cortados = slugsValidos.slice(LIMITE_VISUAL_MESTRES);
+  const slugsRender = slugsValidos.slice(0, LIMITE_VISUAL_MESTRES);
+
+  // Distribui posicoes X entre os mestres renderizados.
+  // Canvas 960px de largura, margem 100px de cada lado, 760px utilizaveis.
+  const N = slugsRender.length;
+  const W = 960, MARGIN_X = 100;
+  const usableW = W - MARGIN_X * 2;
+  const espacamento = N === 1 ? 0 : usableW / (N - 1);
+  const Y_MESA = 380;
+
+  const MESAS_MESTRES = slugsRender.map((slug, i) => {
+    const def = MESTRES_DEF[slug];
+    const x = N === 1 ? W / 2 : MARGIN_X + i * espacamento;
+    return {
+      id: slug,
+      nome: def.nomeCurto.toUpperCase(),
+      x: Math.round(x),
+      y: Y_MESA,
+      accent: def.accent,
+    };
+  });
+
+  const AGENTES_DEF = [
+    { id: 'atendente', nome: 'Atendente', papel: 'Pinguim · Orquestrador',
+      tipoSprite: 'pinguim', home: { x: 480, y: 540 } },
+    ...slugsRender.map((slug, i) => {
+      const def = MESTRES_DEF[slug];
+      const mesa = MESAS_MESTRES[i];
+      return {
+        id: slug,
+        nome: def.nomeCurto,
+        papel: def.papel,
+        tipoSprite: 'humano',
+        skin: def.skin, shirt: def.shirt, pants: def.pants, hair: def.hair,
+        acessorio: def.acessorio,
+        home: { x: mesa.x, y: 430 },
+      };
+    }),
+  ];
+
+  return {
+    MESAS_MESTRES,
+    AGENTES_DEF,
+    slugsRender,
+    mestresCortados: cortados,
+    slugsDesconhecidos,
+  };
+}
 
 /* ============================== DESENHO DE CENÁRIO ============================== */
 
@@ -903,6 +972,48 @@ function drawHumano(ctx, x, y, agent, state, frame, direction, holdingPaper) {
     ctx.fillRect(-6, -14 + walkBob, 1, 4);
     ctx.fillRect(5, -14 + walkBob, 1, 4);
   }
+  // V2.5 — 4 acessorios novos
+  if (agent.acessorio === 'chapeu' && direction !== 'up') {
+    // Chapeu fedora marrom — Kennedy (vibe Texas direct mail)
+    ctx.fillStyle = '#3a1f0a';
+    ctx.fillRect(-7, -16 + walkBob, 14, 2);  // aba
+    ctx.fillRect(-5, -19 + walkBob, 10, 3);  // copa
+    ctx.fillStyle = '#5a371c';
+    ctx.fillRect(-5, -16 + walkBob, 10, 1);  // faixa
+  }
+  if (agent.acessorio === 'bandana' && direction !== 'up') {
+    // Bandana vinho amarrada — Carlton (vibe rocker)
+    ctx.fillStyle = '#7f1d1d';
+    ctx.fillRect(-5, -14 + walkBob, 10, 3);  // bandana
+    ctx.fillStyle = '#991b1b';
+    ctx.fillRect(-5, -14 + walkBob, 10, 1);  // highlight
+    if (direction === 'right') {
+      ctx.fillStyle = '#7f1d1d';
+      ctx.fillRect(5, -13 + walkBob, 2, 4);  // ponta amarrada
+    } else {
+      ctx.fillStyle = '#7f1d1d';
+      ctx.fillRect(-7, -13 + walkBob, 2, 4);
+    }
+  }
+  if (agent.acessorio === 'microfone' && direction !== 'up' && !sitting) {
+    // Microfone na mao — Brunson (palco/webinar)
+    const mx = direction === 'right' ? 7 : -9;
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(mx, 0 + walkBob, 2, 4);     // bastao
+    ctx.fillStyle = '#374151';
+    ctx.fillRect(mx - 1, -2 + walkBob, 4, 3); // capsula
+    ctx.fillStyle = '#6b7280';
+    ctx.fillRect(mx, -1 + walkBob, 2, 1);    // grade
+  }
+  if (agent.acessorio === 'monitor' && direction !== 'up' && sitting) {
+    // Monitor extra que Benson segura — pequeno, sobre o tampo
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(-4, -2 + walkBob, 8, 5);
+    ctx.fillStyle = '#10b981';
+    ctx.fillRect(-3, -1 + walkBob, 6, 3);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fillRect(-3, -1 + walkBob, 2, 1);
+  }
 
   ctx.restore();
 
@@ -976,7 +1087,13 @@ function drawSpeechBubble(ctx, x, y, text) {
 }
 
 /* ============================== ENGINE ============================== */
-export function criarEngineCopy(canvas) {
+// V2.5 — `mestresSlugs` opcional. Se nao vier, usa MESTRES_DEFAULT (4 hardcoded
+// — preserva comportamento V2.4). Limite visual: 6 mesas.
+export function criarEngineCopy(canvas, mestresSlugs) {
+  const layout = montarLayoutMestres(mestresSlugs);
+  const MESAS_MESTRES = layout.MESAS_MESTRES;
+  const AGENTES_DEF = layout.AGENTES_DEF;
+
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
   const W = canvas.width, H = canvas.height;
@@ -1206,11 +1323,32 @@ export function criarEngineCopy(canvas) {
     agentes: () => AGENTES_DEF.map(a => ({ id: a.id, nome: a.nome, papel: a.papel })),
     mestres: () => MESAS_MESTRES.map(m => m.id),
     fontes: () => FONTES.map(f => f.id),
+    // V2.5 — info pro roteiro/modal sobre o que foi cortado e o que e desconhecido
+    layout: {
+      mestresRender: layout.slugsRender,
+      mestresCortados: layout.mestresCortados,
+      slugsDesconhecidos: layout.slugsDesconhecidos,
+      total: layout.slugsRender.length,
+    },
     destroy: () => { destroyed = true; if (rafId) cancelAnimationFrame(rafId); },
   };
 }
 
-// Exporta também os defs pra modal popular UI lateral
-export const COPY_AGENTES = AGENTES_DEF;
-export const COPY_MESTRES = MESAS_MESTRES;
+// Exporta defs estaticos pra modal popular UI lateral.
+// V2.5: COPY_AGENTES / COPY_MESTRES viraram funcoes — modal passa a lista de
+// slugs vinda do backend. Sem lista, retorna o default V2.4 (4 mestres).
 export const COPY_FONTES = FONTES;
+export const COPY_MESTRES_DEF = MESTRES_DEF;
+export const COPY_MESTRES_DEFAULT = MESTRES_DEFAULT;
+export const COPY_LIMITE_VISUAL_MESTRES = LIMITE_VISUAL_MESTRES;
+
+// Helper pro modal popular sidebar com base em slugs (mesmo formato que
+// AGENTES_DEF original — Atendente + N mestres).
+export function listarAgentesParaSidebar(mestresSlugs) {
+  const layout = montarLayoutMestres(mestresSlugs);
+  return layout.AGENTES_DEF;
+}
+
+// Compat alias — modal antigo importava COPY_AGENTES como array.
+// Devolve o default V2.4 pra qualquer chamador que nao migrou.
+export const COPY_AGENTES = listarAgentesParaSidebar(MESTRES_DEFAULT);

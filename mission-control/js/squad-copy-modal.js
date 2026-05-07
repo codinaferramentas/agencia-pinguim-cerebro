@@ -5,10 +5,11 @@
    Reutiliza CSS da .squad-overlay já existente (mesmas classes).
 */
 
-import { criarEngineCopy, COPY_AGENTES, COPY_FONTES } from './squad-copy-animation.js?v=20260507a';
-import { ROTEIROS_COPY } from './squad-copy-roteiros.js?v=20260507a';
+import { criarEngineCopy, listarAgentesParaSidebar, COPY_FONTES, COPY_MESTRES_DEFAULT } from './squad-copy-animation.js?v=20260507b';
+import { ROTEIROS_COPY } from './squad-copy-roteiros.js?v=20260507b';
 
-export async function abrirSquadCopyModal({ roteiro, apiCall, titulo, subtitulo, pedido }) {
+// V2.5 — `mestresSlugs` opcional. Se nao vier, usa o default V2.4 (4 mestres).
+export async function abrirSquadCopyModal({ roteiro, apiCall, titulo, subtitulo, pedido, mestresSlugs }) {
   const roteiroFn = ROTEIROS_COPY[roteiro];
   if (!roteiroFn) throw new Error(`Roteiro de copy '${roteiro}' nao encontrado`);
 
@@ -36,7 +37,7 @@ export async function abrirSquadCopyModal({ roteiro, apiCall, titulo, subtitulo,
             <div class="squad-counters">
               <div><span class="squad-counter-num" id="squad-copy-c-elapsed">0s</span><span class="squad-counter-label">Tempo</span></div>
               <div><span class="squad-counter-num" id="squad-copy-c-steps">0</span><span class="squad-counter-label">Etapas</span></div>
-              <div><span class="squad-counter-num" id="squad-copy-c-mestres">0<span class="squad-counter-total">/4</span></span><span class="squad-counter-label">Mestres</span></div>
+              <div><span class="squad-counter-num" id="squad-copy-c-mestres">0<span class="squad-counter-total" id="squad-copy-c-mestres-total">/0</span></span><span class="squad-counter-label">Mestres</span></div>
             </div>
           </div>
           <div class="squad-panel-block">
@@ -53,9 +54,14 @@ export async function abrirSquadCopyModal({ roteiro, apiCall, titulo, subtitulo,
   `;
   document.body.appendChild(overlay);
 
-  // Popula lista de agentes (Atendente + 4 mestres)
+  // V2.5 — popula sidebar com a lista dinamica de mestres (vinda do backend ou default)
+  const agentesParaSidebar = listarAgentesParaSidebar(mestresSlugs);
+  const totalMestres = agentesParaSidebar.length - 1; // -1 pelo Atendente
+  const totalEl = overlay.querySelector('#squad-copy-c-mestres-total');
+  if (totalEl) totalEl.textContent = `/${totalMestres}`;
+
   const agentsEl = overlay.querySelector('#squad-copy-agents');
-  COPY_AGENTES.forEach(a => {
+  agentesParaSidebar.forEach(a => {
     const row = document.createElement('div');
     row.className = 'squad-agent-item';
     row.id = `squad-copy-agent-${a.id}`;
@@ -79,8 +85,8 @@ export async function abrirSquadCopyModal({ roteiro, apiCall, titulo, subtitulo,
   const cElapsed = overlay.querySelector('#squad-copy-c-elapsed');
   const cMestres = overlay.querySelector('#squad-copy-c-mestres');
 
-  // Cria engine
-  const engineRaw = criarEngineCopy(canvas);
+  // Cria engine — V2.5 passa lista de mestres dinamica (default = 4 hardcoded)
+  const engineRaw = criarEngineCopy(canvas, mestresSlugs);
 
   // Wrappers que sincronizam UI lateral com estado da engine.
   // Quando um mestre vira visível, marca como "convocado" no painel.
@@ -112,7 +118,7 @@ export async function abrirSquadCopyModal({ roteiro, apiCall, titulo, subtitulo,
 
   function atualizarContadorMestres() {
     const ativos = overlay.querySelectorAll('.squad-agent-ativo').length;
-    cMestres.innerHTML = `${ativos}<span class="squad-counter-total">/4</span>`;
+    cMestres.innerHTML = `${ativos}<span class="squad-counter-total">/${totalMestres}</span>`;
   }
 
   const t0 = Date.now();
@@ -169,7 +175,7 @@ export async function abrirSquadCopyModal({ roteiro, apiCall, titulo, subtitulo,
    - Toggle pinguim_squad_animacao continua sendo o mesmo
    - Off = no-op (chamador continua sem precisar de if)
    ============================================================ */
-export function iniciarSquadCopyParalelo({ pedido, titulo, subtitulo }) {
+export function iniciarSquadCopyParalelo({ pedido, titulo, subtitulo, mestresSlugs }) {
   const squadOn = localStorage.getItem('pinguim_squad_animacao') === 'on';
   if (!squadOn) return { sinalizarConclusao: () => {}, sinalizarErro: () => {} };
 
@@ -181,6 +187,7 @@ export function iniciarSquadCopyParalelo({ pedido, titulo, subtitulo }) {
     titulo: titulo || 'Gerando copy',
     subtitulo: subtitulo || '',
     pedido,
+    mestresSlugs, // V2.5 — opcional; se nao vier, modal usa default
     apiCall: () => promiseExt,
   }).catch(() => { /* erro do squad nao bloqueia o chamador */ });
 

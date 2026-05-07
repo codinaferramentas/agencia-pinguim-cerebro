@@ -88,12 +88,17 @@
     <textarea id="pedido">monta a copy completa pra página de venda do Elo. Eh um produto pra criadores iniciantes a R$ 1.997.</textarea>
   </div>
 
+  <div class="field">
+    <label for="mestres">Mestres (opcional — V2.5 visualiza N) <span class="hint" style="color:#8b95a7">slugs separados por vírgula. Vazio = backend decide.</span></label>
+    <textarea id="mestres" style="min-height:50px">gary-halbert, eugene-schwartz, gary-bencivenga, alex-hormozi, dan-kennedy, john-carlton</textarea>
+  </div>
+
   <button id="btn-rodar">Rodar pipeline criativo</button>
 
   <div id="resultado" class="resultado"></div>
 
   <script type="module">
-    import { iniciarSquadCopyParalelo } from './js/squad-copy-modal.js?v=20260507a';
+    import { iniciarSquadCopyParalelo } from './js/squad-copy-modal.js?v=20260507b';
 
     // Sincroniza toggle com localStorage (mesma chave do squad principal)
     const toggle = document.getElementById('toggle-anim');
@@ -115,11 +120,18 @@
       resultadoEl.classList.remove('show');
       resultadoEl.textContent = '';
 
+      // V2.5 — lê textarea de mestres (opcional)
+      const mestresInput = document.getElementById('mestres').value.trim();
+      const mestresSlugs = mestresInput
+        ? mestresInput.split(',').map(s => s.trim()).filter(Boolean)
+        : undefined;
+
       // Dispara animação em paralelo (no-op se toggle off)
       const squad = iniciarSquadCopyParalelo({
         pedido,
         titulo: 'Pipeline criativo de copy',
         subtitulo: pedido.slice(0, 80) + (pedido.length > 80 ? '...' : ''),
+        mestresSlugs, // V2.5 — opcional; se nao vier, modal usa default 4 hardcoded
       });
 
       const t0 = Date.now();
