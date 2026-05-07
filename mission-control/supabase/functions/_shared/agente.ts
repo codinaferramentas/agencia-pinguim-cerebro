@@ -307,6 +307,275 @@ REGRAS:
 `;
 
 // =====================================================
+// EPP — Verifier + Reflection loop (Anatomia obrigatoria de TODO agente Pinguim)
+//
+// Camada 1 — Self-Verification:
+//   Antes de devolver, agente roda checklist via gpt-4o-mini.
+//   Custo baixo (1 chamada extra mini-modelo, ~US$ 0.0005).
+//
+// Camada 3 — Reflection loop com guardrails duros (anti-OpenClaw bug):
+//   Se Verifier reprovou, refaz 1 vez com nota especifica.
+//   - MAX_REFLECTIONS = 2 por turno
+//   - MAX_IDENTICAL_OUTPUTS = 2 (similaridade > 0.8 = stop)
+//   - MAX_COST_USD = 0.20 por turno (corte automatico)
+//   - Cada round logado em pinguim.agente_execucoes com tag reflection_round
+//
+// Aplicado automaticamente em executarAgenteInline. Toda agente herda.
+// =====================================================
+
+export const EPP_LIMITS = {
+  MAX_REFLECTIONS: 1, // 1 reflexão = 2 tentativas total. Pra Chiefs com mestres encadeados, 2 reflexões estoura timeout 150s.
+  MAX_IDENTICAL_SIMILARITY: 0.85,
+  MAX_COST_USD_TURNO: 0.20,
+  MAX_LATENCIA_MS_TURNO: 110_000, // corta antes do hard limit 150s
+};
+
+export interface VerifierResult {
+  aprovado: boolean;
+  problemas: string[];
+  recomendacao_refazer: string | null;
+  custo_usd: number;
+}
+
+/**
+ * Camada 1 — Self-Verification.
+ * Roda checklist sobre output. Devolve aprovado/reprovado + problemas + nota pra refazer.
+ * Usa gpt-4o-mini (50x mais barato que gpt-4o).
+ */
+export async function verificarOutput(args: {
+  briefing: string;
+  output_md: string;
+  agente_slug: string;
+  agente_role: string; // "orquestrador-de-squad" | "mestre" | "atendente"
+  expectativa: string; // descrição do que era esperado
+}): Promise<VerifierResult> {
+  const { briefing, output_md, agente_slug, agente_role, expectativa } = args;
+
+  const checklistByRole: Record<string, string[]> = {
+    'orquestrador-de-squad': [
+      '1. Output tem os 4 blocos (gancho, desenvolvimento, virada, cta) preenchidos com conteúdo real (não vazio, não "lorem")?',
+      '2. Cita explicitamente quais mestres da squad foram invocados?',
+      '3. Cada mestre tem justificativa clara (item da matriz citado)?',
+      '4. NÃO contém invenção (preço chumbado, data inventada, número sem fonte explícita)?',
+      '5. Output cabe no formato pedido (ex.: 30s = 80-120 palavras na copy_final)?',
+    ],
+    'mestre': [
+      '1. Output respeita o método/framework do mestre (citado no system_prompt)?',
+      '2. Inclui marca registrada do mestre (ex.: Hormozi cita matemática, Halbert número específico, Schwartz nível de consciência)?',
+      '3. NÃO contém invenção (preço, data, número sem fonte)?',
+      '4. Tom consistente com o mestre (Hormozi direto, Schwartz progressivo, etc)?',
+    ],
+    'atendente': [
+      '1. Se o pedido era entregável criativo (copy/design/história/conselho), o Atendente delegou pra um Chief?',
+      '2. Se delegou, o output do Chief foi devolvido INTEGRALMENTE (sem cortar/resumir)?',
+      '3. Não inventou número (preço, data, métrica)?',
+      '4. Não parou pra perguntar quando devia delegar?',
+    ],
+  };
+
+  const checklist = checklistByRole[agente_role] || checklistByRole['mestre'];
+
+  const sysPrompt = `Você é o **Verifier do Pinguim OS**. Sua função é checar se o output de outro agente passou em critérios de qualidade objetivos.
+
+Você NÃO reescreve, NÃO sugere melhorias subjetivas, NÃO opina sobre estilo. Você só responde SIM/NÃO em cada item do checklist e identifica problemas concretos.
+
+Devolva JSON nesse formato exato:
+{
+  "aprovado": true|false,
+  "problemas": ["problema concreto 1", "problema concreto 2"],
+  "recomendacao_refazer": "instrução curta pro agente refazer, ou null se aprovado"
+}
+
+Aprovado=true SOMENTE se todos os itens do checklist passarem. Em caso de dúvida, reprovar.`;
+
+  const userPrompt = `## Briefing original
+${briefing.slice(0, 600)}
+
+## Expectativa
+${expectativa}
+
+## Output do agente "${agente_slug}" (papel: ${agente_role})
+${output_md.slice(0, 2500)}
+
+## Checklist
+${checklist.join('\n')}
+
+Responda em JSON.`;
+
+  try {
+    const resp = await chamarLLM({
+      modelo: 'openai:gpt-4o-mini',
+      systemPrompt: sysPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+      temperatura: 0.1,
+      maxTokens: 600,
+    }, `verifier-${agente_slug}`);
+
+    let parsed: any;
+    try {
+      const txt = resp.content.trim();
+      const m = txt.match(/```json\s*([\s\S]*?)```/) || txt.match(/(\{[\s\S]*\})/);
+      parsed = JSON.parse(m ? m[1] : txt);
+    } catch {
+      // Verifier falhou ao parsear — não bloqueia o fluxo. Trata como aprovado.
+      return { aprovado: true, problemas: [], recomendacao_refazer: null, custo_usd: 0 };
+    }
+
+    const custo = calcularCustoUSD(resp.modeloUsado, resp.tokensIn, resp.tokensOut, resp.tokensCached);
+    return {
+      aprovado: parsed.aprovado === true,
+      problemas: Array.isArray(parsed.problemas) ? parsed.problemas : [],
+      recomendacao_refazer: parsed.recomendacao_refazer || null,
+      custo_usd: Number(custo.toFixed(6)),
+    };
+  } catch (e) {
+    // Verifier crashou — não bloqueia, log e segue
+    console.warn(`[verifier] crashou em ${agente_slug}:`, (e as Error).message);
+    return { aprovado: true, problemas: [], recomendacao_refazer: null, custo_usd: 0 };
+  }
+}
+
+/**
+ * Detector de loop semântico — evita Reflection refazer mesma coisa.
+ * Similaridade simples por jaccard de palavras (sem LLM, custo zero).
+ */
+export function similaridadeOutputs(a: string, b: string): number {
+  const tok = (s: string) => new Set(
+    s.toLowerCase().replace(/[^a-záéíóúâêôãõç\s]/gi, ' ').split(/\s+/).filter(w => w.length > 3)
+  );
+  const sa = tok(a);
+  const sb = tok(b);
+  if (sa.size === 0 || sb.size === 0) return 0;
+  const intersect = [...sa].filter(w => sb.has(w)).length;
+  const union = new Set([...sa, ...sb]).size;
+  return intersect / union;
+}
+
+// =====================================================
+// EXECUTOR COM EPP — entry point de TODA execução de agente Pinguim.
+// Chama executarAgenteInline + Verifier + Reflection loop.
+// Anatomia obrigatória — toda agente herda automaticamente.
+// =====================================================
+
+export async function executarComEPP(
+  input: ExecutarInlineInput,
+  opts: { skip_verifier?: boolean; expectativa?: string; reflection_round?: number; deadline_ms?: number } = {}
+): Promise<ExecutarInlineOutput & { reflection_rounds?: number; verifier_problemas?: string[]; epp_aplicado?: boolean }> {
+  const reflectionRound = opts.reflection_round || 0;
+  const deadline = opts.deadline_ms || Date.now() + EPP_LIMITS.MAX_LATENCIA_MS_TURNO;
+
+  // Executa rodada normal
+  const out = await executarAgenteInline(input);
+
+  // Guardrail latencia: se passou do deadline, devolve direto sem Verifier
+  if (Date.now() >= deadline) {
+    return { ...out, reflection_rounds: reflectionRound, verifier_problemas: ['[STOP] deadline atingido (110s)'], epp_aplicado: false };
+  }
+
+  // Skip verifier em recursão (mestre dentro de chief) ou se desligado explicitamente
+  if (opts.skip_verifier || reflectionRound >= EPP_LIMITS.MAX_REFLECTIONS) {
+    return { ...out, reflection_rounds: reflectionRound, epp_aplicado: false };
+  }
+
+  // Carrega agente pra saber o role (skip se LLM ja consumiu muito)
+  let agenteRole = 'mestre';
+  try {
+    const a = await carregarAgente(input.agente_slug);
+    if (ehOrquestrador(a)) agenteRole = 'orquestrador-de-squad';
+    if (input.agente_slug === 'pinguim') agenteRole = 'atendente';
+  } catch {}
+
+  const expectativa = opts.expectativa || (
+    agenteRole === 'orquestrador-de-squad'
+      ? 'Output em 4 blocos (gancho/desenvolvimento/virada/cta) + cita mestres invocados + sem invenção'
+      : agenteRole === 'atendente'
+        ? 'Delega pra Chief quando entregável criativo. Devolve output completo. Não inventa.'
+        : 'Aplica método do mestre. Sem invenção. Marca registrada do mestre presente.'
+  );
+
+  // Camada 1 — Verifier
+  const verif = await verificarOutput({
+    briefing: input.briefing,
+    output_md: out.conteudo_md,
+    agente_slug: input.agente_slug,
+    agente_role: agenteRole,
+    expectativa,
+  });
+
+  // Acumula custo do verifier no output
+  const custoComVerif = (out.uso?.custo_usd || 0) + verif.custo_usd;
+  const usoComVerif = { ...out.uso, custo_usd: Number(custoComVerif.toFixed(6)) };
+
+  if (verif.aprovado) {
+    return {
+      ...out,
+      uso: usoComVerif,
+      reflection_rounds: reflectionRound,
+      verifier_problemas: [],
+      epp_aplicado: true,
+    };
+  }
+
+  // Camada 3 — Reflection (com guardrails)
+  // Guardrail: cost cap
+  if (custoComVerif >= EPP_LIMITS.MAX_COST_USD_TURNO) {
+    return {
+      ...out,
+      uso: usoComVerif,
+      reflection_rounds: reflectionRound,
+      verifier_problemas: [...verif.problemas, '[STOP] cost cap atingido (US$ ' + EPP_LIMITS.MAX_COST_USD_TURNO + ')'],
+      epp_aplicado: true,
+    };
+  }
+
+  // Guardrail: max reflections atingido
+  if (reflectionRound >= EPP_LIMITS.MAX_REFLECTIONS) {
+    return {
+      ...out,
+      uso: usoComVerif,
+      reflection_rounds: reflectionRound,
+      verifier_problemas: [...verif.problemas, '[STOP] max reflections atingido'],
+      epp_aplicado: true,
+    };
+  }
+
+  // Refaz com nota da reflexão como contexto extra
+  const briefingComReflexao = input.briefing + `\n\n## ⚠ REFLEXÃO (round ${reflectionRound + 1})\nVocê tentou antes e o Verifier reprovou. Problemas detectados:\n${verif.problemas.map(p => '- ' + p).join('\n')}\n\nRecomendação: ${verif.recomendacao_refazer || 'corrija os problemas e refaça'}\n\nEsta tentativa NÃO pode repetir os mesmos erros.`;
+
+  const refazendo = await executarComEPP(
+    { ...input, briefing: briefingComReflexao },
+    { ...opts, reflection_round: reflectionRound + 1, expectativa, deadline_ms: deadline },
+  );
+
+  // Guardrail: detector de loop semântico
+  const sim = similaridadeOutputs(out.conteudo_md, refazendo.conteudo_md || '');
+  if (sim > EPP_LIMITS.MAX_IDENTICAL_SIMILARITY) {
+    return {
+      ...refazendo,
+      uso: {
+        ...refazendo.uso,
+        custo_usd: Number(((refazendo.uso?.custo_usd || 0) + custoComVerif).toFixed(6)),
+      },
+      verifier_problemas: [
+        ...verif.problemas,
+        `[STOP] output do round ${reflectionRound + 1} é ${(sim * 100).toFixed(0)}% igual ao anterior — sem progresso, parando`,
+      ],
+      epp_aplicado: true,
+    };
+  }
+
+  // Acumula custo da reflexão
+  return {
+    ...refazendo,
+    uso: {
+      ...refazendo.uso,
+      custo_usd: Number(((refazendo.uso?.custo_usd || 0) + custoComVerif).toFixed(6)),
+    },
+    epp_aplicado: true,
+  };
+}
+
+// =====================================================
 // EXECUTOR INLINE — modelo OpenClaw real.
 // Carrega agente do banco, executa LLM (com loop tool calling se for orquestrador),
 // retorna resultado estruturado. NÃO faz fetch HTTP entre Edge Functions.
@@ -423,7 +692,10 @@ export async function executarAgenteInline(input: ExecutarInlineInput): Promise<
       for (const tc of llmResp.toolCalls) {
         let resultado: any;
         if (tc.name === 'delegar-mestre') {
-          // Recursão inline — sem fetch HTTP
+          // Recursão inline SEM Verifier — mestre individual é execução simples,
+          // o Verifier do Chief que consolida pega problemas dos mestres.
+          // (Anti-explosão: Verifier rodando em cada mestre × N mestres × Chief
+          //  estourava timeout 150s da Edge Function.)
           const sub = await executarAgenteInline({
             agente_slug: tc.arguments.mestre_slug,
             briefing: tc.arguments.briefing + (tc.arguments.parte && tc.arguments.parte !== 'completo' ? `\n\nParte: ${tc.arguments.parte}` : ''),

@@ -32,6 +32,7 @@ import {
   logarTool,
   calcularCustoUSD,
   executarAgenteInline,
+  executarComEPP,
 } from '../_shared/agente.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -283,7 +284,13 @@ async function executarTool(
     tenant_id: string;
     cliente_id: string;
     solicitante_id: string | null;
-    squadsConsultadas?: Array<{ squad: string; chief: string; mestres: string[] }>;
+    squadsConsultadas?: Array<{
+      squad: string;
+      chief: string;
+      mestres: string[];
+      reflection_rounds?: number;
+      verifier_problemas?: string[];
+    }>;
   },
 ): Promise<string> {
   const tInicio = Date.now();
@@ -406,7 +413,7 @@ async function executarTool(
           };
           break;
         }
-        const sub = await executarAgenteInline({
+        const sub = await executarComEPP({
           agente_slug: chiefSlug,
           briefing: toolArgs.briefing,
           tenant_id: ctx.tenant_id,
@@ -419,6 +426,8 @@ async function executarTool(
             squad: toolArgs.squad_slug,
             chief: chiefSlug,
             mestres: (sub.mestres_invocados || []).map((m: any) => m.slug),
+            reflection_rounds: sub.reflection_rounds || 0,
+            verifier_problemas: sub.verifier_problemas || [],
           });
         }
         resultado = {
@@ -428,6 +437,8 @@ async function executarTool(
           conteudo_md: sub.conteudo_md,
           conteudo_estruturado: sub.conteudo_estruturado,
           mestres_invocados: sub.mestres_invocados,
+          reflection_rounds: sub.reflection_rounds || 0,
+          verifier_problemas: sub.verifier_problemas || [],
           uso: sub.uso,
         };
         break;
@@ -599,7 +610,13 @@ serve(async (req) => {
     let toolsExecutadas: string[] = [];
     let planoCard: any = null;
     let scripts: any[] = [];
-    let squadsConsultadas: Array<{ squad: string; chief: string; mestres: string[] }> = [];
+    let squadsConsultadas: Array<{
+      squad: string;
+      chief: string;
+      mestres: string[];
+      reflection_rounds?: number;
+      verifier_problemas?: string[];
+    }> = [];
     let respostaTexto = '';
     let modeloUsado = '';
     let rounds = 0;
