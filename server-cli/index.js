@@ -44,16 +44,16 @@ function runClaudeCLI(prompt, opts = {}) {
     ];
     if (opts.model) args.push('--model', opts.model);
 
+    const env = { ...process.env };
+    // CRITICO: deletar (nao set vazio) — evita "cannot launch inside another Claude Code session"
+    delete env.CLAUDECODE;
+    delete env.CLAUDE_CODE_ENTRYPOINT;
+
     const proc = spawn('claude', args, {
       cwd: PROJECT_DIR,
-      env: {
-        ...process.env,
-        // CRITICO: evita erro "cannot launch inside another Claude Code session"
-        CLAUDECODE: '',
-        CLAUDE_CODE_ENTRYPOINT: '',
-      },
-      shell: true, // Windows precisa shell:true pra encontrar o claude no PATH
-      timeout: opts.timeout || 240_000,
+      env,
+      shell: true,
+      timeout: opts.timeout || 480_000, // 8 min — entregavel longo (Chief + 4 mestres) leva tempo
     });
 
     let stdout = '';
