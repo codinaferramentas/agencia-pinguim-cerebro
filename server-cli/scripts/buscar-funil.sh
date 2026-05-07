@@ -26,9 +26,11 @@ fi
 
 SQL=$(cat <<EOF
 SELECT p.nome AS produto_nome,
-  fe.id, fe.nome, fe.ordem, fe.descricao, fe.copy_alvo
+  fe.id, fe.papel, fe.tipo, fe.ordem, fe.condicao_texto,
+  f.nome AS funil_nome
 FROM pinguim.produtos p
 LEFT JOIN pinguim.funil_etapas fe ON fe.produto_id = p.id
+LEFT JOIN pinguim.funis f ON f.id = fe.funil_id
 WHERE p.slug = '$PRODUTO_SLUG'
 ORDER BY fe.ordem ASC NULLS LAST;
 EOF
@@ -43,31 +45,49 @@ RESPONSE=$(curl -s -X POST "https://api.supabase.com/v1/projects/${SUPABASE_PROJ
 
 echo "$RESPONSE" | python -c "
 import sys, json
+raw = sys.stdin.read()
 try:
-    d = json.loads(sys.stdin.read())
-except:
-    print('ERRO: resposta invalida')
-    sys.exit(1)
-
-if not d or len(d) == 0:
-    print('ERRO: produto $PRODUTO_SLUG nao encontrado')
-    sys.exit(1)
-
-produto_nome = d[0].get('produto_nome', '$PRODUTO_SLUG')
-etapas = [r for r in d if r.get('id')]
-
-if not etapas:
-    print(f'FUNIL NAO MAPEADO pra {produto_nome} (0 etapas).')
+    d = json.loads(raw)
+except Exception as e:
+    print(f'FUNIL NAO MAPEADO pra $PRODUTO_SLUG (resposta invalida da API).')
     print('Mestre assume etapa neutra OU produz versao dupla (frio + quente).')
     sys.exit(0)
 
-print(f'=== FUNIL: {produto_nome} ({len(etapas)} etapas) ===')
-print()
+# Supabase devolve dict {message: ...} quando ha erro SQL — tratar como gap silencioso
+if isinstance(d, dict):
+    print(f'FUNIL NAO MAPEADO pra $PRODUTO_SLUG (erro de schema: {d.get(\"message\",\"\")[:120]}).')
+    print('Mestre assume etapa neutra OU produz versao dupla (frio + quente).')
+    sys.exit(0)
+
+if not isinstance(d, list) or len(d) == 0:
+    print(f'FUNIL NAO MAPEADO pra $PRODUTO_SLUG (produto nao encontrado).')
+    print('Mestre assume etapa neutra OU produz versao dupla (frio + quente).')
+    sys.exit(0)
+
+produto_nome = d[0].get('produto_nome') or '$PRODUTO_SLUG'
+etapas = [r for r in d if r.get('id')]
+
+if not etapas:
+    print(f'FUNIL NAO MAPEADO pra {produto_nome} (0 etapas cadastradas).')
+    print('Mestre assume etapa neutra OU produz versao dupla (frio + quente).')
+    sys.exit(0)
+
+# Agrupa por funil_nome
+funis = {}
 for e in etapas:
-    print(f'## Etapa {e.get(\"ordem\", \"?\")}: {e.get(\"nome\", \"?\")}')
-    if e.get('descricao'):
-        print(f'  {e[\"descricao\"]}')
-    if e.get('copy_alvo'):
-        print(f'  Copy alvo: {e[\"copy_alvo\"]}')
-    print()
+    fn = e.get('funil_nome') or '(sem nome)'
+    funis.setdefault(fn, []).append(e)
+
+print(f'=== FUNIL: {produto_nome} ({len(etapas)} etapas em {len(funis)} funil(is)) ===')
+print()
+for funil_nome, etps in funis.items():
+    print(f'# Funil: {funil_nome}')
+    for e in etps:
+        ordem = e.get('ordem', '?')
+        papel = e.get('papel') or '(sem papel)'
+        tipo = e.get('tipo') or 'etapa'
+        print(f'## Etapa {ordem} [{tipo}]: {papel}')
+        if e.get('condicao_texto'):
+            print(f'  Condicao: {e[\"condicao_texto\"]}')
+        print()
 "
