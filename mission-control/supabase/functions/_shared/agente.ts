@@ -356,19 +356,19 @@ export async function verificarOutput(args: {
       '1. Output tem os 4 blocos (gancho, desenvolvimento, virada, cta) preenchidos com conteúdo real (não vazio, não "lorem")?',
       '2. Cita explicitamente quais mestres da squad foram invocados?',
       '3. Cada mestre tem justificativa clara (item da matriz citado)?',
-      '4. NÃO contém invenção (preço chumbado, data inventada, número sem fonte explícita)?',
+      '4. **REGRA DURA: NENHUMA invenção de número/preço/métrica.** Se o output cita "R$X" ou "$X" ou "X%" ou "X clientes" ou "X dias" — esse número DEVE ter vindo do briefing original. Se não veio, REPROVAR. Procure por "R$", "$", números seguidos de "%", "clientes", "alunos", "vendas", "dias", "horas". Cada um precisa ter base no briefing.',
       '5. Output cabe no formato pedido (ex.: 30s = 80-120 palavras na copy_final)?',
     ],
     'mestre': [
       '1. Output respeita o método/framework do mestre (citado no system_prompt)?',
       '2. Inclui marca registrada do mestre (ex.: Hormozi cita matemática, Halbert número específico, Schwartz nível de consciência)?',
-      '3. NÃO contém invenção (preço, data, número sem fonte)?',
+      '3. **REGRA DURA: números só se vieram do briefing.** Hormozi/Halbert podem usar matemática genérica ("dobrar", "10x") mas NÃO podem cravar valores específicos (R$500, $29, 7 dias) sem o briefing ter dado. Se vê número específico, checar se está no briefing original. Se não, REPROVAR.',
       '4. Tom consistente com o mestre (Hormozi direto, Schwartz progressivo, etc)?',
     ],
     'atendente': [
       '1. Se o pedido era entregável criativo (copy/design/história/conselho), o Atendente delegou pra um Chief?',
       '2. Se delegou, o output do Chief foi devolvido INTEGRALMENTE (sem cortar/resumir)?',
-      '3. Não inventou número (preço, data, métrica)?',
+      '3. **REGRA DURA: zero invenção de número/preço/data.** Atendente não cria copy, então qualquer número específico no output que NÃO veio do briefing é invenção. REPROVAR.',
       '4. Não parou pra perguntar quando devia delegar?',
     ],
   };

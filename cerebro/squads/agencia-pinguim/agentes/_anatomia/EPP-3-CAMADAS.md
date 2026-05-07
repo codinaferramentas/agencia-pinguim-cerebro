@@ -12,9 +12,11 @@ Sem reflexão automática, agentes IA falham silenciosamente. Cliente vê respos
 
 Indústria 2026 (Replit, Anthropic, OpenClaw): agentes com reflexão entregam **25-50% mais sucesso** em tarefas multi-step. Custo adicional: **+20-30%**. ROI claro.
 
-## As 3 camadas
+## As 3 camadas (em ordem de disparo)
 
-### Camada 1 — Self-Verification (interno, obrigatório)
+> **Ordem importa.** O agente faz tudo que pode internamente ANTES de chegar no humano. Humano é a ÚLTIMA palavra, não a primeira.
+
+### Camada 1 — Self-Verification (interno, automático, sempre)
 
 **O que faz:** antes de devolver resposta final, agente roda checklist via `gpt-4o-mini` (50× mais barato que gpt-4o). Output checado contra critérios objetivos do role do agente.
 
@@ -36,25 +38,11 @@ Indústria 2026 (Replit, Anthropic, OpenClaw): agentes com reflexão entregam **
 }
 ```
 
-### Camada 2 — Feedback humano (👍 👎 ✏️)
-
-**O que faz:** abaixo de toda resposta do Pinguim no painel, 3 botões. Cliente avalia. Resultado vai pra `pinguim.aprendizados_cliente_agente` (Tier 2 — perfil específico do cliente).
-
-**Quando dispara:** explícito, humano clica.
-
-**Custo:**
-- 👍: zero (só append em MD).
-- 👎 ou ✏️: ~US$ 0,03 (re-executa Atendente + Verifier com crítica como contexto).
-
-**Endpoint:** `feedback-pinguim` (Edge Function dedicada).
-
-**Loop fechado:** próxima execução do mesmo cliente já recebe contexto do feedback no perfil Tier 2 → agente naturalmente evita repetir o erro. **EPP funcionando de verdade.**
-
-### Camada 3 — Reflection loop (com guardrails duros)
+### Camada 2 — Reflection loop (interno, automático, dispara só se Verifier reprovou)
 
 **O que faz:** se Verifier reprovou, agente refaz com a recomendação do Verifier injetada no briefing. Refaz no MÁXIMO 1 vez (2 tentativas total).
 
-**Quando dispara:** automático, quando Camada 1 reprova.
+**Quando dispara:** automático, quando Camada 1 reprova. Cliente nunca vê esse loop — só o resultado final melhor.
 
 **Custo:** +100% no caso (15% dos casos típicos), capado em US$ 0,20 por turno.
 
@@ -68,6 +56,25 @@ Indústria 2026 (Replit, Anthropic, OpenClaw): agentes com reflexão entregam **
 | `MAX_LATENCIA_MS_TURNO` | **110.000 ms** | Deadline antes do hard limit Supabase 150s |
 
 **Verifier NÃO roda em mestre individual** quando Chief delega. Mestre é execução simples; o Verifier do Chief que consolida pega problemas dos mestres. Sem isso, 4 mestres × Verifier = explosão de timeout.
+
+### Camada 3 — Feedback humano (👍 👎 ✏️) — A ÚLTIMA palavra
+
+**O que faz:** depois que o agente fez tudo que podia internamente (Verifier passou ou Reflection esgotou), a resposta final aparece pro humano com 3 botões. Humano avalia. Resultado vai pra `pinguim.aprendizados_cliente_agente` (Tier 2 — perfil específico do cliente).
+
+**Quando dispara:** explícito, humano clica.
+
+**Custo:**
+- 👍: zero (só append em MD).
+- 👎 ou ✏️: ~US$ 0,03 (re-executa Atendente + todo EPP de novo com crítica como contexto).
+
+**Endpoint:** `feedback-pinguim` (Edge Function dedicada).
+
+**Loop fechado:** próxima execução do mesmo cliente já recebe contexto do feedback no perfil Tier 2 → agente naturalmente evita repetir o erro. **EPP funcionando de verdade.**
+
+**Por que humano é a ÚLTIMA camada:**
+1. Respeita o tempo do humano — ele só vê o melhor que o agente conseguiu.
+2. Evita loop infinito de "humano fala → agente refaz → humano fala de novo".
+3. Reflection já pegou os erros óbvios que o Verifier detecta. Humano só vê erros sutis que máquina não pega (preferência subjetiva, contexto que só humano sabe).
 
 ## Fluxo completo (exemplo: "copy pro Lo-fi")
 
@@ -84,12 +91,12 @@ Indústria 2026 (Replit, Anthropic, OpenClaw): agentes com reflexão entregam **
    - delegar-mestre(halbert)              │
    - consolidar-roteiro                   │
    ↓                                      │
-5. Verifier checa output do Chief         │
+5. Camada 1 — Verifier checa output do Chief
    - 4 blocos? ✓                          │
    - Mestres citados? ✓                   │
    - Sem invenção? ✗ (inventou preço)    │
    ↓                                      │
-6. Reflection round 1:                    │
+6. Camada 2 — Reflection round 1:         │
    Chief refaz com nota "remova preço"   │
    - delegar-mestre(hormozi) ─ refeito    │
    - consolidar-roteiro ─ sem preço       │
@@ -99,9 +106,9 @@ Indústria 2026 (Replit, Anthropic, OpenClaw): agentes com reflexão entregam **
    ↓ ─────────────────────────────────────┘
 8. Atendente devolve copy + chip "squads_consultadas: copy → hormozi · halbert"
    ↓
-9. Cliente vê 👍/👎/✏️ na UI
+9. Camada 3 — Cliente vê 👍/👎/✏️ na UI
    ↓
-10. Se 👎: feedback-pinguim re-executa com crítica
+10. Se 👎: feedback-pinguim re-executa todo o fluxo (incluindo EPP) com crítica
     Se 👍: linha em perfis/<cliente>.md (Tier 2) — próxima vez já vem certo
 ```
 

@@ -19,7 +19,7 @@
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { sb, executarComEPP, carregarAgente } from '../_shared/agente.ts';
+import { sb, executarComEPP, carregarAgente, carregarHistorico } from '../_shared/agente.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -135,30 +135,19 @@ serve(async (req) => {
       }, 400);
     }
 
-    const briefingComCritica = `${mensagem_humana}\n\n---\n\n## ⚠ Feedback do cliente sobre tentativa anterior\nO cliente avaliou minha resposta anterior como **${tipo === 'rejeitou' ? 'INCORRETA' : 'PRECISA REFINAR'}**.\n\nResposta anterior (resumo): ${(mensagem_agente || '').slice(0, 400)}\n\nCrítica/ajuste do cliente: ${comentario}\n\nRefaça respeitando essa crítica. NÃO repita o mesmo padrão.`;
-
-    const sub = await executarComEPP({
-      agente_slug: 'pinguim',
-      briefing: briefingComCritica,
-      tenant_id, cliente_id, caso_id,
-    });
-
-    // Persiste a nova resposta na conversa
-    await sb().from('conversas').insert({
-      tenant_id, cliente_id, agente_id: pinguim.id, caso_id,
-      papel: 'chief',
-      conteudo: sub.conteudo_md,
-      artefatos: { tipo: 'refeito_por_feedback', feedback: tipo, comentario, reflection_rounds: sub.reflection_rounds || 0 },
-    });
+    // Compõe mensagem que o frontend vai mandar pro Atendente Pinguim.
+    // Não chamamos atendente-pinguim daqui via fetch (Supabase verify_jwt rejeita
+    // SERVICE_ROLE em chamadas internas de Edge Function). O frontend re-envia
+    // com o JWT do usuário, garantindo que todo pipeline (detector, delegar-chief,
+    // EPP) rode normalmente.
+    const mensagemComCritica = `${mensagem_humana}\n\n---\n\n## ⚠ Feedback do cliente sobre tentativa anterior\nO cliente avaliou minha resposta anterior como **${tipo === 'rejeitou' ? 'INCORRETA' : 'PRECISA REFINAR'}**.\n\nResposta anterior (resumo): ${(mensagem_agente || '').slice(0, 400)}\n\nCrítica/ajuste do cliente: ${comentario}\n\nRefaça respeitando essa crítica. NÃO repita o mesmo padrão.`;
 
     return jsonResp({
       ok: true,
       tipo,
       registrado: true,
-      proxima_resposta: sub.conteudo_md,
-      reflection_rounds: sub.reflection_rounds || 0,
-      verifier_problemas: sub.verifier_problemas || [],
-      uso: sub.uso,
+      // Frontend vai pegar essa mensagem e mandar pro Atendente Pinguim usando o JWT do usuário
+      mensagem_pra_reenviar: mensagemComCritica,
       latencia_ms: Date.now() - tInicio,
     });
   } catch (e: any) {

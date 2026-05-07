@@ -429,16 +429,11 @@ async function enviarFeedback(idx, tipo) {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.detalhe || data.error || `HTTP ${resp.status}`);
 
-    // Se rejeitou/refinou, adiciona nova resposta refeita
-    if (data.proxima_resposta) {
-      mensagensVisuais.push({
-        papel: 'chief',
-        conteudo: data.proxima_resposta,
-        uso: data.uso,
-        refeito_por_feedback: tipo,
-        verifier_problemas: data.verifier_problemas || [],
-        reflection_rounds: data.reflection_rounds || 0,
-      });
+    // Se rejeitou/refinou, frontend re-envia mensagem composta pro Atendente Pinguim.
+    // Feedback-pinguim só registrou perfil (Tier 2) e devolveu a mensagem pra reenviar.
+    if (data.mensagem_pra_reenviar) {
+      await enviarMensagem(data.mensagem_pra_reenviar);
+      return; // enviarMensagem já dispara renderAba
     }
   } catch (e) {
     msgChief.feedback_dado = null;
