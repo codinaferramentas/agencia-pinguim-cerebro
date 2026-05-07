@@ -94,6 +94,102 @@ export async function gerar() {
         `,
       },
       {
+        id: 'diagrama',
+        titulo: 'Diagrama da anatomia',
+        html: `
+          <p>Tudo que o agente Pinguim é, em uma figura:</p>
+          <pre style="background:var(--docs-code-bg,#0a0a0a);color:var(--docs-code-fg,#e6e6e6);padding:1.25rem;border-radius:8px;font-size:.75rem;line-height:1.4;overflow-x:auto;font-family:'Geist Mono','JetBrains Mono',ui-monospace,monospace">                    ┌─────────────────────────────────┐
+                    │      AGENTE PINGUIM             │
+                    │   (ex: Atendente, Hormozi)      │
+                    └─────────────────────────────────┘
+                                    │
+         ┌──────────────────────────┼──────────────────────────┐
+         │                          │                          │
+         ▼                          ▼                          ▼
+
+  ┌─────────────┐           ┌──────────────┐         ┌───────────────┐
+  │  IDENTIDADE │           │     EPP      │         │     TOOLS     │
+  │   (7 MDs)   │           │ (3 camadas)  │         │  (capacidade) │
+  └─────────────┘           └──────────────┘         └───────────────┘
+                                                              │
+   IDENTITY                  Camada 1 Verifier         buscar-cerebro
+   SOUL                      Camada 2 Reflection       buscar-persona
+   AGENTS                    Camada 3 Feedback         buscar-skill ◄── chave
+   TOOLS                     humano                    buscar-clone     que abre
+   AGENT-CARD                                          buscar-funil     as Skills
+   SYSTEM-PROMPT
+   APRENDIZADOS                                              │
+   perfis/cliente                                            │
+                                                             ▼
+                                                    ┌─────────────────┐
+                                                    │  5 FONTES VIVAS │
+                                                    │   (no banco)    │
+                                                    └─────────────────┘
+
+   🧠 Cérebro      👤 Persona      🛠 Skill      👥 Clone      🎯 Funil
+   sobre o quê     com quem        como fazer    como soar    pra onde
+   ──────────      ─────────       ─────────     ─────────    ─────────
+   Aulas, depoi-   Dossiê 11       Receita       Voz de       Etapas
+   mentos, obje-   blocos do       executável    pessoa real  do produto
+   ções, oferta    comprador       (MD)          (Hormozi,    (consciência
+                                                  Halbert)     →decisão)</pre>
+          <p><strong>Como ler:</strong> o agente é os 7 MDs (quem ele é) + EPP (como aprende) + Tools (suas mãos). As Tools alcançam as 5 Fontes Vivas que estão no banco. Sem Tool, a fonte fica inalcançável; sem fonte populada, a Tool busca o vazio.</p>
+        `,
+      },
+      {
+        id: 'skill-vs-tool',
+        titulo: 'Skill vs Tool — não confundir',
+        html: `
+          <p>Skill e Tool são parceiras, mas são <strong>coisas diferentes</strong>. Confundir as duas é a fonte mais comum de agente "perdidaço" — agente que tem ferramenta de buscar mas não tem nada pra encontrar, ou agente que tem método escrito mas não tem como acessar.</p>
+          <table style="width:100%;border-collapse:collapse;margin:1rem 0;font-size:.8125rem">
+            <thead>
+              <tr style="border-bottom:1px solid var(--docs-line);text-align:left">
+                <th style="padding:.5rem"></th>
+                <th style="padding:.5rem">🛠 Skill</th>
+                <th style="padding:.5rem">🔧 Tool</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--docs-line)"><td style="padding:.5rem"><strong>O que é</strong></td><td style="padding:.5rem">Conhecimento / método (<em>como fazer X</em>)</td><td style="padding:.5rem">Capacidade técnica (<em>chamar sistema Y</em>)</td></tr>
+              <tr style="border-bottom:1px solid var(--docs-line)"><td style="padding:.5rem"><strong>Forma</strong></td><td style="padding:.5rem">Markdown com receita escrita por humano</td><td style="padding:.5rem">Função de código que chama API ou banco</td></tr>
+              <tr style="border-bottom:1px solid var(--docs-line)"><td style="padding:.5rem"><strong>Quem cria</strong></td><td style="padding:.5rem">Curadoria humana (baseado em Clones)</td><td style="padding:.5rem">Engenharia</td></tr>
+              <tr style="border-bottom:1px solid var(--docs-line)"><td style="padding:.5rem"><strong>Vive onde</strong></td><td style="padding:.5rem"><code>pinguim.skills</code> + MD em <code>cerebro/skills/</code></td><td style="padding:.5rem">Edge Function + registro em <code>pinguim.agentes.tools[]</code></td></tr>
+              <tr style="border-bottom:1px solid var(--docs-line)"><td style="padding:.5rem"><strong>Exemplo</strong></td><td style="padding:.5rem"><em>Página de venda longa: Hormozi pra oferta, Halbert pra headline, Bencivenga pra prova, ordem X…</em></td><td style="padding:.5rem"><code>buscar-skill('pagina-de-venda-longa')</code> que devolve o MD da Skill</td></tr>
+            </tbody>
+          </table>
+          <p><strong>Análogo humano:</strong> Skill é o <em>conhecimento</em> do funcionário ("sei escrever página de venda"). Tool é a <em>chave</em> do escritório ("posso entrar no banco e ler o arquivo X"). Skill sem Tool fica só no MD parado. Tool sem Skill busca conhecimento que não existe.</p>
+          <p><strong>Categorias de Skill:</strong></p>
+          <ul>
+            <li><strong>Universais</strong> — todo agente Pinguim usa: <code>pesquisar-cerebro</code>, <code>aprender-com-feedback</code>, <code>seguir-anatomia</code></li>
+            <li><strong>Por área</strong> — agentes da mesma família: <code>escrever-headline</code>, <code>montar-oferta</code>, <code>gerar-pesquisa-de-persona</code></li>
+            <li><strong>Específicas</strong> — formato concreto: <code>pagina-de-venda-longa</code>, <code>vsl-curta</code>, <code>email-de-lancamento</code>, <code>roteiro-de-aula</code></li>
+          </ul>
+          <p><strong>Como Skill se relaciona com Clone:</strong> a Skill <em>não inventa método</em>. Ela aponta: "pra esse formato, considera consultar Clones [A, B, C], na ordem Y, com foco em Z." Os Clones já têm o método deles — Skill só agrega e dá direção. É assim que mantemos a inteligência dos Clones e ainda damos consistência ao agente.</p>
+
+          <h3 style="margin-top:1.5rem">Padrão técnico — não inventamos do zero</h3>
+          <p>Pinguim segue a <strong>spec aberta Agent Skills</strong> (<a href="https://agentskills.io" target="_blank" rel="noopener">agentskills.io</a>) — formato originado pela Anthropic em 18-Dez-2025 e hoje adotado por <strong>36+ ferramentas</strong>: OpenAI Codex, GitHub Copilot, VS Code, Cursor, Gemini CLI, JetBrains Junie, AWS Kiro, Mistral, Snowflake Cortex, Claude Code.</p>
+          <p>Da spec, dois campos são <strong>obrigatórios</strong>: <code>name</code> + <code>description</code>. Tudo que é Pinguim-específico (família, formato, clones consultados) vive dentro do campo opcional <code>metadata</code> — exatamente como a spec prevê pra extensões de fornecedor. Isso mantém nossas Skills <em>portáveis</em> e <em>forward-compatible</em>: qualquer ferramenta da spec consegue ler o essencial; quem entende Pinguim aproveita o resto.</p>
+          <p>Estrutura final de uma Skill Pinguim:</p>
+          <pre style="background:var(--docs-code-bg,#0a0a0a);color:var(--docs-code-fg,#e6e6e6);padding:1rem;border-radius:8px;font-size:.75rem;line-height:1.5;overflow-x:auto;font-family:'Geist Mono','JetBrains Mono',ui-monospace,monospace">---
+name: copy-headline-pas
+description: Aplica framework P.A.S. em headlines de página de venda quando o gancho precisa ser curto e emocional.
+metadata:
+  pinguim:
+    familia: copywriting
+    formato: framework
+    clones: [eugene-schwartz, hormozi]
+---
+
+# Headline P.A.S.
+
+## Quando aplicar
+## Receita
+## O que NÃO fazer
+## Exemplo aplicado</pre>
+          <p><strong>Sobre a separação Skill vs Clone:</strong> a spec aberta não trata "voz/persona" como entidade — só Skill. O precedente conceitual da nossa separação Skill/Clone vem do <a href="https://docs.crewai.com/en/guides/agents/crafting-effective-agents" target="_blank" rel="noopener">CrewAI</a>, que separa formalmente <code>tools</code> (skills/capacidades) de <code>backstory</code> (persona/voz). É decisão arquitetural deliberada do Pinguim, defensável e documentada.</p>
+        `,
+      },
+      {
         id: 'fluxo',
         titulo: 'Fluxo de execução — passo a passo',
         html: `
