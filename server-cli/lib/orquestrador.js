@@ -507,7 +507,32 @@ function distribuirBlocosPorAfinidade(blocos, mestresValidados) {
 // 3. Dispara mestres em paralelo (Promise.all)
 // 4. Consolida output
 // ============================================================
-async function pipelineCriativo({ message, log }) {
+// ============================================================
+// V2.5 Commit 3 — REFATOR
+// pipelineCriativo virou wrapper de planejarPipeline + executarMestres.
+// Os 2 podem ser chamados isoladamente — frontend usa /api/pipeline-plan
+// (so plano) seguido de /api/chat com plan_id (so execucao).
+// Cache de plano em memoria do Express evita consultar 5 fontes 2x.
+// ============================================================
+
+// Helper: regex unica que decide query de skill da mensagem do usuario.
+function escolherSkillQuery(msg) {
+  const m = msg.toLowerCase();
+  if (/\bvsl\b|video.{0,8}venda/.test(m)) return 'vsl';
+  if (/\bheadline\b/.test(m)) return 'headline';
+  if (/\boferta\b|stack|garantia|grand slam/.test(m)) return 'oferta';
+  if (/p[aá]gina|salesletter|carta de venda|pagina-vendas/i.test(m)) return 'pagina';
+  if (/email|e-mail|sequ[eê]ncia/i.test(m)) return 'email';
+  if (/an[uú]ncio|criativo/i.test(m)) return 'anuncio';
+  if (/hook|gancho/i.test(m)) return 'hook';
+  return 'copy';
+}
+
+// ============================================================
+// planejarPipeline — Etapas 1+2: consulta 5 fontes + decide mestres.
+// NAO dispara mestres. Devolve plano completo pra ser executado em separado.
+// ============================================================
+async function planejarPipeline({ message, log }) {
   const t0 = Date.now();
   const squad = detectarSquad(message);
   const produto_slug = detectarProduto(message);
@@ -518,6 +543,8 @@ async function pipelineCriativo({ message, log }) {
     return {
       ok: false,
       mensagem: `Squad ${squad} ainda nao foi implementada. Hoje so 'copy' tem mestres populados.`,
+      squad,
+      produto_slug,
     };
   }
 
@@ -542,21 +569,6 @@ async function pipelineCriativo({ message, log }) {
     );
   }
 
-  // Skill: keyword da mensagem.
-  // Uso termos simples (1 palavra) que casam ILIKE no slug/familia das skills.
-  // Ex: "p[aá]gina de venda" virava "%pagina de venda%" — nao casa "anatomia-pagina-vendas".
-  // Quebro em palavras-chave isoladas, prefiro a mais especifica.
-  function escolherSkillQuery(msg) {
-    const m = msg.toLowerCase();
-    if (/\bvsl\b|video.{0,8}venda/.test(m)) return 'vsl';
-    if (/\bheadline\b/.test(m)) return 'headline';
-    if (/\boferta\b|stack|garantia|grand slam/.test(m)) return 'oferta';
-    if (/p[aá]gina|salesletter|carta de venda|pagina-vendas/i.test(m)) return 'pagina';
-    if (/email|e-mail|sequ[eê]ncia/i.test(m)) return 'email';
-    if (/an[uú]ncio|criativo/i.test(m)) return 'anuncio';
-    if (/hook|gancho/i.test(m)) return 'hook';
-    return 'copy';
-  }
   const skillQuery = escolherSkillQuery(message);
   consultas.push(
     rodarScript(path.join(scriptsDir, 'buscar-skill.sh'), [skillQuery], { timeout: 15_000 })
@@ -565,9 +577,9 @@ async function pipelineCriativo({ message, log }) {
   );
 
   const fontes = await Promise.all(consultas);
-  log(`5 fontes consultadas em ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+  log(`${fontes.length} fontes consultadas em ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
-  // Briefing rico
+  // Briefing rico (montado uma vez, reusado pelos N mestres)
   const briefingRico = `## PEDIDO ORIGINAL
 ${message}
 
@@ -578,11 +590,8 @@ ${fontes.map(f => f.ok
 `;
 
   // ============================================================
-  // Etapa 2 — V2.5: decidir mestres dinamicamente a partir da Skill
+  // Etapa 2 — Decidir mestres dinamicamente (V2.5)
   // ============================================================
-  // Le clones recomendados da Skill principal (primeira do `buscar-skill.sh`,
-  // que ja vem ordenada por score DESC), valida no banco, distribui blocos
-  // por afinidade. Fallback hardcoded preservado em todo edge case.
   const fonteSkill = fontes.find(f => f.tipo === 'skill' && f.ok);
   const skillPrincipal = fonteSkill ? extrairSkillPrincipal(fonteSkill.conteudo) : null;
 
@@ -643,14 +652,42 @@ ${fontes.map(f => f.ok
     log(`fallback ativo: 4 mestres hardcoded [${mestresPorBloco.map(m => m.mestre).join(', ')}]`);
   }
 
+  return {
+    ok: true,
+    plano: {
+      message,
+      squad,
+      produto_slug,
+      fontes,
+      briefingRico,
+      mestresPorBloco,
+      fonteDecisao,
+      skillUsada,
+      mestresValidados,
+      mestresIgnorados,
+      blocosFallbackGenerico,
+      blocosTotal,
+      planejado_em: Date.now(),
+      duracao_planejamento_s: ((Date.now() - t0) / 1000).toFixed(1),
+    },
+  };
+}
+
+// ============================================================
+// executarMestres — Etapas 3+4: dispara mestres em paralelo + consolida.
+// Recebe plano produzido por planejarPipeline().
+// ============================================================
+async function executarMestres({ plano, log }) {
+  const { message, fontes, briefingRico, mestresPorBloco, fonteDecisao,
+          skillUsada, mestresValidados, mestresIgnorados,
+          blocosFallbackGenerico, blocosTotal } = plano;
+
   // ============================================================
   // Etapa 3 — Disparar mestres em PARALELO (N variavel)
   // ============================================================
   log(`disparando ${mestresPorBloco.length} mestre(s) em paralelo (allSettled — 1 trava nao bloqueia outros)...`);
   const t_mestres_0 = Date.now();
 
-  // Timeout duro do POOL inteiro: 120s. Se algum mestre nao responder ate la,
-  // ele entra como erro e o pipeline segue com os que responderam.
   const TIMEOUT_POOL_MS = 120_000;
 
   function comTimeout(promise, timeoutMs, mestreSlug) {
@@ -687,8 +724,6 @@ Devolva CADA BLOCO separado por cabeçalho \`### NOME-DO-BLOCO\`. Em markdown.`;
     }
   });
 
-  // allSettled: nunca trava. Cada mestre pode falhar isoladamente.
-  // Race contra timeout de pool: garante que pipeline NAO ultrapassa 75s nos mestres.
   const racedPromises = mestresPromises.map((p, i) => comTimeout(p, TIMEOUT_POOL_MS, mestresPorBloco[i].mestre));
   const settled = await Promise.allSettled(racedPromises);
   const resultados = settled.map(s => s.status === 'fulfilled' ? s.value : { mestre: 'desconhecido', ok: false, erro: String(s.reason) });
@@ -728,7 +763,6 @@ Devolva CADA BLOCO separado por cabeçalho \`### NOME-DO-BLOCO\`. Em markdown.`;
     consolidado += `**Atencao:** ${falhas.length} mestre(s) falharam — output incompleto.\n\n`;
   }
 
-  // Gaps do briefing
   const gaps = fontes.filter(f => !f.ok);
   if (gaps.length > 0) {
     consolidado += `**Gaps declarados:**\n${gaps.map(g => `- ${g.tipo}: ${g.erro}`).join('\n')}\n`;
@@ -738,7 +772,7 @@ Devolva CADA BLOCO separado por cabeçalho \`### NOME-DO-BLOCO\`. Em markdown.`;
     ok: sucessos.length > 0,
     conteudo: consolidado,
     metricas: {
-      total_s: ((Date.now() - t0) / 1000).toFixed(1),
+      total_s: ((Date.now() - plano.planejado_em) / 1000).toFixed(1),
       mestres_paralelo_s: parseFloat(dur_total_mestres),
       mestres_sucesso: sucessos.length,
       mestres_falha: falhas.length,
@@ -755,9 +789,41 @@ Devolva CADA BLOCO separado por cabeçalho \`### NOME-DO-BLOCO\`. Em markdown.`;
   };
 }
 
+// ============================================================
+// pipelineCriativo — wrapper que preserva contrato externo (V2.4 e antes).
+// Para chamadas que NAO passam por /api/pipeline-plan + plan_id.
+// ============================================================
+async function pipelineCriativo({ message, log }) {
+  const planResult = await planejarPipeline({ message, log });
+  if (!planResult.ok) {
+    return {
+      ok: false,
+      conteudo: planResult.mensagem,
+      metricas: {
+        total_s: '0',
+        mestres_paralelo_s: 0,
+        mestres_sucesso: 0,
+        mestres_falha: 0,
+        mestres_total: 0,
+        mestres_usados: [],
+        mestres_ignorados: [],
+        fonte_decisao: 'erro',
+        skill_usada: null,
+        blocos_total: 0,
+        blocos_fallback_generico: [],
+        fontes_consultadas: 0,
+        fontes_gap: 0,
+      },
+    };
+  }
+  return await executarMestres({ plano: planResult.plano, log });
+}
+
 module.exports = {
   ehPedidoCriativoGrande,
   detectarSquad,
   detectarProduto,
   pipelineCriativo,
+  planejarPipeline,
+  executarMestres,
 };

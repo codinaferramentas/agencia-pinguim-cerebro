@@ -163,6 +163,10 @@
   <header>
     <h1>Atendente <span>Pinguim 🐧</span> <span style="font-size:.7em; color: var(--text3); font-weight: 400;">local · Max</span></h1>
     <div class="status">
+      <label style="display:flex; align-items:center; gap:.4rem; font-size:.75rem; color:var(--text2); cursor:pointer; user-select:none;">
+        <input type="checkbox" id="toggle-anim" style="cursor:pointer;">
+        <span>Animação Salão</span>
+      </label>
       <div class="dot" id="status-dot"></div>
       <span id="status-txt">conectado</span>
     </div>
@@ -184,7 +188,11 @@
   </div>
 </div>
 
-<script>
+<script type="module">
+// V2.5 Commit 3 — chat real chama animacao do Salao dos Mestres em paralelo
+// quando backend detecta pedido criativo.
+import { iniciarSquadCopyParalelo } from '/mission-control/js/squad-copy-modal.js?v=20260507c';
+
 const messagesEl = document.getElementById('messages');
 const emptyEl = document.getElementById('empty');
 const form = document.getElementById('form');
@@ -192,8 +200,15 @@ const input = document.getElementById('input');
 const send = document.getElementById('send');
 const statusDot = document.getElementById('status-dot');
 const statusTxt = document.getElementById('status-txt');
+const toggleAnim = document.getElementById('toggle-anim');
 
 const threadId = 'thread-' + Date.now();
+
+// Sincroniza toggle com localStorage (mesma chave do squad principal — V2.4)
+toggleAnim.checked = localStorage.getItem('pinguim_squad_animacao') === 'on';
+toggleAnim.addEventListener('change', () => {
+  localStorage.setItem('pinguim_squad_animacao', toggleAnim.checked ? 'on' : 'off');
+});
 
 // Auto-resize textarea
 input.addEventListener('input', () => {
@@ -286,41 +301,102 @@ form.addEventListener('submit', async (e) => {
   addTyping();
 
   const t0 = Date.now();
+  let squad = null; // handle da animacao, se aberta
+
   try {
+    // ============================================================
+    // FASE A — V2.5: detectar tipo no backend (regex puro, ~1ms)
+    // Se for criativo E toggle anima ON, segue two-phase com animacao.
+    // ============================================================
+    let plan_id = null;
+    let mestresSlugs = null;
+
+    if (toggleAnim.checked) {
+      try {
+        const rTipo = await fetch('/api/detectar-tipo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message }),
+        });
+        const tipo = await rTipo.json();
+
+        if (rTipo.ok && tipo.anima) {
+          // FASE B — pega plano (5 fontes + decide mestres)
+          setStatus('loading', 'planejando elenco...');
+          const rPlan = await fetch('/api/pipeline-plan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message }),
+          });
+          const plan = await rPlan.json();
+
+          if (rPlan.ok && plan.plan_id) {
+            plan_id = plan.plan_id;
+            mestresSlugs = plan.mestres_usados;
+
+            // FASE C — abre animacao com elenco real e dispara em paralelo
+            removeTyping();
+            squad = iniciarSquadCopyParalelo({
+              pedido: message,
+              titulo: 'Pipeline criativo de copy',
+              subtitulo: message.slice(0, 80) + (message.length > 80 ? '...' : ''),
+              mestresSlugs,
+            });
+            setStatus('loading', `${mestresSlugs.length} mestre(s) escrevendo...`);
+          }
+          // Se /api/pipeline-plan falhou, segue caminho normal sem animacao
+        }
+      } catch (e) {
+        console.warn('detectar-tipo/pipeline-plan falhou — segue sem animacao:', e.message);
+      }
+    }
+
+    // ============================================================
+    // FASE D — chama /api/chat (com plan_id se planejou; senao do zero)
+    // ============================================================
+    if (!squad) addTyping(); // garante typing se nao abriu animacao
+    const body = { message, thread_id: threadId };
+    if (plan_id) body.plan_id = plan_id;
+
     const r = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, thread_id: threadId }),
+      body: JSON.stringify(body),
     });
     const data = await r.json();
 
     removeTyping();
 
     if (!r.ok) {
+      if (squad) squad.sinalizarErro(new Error(data.error || 'erro'));
       const errEl = document.createElement('div');
       errEl.className = 'err';
       errEl.innerHTML = `<strong>Erro:</strong> ${data.error || 'desconhecido'}${data.hint ? `<br><small>${data.hint}</small>` : ''}`;
       messagesEl.appendChild(errEl);
       setStatus('off', 'erro');
     } else {
+      // Sinaliza animacao que o pipeline acabou (com resultado real)
+      if (squad) squad.sinalizarConclusao(data);
+
       const dur = data.duracao_s || ((Date.now() - t0) / 1000).toFixed(1);
       let metaTxt = `${dur}s · Max local`;
+      if (data.pipeline) {
+        const p = data.pipeline;
+        metaTxt += ` · ${p.mestres_sucesso}/${p.mestres_total} mestres`;
+        if (p.fonte_decisao === 'skill') metaTxt += ` · skill: ${p.skill_usada?.slug || '?'}`;
+        else metaTxt += ' · fallback hardcoded';
+      }
       if (data.epp) {
-        if (data.epp.verifier_pulado) {
-          metaTxt += ' · verifier pulado (saudacao)';
-        } else if (data.epp.verifier_aprovou) {
-          metaTxt += ' · ✓ verifier aprovou';
-        } else {
-          metaTxt += ' · ⚠ verifier reprovou';
-        }
-        if (data.epp.reflection_round > 0) {
-          metaTxt += ` · reflection ${data.epp.reflection_round}x`;
-        }
+        if (data.epp.verifier_pulado) metaTxt += ' · verifier pulado';
+        else if (data.epp.verifier_aprovou) metaTxt += ' · ✓ verifier';
+        else if (data.epp.verifier_aprovou === false) metaTxt += ' · ⚠ verifier reprovou';
+        if (data.epp.reflection_round > 0) metaTxt += ` · reflection ${data.epp.reflection_round}x`;
       }
       addMsg('assistant', data.content, metaTxt);
       setStatus('ok', 'conectado');
     }
   } catch (err) {
+    if (squad) squad.sinalizarErro(err);
     removeTyping();
     const errEl = document.createElement('div');
     errEl.className = 'err';

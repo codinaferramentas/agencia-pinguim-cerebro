@@ -24,6 +24,10 @@ const {
 const {
   ehPedidoCriativoGrande,
   pipelineCriativo,
+  planejarPipeline,
+  executarMestres,
+  detectarSquad,
+  detectarProduto,
 } = require('./lib/orquestrador');
 
 const app = express();
@@ -53,6 +57,48 @@ app.use('/mission-control', express.static(MISSION_CONTROL_DIR));
 
 // Threads em memoria — V2 vai pra banco.
 const threads = {};
+
+// ============================================================
+// V2.5 Commit 3 — Cache de plano em memoria (TTL 5 min)
+// /api/pipeline-plan guarda plano completo (5 fontes consultadas + briefing
+// + mestresPorBloco). /api/chat com plan_id recupera e pula direto pra
+// executarMestres — evita consultar fontes 2x.
+// ============================================================
+const PIPELINE_PLAN_TTL_MS = 5 * 60 * 1000; // 5 min
+const planoCache = new Map(); // plan_id -> { plano, expiraEm, timeout }
+
+function gerarPlanId() {
+  // UUID v4 simples — sem dependencia externa
+  return 'plan_' + Date.now().toString(36) + '_' +
+    Math.random().toString(36).slice(2, 10);
+}
+
+function guardarPlano(planId, plano) {
+  // Limpa entrada antiga se mesmo id reaparecer (paranoia)
+  if (planoCache.has(planId)) {
+    clearTimeout(planoCache.get(planId).timeout);
+  }
+  const expiraEm = Date.now() + PIPELINE_PLAN_TTL_MS;
+  const timeout = setTimeout(() => {
+    planoCache.delete(planId);
+    console.log(`[plan-cache] expirou ${planId}`);
+  }, PIPELINE_PLAN_TTL_MS);
+  planoCache.set(planId, { plano, expiraEm, timeout });
+}
+
+function recuperarPlano(planId) {
+  const entry = planoCache.get(planId);
+  if (!entry) return null;
+  if (entry.expiraEm < Date.now()) {
+    planoCache.delete(planId);
+    clearTimeout(entry.timeout);
+    return null;
+  }
+  // Plano so e usado uma vez — depois vai pro lixo (evita reuso indevido)
+  planoCache.delete(planId);
+  clearTimeout(entry.timeout);
+  return entry.plano;
+}
 
 // ============================================================
 // Spawna claude CLI e retorna texto de resposta.
@@ -102,13 +148,117 @@ function runClaudeCLI(prompt, opts = {}) {
 }
 
 // ============================================================
+// POST /api/detectar-tipo  —  V2.5 Commit 3
+// body: { message }
+// resposta: { tipo, subcategoria, anima }
+// Backend e fonte unica da verdade pra "isso vai chamar pipeline criativo?"
+// Frontend consulta antes de chamar /api/chat pra decidir se anima.
+// ~1ms (so regex puro, sem CLI nem SQL).
+// ============================================================
+// V2.5 Commit 4 prep: hoje so 'copy' tem mestres populados. Lista exposta aqui
+// pra o detector saber se a squad detectada esta disponivel sem precisar
+// consultar banco a cada turno. Quando popular nova squad, adicionar slug aqui
+// (e Commit 4 vai virar tabela em pinguim.squads).
+const SQUADS_POPULADAS = new Set(['copy']);
+
+app.post('/api/detectar-tipo', (req, res) => {
+  const { message } = req.body || {};
+  if (!message || !message.trim()) {
+    return res.status(400).json({ error: 'message obrigatorio' });
+  }
+
+  const ehCriativo = ehPedidoCriativoGrande(message);
+  const ctx = detectarPapelEContexto(message);
+  const squad_destino = detectarSquad(message);
+  const produto_slug = detectarProduto(message);
+  const squad_disponivel = SQUADS_POPULADAS.has(squad_destino);
+
+  let subcategoria;
+  if (ctx.pular_verifier) subcategoria = 'saudacao';
+  else if (ehCriativo) subcategoria = 'criativo-grande';
+  else if (/^(quem (e |voce )|o que (e |voce )|qual seu|como funciona|me explica)/i.test(message)) subcategoria = 'factual';
+  else if (/^(lista|atualiza|verifica)/i.test(message)) subcategoria = 'comando-admin';
+  else subcategoria = 'factual'; // default conservador
+
+  // So anima se for criativo E squad detectada esta populada — frontend evita
+  // abrir Salao vazio pra "estrategia de tráfego" (squad ainda nao populada).
+  const anima = ehCriativo && squad_disponivel;
+
+  res.json({
+    tipo: ehCriativo ? 'criativo' : 'normal',
+    subcategoria,
+    squad_destino,
+    squad_disponivel,
+    produto_slug,
+    anima,
+  });
+});
+
+// ============================================================
+// POST /api/pipeline-plan  —  V2.5 Commit 3
+// body: { message }
+// resposta: { plan_id, mestres_usados, fonte_decisao, skill_usada,
+//             blocos_total, fontes_consultadas, fontes_gap, expira_em }
+// Roda Etapas 1+2 do pipeline (5 fontes + decide mestres). NAO roda mestres.
+// Plano completo fica em cache TTL 5min — frontend usa plan_id em /api/chat
+// pra pular consulta de fontes (evita 5s desperdicados + carga em Supabase).
+// ============================================================
+app.post('/api/pipeline-plan', async (req, res) => {
+  const t0 = Date.now();
+  try {
+    const { message } = req.body || {};
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: 'message obrigatorio' });
+    }
+    if (!ehPedidoCriativoGrande(message)) {
+      return res.status(400).json({ error: 'mensagem nao e pedido criativo grande — use /api/chat direto' });
+    }
+
+    console.log(`[${new Date().toISOString()}] pipeline-plan: ${message.slice(0, 80)}`);
+    const log = (msg) => console.log(`  [pipeline-plan] ${msg}`);
+    const result = await planejarPipeline({ message, log });
+
+    if (!result.ok) {
+      return res.status(400).json({ error: result.mensagem || 'planejamento falhou' });
+    }
+
+    const plan_id = gerarPlanId();
+    guardarPlano(plan_id, result.plano);
+
+    const dur = ((Date.now() - t0) / 1000).toFixed(1);
+    console.log(`  -> plano ${plan_id} criado em ${dur}s | mestres: ${result.plano.mestresPorBloco.length}`);
+
+    // Devolve so o que o frontend precisa pra abrir animacao.
+    // O plano completo fica no cache do servidor.
+    res.json({
+      plan_id,
+      mestres_usados: result.plano.mestresPorBloco.map(m => m.mestre),
+      mestres_ignorados: result.plano.mestresIgnorados || [],
+      fonte_decisao: result.plano.fonteDecisao,
+      skill_usada: result.plano.skillUsada,
+      blocos_total: result.plano.blocosTotal,
+      blocos_fallback_generico: result.plano.blocosFallbackGenerico || [],
+      fontes_consultadas: result.plano.fontes.length,
+      fontes_gap: result.plano.fontes.filter(f => !f.ok).length,
+      duracao_planejamento_s: parseFloat(dur),
+      expira_em: Date.now() + PIPELINE_PLAN_TTL_MS,
+    });
+  } catch (err) {
+    console.error('Erro pipeline-plan:', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// ============================================================
 // POST /api/chat
-// body: { message, thread_id }
+// body: { message, thread_id, plan_id? }
+// V2.5 Commit 3: plan_id opcional. Se vier e for valido, executa direto
+// os mestres (pula consulta de fontes — ja foi feita no /api/pipeline-plan).
 // ============================================================
 app.post('/api/chat', async (req, res) => {
   const t0 = Date.now();
   try {
-    const { message, thread_id = 'default' } = req.body || {};
+    const { message, thread_id = 'default', plan_id } = req.body || {};
 
     if (!message || !message.trim()) {
       return res.status(400).json({ error: 'message obrigatorio' });
@@ -130,16 +280,29 @@ app.post('/api/chat', async (req, res) => {
       prompt = `--- HISTORICO ---\n${historico}\n--- FIM DO HISTORICO ---\n\nUsuario: ${message}`;
     }
 
-    console.log(`[${new Date().toISOString()}] thread=${thread_id} pergunta: ${message.slice(0, 80)}`);
+    console.log(`[${new Date().toISOString()}] thread=${thread_id} pergunta: ${message.slice(0, 80)}${plan_id ? ` (plan_id=${plan_id})` : ''}`);
 
     // ============================================================
     // DESVIO — Pedido criativo grande pula CLI e vai pro orquestrador Node
-    // (delegacao real em paralelo, sem bash aninhado).
+    // V2.5 Commit 3: se vier plan_id valido no body, usa plano cacheado
+    // (frontend ja chamou /api/pipeline-plan e mostrou animacao).
     // ============================================================
     if (ehPedidoCriativoGrande(message)) {
-      console.log(`  [orquestrador] pedido criativo detectado — pulando CLI direto`);
       const log = (msg) => console.log(`  [orquestrador] ${msg}`);
-      const resultadoPipe = await pipelineCriativo({ message, log });
+      let resultadoPipe;
+      if (plan_id) {
+        const plano = recuperarPlano(plan_id);
+        if (plano) {
+          console.log(`  [orquestrador] plano ${plan_id} recuperado do cache — pulando consulta de fontes`);
+          resultadoPipe = await executarMestres({ plano, log });
+        } else {
+          console.log(`  [orquestrador] plano ${plan_id} expirou ou nao existe — refazendo do zero`);
+          resultadoPipe = await pipelineCriativo({ message, log });
+        }
+      } else {
+        console.log(`  [orquestrador] pedido criativo detectado — pulando CLI direto`);
+        resultadoPipe = await pipelineCriativo({ message, log });
+      }
 
       const respostaPipe = resultadoPipe.conteudo;
       threads[thread_id].push({ role: 'assistant', content: respostaPipe });
