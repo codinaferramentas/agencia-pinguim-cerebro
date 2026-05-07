@@ -304,7 +304,20 @@ form.addEventListener('submit', async (e) => {
       setStatus('off', 'erro');
     } else {
       const dur = data.duracao_s || ((Date.now() - t0) / 1000).toFixed(1);
-      addMsg('assistant', data.content, `${dur}s · Max local`);
+      let metaTxt = `${dur}s · Max local`;
+      if (data.epp) {
+        if (data.epp.verifier_pulado) {
+          metaTxt += ' · verifier pulado (saudacao)';
+        } else if (data.epp.verifier_aprovou) {
+          metaTxt += ' · ✓ verifier aprovou';
+        } else {
+          metaTxt += ' · ⚠ verifier reprovou';
+        }
+        if (data.epp.reflection_round > 0) {
+          metaTxt += ` · reflection ${data.epp.reflection_round}x`;
+        }
+      }
+      addMsg('assistant', data.content, metaTxt);
       setStatus('ok', 'conectado');
     }
   } catch (err) {

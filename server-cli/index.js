@@ -15,6 +15,12 @@ const express = require('express');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const {
+  EPP_LIMITS,
+  verificarOutput,
+  similaridadeOutputs,
+  detectarPapelEContexto,
+} = require('./lib/verificador');
 
 const app = express();
 const PORT = 3737;
@@ -23,7 +29,7 @@ const PROJECT_DIR = __dirname;
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Threads em memoria — V1. V2 vai pra banco.
+// Threads em memoria — V2 vai pra banco.
 const threads = {};
 
 // ============================================================
@@ -104,17 +110,70 @@ app.post('/api/chat', async (req, res) => {
 
     console.log(`[${new Date().toISOString()}] thread=${thread_id} pergunta: ${message.slice(0, 80)}`);
 
-    const resposta = await runClaudeCLI(prompt);
+    // ============================================================
+    // EPP — Camadas 1 + 2 (Verifier + Reflection)
+    // ============================================================
+    const ctx = detectarPapelEContexto(message);
+    let resposta = await runClaudeCLI(prompt);
+    const t_resposta_1 = Date.now() - t0;
+    console.log(`  primeira resposta em ${(t_resposta_1/1000).toFixed(1)}s, ${resposta.length} chars`);
+
+    let verifier = null;
+    let reflection_round = 0;
+    const verifier_problemas = [];
+
+    if (!ctx.pular_verifier) {
+      // Camada 1 — Self-Verification
+      verifier = await verificarOutput({
+        briefing: message,
+        output_md: resposta,
+        agente_slug: 'pinguim',
+        agente_role: ctx.papel,
+        expectativa: ctx.expectativa,
+      });
+
+      console.log(`  verifier: ${verifier.aprovado ? 'APROVOU' : 'REPROVOU'} em ${(verifier.latencia_ms/1000).toFixed(1)}s${verifier.problemas.length ? ` — problemas: ${verifier.problemas.length}` : ''}`);
+
+      if (!verifier.aprovado && verifier.recomendacao_refazer) {
+        verifier_problemas.push(...verifier.problemas);
+        // Camada 2 — Reflection (1 vez, com guardrails)
+        const tDec = Date.now() - t0;
+        if (tDec < EPP_LIMITS.MAX_LATENCIA_MS_TURNO) {
+          reflection_round = 1;
+          const promptRefazer = `${prompt}\n\n---\n\n[NOTA DO VERIFIER]\nVoce respondeu acima, mas o Verifier identificou problemas:\n${verifier.problemas.map(p => `- ${p}`).join('\n')}\n\nRecomendacao: ${verifier.recomendacao_refazer}\n\nRefaca a resposta corrigindo os problemas listados. Mantenha o que estava certo, ajuste so o que o Verifier apontou.`;
+
+          console.log(`  iniciando reflection round 1...`);
+          const respostaRefeita = await runClaudeCLI(promptRefazer);
+
+          // Anti-loop: se output igual ao primeiro, mantem o primeiro
+          const sim = similaridadeOutputs(resposta, respostaRefeita);
+          if (sim > EPP_LIMITS.MAX_IDENTICAL_SIMILARITY) {
+            console.log(`  reflection produziu output similar (${sim.toFixed(2)}) — mantendo primeira resposta`);
+          } else {
+            resposta = respostaRefeita;
+            console.log(`  reflection ok: similarity ${sim.toFixed(2)}, novo output ${resposta.length} chars`);
+          }
+        } else {
+          console.log(`  reflection pulada — proximo do timeout`);
+        }
+      }
+    }
 
     threads[thread_id].push({ role: 'assistant', content: resposta });
 
     const dur = ((Date.now() - t0) / 1000).toFixed(1);
-    console.log(`  -> resposta em ${dur}s, ${resposta.length} chars`);
+    console.log(`  -> resposta final em ${dur}s, ${resposta.length} chars (reflection_round=${reflection_round})`);
 
     res.json({
       thread_id,
       content: resposta,
       duracao_s: parseFloat(dur),
+      epp: {
+        verifier_aprovou: verifier ? verifier.aprovado : null,
+        verifier_pulado: ctx.pular_verifier,
+        reflection_round,
+        problemas_encontrados: verifier_problemas,
+      },
     });
   } catch (err) {
     console.error('Erro:', err);
