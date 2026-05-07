@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Salão dos Mestres — Teste de Animação</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body {
+      background: #0a0e1a;
+      color: #e6e9ef;
+      font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+      padding: 32px;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    .sub { color: #8b95a7; font-size: 0.9rem; margin-bottom: 24px; }
+    .field { margin-bottom: 16px; }
+    label { display: block; font-size: 0.8rem; color: #8b95a7; margin-bottom: 4px; }
+    textarea {
+      width: 100%;
+      min-height: 80px;
+      padding: 10px;
+      background: #1a1f2e;
+      color: #e6e9ef;
+      border: 1px solid #2a3040;
+      border-radius: 6px;
+      font: inherit;
+      box-sizing: border-box;
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      background: #1a1f2e;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+    .toggle-row label {
+      margin: 0;
+      flex: 1;
+      color: #e6e9ef;
+      font-size: 0.9rem;
+    }
+    .toggle-row .hint { font-size: 0.75rem; color: #8b95a7; }
+    button {
+      background: #E85C00;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 6px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .resultado {
+      margin-top: 24px;
+      padding: 16px;
+      background: #1a1f2e;
+      border-radius: 6px;
+      max-height: 400px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      font-family: ui-monospace, monospace;
+      font-size: 0.85rem;
+      display: none;
+    }
+    .resultado.show { display: block; }
+    .err { color: #ef4444; }
+    .ok { color: #10b981; }
+  </style>
+</head>
+<body>
+  <h1>Salão dos Mestres</h1>
+  <p class="sub">Página standalone pra testar a animação do pipeline criativo. Conecta no <code>localhost:3737</code>.</p>
+
+  <div class="toggle-row">
+    <input type="checkbox" id="toggle-anim">
+    <label for="toggle-anim">Animação ON (mostra o salão dos mestres)</label>
+    <span class="hint">Se OFF, processa em silêncio</span>
+  </div>
+
+  <div class="field">
+    <label for="pedido">Pedido criativo</label>
+    <textarea id="pedido">monta a copy completa pra página de venda do Elo. Eh um produto pra criadores iniciantes a R$ 1.997.</textarea>
+  </div>
+
+  <button id="btn-rodar">Rodar pipeline criativo</button>
+
+  <div id="resultado" class="resultado"></div>
+
+  <script type="module">
+    import { iniciarSquadCopyParalelo } from './js/squad-copy-modal.js?v=20260507a';
+
+    // Sincroniza toggle com localStorage (mesma chave do squad principal)
+    const toggle = document.getElementById('toggle-anim');
+    toggle.checked = localStorage.getItem('pinguim_squad_animacao') === 'on';
+    toggle.addEventListener('change', () => {
+      localStorage.setItem('pinguim_squad_animacao', toggle.checked ? 'on' : 'off');
+    });
+
+    const btn = document.getElementById('btn-rodar');
+    const pedidoEl = document.getElementById('pedido');
+    const resultadoEl = document.getElementById('resultado');
+
+    btn.addEventListener('click', async () => {
+      const pedido = pedidoEl.value.trim();
+      if (!pedido) return;
+
+      btn.disabled = true;
+      btn.textContent = 'Processando...';
+      resultadoEl.classList.remove('show');
+      resultadoEl.textContent = '';
+
+      // Dispara animação em paralelo (no-op se toggle off)
+      const squad = iniciarSquadCopyParalelo({
+        pedido,
+        titulo: 'Pipeline criativo de copy',
+        subtitulo: pedido.slice(0, 80) + (pedido.length > 80 ? '...' : ''),
+      });
+
+      const t0 = Date.now();
+      try {
+        // Caminho relativo: funciona se a pagina foi servida pelo server-cli
+        // (http://localhost:3737/mission-control/squad-copy-test.html).
+        // Se aberta de outro host, cai pra absoluta da 3737.
+        const apiBase = window.location.port === '3737' ? '' : 'http://localhost:3737';
+        const r = await fetch(apiBase + '/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: pedido,
+            thread_id: 'squad-copy-test-' + t0,
+          }),
+        });
+        const data = await r.json();
+        const dur = ((Date.now() - t0) / 1000).toFixed(1);
+
+        // Sinaliza animação que terminou (com o resultado real)
+        squad.sinalizarConclusao(data);
+
+        // Mostra resultado
+        const meta = `=== Pipeline em ${dur}s ===\n` +
+          (data.pipeline ? `Mestres: ${data.pipeline.mestres_sucesso}/${data.pipeline.mestres_sucesso + data.pipeline.mestres_falha}\n` : '') +
+          (data.pipeline ? `Fontes: ${data.pipeline.fontes_consultadas} consultadas, ${data.pipeline.fontes_gap} com gap\n` : '') +
+          (data.pipeline ? `Tempo paralelo dos mestres: ${data.pipeline.mestres_paralelo_s}s\n` : '') +
+          `\n--- COPY ENTREGUE ---\n\n`;
+        resultadoEl.innerHTML = `<span class="ok">${meta}</span>` + escapeHTML(data.content || data.error || '(sem conteúdo)');
+        resultadoEl.classList.add('show');
+      } catch (e) {
+        squad.sinalizarErro(e);
+        resultadoEl.innerHTML = `<span class="err">ERRO: ${escapeHTML(e.message)}</span>`;
+        resultadoEl.classList.add('show');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Rodar pipeline criativo';
+      }
+    });
+
+    function escapeHTML(s) {
+      return String(s || '').replace(/[&<>"']/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
+      );
+    }
+  </script>
+</body>
+</html>

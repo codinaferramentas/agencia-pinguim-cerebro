@@ -31,7 +31,25 @@ const PORT = 3737;
 const PROJECT_DIR = __dirname;
 
 app.use(express.json({ limit: '10mb' }));
+
+// CORS dev-friendly — permite qualquer origin (uso local).
+// Necessario pra paginas HTML fora do server-cli (ex: mission-control) baterem na API.
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve o mission-control inteiro em /mission-control/* — pra testar
+// V2.4 Salao dos Mestres no mesmo dominio do server-cli (mata necessidade
+// de servidor estatico paralelo na 8080). Quando V3 acontecer, mission-control
+// sera servido aqui em definitivo.
+const MISSION_CONTROL_DIR = path.join(__dirname, '..', 'mission-control');
+app.use('/mission-control', express.static(MISSION_CONTROL_DIR));
 
 // Threads em memoria — V2 vai pra banco.
 const threads = {};
