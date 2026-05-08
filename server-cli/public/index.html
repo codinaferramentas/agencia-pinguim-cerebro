@@ -206,6 +206,21 @@ const toggleAnim = document.getElementById('toggle-anim');
 
 const threadId = 'thread-' + Date.now();
 
+// V2.5 hotfix: trava de mensagens em paralelo. inFlight=true bloqueia tanto
+// submit do botao quanto Enter no textarea. Igual ChatGPT: nao deixa mandar
+// segunda mensagem enquanto a primeira nao respondeu (evita respostas fora
+// de ordem que confundem o usuario).
+let inFlight = false;
+
+function setInFlight(travado) {
+  inFlight = travado;
+  send.disabled = travado;
+  input.disabled = travado;
+  input.placeholder = travado
+    ? 'Aguardando resposta... (mensagens encavaladas saem fora de ordem)'
+    : 'Digite sua mensagem... (Enter envia, Shift+Enter quebra linha)';
+}
+
 // Sincroniza toggle com localStorage (mesma chave do squad principal — V2.4)
 toggleAnim.checked = localStorage.getItem('pinguim_squad_animacao') === 'on';
 toggleAnim.addEventListener('change', () => {
@@ -218,10 +233,11 @@ input.addEventListener('input', () => {
   input.style.height = Math.min(input.scrollHeight, 200) + 'px';
 });
 
-// Enter envia, Shift+Enter quebra linha
+// Enter envia, Shift+Enter quebra linha. Trava se ja tem requisicao em voo.
 input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
+    if (inFlight) return; // bloqueia Enter encavalado
     form.requestSubmit();
   }
 });
@@ -295,13 +311,14 @@ function setStatus(state, text) {
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (inFlight) return; // dupla protecao — submit nao dispara enquanto em voo
   const message = input.value.trim();
   if (!message) return;
 
   addMsg('user', message);
   input.value = '';
   input.style.height = 'auto';
-  send.disabled = true;
+  setInFlight(true);
   setStatus('loading', 'pensando...');
   addTyping();
 
@@ -409,7 +426,7 @@ form.addEventListener('submit', async (e) => {
     messagesEl.appendChild(errEl);
     setStatus('off', 'desconectado');
   } finally {
-    send.disabled = false;
+    setInFlight(false);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     input.focus();
   }
