@@ -74,44 +74,63 @@ A Categoria E tem **3 sub-categorias** — saber qual disparar é o que faz o ag
 - Doc/texto truncado em 4000 chars na resposta visual
 - PDF não tem parser de texto nesta versão — devolve só metadata + link
 
-#### E3 — EDITAR planilha (com confirmação humana NO CHAT)
+#### E3 — EDITAR planilha (confirmação SÓ quando agente inferiu algo)
 
 **Sinais:** verbos destrutivos + arquivo: "coloca", "escreve", "põe", "atualiza", "muda", "troca", "altera", "preenche", "adiciona linha", "marca como", "registra que"
 
-**REGRA DURA — fluxo de 3 passos. NUNCA pular o passo 2.**
+**REGRA DURA — confirmação inteligente, não cega.**
 
-**Passo 1 — Investiga:** roda `buscar-drive.sh` (se precisa achar) + `ler-drive.sh` (pra ver layout atual). Identifica:
-- Qual arquivo (fileId)
-- Qual aba (se planilha tem várias)
-- Qual célula/range (mapeia "coluna teste linha 7" → "B7" lendo o cabeçalho)
-- Qual valor está lá agora
+Pedir "sim/não" quando o sócio já especificou tudo é **redundante e insulta**. Pedir só quando agente teve que **interpretar/inferir** algo.
 
-**Passo 2 — Mostra plano e PEDE CONFIRMAÇÃO no chat:**
+##### Tabela de quando confirmar (decora isto)
+
+| Pedido do sócio | Confirma? | Por quê |
+|---|---|---|
+| "coloca 'X' em B7" | ❌ executa direto | célula + valor explícitos, zero inferência |
+| "põe 'arquivo encontrado' na célula C12" | ❌ executa direto | idem |
+| "coloca 'X' na coluna teste linha 7" | ❌ executa direto* | só mapeou nome→letra (B), linha+valor explícitos |
+| "preenche a coluna teste com 'X'" | ✅ confirma | não disse linha — agente inferiu range inteiro |
+| "marca aquela linha do João como pago" | ✅ confirma | precisou achar linha do "João" via leitura — interpretação pesada |
+| "atualiza o status do projeto" | ✅ confirma | tudo vago — qual célula? qual valor? |
+| "limpa a planilha" / "apaga a coluna X" | ✅ sempre | destrutivo amplo + irreversível |
+| Edição em **append** / **range múltiplo** | ✅ sempre | escala maior, vale a pausa |
+
+*"executa direto" inclui o passo de **ler o cabeçalho** primeiro pra confirmar a letra. Se "coluna teste" não bate exato com nenhum cabeçalho, vira ✅ confirma (vira inferência ambígua).
+
+##### Fluxo quando NÃO confirma (caminho rápido)
+
+1. **Investiga** (rápido): se precisa, `buscar-drive.sh` pra achar fileId + `ler-drive.sh` no cabeçalho pra confirmar coluna
+2. **Executa**: `bash scripts/editar-drive.sh celula <fileId> "<aba>" "<celula>" "<valor>"`
+3. **Devolve resultado** com antes/depois + link clicável (auditoria sem fricção)
+
+##### Fluxo quando CONFIRMA (interpretação ou escala)
+
+1. **Investiga** + **lê** layout atual
+2. **Mostra plano e PEDE CONFIRMAÇÃO no chat:**
 
 ```
 Encontrei: **<nome do arquivo>** ([link](...))
 Aba: <aba>
-Célula <ref>: atualmente "<valor antigo>"
-
-Vou alterar <ref> de "<valor antigo>" pra "<valor novo>".
+Vou <descrição da operação inferida>:
+  - Célula <ref>: "<valor antigo>" → "<valor novo>"
+  - (ou range/append, conforme o caso)
 
 Confirma? [sim/não]
 ```
 
-**E PARA. Espera o sócio responder.** Não chama `editar-drive.sh` antes da confirmação. Não assume "sim implícito".
+3. **PARA**. Espera o sócio responder.
+4. **Executa só após "sim" explícito** + devolve antes/depois + link
 
-**Passo 3 — Executa só após "sim" explícito:**
-- `bash scripts/editar-drive.sh celula <fileId> "<aba>" "<celula>" "<valor>"`
-- Devolve confirmação com antes/depois + link
+##### Sempre, em qualquer caminho
 
-**Operações disponíveis:**
-- `celula` — 1 célula (B7, C12, etc)
-- `range` — bloco (A1:C3) com matriz de valores
-- `append` — adicionar linha(s) ao final da aba
+- **Resultado final inclui antes/depois + link** (mesmo quando não confirmou) — sócio audita visualmente
+- **Erro?** declara honesto, não disfarça (ex: "B12 não existe nessa aba — máximo é coluna F")
 
-**Anti-padrões proibidos:**
-- ❌ Editar sem mostrar plano primeiro
-- ❌ "Sim" do sócio numa mensagem antiga ≠ "sim" pra esta edição (cada edição = nova confirmação)
+##### Anti-padrões proibidos
+
+- ❌ Pedir confirmação quando célula+valor vieram explícitos no pedido
+- ❌ Editar sem ler cabeçalho quando o sócio falou "coluna X" (precisa confirmar que X existe e é qual letra)
+- ❌ "Sim" do sócio numa mensagem antiga ≠ "sim" pra esta edição (cada edição que ENTRA no caminho confirmar = nova confirmação)
 - ❌ Editar Doc (texto formatado) — não implementado nesta versão, só planilhas
 - ❌ Inventar célula sem ler a planilha primeiro pra confirmar layout
 
