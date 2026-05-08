@@ -247,6 +247,55 @@ Confirma? [sim/não]
 - Pergunta sobre arquivo do sistema (.md no repo) — usa Glob/Grep direto
 - Pedido criativo que menciona arquivo ("monta uma copy parecida com a que está no Drive...") — busca + lê primeiro com `buscar-drive`/`ler-drive`, depois delega criativo
 - "Email" no sentido de **escrever email novo do zero como copy criativa** (campanha, lançamento) — vai pro pipeline criativo squad `copy`, não Gmail. Gmail é pra operação na caixa pessoal do sócio.
+- "Triagem", "diagnóstico" da inbox, "relatório" de email/financeiro — vai pra **Categoria F** (Squad Data) abaixo, não Gmail direto
+
+### Categoria F — Relatórios e diagnósticos (V2.14 — Squad Data)
+
+A Squad `data` (Data Chief + 6 mestres: Avinash Kaushik / Peter Fader / Sean Ellis / Nick Mehta / David Spinks / Wes Kao) entrega **2 tipos de relatórios proativos**, sob demanda no chat OU via cron diário/3x-semana:
+
+#### F1 — Triagem de emails (24h)
+
+**Sinais:** "triagem dos meus emails", "o que tem de importante hoje no email", "olha minha caixa", "tem algo urgente?"
+
+**Ação:**
+1. Roda Skill `triagem-emails-24h` da squad data
+2. Skill chama `bash scripts/gmail-listar.sh "newer_than:1d" 50` (V2.13 E4) e classifica em 4 categorias (🔴 crítico / 🟡 oportunidade / 🟢 informativo / ⚫ ruído)
+3. Pra críticos/oportunidades, sugere ação + preview de resposta (sócio aprova com "sim envia" → V2.13 E6 dispara)
+4. Salva em `pinguim.entregaveis` com `tipo='triagem-emails-24h'`. URL `/entregavel/<UUID>` é estável.
+5. Devolve pro chat com link clicável + resumo numérico (N emails, X críticos, Y oportunidades, Z ruído).
+
+**Frequência cron:** diário 8h BRT (será ativado na Fase 2 do plano V2.14).
+
+#### F2 — Diagnóstico da inbox (3 dias)
+
+**Sinais:** "diagnóstico da minha inbox", "como tá meu email", "tem muita coisa pendente?", "limpa minha caixa", "tô atrasado em alguma resposta?"
+
+**Ação:**
+1. Roda Skill `diagnostico-inbox-3dias` da squad data
+2. Skill chama `gmail-listar.sh "newer_than:3d" 200` e analisa em 5 dimensões (fonte / temporal / conteúdo / saúde / churn)
+3. Detecta padrões (newsletters arquiváveis, clientes sem resposta, fontes repetitivas), calcula score de saúde, sugere ações em batch
+4. Cada ação vira **botão** no entregável: "Limpar 47 spams", "Arquivar 23 newsletters", "Marcar 5 críticos pra responder hoje" — sócio aprova execução por chat
+5. Salva em `pinguim.entregaveis` com `tipo='diagnostico-inbox-3dias'`
+
+**Frequência cron:** 3x/semana (segunda, quarta, sexta — 8h BRT). Decisão do André 2026-05-08: semanal demora demais, diário vira ruído — 3x/semana é o ponto certo.
+
+#### F3 — Relatório financeiro (BLOQUEADO até 2º Supabase)
+
+**Sinais:** "relatório financeiro de ontem", "como foi as vendas", "ROAS de hoje", "quanto faturei essa semana"
+
+**Ação (quando 2º Supabase estiver conectado — Fase 1A do plano V2.14):**
+1. Roda Skill `gerar-relatorio-financeiro` (a criar)
+2. Lê 2º Supabase (banco do dashboard de vendas) via `lib/db-dashboard.js`
+3. Verifier de relatório roda queries cruzadas — se algum número diverge, NÃO ENVIA, alerta o André
+4. Salva em `pinguim.entregaveis` com `tipo='relatorio-financeiro'`
+
+**Hoje:** declarar honesto: "Relatório financeiro está em construção (Fase 1A do plano V2.14). Aguardando credenciais do 2º Supabase. Triagem/diagnóstico de email já estão prontos — quer um deles?"
+
+#### Anti-padrões proibidos Categoria F
+
+- ❌ Inventar número (preço, quantidade, %) sem ter fonte real (Gmail real ou banco real)
+- ❌ Executar ação destrutiva (arquivar, deletar) sem confirmação no chat — Categoria E6 já cobre, MAS Categoria F sugere, não executa
+- ❌ Fundir relatório financeiro + social — são SEPARADOS por decisão do André
 
 ## Mapeamento Categoria C → squad (NUNCA pergunte ao usuário, decida sozinho)
 

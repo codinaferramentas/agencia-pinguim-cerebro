@@ -78,6 +78,9 @@ function ehPedidoEdicao(message) {
 // ============================================================
 function detectarSquad(message) {
   const m = message.toLowerCase();
+  // V2.14 — squad data PRIMEIRO (relatorios + diagnosticos de email/inbox)
+  // antes de advisory pq palavras como "diagnostico" sao especificas
+  if (/\b(triagem|diagn[oó]stico|relat[oó]rio|inbox|caixa\s+de\s+email|meu(s)?\s+emails?|meus\s+emails|tem\s+algo\s+importante|score\s+de\s+sa[uú]de|olha\s+a\s+inbox|olha\s+meus?\s+emails?)\b/i.test(m)) return 'data';
   // Advisory PRIMEIRO — palavras de advisory sao mais especificas e nao colidem com copy
   if (/\b(conselho|dilema|decis[aã]o|aposta|prop[oó]sito|estrat[eé]gia|estrat[eé]gic[ao]|an[aá]lise\s+estrat[eé]gica|quadro\s+de|perdas\s+e\s+ganhos?|pros\s+e\s+contras|comparativo|tradeoff|trade-off|investir|contratar|cancelar|seguir|escolher entre|me\s+ajuda\s+a\s+(decidir|escolher|pensar)|deveria|devo|decidir entre)\b/i.test(m)) return 'advisory-board';
   if (/\b(copy|p[aá]gina|vsl|email|an[uú]ncio|headline|oferta|stack|garantia|faq|salesletter|carta)\b/i.test(m)) return 'copy';
@@ -320,7 +323,7 @@ function normalizarSlugBloco(texto) {
 // Estado 2026-05-08:
 //   - copy: 8 mestres + Copy Chief
 //   - advisory-board: 4 conselheiros (Dalio/Munger/Naval/Thiel) + Board Chair
-const SQUADS_POPULADAS = new Set(['copy', 'advisory-board']);
+const SQUADS_POPULADAS = new Set(['copy', 'advisory-board', 'data']);
 
 // AFINIDADE indexada por squad. Hoje so 'copy'. Cada nova squad populada
 // ganha sua propria entry aqui — copy-paste do template + ajustar slugs.
@@ -423,6 +426,45 @@ const AFINIDADE_POR_SQUAD = {
     'veredito-board-chair':                 ['board-chair'],
     'veredito-board-chair-consolidacao':    ['board-chair'],
   },
+  // V2.14 — Squad data (relatorios + diagnosticos de inbox/email)
+  'data': {
+    // Score de saude e KPIs (Avinash Kaushik)
+    'score-de-saude':                       ['avinash-kaushik'],
+    'kpis-de-inbox':                        ['avinash-kaushik'],
+    'taxa-resposta':                        ['avinash-kaushik'],
+    'tempo-medio-resposta':                 ['avinash-kaushik'],
+    'analise-conversao':                    ['avinash-kaushik'],
+
+    // Customer value e prioridade por LTV (Peter Fader)
+    'clv':                                  ['peter-fader'],
+    'rfm-segmentation':                     ['peter-fader'],
+    'prioridade-por-ltv':                   ['peter-fader'],
+
+    // Oportunidades de conversao escondidas (Sean Ellis)
+    'oportunidades-conversao':              ['sean-ellis'],
+    'lead-engajado-sem-followup':           ['sean-ellis'],
+    'north-star':                           ['sean-ellis'],
+
+    // Risco de churn (Nick Mehta)
+    'risco-churn':                          ['nick-mehta'],
+    'health-score-conta':                   ['nick-mehta'],
+    'cliente-sem-resposta':                 ['nick-mehta'],
+
+    // Qualidade de comunicacao (David Spinks)
+    'qualidade-comunicacao':                ['david-spinks'],
+    'tom-relacional':                       ['david-spinks'],
+    'engajamento-qualitativo':              ['david-spinks'],
+
+    // Padroes temporais (Wes Kao)
+    'padroes-temporais':                    ['wes-kao'],
+    'cohort-retencao':                      ['wes-kao'],
+    'horario-critico':                      ['wes-kao'],
+
+    // Sintese final (Data Chief — vem em serie depois dos 6)
+    'sintese-relatorio':                    ['data-chief'],
+    'narrativa-final':                      ['data-chief'],
+    'decisao-acionavel':                    ['data-chief'],
+  },
   // Quando popular outras squads:
   // 'storytelling':   { 'jornada-heroi': ['joseph-campbell'], ... },
   // 'traffic-masters':{ 'criativo-anuncio': ['pedro-sobral'], ... },  // Pedro Sobral, NAO Pedro Aredes (memoria dedicada)
@@ -450,6 +492,14 @@ const FOCO_PADRAO_POR_MESTRE = {
   'peter-thiel':        'monopolio vs competicao, 10x nao 10%, Last Mover Advantage',
   'naval-ravikant':     'leverage permission-less (codigo + midia), specific knowledge, escala sem permissao',
   'board-chair':        'orquestracao do advisory: diagnostica natureza do dilema + escolhe conselheiros + consolida pareceres',
+  // Squad data (V2.14)
+  'avinash-kaushik':    'Web Analytics, See-Think-Do-Care, score de saude da inbox/funil, KPIs de comunicacao (taxa resposta, tempo medio)',
+  'peter-fader':        'Customer Centricity / CLV, RFM segmentation, peso por valor do cliente (alto LTV merece prioridade)',
+  'sean-ellis':         'Growth Hacking, North Star Metric, oportunidades de conversao escondidas (lead engajado sem follow-up)',
+  'nick-mehta':         'Customer Success, health score por conta, flag de risco de churn (cliente reclamando + sem resposta)',
+  'david-spinks':       'Community Metrics, qualidade de comunicacao (tom relacional vs transacional), engajamento qualitativo',
+  'wes-kao':            'Cohort Analysis, padroes temporais (qual dia/hora gera mais email critico, padroes de retencao)',
+  'data-chief':         'orquestracao da squad data: diagnostica natureza do relatorio + sintetiza pareceres dos 6 mestres em narrativa unica + decisao acionavel',
 };
 
 // Fallback hardcoded indexado por squad. Hoje so 'copy'. Usado quando Skill
@@ -497,6 +547,29 @@ const MESTRES_FALLBACK_POR_SQUAD = {
       mestre: 'naval-ravikant',
       blocos: ['LEVERAGE (essa decisao adiciona codigo/midia/capital ou trabalho linear?)', 'SPECIFIC-KNOWLEDGE (reforca o que so voces fazem?)'],
       foco: FOCO_PADRAO_POR_MESTRE['naval-ravikant'],
+    },
+  ],
+  // V2.14 — Squad data (relatorios + diagnosticos)
+  'data': [
+    {
+      mestre: 'avinash-kaushik',
+      blocos: ['SCORE-DE-SAUDE (calculo + faixa 80/60/<60)', 'KPIS-DE-INBOX (taxa lida, taxa respondida, tempo medio resposta)'],
+      foco: FOCO_PADRAO_POR_MESTRE['avinash-kaushik'],
+    },
+    {
+      mestre: 'sean-ellis',
+      blocos: ['OPORTUNIDADES-CONVERSAO (lead engajado sem follow-up, lead que pediu trial)', 'NORTH-STAR (qual metrica unica importa hoje)'],
+      foco: FOCO_PADRAO_POR_MESTRE['sean-ellis'],
+    },
+    {
+      mestre: 'nick-mehta',
+      blocos: ['RISCO-CHURN (cliente reclamando + sem resposta ha N dias)', 'HEALTH-SCORE-POR-CONTA'],
+      foco: FOCO_PADRAO_POR_MESTRE['nick-mehta'],
+    },
+    {
+      mestre: 'wes-kao',
+      blocos: ['PADROES-TEMPORAIS (qual dia/hora gerou mais email critico)', 'COHORT-RETENCAO'],
+      foco: FOCO_PADRAO_POR_MESTRE['wes-kao'],
     },
   ],
 };
@@ -944,6 +1017,7 @@ async function executarMestres({ plano, log }) {
   // ============================================================
   const SINTETIZADORES_POR_SQUAD = {
     'advisory-board': 'board-chair',
+    'data': 'data-chief', // V2.14 — Chief sintetiza pareceres dos 6 mestres da squad data
     // futuras squads: 'copy': 'copy-chief', 'storytelling': 'story-director', etc
   };
   const slugSintetizador = SINTETIZADORES_POR_SQUAD[squad];
