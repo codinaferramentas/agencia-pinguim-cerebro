@@ -31,6 +31,7 @@ const {
   SQUADS_POPULADAS, // V2.5 Commit 4 — fonte unica da verdade
 } = require('./lib/orquestrador');
 const { classificarMensagem } = require('./lib/router-llm'); // V2.9 — LLM router
+const { renderEntregavel } = require('./lib/template-html'); // V2.10 — entregavel HTML
 
 const app = express();
 const PORT = 3737;
@@ -100,6 +101,34 @@ function recuperarPlano(planId) {
   planoCache.delete(planId);
   clearTimeout(entry.timeout);
   return entry.plano;
+}
+
+// ============================================================
+// V2.10 — Cache de entregavel HTML (TTL 60 min)
+// Diferente do planoCache (que e single-use, evita reuso indevido do plano),
+// o entregavel persiste enquanto o usuario quer reabrir/F5/compartilhar link.
+// Indexado pelo MESMO plan_id quando o pipeline foi planejado, ou um novo
+// plan_id gerado quando o pipeline foi do zero (sem /api/pipeline-plan).
+// ============================================================
+const ENTREGAVEL_TTL_MS = 60 * 60 * 1000; // 60 min
+const ENTREGAVEL_MIN_CHARS = parseInt(process.env.ENTREGAVEL_HTML_MIN_CHARS || '2000', 10);
+const entregavelCache = new Map(); // id -> { markdown, metricas, pedido, criadoEm, timeout }
+
+function guardarEntregavel(id, dados) {
+  if (entregavelCache.has(id)) {
+    clearTimeout(entregavelCache.get(id).timeout);
+  }
+  const timeout = setTimeout(() => {
+    entregavelCache.delete(id);
+    console.log(`[entregavel-cache] expirou ${id}`);
+  }, ENTREGAVEL_TTL_MS);
+  entregavelCache.set(id, { ...dados, timeout });
+}
+
+function recuperarEntregavel(id) {
+  const entry = entregavelCache.get(id);
+  if (!entry) return null;
+  return entry;
 }
 
 // ============================================================
@@ -370,6 +399,35 @@ app.post('/api/chat', async (req, res) => {
       const dur = ((Date.now() - t0) / 1000).toFixed(1);
       console.log(`  -> pipeline criativo finalizou em ${dur}s | mestres: ${resultadoPipe.metricas.mestres_sucesso}/${resultadoPipe.metricas.mestres_sucesso + resultadoPipe.metricas.mestres_falha} | tempo paralelo: ${resultadoPipe.metricas.mestres_paralelo_s}s`);
 
+      // ============================================================
+      // V2.10 — Entregavel grande vira HTML em rota dedicada.
+      // Decisao: pipeline criativo + sucesso + conteudo >= MIN_CHARS.
+      // (squad nao populada nem entra aqui — ehPedidoCriativoGrande filtra
+      //  no atalho honesto, ou planejarPipeline retorna ok=false.)
+      // ============================================================
+      let entregavel_url = null;
+      let entregavel_preview = null;
+      if (resultadoPipe.ok && respostaPipe.length >= ENTREGAVEL_MIN_CHARS) {
+        const entregavelId = plan_id || gerarPlanId();
+        guardarEntregavel(entregavelId, {
+          markdown: respostaPipe,
+          metricas: resultadoPipe.metricas,
+          pedido: message,
+          criadoEm: Date.now(),
+        });
+        entregavel_url = `/entregavel/${entregavelId}`;
+        // Preview = primeiras 200 chars do conteudo dos mestres (pula o header de metadata)
+        const headerEnd = respostaPipe.indexOf('---');
+        const blocosTxt = headerEnd > -1 ? respostaPipe.slice(headerEnd + 3) : respostaPipe;
+        entregavel_preview = blocosTxt
+          .replace(/^#+\s.*$/gm, '')      // remove headers
+          .replace(/\*\*([^*]+)\*\*/g, '$1') // tira bold marker
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 200);
+        console.log(`  -> entregavel HTML em ${entregavel_url} (${respostaPipe.length} chars >= ${ENTREGAVEL_MIN_CHARS})`);
+      }
+
       return res.json({
         thread_id,
         content: respostaPipe,
@@ -381,6 +439,8 @@ app.post('/api/chat', async (req, res) => {
           problemas_encontrados: [],
         },
         pipeline: resultadoPipe.metricas,
+        entregavel_url,        // V2.10 — URL pra abrir HTML formatado (null se conteudo curto)
+        entregavel_preview,    // V2.10 — primeiras ~200 chars pra cartao de preview no chat
       });
     }
 
@@ -468,6 +528,40 @@ app.get('/api/health', async (req, res) => {
   } catch (err) {
     res.status(500).json({ status: 'erro', detalhe: err.message });
   }
+});
+
+// ============================================================
+// GET /entregavel/:id  —  V2.10
+// Renderiza entregavel grande do pipeline criativo como HTML standalone.
+// Cache em RAM (TTL 60min). Chat manda link aqui em vez de inline quando
+// conteudo > ENTREGAVEL_MIN_CHARS chars + tipo criativo.
+// ============================================================
+app.get('/entregavel/:id', (req, res) => {
+  const entry = recuperarEntregavel(req.params.id);
+  if (!entry) {
+    res.status(404)
+      .type('html')
+      .send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><title>Entregável não encontrado</title>
+<style>body{background:#0a0a0f;color:#f1f5f9;font-family:system-ui,sans-serif;
+display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;padding:2rem}
+h1{font-size:1.5rem;margin-bottom:.5rem}p{color:#94a3b8;max-width:500px}
+a{color:#E85C00}</style></head>
+<body><div>
+<h1>🐧 Entregável não encontrado</h1>
+<p>Esse entregável expirou (TTL 60 min) ou o servidor reiniciou.<br>
+Volta pro <a href="/">chat</a> e refaz o pedido.</p>
+</div></body></html>`);
+    return;
+  }
+  const html = renderEntregavel({
+    markdown: entry.markdown,
+    metricas: entry.metricas,
+    criadoEm: entry.criadoEm,
+    pedido: entry.pedido,
+  });
+  res.type('html').send(html);
 });
 
 // ============================================================
