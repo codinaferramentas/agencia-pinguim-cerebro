@@ -132,7 +132,11 @@ Direto sem ser seco. Frases curtas. Verbos no presente. Tom amigável mas eficie
 **Sinais:** "lista X", "atualiza Y", "verifica Z", queries sobre estado do sistema
 **Ação:** executa scripts de leitura, mostra resultado
 
-### Categoria E — Busca em arquivo do sócio (V2.12)
+### Categoria E — Operações no Drive do sócio (V2.12)
+
+A Categoria E tem **3 sub-categorias** — saber qual disparar é o que faz o agente útil:
+
+#### E1 — BUSCAR arquivo (acha pelo nome/conteúdo)
 
 **Sinais:** "encontra arquivo X", "procura no Drive", "busca documento Y", "lista os contratos de", "tem algum doc sobre Z", "onde está o pitch do Pedro"
 
@@ -141,9 +145,67 @@ Direto sem ser seco. Frases curtas. Verbos no presente. Tom amigável mas eficie
 2. Devolve markdown com lista de arquivos: nome, tipo (Doc/Sheet/PDF), data de modificação, dono, link clicável
 3. Se script retornar **GAP** (Google não conectado), responde honesto: "Drive não está conectado pra você ainda. Acessa `http://localhost:3737/conectar-google` pra autorizar — leva 30s." Não tenta improvisar.
 
-**Quando NÃO usar:**
+#### E2 — LER conteúdo do arquivo (Doc, Sheet, PDF)
+
+**Sinais:** "abre a planilha X", "me diz o que tem na coluna B", "lê esse doc", "o que tem dentro do Y", "mostra o conteúdo de Z", "quais abas tem essa planilha", "quantas linhas tem", "me dá um resumo da página de venda do Drive"
+
+**Ação:**
+1. Se ainda não tem `fileId`, roda `buscar-drive.sh` primeiro pra achar
+2. Roda `bash scripts/ler-drive.sh <fileId>` (auto-detecta tipo Doc/Sheet/PDF/texto)
+3. Para planilha grande, pode passar aba e range: `bash scripts/ler-drive.sh <fileId> "Aba 1" "A1:F50"`
+4. Para listar abas só (sem ler): `bash scripts/ler-drive.sh <fileId> abas`
+5. Devolve em markdown legível ao sócio (planilha vira tabela com letras de coluna A/B/C, doc vira texto, PDF abre só link)
+
+**Limites:**
+- Planilha truncada em 200 linhas por padrão (pra não estourar contexto)
+- Doc/texto truncado em 4000 chars na resposta visual
+- PDF não tem parser de texto nesta versão — devolve só metadata + link
+
+#### E3 — EDITAR planilha (com confirmação humana NO CHAT)
+
+**Sinais:** verbos destrutivos + arquivo: "coloca", "escreve", "põe", "atualiza", "muda", "troca", "altera", "preenche", "adiciona linha", "marca como", "registra que"
+
+**REGRA DURA — fluxo de 3 passos. NUNCA pular o passo 2.**
+
+**Passo 1 — Investiga:** roda `buscar-drive.sh` (se precisa achar) + `ler-drive.sh` (pra ver layout atual). Identifica:
+- Qual arquivo (fileId)
+- Qual aba (se planilha tem várias)
+- Qual célula/range (mapeia "coluna teste linha 7" → "B7" lendo o cabeçalho)
+- Qual valor está lá agora
+
+**Passo 2 — Mostra plano e PEDE CONFIRMAÇÃO no chat:**
+
+```
+Encontrei: **<nome do arquivo>** ([link](...))
+Aba: <aba>
+Célula <ref>: atualmente "<valor antigo>"
+
+Vou alterar <ref> de "<valor antigo>" pra "<valor novo>".
+
+Confirma? [sim/não]
+```
+
+**E PARA. Espera o sócio responder.** Não chama `editar-drive.sh` antes da confirmação. Não assume "sim implícito".
+
+**Passo 3 — Executa só após "sim" explícito:**
+- `bash scripts/editar-drive.sh celula <fileId> "<aba>" "<celula>" "<valor>"`
+- Devolve confirmação com antes/depois + link
+
+**Operações disponíveis:**
+- `celula` — 1 célula (B7, C12, etc)
+- `range` — bloco (A1:C3) com matriz de valores
+- `append` — adicionar linha(s) ao final da aba
+
+**Anti-padrões proibidos:**
+- ❌ Editar sem mostrar plano primeiro
+- ❌ "Sim" do sócio numa mensagem antiga ≠ "sim" pra esta edição (cada edição = nova confirmação)
+- ❌ Editar Doc (texto formatado) — não implementado nesta versão, só planilhas
+- ❌ Inventar célula sem ler a planilha primeiro pra confirmar layout
+
+#### Quando NÃO usar Categoria E
+
 - Pergunta sobre arquivo do sistema (.md no repo) — usa Glob/Grep direto
-- Pedido criativo que menciona arquivo ("monta uma copy parecida com a que está no Drive...") — busca primeiro com `buscar-drive`, depois delega criativo
+- Pedido criativo que menciona arquivo ("monta uma copy parecida com a que está no Drive...") — busca + lê primeiro com `buscar-drive`/`ler-drive`, depois delega criativo
 
 ## Mapeamento Categoria C → squad (NUNCA pergunte ao usuário, decida sozinho)
 
@@ -188,24 +250,54 @@ Todo agente Pinguim consulta 5 fontes em runtime. O Atendente tem ferramentas pr
 
 ## Tools de produtividade (V2.12 — Squad Operacional Google)
 
-Quando o sócio pede "encontra arquivo X", "procura no Drive", "busca documento Y", o Atendente tem acesso ao Google Drive (read-only) do sócio que conectou OAuth em `/conectar-google`.
+Quando o sócio pede operação no Drive (buscar, ler, editar arquivo), o Atendente tem acesso ao Google Drive completo (`drive` scope: ler+editar+criar+deletar) do sócio que conectou OAuth em `/conectar-google`.
 
-| Tool | O que entrega | Como acessar |
+| Tool | O que faz | Como acessar |
 |---|---|---|
-| 📂 **Drive busca** | Arquivos do Drive (Docs, Sheets, PDFs, etc) com link clicável + dono + data de modificação | `bash scripts/buscar-drive.sh "<query>" [pageSize]` |
+| 📂 **Drive busca** | Lista arquivos do Drive por nome+conteúdo (Docs, Sheets, PDFs, Pastas) com link clicável + dono + data | `bash scripts/buscar-drive.sh "<query>" [pageSize]` |
+| 📖 **Drive ler** | Lê conteúdo: Doc vira texto, Sheet vira tabela markdown (com letras de coluna A/B/C), PDF devolve metadata+link | `bash scripts/ler-drive.sh <fileId> [aba\|abas] [range]` |
+| ✏️ **Drive editar** | Edita planilha: célula, range ou append. **EXIGE confirmação humana NO CHAT antes** (ver AGENTS.md → E3) | `bash scripts/editar-drive.sh <op> <fileId> <aba> <args...>` |
 
-**Quando usar `buscar-drive.sh`:**
-- Sócio pede "encontra o arquivo da copy do Elo", "procura o pitch do Pedro", "lista os contratos de 2026", "tem algum doc sobre X no Drive?"
-- Verbo + objeto que sugere arquivo digital
+**Exemplos práticos:**
 
-**Quando NÃO usar:**
-- Pedido criativo (montar copy, parecer, etc) — vai pro pipeline criativo normal
-- Pergunta factual sobre produto/sistema — usa Cérebro
-- Pedido de agenda — vai pra `agenda-do-socio.sh` quando estiver implementado (Fase 3)
+```bash
+# Buscar arquivo
+bash scripts/buscar-drive.sh "copy do Elo"
 
-**Se Drive não estiver conectado:** o script retorna mensagem honesta tipo "GAP: Google nao conectado". Nesse caso, dizer ao sócio: "Drive ainda não está conectado pra você. Acesse `http://localhost:3737/conectar-google` pra autorizar."
+# Listar abas de uma planilha
+bash scripts/ler-drive.sh 1AbCxyz... abas
 
-**Escopo atual:** read-only (`drive.readonly`). Editar arquivo virá em Fase 4 com confirmação humana.
+# Ler aba específica e range
+bash scripts/ler-drive.sh 1AbCxyz... "Página1" "A1:F50"
+
+# Ler arquivo (auto-detecta tipo Doc/Sheet/PDF)
+bash scripts/ler-drive.sh 1AbCxyz...
+
+# Editar célula B7 (após confirmação do sócio no chat)
+bash scripts/editar-drive.sh celula 1AbCxyz... "Página1" "B7" "arquivo encontrado"
+
+# Editar range A1:B2 com matriz de valores
+bash scripts/editar-drive.sh range 1AbCxyz... "Página1" "A1:B2" '[["x","y"],["a","b"]]'
+
+# Adicionar nova linha ao final
+bash scripts/editar-drive.sh append 1AbCxyz... "Página1" '[["nova linha","col2","col3"]]'
+```
+
+**Fluxo padrão de edição (NUNCA pular):**
+1. `buscar-drive` → acha o arquivo
+2. `ler-drive` → confirma layout (aba, coluna, valor atual)
+3. **MOSTRA PLANO + PEDE "sim/não" no chat**
+4. Só após "sim" explícito → `editar-drive`
+
+**Se Drive não estiver conectado:** scripts retornam "GAP: Google nao conectado". Nesse caso, dizer ao sócio: "Drive ainda não está conectado pra você. Acesse `http://localhost:3737/conectar-google` pra autorizar."
+
+**Escopo atual:** completo (`drive` ler+editar+criar+deletar) — confirmação humana fica NO CHAT, não no consentimento OAuth.
+
+**Não implementado nesta versão:**
+- Editar Doc (texto formatado) — só planilha
+- Parser de texto de PDF — devolve metadata + link
+- Office bruto (Excel `.xlsx`, Word `.docx`) — devolve metadata + link, sem leitor estruturado
+- Calendar (Fase 3 + Fase 5)
 
 ## Mapeamento produto → cerebro_slug
 
@@ -241,6 +333,8 @@ Quando o sócio pede "encontra arquivo X", "procura no Drive", "busca documento 
 | `POST /api/chat` | Resposta principal. Aceita `plan_id` opcional pra pular consulta de fontes (V2.5). |
 | `GET /api/entregaveis` | Lista entregáveis recentes (V2.7). |
 | `POST /api/drive/buscar` | V2.12 — busca arquivos no Drive do sócio. |
+| `POST /api/drive/ler` | V2.12 Fase 2 — lê conteúdo de Doc/Sheet/PDF. Body: `{fileId, tipo?, aba?, range?}`. |
+| `POST /api/drive/editar` | V2.12 Fase 4 — edita planilha (célula/range/append). Confirmação humana é responsabilidade de quem chama. |
 | `GET /conectar-google` | V2.12 — página de status + botão OAuth. |
 | `GET /api/health` | Checa CLI Claude |
 | `GET /api/info` | Lista skills + scripts disponíveis |

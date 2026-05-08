@@ -37,6 +37,7 @@ const db = require('./lib/db'); // V2.7+V2.11 — persistencia em pinguim.conver
 const { revisarConsolidado } = require('./lib/reviewer'); // V2.6 — revisor pos-pipeline (portugues + clareza)
 const oauthGoogle = require('./lib/oauth-google'); // V2.12 Fase 0 — OAuth Drive + Calendar
 const googleDrive = require('./lib/google-drive'); // V2.12 Fase 1 — busca arquivos no Drive
+const googleDriveContent = require('./lib/google-drive-content'); // V2.12 Fase 2+4 — ler e editar conteudo
 
 const app = express();
 const PORT = 3737;
@@ -897,6 +898,89 @@ app.post('/api/drive/buscar', async (req, res) => {
     res.json({ ok: true, ...r, latencia_ms: dur_ms });
   } catch (e) {
     console.error('[drive-buscar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
+// V2.12 Fase 2 — POST /api/drive/ler
+// Body: { fileId, cliente_id?, tipo?: 'auto'|'doc'|'planilha'|'pdf'|'texto', aba?, range?, limite_linhas? }
+// Resposta varia por tipo:
+//   doc/texto: { texto, tamanho_chars }
+//   planilha:  { abas, aba_lida, valores [[...]], total_linhas, truncado }
+//   pdf:       { base64, tamanho_bytes }
+// ============================================================
+app.post('/api/drive/ler', async (req, res) => {
+  try {
+    const { fileId, cliente_id, tipo = 'auto', aba, range, limite_linhas } = req.body || {};
+    if (!fileId) {
+      return res.status(400).json({ ok: false, error: 'fileId obrigatorio' });
+    }
+    const t0 = Date.now();
+    let r;
+    switch (tipo) {
+      case 'auto':     r = await googleDriveContent.lerAuto({ fileId, cliente_id, aba, range, limite_linhas }); break;
+      case 'doc':      r = await googleDriveContent.lerDoc({ fileId, cliente_id }); break;
+      case 'planilha': r = await googleDriveContent.lerPlanilha({ fileId, cliente_id, aba, range, limite_linhas }); break;
+      case 'pdf':      r = await googleDriveContent.lerPdf({ fileId, cliente_id }); break;
+      case 'texto':    r = await googleDriveContent.lerTextoSimples({ fileId, cliente_id }); break;
+      case 'abas':     r = { abas: await googleDriveContent.listarAbas({ fileId, cliente_id }) }; break;
+      default:         return res.status(400).json({ ok: false, error: `tipo invalido: ${tipo}` });
+    }
+    const dur_ms = Date.now() - t0;
+    console.log(`[drive-ler] ${dur_ms}ms | fileId=${fileId.slice(0, 12)} | tipo=${tipo} | nome="${(r.nome || '').slice(0, 40)}"`);
+    res.json({ ok: true, ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[drive-ler] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
+// V2.12 Fase 4 — POST /api/drive/editar
+// Body: { fileId, cliente_id?, operacao: 'celula'|'range'|'append', aba?, ...args }
+//   operacao=celula:  { celula: 'B7', valor: 'novo' }
+//   operacao=range:   { range: 'A1:C3', valores: [[...]] }
+//   operacao=append:  { valores: [[...]] }
+//
+// IMPORTANTE: confirmacao humana e responsabilidade de QUEM CHAMA (Atendente
+// Pinguim mostra plano + pede 'sim/nao' antes de bater aqui). Esta camada
+// nao tem trava — so executa.
+// ============================================================
+app.post('/api/drive/editar', async (req, res) => {
+  try {
+    const { fileId, cliente_id, operacao, aba, celula, range, valor, valores } = req.body || {};
+    if (!fileId) {
+      return res.status(400).json({ ok: false, error: 'fileId obrigatorio' });
+    }
+    if (!operacao) {
+      return res.status(400).json({ ok: false, error: 'operacao obrigatoria (celula|range|append)' });
+    }
+    const t0 = Date.now();
+    let r;
+    switch (operacao) {
+      case 'celula':
+        if (!celula) return res.status(400).json({ ok: false, error: 'celula obrigatoria' });
+        if (valor === undefined) return res.status(400).json({ ok: false, error: 'valor obrigatorio' });
+        r = await googleDriveContent.editarCelula({ fileId, cliente_id, aba, celula, valor });
+        break;
+      case 'range':
+        if (!range) return res.status(400).json({ ok: false, error: 'range obrigatorio' });
+        if (!Array.isArray(valores)) return res.status(400).json({ ok: false, error: 'valores deve ser matriz [[]]' });
+        r = await googleDriveContent.editarRange({ fileId, cliente_id, aba, range, valores });
+        break;
+      case 'append':
+        if (!Array.isArray(valores)) return res.status(400).json({ ok: false, error: 'valores deve ser matriz [[]]' });
+        r = await googleDriveContent.adicionarLinha({ fileId, cliente_id, aba, valores });
+        break;
+      default:
+        return res.status(400).json({ ok: false, error: `operacao invalida: ${operacao}` });
+    }
+    const dur_ms = Date.now() - t0;
+    console.log(`[drive-editar] ${dur_ms}ms | fileId=${fileId.slice(0, 12)} | op=${operacao} | nome="${(r.nome || '').slice(0, 40)}"`);
+    res.json({ ok: true, ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[drive-editar] erro:', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });

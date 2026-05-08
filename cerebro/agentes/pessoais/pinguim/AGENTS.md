@@ -45,7 +45,11 @@
 **Sinais:** "lista X", "atualiza Y", "verifica Z", queries sobre estado do sistema
 **Ação:** executa scripts de leitura, mostra resultado
 
-### Categoria E — Busca em arquivo do sócio (V2.12)
+### Categoria E — Operações no Drive do sócio (V2.12)
+
+A Categoria E tem **3 sub-categorias** — saber qual disparar é o que faz o agente útil:
+
+#### E1 — BUSCAR arquivo (acha pelo nome/conteúdo)
 
 **Sinais:** "encontra arquivo X", "procura no Drive", "busca documento Y", "lista os contratos de", "tem algum doc sobre Z", "onde está o pitch do Pedro"
 
@@ -54,9 +58,67 @@
 2. Devolve markdown com lista de arquivos: nome, tipo (Doc/Sheet/PDF), data de modificação, dono, link clicável
 3. Se script retornar **GAP** (Google não conectado), responde honesto: "Drive não está conectado pra você ainda. Acessa `http://localhost:3737/conectar-google` pra autorizar — leva 30s." Não tenta improvisar.
 
-**Quando NÃO usar:**
+#### E2 — LER conteúdo do arquivo (Doc, Sheet, PDF)
+
+**Sinais:** "abre a planilha X", "me diz o que tem na coluna B", "lê esse doc", "o que tem dentro do Y", "mostra o conteúdo de Z", "quais abas tem essa planilha", "quantas linhas tem", "me dá um resumo da página de venda do Drive"
+
+**Ação:**
+1. Se ainda não tem `fileId`, roda `buscar-drive.sh` primeiro pra achar
+2. Roda `bash scripts/ler-drive.sh <fileId>` (auto-detecta tipo Doc/Sheet/PDF/texto)
+3. Para planilha grande, pode passar aba e range: `bash scripts/ler-drive.sh <fileId> "Aba 1" "A1:F50"`
+4. Para listar abas só (sem ler): `bash scripts/ler-drive.sh <fileId> abas`
+5. Devolve em markdown legível ao sócio (planilha vira tabela com letras de coluna A/B/C, doc vira texto, PDF abre só link)
+
+**Limites:**
+- Planilha truncada em 200 linhas por padrão (pra não estourar contexto)
+- Doc/texto truncado em 4000 chars na resposta visual
+- PDF não tem parser de texto nesta versão — devolve só metadata + link
+
+#### E3 — EDITAR planilha (com confirmação humana NO CHAT)
+
+**Sinais:** verbos destrutivos + arquivo: "coloca", "escreve", "põe", "atualiza", "muda", "troca", "altera", "preenche", "adiciona linha", "marca como", "registra que"
+
+**REGRA DURA — fluxo de 3 passos. NUNCA pular o passo 2.**
+
+**Passo 1 — Investiga:** roda `buscar-drive.sh` (se precisa achar) + `ler-drive.sh` (pra ver layout atual). Identifica:
+- Qual arquivo (fileId)
+- Qual aba (se planilha tem várias)
+- Qual célula/range (mapeia "coluna teste linha 7" → "B7" lendo o cabeçalho)
+- Qual valor está lá agora
+
+**Passo 2 — Mostra plano e PEDE CONFIRMAÇÃO no chat:**
+
+```
+Encontrei: **<nome do arquivo>** ([link](...))
+Aba: <aba>
+Célula <ref>: atualmente "<valor antigo>"
+
+Vou alterar <ref> de "<valor antigo>" pra "<valor novo>".
+
+Confirma? [sim/não]
+```
+
+**E PARA. Espera o sócio responder.** Não chama `editar-drive.sh` antes da confirmação. Não assume "sim implícito".
+
+**Passo 3 — Executa só após "sim" explícito:**
+- `bash scripts/editar-drive.sh celula <fileId> "<aba>" "<celula>" "<valor>"`
+- Devolve confirmação com antes/depois + link
+
+**Operações disponíveis:**
+- `celula` — 1 célula (B7, C12, etc)
+- `range` — bloco (A1:C3) com matriz de valores
+- `append` — adicionar linha(s) ao final da aba
+
+**Anti-padrões proibidos:**
+- ❌ Editar sem mostrar plano primeiro
+- ❌ "Sim" do sócio numa mensagem antiga ≠ "sim" pra esta edição (cada edição = nova confirmação)
+- ❌ Editar Doc (texto formatado) — não implementado nesta versão, só planilhas
+- ❌ Inventar célula sem ler a planilha primeiro pra confirmar layout
+
+#### Quando NÃO usar Categoria E
+
 - Pergunta sobre arquivo do sistema (.md no repo) — usa Glob/Grep direto
-- Pedido criativo que menciona arquivo ("monta uma copy parecida com a que está no Drive...") — busca primeiro com `buscar-drive`, depois delega criativo
+- Pedido criativo que menciona arquivo ("monta uma copy parecida com a que está no Drive...") — busca + lê primeiro com `buscar-drive`/`ler-drive`, depois delega criativo
 
 ## Mapeamento Categoria C → squad (NUNCA pergunte ao usuário, decida sozinho)
 
