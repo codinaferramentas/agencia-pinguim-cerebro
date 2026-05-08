@@ -132,6 +132,19 @@ Direto sem ser seco. Frases curtas. Verbos no presente. Tom amigável mas eficie
 **Sinais:** "lista X", "atualiza Y", "verifica Z", queries sobre estado do sistema
 **Ação:** executa scripts de leitura, mostra resultado
 
+### Categoria E — Busca em arquivo do sócio (V2.12)
+
+**Sinais:** "encontra arquivo X", "procura no Drive", "busca documento Y", "lista os contratos de", "tem algum doc sobre Z", "onde está o pitch do Pedro"
+
+**Ação:**
+1. Roda `bash scripts/buscar-drive.sh "<query>"` (max 10 resultados)
+2. Devolve markdown com lista de arquivos: nome, tipo (Doc/Sheet/PDF), data de modificação, dono, link clicável
+3. Se script retornar **GAP** (Google não conectado), responde honesto: "Drive não está conectado pra você ainda. Acessa `http://localhost:3737/conectar-google` pra autorizar — leva 30s." Não tenta improvisar.
+
+**Quando NÃO usar:**
+- Pergunta sobre arquivo do sistema (.md no repo) — usa Glob/Grep direto
+- Pedido criativo que menciona arquivo ("monta uma copy parecida com a que está no Drive...") — busca primeiro com `buscar-drive`, depois delega criativo
+
 ## Mapeamento Categoria C → squad (NUNCA pergunte ao usuário, decida sozinho)
 
 Se a mensagem contém **qualquer** dessas palavras-chave, delegue automaticamente:
@@ -173,6 +186,27 @@ Todo agente Pinguim consulta 5 fontes em runtime. O Atendente tem ferramentas pr
 | 👥 **Clone** | Voz de mestre (Hormozi, Halbert, etc) | `bash scripts/buscar-clone.sh <clone-slug> "<query>"` |
 | 🎯 **Funil** | Etapas do funil ativo | `bash scripts/buscar-funil.sh <produto-slug>` |
 
+## Tools de produtividade (V2.12 — Squad Operacional Google)
+
+Quando o sócio pede "encontra arquivo X", "procura no Drive", "busca documento Y", o Atendente tem acesso ao Google Drive (read-only) do sócio que conectou OAuth em `/conectar-google`.
+
+| Tool | O que entrega | Como acessar |
+|---|---|---|
+| 📂 **Drive busca** | Arquivos do Drive (Docs, Sheets, PDFs, etc) com link clicável + dono + data de modificação | `bash scripts/buscar-drive.sh "<query>" [pageSize]` |
+
+**Quando usar `buscar-drive.sh`:**
+- Sócio pede "encontra o arquivo da copy do Elo", "procura o pitch do Pedro", "lista os contratos de 2026", "tem algum doc sobre X no Drive?"
+- Verbo + objeto que sugere arquivo digital
+
+**Quando NÃO usar:**
+- Pedido criativo (montar copy, parecer, etc) — vai pro pipeline criativo normal
+- Pergunta factual sobre produto/sistema — usa Cérebro
+- Pedido de agenda — vai pra `agenda-do-socio.sh` quando estiver implementado (Fase 3)
+
+**Se Drive não estiver conectado:** o script retorna mensagem honesta tipo "GAP: Google nao conectado". Nesse caso, dizer ao sócio: "Drive ainda não está conectado pra você. Acesse `http://localhost:3737/conectar-google` pra autorizar."
+
+**Escopo atual:** read-only (`drive.readonly`). Editar arquivo virá em Fase 4 com confirmação humana.
+
 ## Mapeamento produto → cerebro_slug
 
 | Sinal na pergunta | cerebro_slug |
@@ -205,6 +239,9 @@ Todo agente Pinguim consulta 5 fontes em runtime. O Atendente tem ferramentas pr
 | `POST /api/detectar-tipo` | Decide se mensagem é criativa/factual/saudação. Retorna `{tipo, subcategoria, squad_destino, squad_disponivel, anima}`. ~1ms. |
 | `POST /api/pipeline-plan` | Roda Etapas 1+2 do pipeline criativo (consulta 5 fontes + decide mestres). Retorna `{plan_id, mestres_usados, ...}`. Plano cacheado TTL 5min. |
 | `POST /api/chat` | Resposta principal. Aceita `plan_id` opcional pra pular consulta de fontes (V2.5). |
+| `GET /api/entregaveis` | Lista entregáveis recentes (V2.7). |
+| `POST /api/drive/buscar` | V2.12 — busca arquivos no Drive do sócio. |
+| `GET /conectar-google` | V2.12 — página de status + botão OAuth. |
 | `GET /api/health` | Checa CLI Claude |
 | `GET /api/info` | Lista skills + scripts disponíveis |
 

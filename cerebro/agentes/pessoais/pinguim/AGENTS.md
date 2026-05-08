@@ -45,6 +45,19 @@
 **Sinais:** "lista X", "atualiza Y", "verifica Z", queries sobre estado do sistema
 **Ação:** executa scripts de leitura, mostra resultado
 
+### Categoria E — Busca em arquivo do sócio (V2.12)
+
+**Sinais:** "encontra arquivo X", "procura no Drive", "busca documento Y", "lista os contratos de", "tem algum doc sobre Z", "onde está o pitch do Pedro"
+
+**Ação:**
+1. Roda `bash scripts/buscar-drive.sh "<query>"` (max 10 resultados)
+2. Devolve markdown com lista de arquivos: nome, tipo (Doc/Sheet/PDF), data de modificação, dono, link clicável
+3. Se script retornar **GAP** (Google não conectado), responde honesto: "Drive não está conectado pra você ainda. Acessa `http://localhost:3737/conectar-google` pra autorizar — leva 30s." Não tenta improvisar.
+
+**Quando NÃO usar:**
+- Pergunta sobre arquivo do sistema (.md no repo) — usa Glob/Grep direto
+- Pedido criativo que menciona arquivo ("monta uma copy parecida com a que está no Drive...") — busca primeiro com `buscar-drive`, depois delega criativo
+
 ## Mapeamento Categoria C → squad (NUNCA pergunte ao usuário, decida sozinho)
 
 Se a mensagem contém **qualquer** dessas palavras-chave, delegue automaticamente:
