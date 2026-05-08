@@ -21,10 +21,12 @@ const fs = require('fs');
 function ehPedidoCriativoGrande(message) {
   const m = message.toLowerCase();
 
-  // Verbos de criacao
-  const verbos = /\b(monta|cria|escreve|gera|faz|desenvolve|elabora|produz|me d[aá])\b/i;
+  // Verbos de criacao/analise
+  const verbos = /\b(monta|cria|escreve|gera|faz|desenvolve|elabora|produz|me d[aá]|analisa|avalia|diagnostica|estrutura)\b/i;
   // Objeto criativo (entregavel)
-  const objetos = /\b(copy|p[aá]gina de venda|salesletter|carta de venda|vsl|email\s+(de|pra)|sequ[eê]ncia de email|an[uú]ncio|criativo|headline|hook|gancho|oferta|stack|garantia|faq|hist[oó]ria|pitch|roteiro)\b/i;
+  // Squad copy: copy/pagina/VSL/email/anuncio/headline/hook/oferta/etc
+  // Squad advisory-board: conselho/dilema/decisao/cenario/parecer/analise estrategica
+  const objetos = /\b(copy|p[aá]gina de venda|salesletter|carta de venda|vsl|email\s+(de|pra)|sequ[eê]ncia de email|an[uú]ncio|criativo|headline|hook|gancho|oferta|stack|garantia|faq|hist[oó]ria|pitch|roteiro|conselho|dilema|decis[aã]o|cen[aá]rio|parecer|an[aá]lise|veredito|estrat[eé]gia|aposta)\b/i;
 
   return verbos.test(m) && objetos.test(m);
 }
@@ -255,9 +257,11 @@ function normalizarSlugBloco(texto) {
 // ============================================================
 
 // Lista de squads com mestres populados em pinguim.agentes.
-// Hoje so 'copy' (8 mestres + Copy Chief). Quando popular outra squad, adicionar
-// aqui. V3 vira coluna pinguim.squads.populada (auto-detectado).
-const SQUADS_POPULADAS = new Set(['copy']);
+// V3 vira coluna pinguim.squads.populada (auto-detectado).
+// Estado 2026-05-08:
+//   - copy: 8 mestres + Copy Chief
+//   - advisory-board: 4 conselheiros (Dalio/Munger/Naval/Thiel) + Board Chair
+const SQUADS_POPULADAS = new Set(['copy', 'advisory-board']);
 
 // AFINIDADE indexada por squad. Hoje so 'copy'. Cada nova squad populada
 // ganha sua propria entry aqui — copy-paste do template + ajustar slugs.
@@ -307,8 +311,62 @@ const AFINIDADE_POR_SQUAD = {
     'roteiro-video':                 ['jon-benson', 'russell-brunson'],
     'video-de-vendas':               ['jon-benson', 'russell-brunson'],
   },
-  // Quando popular advisory-board:
-  // 'advisory-board': { 'dilema-estrategico': ['munger', 'buffett'], ... },
+  'advisory-board': {
+    // Diagnostico + checklist sao do Board Chair
+    'diagnostico-estrategico':              ['board-chair'],
+    'diagnostico':                          ['board-chair'],
+    'checklist-pre-decisao':                ['board-chair', 'charlie-munger'],
+    'checklist':                            ['board-chair', 'charlie-munger'],
+
+    // Frameworks proprios de cada conselheiro
+    'cenarios-3-otimista-central-pessimista': ['ray-dalio'],
+    'cenarios':                             ['ray-dalio'],
+    'cenario-otimista':                     ['ray-dalio'],
+    'cenario-central':                      ['ray-dalio'],
+    'cenario-pessimista':                   ['ray-dalio'],
+    'all-weather':                          ['ray-dalio'],
+    'principios':                           ['ray-dalio'],
+
+    'inversion-mental-model':               ['charlie-munger'],
+    'inversion':                            ['charlie-munger'],
+    'caminhos-de-falha':                    ['charlie-munger'],
+    'mental-models':                        ['charlie-munger'],
+    'incentivos':                           ['charlie-munger'],
+    'circle-of-competence':                 ['charlie-munger'],
+
+    'monopolio-vs-competicao':              ['peter-thiel'],
+    'monopolio':                            ['peter-thiel'],
+    'tecnologia-proprietaria':              ['peter-thiel'],
+    'network-effects':                      ['peter-thiel'],
+    'economia-de-escala':                   ['peter-thiel'],
+    'branding':                             ['peter-thiel'],
+    'last-mover-advantage':                 ['peter-thiel'],
+
+    'leverage-sem-permissao':               ['naval-ravikant'],
+    'leverage':                             ['naval-ravikant'],
+    'labor-leverage':                       ['naval-ravikant'],
+    'capital-leverage':                     ['naval-ravikant'],
+    'permission-less-leverage':             ['naval-ravikant'],
+    'codigo':                               ['naval-ravikant'],
+    'midia':                                ['naval-ravikant'],
+    'specific-knowledge':                   ['naval-ravikant'],
+
+    // Sintese final: Board Chair consolida apos os 4 opinarem
+    'consolidacao':                         ['board-chair'],
+    'parecer-final':                        ['board-chair'],
+    'veredito':                             ['board-chair'],
+
+    // Blocos da Skill `advisory-completo` (pipeline 5 passos)
+    'cenarios-ray-dalio':                   ['ray-dalio'],
+    'inversion-charlie-munger':             ['charlie-munger'],
+    'monopolio-vs-competicao-peter-thiel':  ['peter-thiel'],
+    'leverage-naval-ravikant':              ['naval-ravikant'],
+    'veredito-board-chair':                 ['board-chair'],
+    'veredito-board-chair-consolidacao':    ['board-chair'],
+  },
+  // Quando popular outras squads:
+  // 'storytelling':   { 'jornada-heroi': ['joseph-campbell'], ... },
+  // 'traffic-masters':{ 'criativo-anuncio': ['pedro-sobral'], ... },  // Pedro Sobral, NAO Pedro Aredes (memoria dedicada)
   // 'finops':         { 'analise-custo-cloud': ['storment', 'quinn'], ... },
   // etc.
 };
@@ -327,6 +385,12 @@ const FOCO_PADRAO_POR_MESTRE = {
   'jon-benson':         'estrutura de VSL classica, call-out + agitacao + solucao',
   'stefan-georgi':      'metodo RMBC — Research Mechanism Belief Close',
   'todd-brown':         'metodo E5 — Big Idea + Promise + Mechanism + Proof + Plan',
+  // Squad advisory-board
+  'ray-dalio':          'cenarios + probabilidades + All Weather, decisao funciona em qualquer regime',
+  'charlie-munger':     'inversion (como falhar com certeza?) + mental models + incentivos',
+  'peter-thiel':        'monopolio vs competicao, 10x nao 10%, Last Mover Advantage',
+  'naval-ravikant':     'leverage permission-less (codigo + midia), specific knowledge, escala sem permissao',
+  'board-chair':        'orquestracao do advisory: diagnostica natureza do dilema + escolhe conselheiros + consolida pareceres',
 };
 
 // Fallback hardcoded indexado por squad. Hoje so 'copy'. Usado quando Skill
@@ -353,6 +417,28 @@ const MESTRES_FALLBACK_POR_SQUAD = {
     blocos: ['STACK-DE-BONUS (5 bonus, total declarado 4-5x preco)', 'OFERTA (preco + parcelamento)', 'GARANTIA (tripla)', 'FAQ-VENDEDORA (5-6 perguntas)'],
     foco: FOCO_PADRAO_POR_MESTRE['alex-hormozi'],
   },
+  ],
+  'advisory-board': [
+    {
+      mestre: 'ray-dalio',
+      blocos: ['CENARIOS (otimista/central/pessimista com probabilidades)', 'ALL-WEATHER (a decisao funciona em qualquer cenario?)'],
+      foco: FOCO_PADRAO_POR_MESTRE['ray-dalio'],
+    },
+    {
+      mestre: 'charlie-munger',
+      blocos: ['INVERSION (como esta decisao falha com certeza?)', 'INCENTIVOS (quem ganha, quem perde, quem decide?)'],
+      foco: FOCO_PADRAO_POR_MESTRE['charlie-munger'],
+    },
+    {
+      mestre: 'peter-thiel',
+      blocos: ['MONOPOLIO-VS-COMPETICAO (essa decisao move pra qual lado?)', 'POSICIONAMENTO (10x diferenciado ou commodity?)'],
+      foco: FOCO_PADRAO_POR_MESTRE['peter-thiel'],
+    },
+    {
+      mestre: 'naval-ravikant',
+      blocos: ['LEVERAGE (essa decisao adiciona codigo/midia/capital ou trabalho linear?)', 'SPECIFIC-KNOWLEDGE (reforca o que so voces fazem?)'],
+      foco: FOCO_PADRAO_POR_MESTRE['naval-ravikant'],
+    },
   ],
 };
 
@@ -543,8 +629,19 @@ function distribuirBlocosPorAfinidade(blocos, mestresValidados, squadSlug = 'cop
 // ============================================================
 
 // Helper: regex unica que decide query de skill da mensagem do usuario.
+// Ordem importa — palavras mais especificas devem aparecer antes.
 function escolherSkillQuery(msg) {
   const m = msg.toLowerCase();
+  // === Advisory-board ===
+  // Pedidos genericos -> advisory-completo (4 conselheiros + Board Chair)
+  if (/\b(conselho|dilema|decis[aã]o|estrat[eé]gia|aposta|prop[oó]sito)\b/i.test(m)) return 'advisory-completo';
+  // Pedidos especificos por framework -> Skill do conselheiro especifico
+  if (/\bmonop[oó]lio\b|competi[cç][aã]o|concorrente|diferencia|10x/i.test(m)) return 'monopolio';
+  if (/\binvers[aã]o\b|inversion|como\s+falh|caminho\s+de\s+falha/i.test(m)) return 'inversion';
+  if (/\bcen[aá]rio\b|otimista|pessimista|all weather|probabilidade/i.test(m)) return 'cenarios';
+  if (/\balavancagem\b|leverage|escalar sem|specific knowledge/i.test(m)) return 'leverage';
+
+  // === Copy ===
   if (/\bvsl\b|video.{0,8}venda/.test(m)) return 'vsl';
   if (/\bheadline\b/.test(m)) return 'headline';
   if (/\boferta\b|stack|garantia|grand slam/.test(m)) return 'oferta';
