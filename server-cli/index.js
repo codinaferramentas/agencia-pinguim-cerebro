@@ -388,6 +388,20 @@ app.post('/api/chat', async (req, res) => {
       prompt = `--- HISTORICO ---\n${historico}\n--- FIM DO HISTORICO ---\n\nUsuario: ${message}`;
     }
 
+    // V2.12 Fix 2 — injeta drive_contexto se há arquivos recém-manipulados
+    // na thread. Atendente usa pra evitar buscar planilha de novo quando
+    // sócio diz "essa planilha"/"nessa"/"continua". Limite 5 fileIds, 30 dias.
+    try {
+      const driveCtx = await db.lerDriveContexto({ dias: 30, limite: 5 });
+      if (driveCtx.length > 0) {
+        const blocoCtx = db.formatarDriveContextoPraPrompt(driveCtx);
+        prompt = `${blocoCtx}\n\n${prompt}`;
+        console.log(`  [drive-contexto] injetou ${driveCtx.length} arquivo(s) recente(s) no prompt`);
+      }
+    } catch (e) {
+      console.warn(`  [drive-contexto] erro lendo contexto (nao bloqueante): ${e.message}`);
+    }
+
     console.log(`[${new Date().toISOString()}] thread=${thread_id} pergunta: ${message.slice(0, 80)}${plan_id ? ` (plan_id=${plan_id})` : ''}`);
 
     // ============================================================
@@ -895,6 +909,12 @@ app.post('/api/drive/buscar', async (req, res) => {
     const r = await googleDrive.buscarArquivos({ query, cliente_id, pageSize });
     const dur_ms = Date.now() - t0;
     console.log(`[drive-buscar] ${dur_ms}ms | query="${query.slice(0, 60)}" | retornou=${r.total_retornado}`);
+    // V2.12 Fix 2 — registra TOP-1 do resultado como contexto Drive
+    // (busca sem hit não cria contexto). Não bloqueia a resposta.
+    if (r.arquivos && r.arquivos[0]) {
+      const top = r.arquivos[0];
+      db.registrarOpDrive({ cliente_id, fileId: top.id, nome: top.nome, link: top.link, op: 'buscar' }).catch(()=>{});
+    }
     res.json({ ok: true, ...r, latencia_ms: dur_ms });
   } catch (e) {
     console.error('[drive-buscar] erro:', e.message);
@@ -924,11 +944,21 @@ app.post('/api/drive/ler', async (req, res) => {
       case 'planilha': r = await googleDriveContent.lerPlanilha({ fileId, cliente_id, aba, range, limite_linhas }); break;
       case 'pdf':      r = await googleDriveContent.lerPdf({ fileId, cliente_id }); break;
       case 'texto':    r = await googleDriveContent.lerTextoSimples({ fileId, cliente_id }); break;
-      case 'abas':     r = { abas: await googleDriveContent.listarAbas({ fileId, cliente_id }) }; break;
+      case 'abas': {
+        // Pega metadata + abas em paralelo pra registrarOpDrive ter nome/link
+        const [meta, abas] = await Promise.all([
+          googleDriveContent.lerAuto({ fileId, cliente_id }).catch(() => ({})),
+          googleDriveContent.listarAbas({ fileId, cliente_id }),
+        ]);
+        r = { nome: meta.nome, link: meta.link, abas };
+        break;
+      }
       default:         return res.status(400).json({ ok: false, error: `tipo invalido: ${tipo}` });
     }
     const dur_ms = Date.now() - t0;
     console.log(`[drive-ler] ${dur_ms}ms | fileId=${fileId.slice(0, 12)} | tipo=${tipo} | nome="${(r.nome || '').slice(0, 40)}"`);
+    // V2.12 Fix 2 — registra leitura como contexto Drive (não bloqueia resposta).
+    db.registrarOpDrive({ cliente_id, fileId, nome: r.nome, link: r.link, aba: r.aba_lida || aba, op: 'ler' }).catch(()=>{});
     res.json({ ok: true, ...r, latencia_ms: dur_ms });
   } catch (e) {
     console.error('[drive-ler] erro:', e.message);
@@ -978,6 +1008,8 @@ app.post('/api/drive/editar', async (req, res) => {
     }
     const dur_ms = Date.now() - t0;
     console.log(`[drive-editar] ${dur_ms}ms | fileId=${fileId.slice(0, 12)} | op=${operacao} | nome="${(r.nome || '').slice(0, 40)}"`);
+    // V2.12 Fix 2 — registra edição como contexto Drive (não bloqueia resposta)
+    db.registrarOpDrive({ cliente_id, fileId, nome: r.nome, link: r.link, aba: r.aba || aba, op: 'editar' }).catch(()=>{});
     res.json({ ok: true, ...r, latencia_ms: dur_ms });
   } catch (e) {
     console.error('[drive-editar] erro:', e.message);

@@ -93,13 +93,17 @@ async function salvarMensagem({ cliente_id = CLIENTE_ID_PADRAO, agente_id = AGEN
 }
 
 async function carregarHistorico({ cliente_id = CLIENTE_ID_PADRAO, agente_id = AGENTE_ID_PINGUIM, limite = 20 }) {
-  // Retorna últimas N mensagens em ordem cronológica (mais antiga primeiro)
+  // Retorna últimas N mensagens em ordem cronológica (mais antiga primeiro).
+  // Filtra papel IN ('humano','chief') pra não vazar mensagens 'sistema'
+  // (V2.12 Fix 2 grava drive_op em mensagens 'sistema' que não devem
+  // aparecer no histórico do CLI).
   const sql = `
     SELECT id, papel, conteudo, criado_em
     FROM pinguim.conversas
     WHERE tenant_id = ${esc(TENANT_ID_PINGUIM)}
       AND cliente_id = ${esc(cliente_id)}
       AND agente_id = ${esc(agente_id)}
+      AND papel IN ('humano', 'chief')
     ORDER BY criado_em DESC
     LIMIT ${parseInt(limite, 10)};
   `;
@@ -214,6 +218,123 @@ async function ultimoEntregavelDoCliente({ cliente_id = CLIENTE_ID_PADRAO, agent
 }
 
 // ============================================================
+// V2.12 Fix 2 — DRIVE_CONTEXTO PERSISTIDO (Princípios 11+12)
+// ============================================================
+// Reusa pinguim.conversas.artefatos JSONB (já existe desde V2.7+V2.11) —
+// não cria tabela paralela (Princípio 11: não inventar 2ª solução).
+// Persistido no banco, não em RAM (Princípio 12: funciona no servidor V3).
+//
+// Convenção do JSONB:
+//   { "drive_op": { "fileId": "...", "nome": "...", "link": "...",
+//                   "aba": "...", "op": "buscar"|"ler"|"editar" } }
+//
+// Estratégia: ao invés de tentar atualizar a última mensagem da thread
+// (que pode estar bloqueada/em escrita ou nem existir ainda), inserimos
+// uma mensagem de papel='sistema' com a operação Drive. Não polui o
+// histórico do agente porque carregarHistorico filtra por papel
+// IN ('humano','chief'). Mas drive_contexto enxerga todas.
+// ============================================================
+
+// Insere uma "mensagem de sistema" registrando a operação Drive.
+// Não aparece no histórico do CLI porque carregarHistorico filtra papel.
+async function registrarOpDrive({
+  cliente_id = CLIENTE_ID_PADRAO,
+  agente_id = AGENTE_ID_PINGUIM,
+  fileId,
+  nome,
+  link = null,
+  aba = null,
+  op, // 'buscar' | 'ler' | 'editar'
+}) {
+  if (!fileId || !op) return null; // busca pode não ter fileId específico — não registra
+  const artefatos = { drive_op: { fileId, nome: nome || null, link, aba, op } };
+  const sql = `
+    INSERT INTO pinguim.conversas (tenant_id, cliente_id, agente_id, papel, conteudo, artefatos)
+    VALUES (
+      ${esc(TENANT_ID_PINGUIM)},
+      ${esc(cliente_id)},
+      ${esc(agente_id)},
+      'sistema',
+      ${esc(`drive_op:${op} ${nome || fileId}`)},
+      ${esc(JSON.stringify(artefatos))}::jsonb
+    )
+    RETURNING id;
+  `;
+  try {
+    const data = await rodarSQL(sql);
+    return Array.isArray(data) && data[0] ? data[0] : null;
+  } catch (e) {
+    console.error('[registrarOpDrive] falhou (nao bloqueante):', e.message);
+    return null;
+  }
+}
+
+// Lê drive_contexto: últimos N fileIds únicos manipulados pelo cliente
+// nos últimos K dias. Mais recente vence (dedupa por fileId, mantém o
+// último uso). Retorna lista pronta pra injetar no prompt.
+async function lerDriveContexto({
+  cliente_id = CLIENTE_ID_PADRAO,
+  agente_id = AGENTE_ID_PINGUIM,
+  dias = 30,
+  limite = 5,
+} = {}) {
+  const sql = `
+    WITH ops AS (
+      SELECT
+        artefatos->'drive_op'->>'fileId' AS file_id,
+        artefatos->'drive_op'->>'nome'   AS nome,
+        artefatos->'drive_op'->>'link'   AS link,
+        artefatos->'drive_op'->>'aba'    AS aba,
+        artefatos->'drive_op'->>'op'     AS op,
+        criado_em
+      FROM pinguim.conversas
+      WHERE tenant_id = ${esc(TENANT_ID_PINGUIM)}
+        AND cliente_id = ${esc(cliente_id)}
+        AND agente_id = ${esc(agente_id)}
+        AND artefatos ? 'drive_op'
+        AND criado_em > NOW() - INTERVAL '${parseInt(dias, 10)} days'
+    ),
+    dedup AS (
+      SELECT DISTINCT ON (file_id) file_id, nome, link, aba, op, criado_em
+      FROM ops
+      WHERE file_id IS NOT NULL
+      ORDER BY file_id, criado_em DESC
+    )
+    SELECT file_id AS "fileId", nome, link, aba, op, criado_em
+    FROM dedup
+    ORDER BY criado_em DESC
+    LIMIT ${parseInt(limite, 10)};
+  `;
+  try {
+    const data = await rodarSQL(sql);
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    console.error('[lerDriveContexto] falhou (nao bloqueante):', e.message);
+    return [];
+  }
+}
+
+// Formata drive_contexto pra texto que o Atendente lê no prompt
+function formatarDriveContextoPraPrompt(contexto) {
+  if (!Array.isArray(contexto) || contexto.length === 0) return '';
+  const linhas = contexto.map((c, i) => {
+    const quando = c.criado_em ? new Date(c.criado_em).toISOString().slice(0, 16).replace('T', ' ') : '?';
+    const aba = c.aba ? ` aba "${c.aba}"` : '';
+    return `${i + 1}. **${c.nome || '(sem nome)'}** — fileId \`${c.fileId}\`${aba} — última op: ${c.op} (${quando})`;
+  });
+  return [
+    '[CONTEXTO DRIVE DESTA CONVERSA]',
+    'Arquivos do Drive recém-manipulados (mais recente primeiro):',
+    ...linhas,
+    '',
+    'Quando o sócio disser "essa planilha"/"nessa planilha"/"o arquivo"/"continua nesse"/"altera mais uma coisa" SEM nomear arquivo:',
+    contexto.length === 1
+      ? '- Use o fileId acima direto (sem rodar buscar-drive de novo).'
+      : `- Se o pedido bate claramente com 1 deles, use direto. Se é ambíguo, pergunte "qual delas? mexemos com ${contexto.slice(0, Math.min(3, contexto.length)).map(c => `"${c.nome || c.fileId.slice(0, 8)}"`).join(' e ')} agora há pouco".`,
+  ].join('\n');
+}
+
+// ============================================================
 // V2.12 — COFRE DE CHAVES (sistema + OAuth por cliente)
 // Chaves de sistema: cliente_id=NULL (ex: GOOGLE_OAUTH_CLIENT_ID,
 // GOOGLE_OAUTH_CLIENT_SECRET). Le com get_chave RPC.
@@ -305,4 +426,8 @@ module.exports = {
   lerChavePorCliente,
   salvarRefreshTokenOAuth,
   revogarOAuthToken,
+  // drive_contexto (V2.12 Fix 2)
+  registrarOpDrive,
+  lerDriveContexto,
+  formatarDriveContextoPraPrompt,
 };

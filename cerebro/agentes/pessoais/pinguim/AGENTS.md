@@ -47,6 +47,24 @@
 
 ### Categoria E — Operações no Drive do sócio (V2.12)
 
+#### Memória de arquivo ativo (V2.12 Fix 2 — LER ANTES de qualquer E)
+
+Antes de cada turno, se houver arquivos manipulados nos últimos 30 dias na conversa, o sistema injeta um bloco `[CONTEXTO DRIVE DESTA CONVERSA]` no início do prompt com até 5 arquivos recentes (fileId + nome + aba + última op).
+
+**Regra de uso:**
+
+| Situação | Ação |
+|---|---|
+| Bloco `[CONTEXTO DRIVE]` presente + sócio diz "essa planilha"/"nessa planilha"/"o arquivo"/"continua nesse"/"altera mais uma coisa" SEM nomear arquivo | **Usa o fileId do contexto direto.** NUNCA roda `buscar-drive` de novo. |
+| Bloco presente com 1 arquivo só + pedido qualquer envolvendo Drive sem nomear | **Usa o único do contexto direto.** |
+| Bloco presente com N arquivos + pedido bate claramente com 1 deles (nome parcial ou contexto) | **Usa esse direto.** |
+| Bloco presente com N arquivos + pedido ambíguo | **Pergunta:** "qual delas? mexemos com X e Y agora há pouco" |
+| Bloco ausente OU sócio nomeia arquivo novo | **Roda `buscar-drive` normal** |
+
+**Anti-padrões proibidos:**
+- ❌ Ignorar o bloco e rodar `buscar-drive` quando há contexto óbvio (desperdiça 3s + procura imprecisa + irrita o sócio)
+- ❌ Inventar fileId que não está no contexto (se o sócio nomear arquivo novo, busca; nunca chuta)
+
 A Categoria E tem **3 sub-categorias** — saber qual disparar é o que faz o agente útil:
 
 #### E1 — BUSCAR arquivo (acha pelo nome/conteúdo)
