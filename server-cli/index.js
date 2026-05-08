@@ -28,6 +28,7 @@ const {
   executarMestres,
   detectarSquad,
   detectarProduto,
+  SQUADS_POPULADAS, // V2.5 Commit 4 — fonte unica da verdade
 } = require('./lib/orquestrador');
 
 const app = express();
@@ -155,11 +156,8 @@ function runClaudeCLI(prompt, opts = {}) {
 // Frontend consulta antes de chamar /api/chat pra decidir se anima.
 // ~1ms (so regex puro, sem CLI nem SQL).
 // ============================================================
-// V2.5 Commit 4 prep: hoje so 'copy' tem mestres populados. Lista exposta aqui
-// pra o detector saber se a squad detectada esta disponivel sem precisar
-// consultar banco a cada turno. Quando popular nova squad, adicionar slug aqui
-// (e Commit 4 vai virar tabela em pinguim.squads).
-const SQUADS_POPULADAS = new Set(['copy']);
+// V2.5 Commit 4: SQUADS_POPULADAS importado do orquestrador (fonte unica).
+// V3 vai virar tabela em pinguim.squads (coluna populada).
 
 app.post('/api/detectar-tipo', (req, res) => {
   const { message } = req.body || {};

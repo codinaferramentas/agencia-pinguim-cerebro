@@ -246,56 +246,76 @@ function normalizarSlugBloco(texto) {
     .replace(/^-|-$/g, '');                 // tira hifen das pontas
 }
 
-// Mapa de afinidade — qual mestre cobre qual TIPO de bloco.
-// Inclusivo (mestre pode aparecer em N blocos), ordem importa pro desempate.
-// Slugs sao kebab-case e batem com saida de normalizarSlugBloco().
-const AFINIDADE_MESTRE_POR_BLOCO = {
-  // Aberturas + fechamentos pessoais — voz humana
-  'above-the-fold':                ['gary-halbert', 'john-carlton'],
-  'headline':                      ['gary-halbert', 'john-carlton'],
-  'sub-headline':                  ['gary-halbert', 'john-carlton'],
-  'opening':                       ['gary-halbert', 'john-carlton'],
-  'cta-repetido':                  ['gary-halbert', 'john-carlton'],
-  'ps':                            ['gary-halbert', 'john-carlton'],
+// ============================================================
+// V2.5 Commit 4 — MULTI-SQUAD READY
+// AFINIDADE_POR_SQUAD substitui AFINIDADE_MESTRE_POR_BLOCO global.
+// Cada squad tem seu mapa proprio. Quando popular advisory-board/finops/
+// storytelling/design, basta adicionar entry aqui (alem dos INSERT no banco).
+// SQUADS_POPULADAS lista quais ja tem mestres prontos — exposto pro index.js.
+// ============================================================
 
-  // Dor + jornada do leitor
-  'identificacao-da-dor-problema': ['gary-halbert', 'eugene-schwartz'],
-  'identificacao-da-dor':          ['gary-halbert', 'eugene-schwartz'],
-  'identificacao-dor':             ['gary-halbert', 'eugene-schwartz'],
-  'apresentacao-do-criador':       ['gary-halbert', 'john-carlton'],
+// Lista de squads com mestres populados em pinguim.agentes.
+// Hoje so 'copy' (8 mestres + Copy Chief). Quando popular outra squad, adicionar
+// aqui. V3 vira coluna pinguim.squads.populada (auto-detectado).
+const SQUADS_POPULADAS = new Set(['copy']);
 
-  // Mecanismo + consciencia + produto
-  'apresentacao-do-mecanismo-unico': ['eugene-schwartz', 'todd-brown', 'stefan-georgi'],
-  'mecanismo-unico':                 ['eugene-schwartz', 'todd-brown', 'stefan-georgi'],
-  'por-que-outras-solucoes-falharam': ['eugene-schwartz', 'gary-bencivenga'],
-  'por-que-outras-falham':            ['eugene-schwartz', 'gary-bencivenga'],
-  'apresentacao-do-produto-metodo':   ['eugene-schwartz', 'russell-brunson'],
-  'apresentacao-do-produto':          ['eugene-schwartz', 'russell-brunson'],
-  'promessa-expandida':               ['eugene-schwartz', 'gary-halbert'],
-  'para-quem-e-pra-quem-nao-e':       ['eugene-schwartz', 'dan-kennedy'],
+// AFINIDADE indexada por squad. Hoje so 'copy'. Cada nova squad populada
+// ganha sua propria entry aqui — copy-paste do template + ajustar slugs.
+const AFINIDADE_POR_SQUAD = {
+  'copy': {
+    // Aberturas + fechamentos pessoais — voz humana
+    'above-the-fold':                ['gary-halbert', 'john-carlton'],
+    'headline':                      ['gary-halbert', 'john-carlton'],
+    'sub-headline':                  ['gary-halbert', 'john-carlton'],
+    'opening':                       ['gary-halbert', 'john-carlton'],
+    'cta-repetido':                  ['gary-halbert', 'john-carlton'],
+    'ps':                            ['gary-halbert', 'john-carlton'],
 
-  // Persuasao + prova + bullets
-  'bullets-de-fascinacao':         ['gary-bencivenga'],
-  'bullets-fascinacao':            ['gary-bencivenga'],
-  'prova-social':                  ['gary-bencivenga'],
-  'prova-social-pesada':           ['gary-bencivenga'],
-  'faq-vendedora':                 ['alex-hormozi', 'gary-bencivenga'],
+    // Dor + jornada do leitor
+    'identificacao-da-dor-problema': ['gary-halbert', 'eugene-schwartz'],
+    'identificacao-da-dor':          ['gary-halbert', 'eugene-schwartz'],
+    'identificacao-dor':             ['gary-halbert', 'eugene-schwartz'],
+    'apresentacao-do-criador':       ['gary-halbert', 'john-carlton'],
 
-  // Oferta + valor + urgencia
-  'stack-de-bonus':                ['alex-hormozi', 'dan-kennedy'],
-  'stack-bonus':                   ['alex-hormozi', 'dan-kennedy'],
-  'oferta':                        ['alex-hormozi', 'dan-kennedy'],
-  'oferta-principal':              ['alex-hormozi', 'dan-kennedy'],
-  'garantia':                      ['alex-hormozi', 'dan-kennedy'],
-  'risk-reversal':                 ['dan-kennedy', 'alex-hormozi'],
+    // Mecanismo + consciencia + produto
+    'apresentacao-do-mecanismo-unico': ['eugene-schwartz', 'todd-brown', 'stefan-georgi'],
+    'mecanismo-unico':                 ['eugene-schwartz', 'todd-brown', 'stefan-georgi'],
+    'por-que-outras-solucoes-falharam': ['eugene-schwartz', 'gary-bencivenga'],
+    'por-que-outras-falham':            ['eugene-schwartz', 'gary-bencivenga'],
+    'apresentacao-do-produto-metodo':   ['eugene-schwartz', 'russell-brunson'],
+    'apresentacao-do-produto':          ['eugene-schwartz', 'russell-brunson'],
+    'promessa-expandida':               ['eugene-schwartz', 'gary-halbert'],
+    'para-quem-e-pra-quem-nao-e':       ['eugene-schwartz', 'dan-kennedy'],
 
-  // VSL + roteiro
-  'vsl':                           ['jon-benson', 'russell-brunson'],
-  'roteiro-video':                 ['jon-benson', 'russell-brunson'],
-  'video-de-vendas':               ['jon-benson', 'russell-brunson'],
+    // Persuasao + prova + bullets
+    'bullets-de-fascinacao':         ['gary-bencivenga'],
+    'bullets-fascinacao':            ['gary-bencivenga'],
+    'prova-social':                  ['gary-bencivenga'],
+    'prova-social-pesada':           ['gary-bencivenga'],
+    'faq-vendedora':                 ['alex-hormozi', 'gary-bencivenga'],
+
+    // Oferta + valor + urgencia
+    'stack-de-bonus':                ['alex-hormozi', 'dan-kennedy'],
+    'stack-bonus':                   ['alex-hormozi', 'dan-kennedy'],
+    'oferta':                        ['alex-hormozi', 'dan-kennedy'],
+    'oferta-principal':              ['alex-hormozi', 'dan-kennedy'],
+    'garantia':                      ['alex-hormozi', 'dan-kennedy'],
+    'risk-reversal':                 ['dan-kennedy', 'alex-hormozi'],
+
+    // VSL + roteiro
+    'vsl':                           ['jon-benson', 'russell-brunson'],
+    'roteiro-video':                 ['jon-benson', 'russell-brunson'],
+    'video-de-vendas':               ['jon-benson', 'russell-brunson'],
+  },
+  // Quando popular advisory-board:
+  // 'advisory-board': { 'dilema-estrategico': ['munger', 'buffett'], ... },
+  // 'finops':         { 'analise-custo-cloud': ['storment', 'quinn'], ... },
+  // etc.
 };
 
 // Foco padrao do mestre quando nao ha bloco-especifico no mapa.
+// Globalizado por mestre (mestre e mestre, nao muda por squad — Hormozi
+// sempre vai ser Hormozi mesmo que entre numa squad finops por engano).
 const FOCO_PADRAO_POR_MESTRE = {
   'gary-halbert':       'opening pessoal, voz primeira pessoa, especificidade brutal, P.S. matador',
   'eugene-schwartz':    'calibrar nivel de consciencia da persona, mecanismo unico nomeavel',
@@ -309,9 +329,10 @@ const FOCO_PADRAO_POR_MESTRE = {
   'todd-brown':         'metodo E5 — Big Idea + Promise + Mechanism + Proof + Plan',
 };
 
-// Lista hardcoded de fallback — usada quando nao da pra ler clones da Skill.
-// Mesma distribuicao que rodava antes da V2.5 (validada em prod).
-const MESTRES_FALLBACK_HARDCODED = [
+// Fallback hardcoded indexado por squad. Hoje so 'copy'. Usado quando Skill
+// nao traz clones validos. Quando outra squad for populada, adicionar entry.
+const MESTRES_FALLBACK_POR_SQUAD = {
+  'copy': [
   {
     mestre: 'gary-halbert',
     blocos: ['ABOVE-THE-FOLD (headline + sub-headline + CTA)', 'IDENTIFICACAO-DOR (quadro vivido da persona)', 'P.S. (recap + ultimo gatilho)'],
@@ -332,7 +353,8 @@ const MESTRES_FALLBACK_HARDCODED = [
     blocos: ['STACK-DE-BONUS (5 bonus, total declarado 4-5x preco)', 'OFERTA (preco + parcelamento)', 'GARANTIA (tripla)', 'FAQ-VENDEDORA (5-6 perguntas)'],
     foco: FOCO_PADRAO_POR_MESTRE['alex-hormozi'],
   },
-];
+  ],
+};
 
 // Acha a Skill principal pelo conteudo bruto que `buscar-skill.sh` retornou.
 // Formato esperado: '## <slug>\n**Nome:** ...\n**Familia:** X | **Formato:** Y | **Score:** N\n...'.
@@ -425,12 +447,19 @@ async function carregarBlocosDaSkill(skillSlug) {
 
 // Filtra clones contra a tabela pinguim.agentes — so devolve os que existem
 // e tem system_prompt populado (mestre operacional).
-async function validarMestresPopulados(slugs) {
+// V2.5 Commit 4: filtra tambem por squad — Hormozi (squad copy) nao vaza
+// pra pipeline de finops/storytelling/etc.
+async function validarMestresPopulados(slugs, squadSlug) {
   if (!Array.isArray(slugs) || slugs.length === 0) return [];
   const lista = slugs.map(s => `'${s.replace(/'/g, "''")}'`).join(',');
+  // SQL com JOIN: so aceita mestre cuja squad bate com a do pipeline.
+  // Se squadSlug nao vier, mantem comportamento antigo (sem filtro de squad).
+  const joinSquad = squadSlug
+    ? `JOIN pinguim.squads s ON s.id = a.squad_id WHERE s.slug = '${squadSlug.replace(/'/g, "''")}' AND a.slug IN (${lista})`
+    : `WHERE a.slug IN (${lista})`;
   try {
     const data = await rodarSQL(
-      `SELECT slug FROM pinguim.agentes WHERE slug IN (${lista}) AND system_prompt IS NOT NULL AND length(system_prompt) > 100;`
+      `SELECT a.slug FROM pinguim.agentes a ${joinSquad} AND a.system_prompt IS NOT NULL AND length(a.system_prompt) > 100;`
     );
     if (!Array.isArray(data)) return [];
     const validados = new Set(data.map(r => r.slug));
@@ -443,13 +472,11 @@ async function validarMestresPopulados(slugs) {
 
 // Distribui blocos da Skill entre mestres validados por afinidade,
 // usando algoritmo "menos carregado".
-// Para cada bloco em ordem da Skill:
-//   - mestres aptos = AFINIDADE[bloco] ∩ mestresValidados
-//   - se vazio: aptos = mestresValidados (fallback generico)
-//   - escolhe o de menor carga atual; empate = ordem do mapa de afinidade
-// Retorna array no formato esperado pelo pipeline:
-//   [{ mestre, blocos: [...nomesOriginais], foco }]
-function distribuirBlocosPorAfinidade(blocos, mestresValidados) {
+// V2.5 Commit 4: aceita squadSlug — le AFINIDADE_POR_SQUAD[squad].
+// Squad sem mapa de afinidade cai pra fallback generico em todos os blocos.
+function distribuirBlocosPorAfinidade(blocos, mestresValidados, squadSlug = 'copy') {
+  const mapaAfinidade = AFINIDADE_POR_SQUAD[squadSlug] || {};
+
   const carga = {};
   mestresValidados.forEach(m => { carga[m] = 0; });
 
@@ -459,7 +486,7 @@ function distribuirBlocosPorAfinidade(blocos, mestresValidados) {
   const blocosFallbackGenerico = [];
 
   for (const bloco of blocos) {
-    const candidatosMapa = AFINIDADE_MESTRE_POR_BLOCO[bloco.slug] || [];
+    const candidatosMapa = mapaAfinidade[bloco.slug] || [];
     let aptos = candidatosMapa.filter(m => mestresValidados.includes(m));
     let usouFallback = false;
 
@@ -531,20 +558,24 @@ function escolherSkillQuery(msg) {
 // ============================================================
 // planejarPipeline — Etapas 1+2: consulta 5 fontes + decide mestres.
 // NAO dispara mestres. Devolve plano completo pra ser executado em separado.
+// V2.5 Commit 4: aceita squad opcional. Se nao vier, detecta da mensagem.
+// Squad nao populada -> retorna ok:false com mensagem honesta (sem CLI).
 // ============================================================
-async function planejarPipeline({ message, log }) {
+async function planejarPipeline({ message, log, squad: squadOverride }) {
   const t0 = Date.now();
-  const squad = detectarSquad(message);
+  const squad = squadOverride || detectarSquad(message);
   const produto_slug = detectarProduto(message);
 
   log(`pipeline criativo: squad=${squad}, produto=${produto_slug || 'nenhum'}`);
 
-  if (squad !== 'copy') {
+  if (!SQUADS_POPULADAS.has(squad)) {
+    const populadasLista = [...SQUADS_POPULADAS].join(', ');
     return {
       ok: false,
-      mensagem: `Squad ${squad} ainda nao foi implementada. Hoje so 'copy' tem mestres populados.`,
+      mensagem: `Squad **${squad}** ainda não populada — hoje só ${populadasLista} tem mestres prontos pra entregar trabalho. Roadmap em fila pra popular essa squad no banco.`,
       squad,
       produto_slug,
+      squad_disponivel: false,
     };
   }
 
@@ -610,18 +641,18 @@ ${fontes.map(f => f.ok
     const clones = await carregarClonesDaSkill(skillPrincipal.slug);
     if (clones.length > 0) {
       log(`Skill recomenda ${clones.length} clones: [${clones.join(', ')}]`);
-      mestresValidados = await validarMestresPopulados(clones);
+      mestresValidados = await validarMestresPopulados(clones, squad);
       mestresIgnorados = clones.filter(c => !mestresValidados.includes(c));
 
       if (mestresValidados.length > 0) {
-        log(`${mestresValidados.length} mestres populados em pinguim.agentes: [${mestresValidados.join(', ')}]${mestresIgnorados.length ? ` (gap: ${mestresIgnorados.join(', ')})` : ''}`);
+        log(`${mestresValidados.length} mestres populados em pinguim.agentes (squad=${squad}): [${mestresValidados.join(', ')}]${mestresIgnorados.length ? ` (gap: ${mestresIgnorados.join(', ')})` : ''}`);
 
         const blocos = await carregarBlocosDaSkill(skillPrincipal.slug);
         blocosTotal = blocos.length;
 
         if (blocos.length > 0) {
-          log(`Skill tem ${blocos.length} blocos. Distribuindo por afinidade...`);
-          const r = distribuirBlocosPorAfinidade(blocos, mestresValidados);
+          log(`Skill tem ${blocos.length} blocos. Distribuindo por afinidade (squad=${squad})...`);
+          const r = distribuirBlocosPorAfinidade(blocos, mestresValidados, squad);
           mestresPorBloco = r.distribuicao;
           blocosFallbackGenerico = r.blocosFallbackGenerico;
           if (mestresPorBloco.length > 0) {
@@ -648,8 +679,19 @@ ${fontes.map(f => f.ok
   }
 
   if (fonteDecisao === 'fallback') {
-    mestresPorBloco = MESTRES_FALLBACK_HARDCODED;
-    log(`fallback ativo: 4 mestres hardcoded [${mestresPorBloco.map(m => m.mestre).join(', ')}]`);
+    mestresPorBloco = MESTRES_FALLBACK_POR_SQUAD[squad] || [];
+    if (mestresPorBloco.length === 0) {
+      // Squad populada mas sem fallback definido — nao deveria acontecer
+      // se SQUADS_POPULADAS e MESTRES_FALLBACK_POR_SQUAD estao em sync.
+      log(`ERRO: squad ${squad} populada mas sem MESTRES_FALLBACK_POR_SQUAD entry`);
+      return {
+        ok: false,
+        mensagem: `Squad ${squad} sem fallback configurado. Atualize MESTRES_FALLBACK_POR_SQUAD em orquestrador.js.`,
+        squad,
+        produto_slug,
+      };
+    }
+    log(`fallback ativo: ${mestresPorBloco.length} mestres hardcoded [${mestresPorBloco.map(m => m.mestre).join(', ')}]`);
   }
 
   return {
@@ -791,10 +833,11 @@ Devolva CADA BLOCO separado por cabeçalho \`### NOME-DO-BLOCO\`. Em markdown.`;
 
 // ============================================================
 // pipelineCriativo — wrapper que preserva contrato externo (V2.4 e antes).
+// V2.5 Commit 4: aceita squad opcional. Default detecta da mensagem.
 // Para chamadas que NAO passam por /api/pipeline-plan + plan_id.
 // ============================================================
-async function pipelineCriativo({ message, log }) {
-  const planResult = await planejarPipeline({ message, log });
+async function pipelineCriativo({ message, log, squad }) {
+  const planResult = await planejarPipeline({ message, log, squad });
   if (!planResult.ok) {
     return {
       ok: false,
@@ -807,12 +850,14 @@ async function pipelineCriativo({ message, log }) {
         mestres_total: 0,
         mestres_usados: [],
         mestres_ignorados: [],
-        fonte_decisao: 'erro',
+        fonte_decisao: planResult.squad_disponivel === false ? 'squad-nao-populada' : 'erro',
         skill_usada: null,
         blocos_total: 0,
         blocos_fallback_generico: [],
         fontes_consultadas: 0,
         fontes_gap: 0,
+        squad: planResult.squad,
+        squad_disponivel: planResult.squad_disponivel ?? null,
       },
     };
   }
@@ -826,4 +871,5 @@ module.exports = {
   pipelineCriativo,
   planejarPipeline,
   executarMestres,
+  SQUADS_POPULADAS, // V2.5 Commit 4 — fonte unica da verdade
 };
