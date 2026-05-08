@@ -38,6 +38,7 @@ const { revisarConsolidado } = require('./lib/reviewer'); // V2.6 — revisor po
 const oauthGoogle = require('./lib/oauth-google'); // V2.12 Fase 0 — OAuth Drive + Calendar
 const googleDrive = require('./lib/google-drive'); // V2.12 Fase 1 — busca arquivos no Drive
 const googleDriveContent = require('./lib/google-drive-content'); // V2.12 Fase 2+4 — ler e editar conteudo
+const googleGmail = require('./lib/google-gmail'); // V2.13 — listar/ler/responder/modificar Gmail
 
 const app = express();
 const PORT = 3737;
@@ -142,11 +143,19 @@ function recuperarEntregavel(id) {
 // ============================================================
 function runClaudeCLI(prompt, opts = {}) {
   return new Promise((resolve, reject) => {
+    // V2.13 — se opts.onChunk veio, usa --output-format stream-json
+    // + --include-partial-messages pra streaming real (CLI emite NDJSON
+    // com mensagens incrementais). Sem onChunk, mantém output 'text'
+    // (mais leve, sem parser).
+    const wantStream = typeof opts.onChunk === 'function';
     const args = [
       '-p',
-      '--output-format', 'text',
+      '--output-format', wantStream ? 'stream-json' : 'text',
       '--allowedTools', 'Bash,Read,Glob,Grep',
     ];
+    if (wantStream) {
+      args.push('--include-partial-messages', '--verbose');
+    }
     if (opts.model) args.push('--model', opts.model);
 
     const env = { ...process.env };
@@ -171,11 +180,53 @@ function runClaudeCLI(prompt, opts = {}) {
 
     let stdout = '';
     let stderr = '';
+    let textoFinal = ''; // V2.13: acumulado de chunks de texto (modo stream-json)
+    let bufferLine = ''; // V2.13: buffer de linha NDJSON incompleta
 
     proc.stdin.write(prompt);
     proc.stdin.end();
 
-    proc.stdout.on('data', (data) => { stdout += data.toString(); });
+    proc.stdout.on('data', (data) => {
+      const chunk = data.toString();
+      stdout += chunk;
+
+      if (!wantStream) return; // modo texto puro, nada mais a fazer
+
+      // V2.13 — modo stream-json: parser NDJSON.
+      // Cada linha é um JSON. Procura mensagens com text delta pra emitir.
+      bufferLine += chunk;
+      const linhas = bufferLine.split('\n');
+      bufferLine = linhas.pop(); // última pode estar incompleta
+
+      for (const linha of linhas) {
+        const t = linha.trim();
+        if (!t) continue;
+        let ev;
+        try { ev = JSON.parse(t); } catch { continue; }
+        // Pra streaming partial (--include-partial-messages), o que importa
+        // são eventos de DELTA — texto incremental. Ignoramos a mensagem
+        // 'assistant' final (ev.type === 'assistant') porque ela traz o
+        // texto INTEIRO de novo, e somar duplica.
+        let textoChunk = null;
+        if (ev.event && ev.event.delta && typeof ev.event.delta.text === 'string') {
+          textoChunk = ev.event.delta.text;
+        } else if (ev.delta && typeof ev.delta.text === 'string') {
+          textoChunk = ev.delta.text;
+        } else if (ev.type === 'assistant' && ev.message && Array.isArray(ev.message.content) && textoFinal.length === 0) {
+          // Fallback: NUNCA recebemos delta E veio 'assistant' final
+          // (CLI sem partial-messages, ou primeira vez sem stream)
+          for (const bloco of ev.message.content) {
+            if (bloco.type === 'text' && bloco.text) {
+              textoChunk = (textoChunk || '') + bloco.text;
+            }
+          }
+        }
+        if (textoChunk) {
+          textoFinal += textoChunk;
+          try { opts.onChunk(textoChunk); } catch (_) {}
+        }
+      }
+    });
     proc.stderr.on('data', (data) => { stderr += data.toString(); });
 
     proc.on('close', (code) => {
@@ -185,7 +236,9 @@ function runClaudeCLI(prompt, opts = {}) {
         return;
       }
       if (code === 0) {
-        resolve(stdout.trim());
+        // Em modo stream-json, retorna o acumulado de chunks de texto.
+        // Em modo texto puro, retorna stdout direto.
+        resolve(wantStream ? (textoFinal.trim() || stdout.trim()) : stdout.trim());
       } else {
         reject(new Error(`claude CLI exit ${code}: ${stderr.slice(-2000)}`));
       }
@@ -702,6 +755,186 @@ app.post('/api/chat', async (req, res) => {
 });
 
 // ============================================================
+// V2.13 — POST /api/chat-stream (SSE)
+// ============================================================
+// Variante de /api/chat que faz STREAMING via Server-Sent Events.
+// Usuario vê resposta aparecer palavra-por-palavra em vez de aguardar
+// 30-40s o turno inteiro. Tempo total NÃO muda — mas a sensação UX é
+// 3-5x mais rápida (vê o agente "trabalhando ao vivo").
+//
+// Cobertura: APENAS caminho normal (Categoria A/B/D/E do Atendente).
+// - Pedido criativo grande (Categoria C) → retorna 409 com instrução
+//   pra frontend cair pro /api/chat antigo (já tem animação Salão)
+// - Pedido de edição V2.11 → idem (re-roda pipeline, não streamavel)
+// - Squad não populada → idem
+//
+// Eventos SSE emitidos:
+//   data: {"type":"start","thread_id":"..."}
+//   data: {"type":"chunk","text":"..."}      (N chunks conforme CLI emite)
+//   data: {"type":"done","content":"...","duracao_s":N,"epp":{...}}
+//   data: {"type":"error","error":"..."}
+//
+// EPP (Verifier+Reflection): roda DEPOIS do stream terminar. Se Reflection
+// rodar, emite NOVOS chunks (frontend substitui texto anterior). Pra V1
+// simplificamos: só roda Verifier no caminho stream se ctx.pular_verifier
+// for false, e marca no done. Reflection fica off-stream nesta versao
+// (evita confusao de UI).
+//
+// Funciona idêntico no servidor V3 — SSE é HTTP padrão.
+// ============================================================
+app.post('/api/chat-stream', async (req, res) => {
+  const t0 = Date.now();
+  const { message, thread_id = 'default' } = req.body || {};
+
+  if (!message || !message.trim()) {
+    return res.status(400).json({ error: 'message obrigatorio' });
+  }
+
+  // Triagem antes de abrir o stream — se cair em pipeline/edição, devolve
+  // 409 e o frontend chama o /api/chat normal (que já trata esses casos).
+  const verboDeCriacao = /\b(monta|cria|escreve|gera|faz|desenvolve|elabora|produz|me d[aá]|planeja|estrutura)\b/i.test(message);
+  const ehEdicao = ehPedidoEdicao(message);
+  const ehCriativoGrande = ehPedidoCriativoGrande(message);
+  const squadDetectada = detectarSquad(message);
+  const squadNaoPop = verboDeCriacao && !ehCriativoGrande && !SQUADS_POPULADAS.has(squadDetectada);
+
+  if (ehEdicao || ehCriativoGrande || squadNaoPop) {
+    const motivo = ehEdicao ? 'edicao_v2' : ehCriativoGrande ? 'pipeline_criativo' : 'squad_nao_populada';
+    return res.status(409).json({
+      error: 'caminho nao streamavel',
+      motivo,
+      hint: 'Use POST /api/chat (caminho com pipeline ou edicao)',
+    });
+  }
+
+  // Abre SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('X-Accel-Buffering', 'no'); // desliga buffer em proxies
+  res.flushHeaders();
+
+  const sse = (type, payload) => {
+    try {
+      res.write(`data: ${JSON.stringify({ type, ...payload })}\n\n`);
+    } catch (_) { /* cliente desconectou */ }
+  };
+
+  // Detecta desconexão do cliente — usa res.on('close'), não req.on('close')
+  // (req.close dispara quando o request body acaba de ser lido, NÃO quando
+  // a conn TCP fecha — bug confundiu V1 do /api/chat-stream).
+  let abortado = false;
+  res.on('close', () => {
+    if (!res.writableEnded) {
+      abortado = true;
+      console.log(`  [stream] cliente desconectou`);
+    }
+  });
+
+  try {
+    // Hidrata thread se vazia (mesma lógica do /api/chat)
+    if (!threads[thread_id]) {
+      try {
+        const historico = await db.carregarHistorico({ limite: 20 });
+        threads[thread_id] = historico.map(m => ({
+          role: m.papel === 'humano' ? 'user' : 'assistant',
+          content: m.conteudo,
+        }));
+      } catch (_) {
+        threads[thread_id] = [];
+      }
+    }
+    threads[thread_id].push({ role: 'user', content: message });
+    db.salvarMensagem({ papel: 'humano', conteudo: message })
+      .catch(e => console.warn(`  [persistencia-stream] erro: ${e.message}`));
+
+    // Monta prompt (idêntico ao /api/chat)
+    const recent = threads[thread_id].slice(-20);
+    let prompt;
+    if (recent.length === 1) {
+      prompt = message;
+    } else {
+      const historico = recent.slice(0, -1)
+        .map(m => `${m.role === 'user' ? 'Usuario' : 'Assistente'}: ${m.content}`)
+        .join('\n\n');
+      prompt = `--- HISTORICO ---\n${historico}\n--- FIM DO HISTORICO ---\n\nUsuario: ${message}`;
+    }
+
+    // V2.12 Fix 2 — injeta drive_contexto
+    try {
+      const driveCtx = await db.lerDriveContexto({ dias: 30, limite: 5 });
+      if (driveCtx.length > 0) {
+        const blocoCtx = db.formatarDriveContextoPraPrompt(driveCtx);
+        prompt = `${blocoCtx}\n\n${prompt}`;
+      }
+    } catch (_) { /* não bloqueia */ }
+
+    console.log(`[${new Date().toISOString()}] thread=${thread_id} STREAM pergunta: ${message.slice(0, 80)}`);
+    sse('start', { thread_id });
+
+    // EPP
+    const ctx = detectarPapelEContexto(message);
+
+    // Spawna CLI com onChunk emitindo SSE
+    let resposta = '';
+    resposta = await runClaudeCLI(prompt, {
+      onChunk: (chunk) => {
+        if (abortado) return;
+        sse('chunk', { text: chunk });
+      },
+    });
+    const t_resposta = Date.now() - t0;
+    console.log(`  [stream] primeira resposta em ${(t_resposta/1000).toFixed(1)}s, ${resposta.length} chars`);
+
+    if (abortado) return; // cliente desistiu
+
+    // Verifier (Camada 1 EPP) — roda DEPOIS do stream, sem stream próprio
+    let verifier = null;
+    let verifier_problemas = [];
+    if (!ctx.pular_verifier) {
+      try {
+        verifier = await verificarOutput({
+          briefing: message,
+          output_md: resposta,
+          agente_slug: 'pinguim',
+          agente_role: ctx.papel,
+          expectativa: ctx.expectativa,
+        });
+        if (!verifier.aprovado) verifier_problemas.push(...verifier.problemas);
+        console.log(`  [stream] verifier: ${verifier.aprovado ? 'APROVOU' : 'REPROVOU'} em ${(verifier.latencia_ms/1000).toFixed(1)}s`);
+      } catch (e) {
+        console.warn(`  [stream] verifier falhou (nao bloqueante): ${e.message}`);
+      }
+    }
+    // Reflection NÃO roda no /api/chat-stream V1 (evita re-streaming caótico).
+    // Se Verifier reprovou, marca no done — frontend pode mostrar aviso.
+
+    threads[thread_id].push({ role: 'assistant', content: resposta });
+    db.salvarMensagem({ papel: 'chief', conteudo: resposta })
+      .catch(e => console.warn(`  [persistencia-stream] erro: ${e.message}`));
+
+    const dur = ((Date.now() - t0) / 1000).toFixed(1);
+    console.log(`  -> [stream] resposta final em ${dur}s, ${resposta.length} chars`);
+
+    sse('done', {
+      content: resposta,
+      duracao_s: parseFloat(dur),
+      epp: {
+        verifier_aprovou: verifier ? verifier.aprovado : null,
+        verifier_pulado: ctx.pular_verifier,
+        reflection_round: 0,
+        reflection_pulado_no_stream: !ctx.pular_verifier && verifier && !verifier.aprovado,
+        problemas_encontrados: verifier_problemas,
+      },
+    });
+    res.end();
+  } catch (err) {
+    console.error('[stream] erro:', err);
+    sse('error', { error: err.message || String(err) });
+    res.end();
+  }
+});
+
+// ============================================================
 // GET /api/health — verifica se claude CLI esta disponivel
 // ============================================================
 app.get('/api/health', async (req, res) => {
@@ -1013,6 +1246,100 @@ app.post('/api/drive/editar', async (req, res) => {
     res.json({ ok: true, ...r, latencia_ms: dur_ms });
   } catch (e) {
     console.error('[drive-editar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
+// V2.13 — GMAIL — listar/ler/responder/modificar/perfil
+// ============================================================
+// 5 endpoints. Categoria E expandida no Atendente:
+//   E4: listar (gmail-listar.sh)
+//   E5: ler email específico (gmail-ler.sh)
+//   E6: responder/modificar — EXIGE confirmação no chat (gmail-responder.sh)
+// ============================================================
+
+app.post('/api/gmail/listar', async (req, res) => {
+  try {
+    const { query = 'in:inbox', pageSize = 10, cliente_id } = req.body || {};
+    const t0 = Date.now();
+    const r = await googleGmail.listarEmails({ query, pageSize, cliente_id });
+    const dur_ms = Date.now() - t0;
+    console.log(`[gmail-listar] ${dur_ms}ms | query="${query}" | retornou=${r.total_retornado}/${r.total_estimado}`);
+    res.json({ ok: true, ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[gmail-listar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/gmail/ler', async (req, res) => {
+  try {
+    const { messageId, cliente_id } = req.body || {};
+    if (!messageId) {
+      return res.status(400).json({ ok: false, error: 'messageId obrigatorio' });
+    }
+    const t0 = Date.now();
+    const r = await googleGmail.lerEmail({ messageId, cliente_id });
+    const dur_ms = Date.now() - t0;
+    console.log(`[gmail-ler] ${dur_ms}ms | id=${messageId.slice(0, 12)} | de="${(r.de || '').slice(0, 40)}" | assunto="${(r.assunto || '').slice(0, 40)}"`);
+    res.json({ ok: true, ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[gmail-ler] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// V2.13 — RESPONDER/ENVIAR EMAIL
+// Atendente Pinguim DEVE mostrar plano e pedir confirmação no chat antes
+// de bater aqui. Esta camada apenas executa.
+app.post('/api/gmail/responder', async (req, res) => {
+  try {
+    const { para, assunto, corpo, reply_to_message_id, thread_id, cc, bcc, cliente_id } = req.body || {};
+    if (!para) return res.status(400).json({ ok: false, error: 'para obrigatorio' });
+    if (!assunto) return res.status(400).json({ ok: false, error: 'assunto obrigatorio' });
+    if (!corpo) return res.status(400).json({ ok: false, error: 'corpo obrigatorio' });
+
+    const t0 = Date.now();
+    const r = await googleGmail.enviarEmail({ para, assunto, corpo, reply_to_message_id, thread_id, cc, bcc, cliente_id });
+    const dur_ms = Date.now() - t0;
+    console.log(`[gmail-enviar] ${dur_ms}ms | para="${para.slice(0, 40)}" | assunto="${assunto.slice(0, 40)}" | reply_to=${reply_to_message_id ? reply_to_message_id.slice(0, 12) : 'novo'}`);
+    res.json({ ok: true, ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[gmail-enviar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// V2.13 — MARCAR como lido/starred/arquivar/spam/lixo
+app.post('/api/gmail/modificar', async (req, res) => {
+  try {
+    const { messageId, op, cliente_id } = req.body || {};
+    if (!messageId) return res.status(400).json({ ok: false, error: 'messageId obrigatorio' });
+    if (!op) return res.status(400).json({ ok: false, error: 'op obrigatoria (lido|nao-lido|starred|unstarred|arquivar|spam|lixo)' });
+
+    const t0 = Date.now();
+    const r = await googleGmail.modificarEmail({ messageId, op, cliente_id });
+    const dur_ms = Date.now() - t0;
+    console.log(`[gmail-modificar] ${dur_ms}ms | id=${messageId.slice(0, 12)} | op=${op}`);
+    res.json({ ok: true, ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[gmail-modificar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// V2.13 — PERFIL (qual email do socio)
+app.post('/api/gmail/perfil', async (req, res) => {
+  try {
+    const { cliente_id } = req.body || {};
+    const t0 = Date.now();
+    const r = await googleGmail.perfilEmail({ cliente_id });
+    const dur_ms = Date.now() - t0;
+    console.log(`[gmail-perfil] ${dur_ms}ms | email=${r.email}`);
+    res.json({ ok: true, ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[gmail-perfil] erro:', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });

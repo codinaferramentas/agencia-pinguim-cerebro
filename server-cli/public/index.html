@@ -129,6 +129,13 @@
   .typing span:nth-child(3) { animation-delay: .4s; }
   @keyframes typing { 0%,60%,100% { opacity: .3; } 30% { opacity: 1; } }
 
+  /* V2.13 — cursor piscante durante streaming SSE */
+  .stream-cursor {
+    display: inline-block; color: var(--text2);
+    animation: blink 1s infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
   .input-area {
     padding: 1rem 1.5rem; border-top: 1px solid var(--border);
     background: var(--bg2);
@@ -372,6 +379,101 @@ function setStatus(state, text) {
   statusTxt.textContent = text;
 }
 
+// V2.13 — Cliente SSE do /api/chat-stream.
+// Cria bolha vazia + atualiza com cada chunk. Retorna o `data` final
+// (mesmo formato do /api/chat antigo: {content, duracao_s, epp, ...}).
+// Se servidor responder 409 (caminho não streamável), retorna null pra
+// caller cair no fallback /api/chat.
+async function chamarChatStream({ message, thread_id }) {
+  const resp = await fetch('/api/chat-stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, thread_id }),
+  });
+
+  if (resp.status === 409) {
+    // Caminho não streamável (criativo, edicao, squad nao populada) — fallback
+    return null;
+  }
+  if (!resp.ok) {
+    throw new Error(`stream HTTP ${resp.status}`);
+  }
+  if (!resp.body) {
+    throw new Error('stream sem body');
+  }
+
+  // Cria bolha de assistente vazia que vai sendo preenchida
+  removeTyping();
+  if (emptyEl) emptyEl.remove();
+  const msg = document.createElement('div');
+  msg.className = 'msg assistant';
+  msg.innerHTML = `
+    <div class="avatar">🐧</div>
+    <div>
+      <div class="bubble"><div class="stream-cursor">▍</div></div>
+    </div>
+  `;
+  messagesEl.appendChild(msg);
+  const bubble = msg.querySelector('.bubble');
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  let acumulado = '';
+  let dataFinal = null;
+  let erroFinal = null;
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    // SSE separa eventos por \n\n. Cada evento começa com "data: <json>\n"
+    const partes = buffer.split('\n\n');
+    buffer = partes.pop(); // último pode estar incompleto, guarda
+
+    for (const parte of partes) {
+      const linha = parte.trim();
+      if (!linha.startsWith('data:')) continue;
+      const json = linha.slice(5).trim();
+      if (!json) continue;
+      let ev;
+      try { ev = JSON.parse(json); } catch { continue; }
+
+      if (ev.type === 'chunk' && ev.text) {
+        acumulado += ev.text;
+        // Re-renderiza bolha como markdown a cada chunk
+        bubble.innerHTML = md(acumulado) + '<span class="stream-cursor">▍</span>';
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      } else if (ev.type === 'done') {
+        dataFinal = ev;
+        // Render final sem cursor
+        bubble.innerHTML = md(ev.content || acumulado);
+        // Adiciona meta abaixo da bolha
+        const metaTxt = `${ev.duracao_s || '?'}s · stream${ev.epp?.verifier_aprovou === false ? ' · ⚠ verifier reprovou' : ev.epp?.verifier_aprovou ? ' · ✓ verifier' : ''}`;
+        const metaEl = document.createElement('div');
+        metaEl.className = 'meta';
+        metaEl.textContent = metaTxt;
+        msg.querySelector('div:last-child').appendChild(metaEl);
+      } else if (ev.type === 'error') {
+        erroFinal = new Error(ev.error || 'erro stream');
+      }
+    }
+  }
+
+  if (erroFinal) {
+    bubble.innerHTML = `<em style="color:#ef4444">erro: ${erroFinal.message}</em>`;
+    throw erroFinal;
+  }
+
+  // Marca que UI já foi renderizada — caller pula addMsg pra não duplicar bolha
+  const final = dataFinal || { content: acumulado, _streamSemDone: true };
+  final._streamRendered = true;
+  return final;
+}
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (inFlight) return; // dupla protecao — submit nao dispara enquanto em voo
@@ -449,17 +551,39 @@ form.addEventListener('submit', async (e) => {
 
     // ============================================================
     // FASE D — chama /api/chat (com plan_id se planejou; senao do zero)
+    // V2.13: se NÃO há squad (caminho normal sem pipeline criativo),
+    // tenta /api/chat-stream primeiro pra UX 3-5x mais rápida (resposta
+    // aparece palavra-por-palavra). Se 409 (caminho nao streamavel),
+    // cai pro /api/chat normal.
     // ============================================================
-    if (!squad) addTyping(); // garante typing se nao abriu animacao
+    if (!squad) addTyping();
     const body = { message, thread_id: threadId };
     if (plan_id) body.plan_id = plan_id;
 
-    const r = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await r.json();
+    let data = null;
+
+    if (!squad) {
+      // Tenta streaming primeiro
+      try {
+        const streamData = await chamarChatStream({ message, thread_id: threadId });
+        if (streamData) data = streamData; // sucesso
+      } catch (e) {
+        console.warn('[chat-stream] falhou, fallback /api/chat:', e.message);
+      }
+    }
+
+    if (!data) {
+      // Fallback: /api/chat normal (pipeline criativo, edicao V2.11, ou erro do stream)
+      const r = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      data = await r.json();
+      if (!r.ok) data._erroHttp = true;
+    }
+    // Compatibilidade com codigo abaixo (esperava 'r' ainda) — sintetiza
+    const r = { ok: !data._erroHttp };
 
     removeTyping();
 
@@ -517,7 +641,11 @@ form.addEventListener('submit', async (e) => {
           extras.novaVersao = data.edicao.nova_versao;
         }
       }
-      addMsg('assistant', data.content, metaTxt, extras);
+      // V2.13 — quando veio do /api/chat-stream, bolha + meta já foram
+      // renderizadas durante o streaming. Não duplicar.
+      if (!data._streamRendered) {
+        addMsg('assistant', data.content, metaTxt, extras);
+      }
       setStatus('ok', 'conectado');
     }
   } catch (err) {
