@@ -821,7 +821,7 @@ ${fontes.map(f => f.ok
 // Recebe plano produzido por planejarPipeline().
 // ============================================================
 async function executarMestres({ plano, log }) {
-  const { message, squad, fontes, briefingRico, mestresPorBloco, fonteDecisao,
+  const { message, squad, produto_slug, fontes, briefingRico, mestresPorBloco, fonteDecisao,
           skillUsada, mestresValidados, mestresIgnorados,
           blocosFallbackGenerico, blocosTotal } = plano;
 
@@ -940,6 +940,9 @@ Devolva CADA BLOCO separado por cabeçalho \`### NOME-DO-BLOCO\`. Em markdown.`;
       blocos_fallback_generico: blocosFallbackGenerico,
       fontes_consultadas: fontes.length,
       fontes_gap: gaps.length,
+      // V2.10 — propagados pro template HTML do entregavel decidir header/cor/skill por squad
+      squad,
+      produto_slug,
     },
   };
 }
