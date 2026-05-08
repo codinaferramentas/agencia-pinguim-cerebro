@@ -1,35 +1,52 @@
-# TOOLS.md — Pinguim (Orquestrador)
+# TOOLS.md — Atendente Pinguim
 
-## Ferramentas essenciais (Fase 4 — MVP)
+## Anatomia das 5 fontes vivas (Pinguim canônico)
 
-### 1. Discord API
-- **Pra que serve:** Canal principal — Pinguim VIVE no Discord da equipe
-- **Integracao:** Bot Token com permissoes amplas (ler mensagens, mandar, mencionar agentes)
-- **Credenciais:** Bot token + IDs de todos os canais Pinguim
-- **Custo:** Gratis
+Todo agente Pinguim consulta 5 fontes em runtime. O Atendente tem ferramentas pra cada uma:
 
-### 2. OpenAI API
-- **Pra que serve:** LLM base
-- **Custo:** Pay-per-use
+| Fonte | O que entrega | Como acessar |
+|---|---|---|
+| 🧠 **Cérebro** | Aulas, depoimentos, oferta do produto | `bash scripts/buscar-cerebro.sh <produto-slug> "<query>"` |
+| 👤 **Persona** | Dossiê 11 blocos do comprador | `bash scripts/buscar-persona.sh <produto-slug>` |
+| 🛠 **Skill** | Receita ("como fazer X") | `bash scripts/buscar-skill.sh "<query>"` |
+| 👥 **Clone** | Voz de mestre (Hormozi, Halbert, etc) | `bash scripts/buscar-clone.sh <clone-slug> "<query>"` |
+| 🎯 **Funil** | Etapas do funil ativo | `bash scripts/buscar-funil.sh <produto-slug>` |
 
-### 3. Sistema de acionamento de agentes (interno)
-- **Pra que serve:** Pinguim aciona outros agentes — precisa de protocolo interno
-- **Integracao:** Mensageria interna do OpenClaw
-- **Observacao:** Isso NAO e uma API externa — e a logica interna do OpenClaw
+## Mapeamento produto → cerebro_slug
 
-## Ferramentas ideais (Fase 5+)
+| Sinal na pergunta | cerebro_slug |
+|---|---|
+| Menciona "Elo" | `elo` |
+| Menciona "ProAlt" | `proalt` |
+| Menciona "Lyra" | `lyra` |
+| Menciona "Taurus" | `tuarus` |
+| Menciona "Orion" | `orion` |
+| Menciona "Lo-fi" | `desafio-de-conte-do-lo-fi` |
+| Menciona "Mentoria Express" | `mentoria-express` |
+| Menciona "SPIN Selling" | `spin-selling` |
+| Menciona "Challenger Sale" | `challenger-sale` |
+| Menciona "MEDDIC" | `meddic` |
+| Menciona "Sandler" | `sandler-selling` |
+| Menciona "Tactical Empathy" ou "Voss" | `tactical-empathy-voss` |
 
-### 4. Leitura do cerebro inteiro
-- **Pra que serve:** Pinguim conhece mapa completo do ecossistema — precisa ler qualquer parte
-- **Integracao:** Filesystem direto (servidor onde roda OpenClaw)
-- **Permissao:** Read-only no cerebro
+## Stack de runtime
 
-### 5. Log de acionamentos
-- **Pra que serve:** Registrar quem pediu o que, pra quem direcionou, resultado
-- **Integracao:** Banco de dados simples (SQLite ou mesmo arquivo .md por dia)
+- **LLM:** Claude CLI local (assinatura Max, login OAuth) — token externo zero
+- **Backend:** Express na porta 3737 (`server-cli/index.js`)
+- **Banco:** Supabase, schema `pinguim`
+- **Skills:** `server-cli/.claude/skills/` (symlink pra `cerebro/skills/`)
+- **Scripts shell:** `server-cli/scripts/buscar-*.sh` chamam Edge Functions Supabase
 
-## Observacoes
+## Endpoints expostos pelo server-cli
 
-- Pinguim NAO precisa de Hotmart/Meta/Calendar — ele so ROTEIA, nao executa
-- Mas precisa conhecer quais agentes existem e o que cada um faz
-- Canal unico: **Discord** (nao precisa de Telegram/WhatsApp — e orquestrador interno)
+| Endpoint | Pra quê |
+|---|---|
+| `POST /api/detectar-tipo` | Decide se mensagem é criativa/factual/saudação. Retorna `{tipo, subcategoria, squad_destino, squad_disponivel, anima}`. ~1ms. |
+| `POST /api/pipeline-plan` | Roda Etapas 1+2 do pipeline criativo (consulta 5 fontes + decide mestres). Retorna `{plan_id, mestres_usados, ...}`. Plano cacheado TTL 5min. |
+| `POST /api/chat` | Resposta principal. Aceita `plan_id` opcional pra pular consulta de fontes (V2.5). |
+| `GET /api/health` | Checa CLI Claude |
+| `GET /api/info` | Lista skills + scripts disponíveis |
+
+## Permissões
+
+`server-cli/.claude/settings.json` permite Bash/Read/Glob/Grep. Sem WebFetch/WebSearch (Atendente não precisa).
