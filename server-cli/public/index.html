@@ -356,11 +356,22 @@ form.addEventListener('submit', async (e) => {
             plan_id = plan.plan_id;
             mestresSlugs = plan.mestres_usados;
 
+            // V2.9 — titulo do modal reflete a squad real (advisory/copy/etc)
+            const TITULOS_POR_SQUAD = {
+              'copy':            'Pipeline criativo de copy',
+              'advisory-board':  'Conselho do Advisory Board',
+              'storytelling':    'Pipeline de narrativa',
+              'design':          'Pipeline de direção visual',
+              'traffic-masters': 'Pipeline de tráfego',
+              'finops':          'Análise financeira',
+            };
+            const titulo = TITULOS_POR_SQUAD[tipo.squad_destino] || 'Pipeline criativo';
+
             // FASE C — abre animacao com elenco real e dispara em paralelo
             removeTyping();
             squad = iniciarSquadCopyParalelo({
               pedido: message,
-              titulo: 'Pipeline criativo de copy',
+              titulo,
               subtitulo: message.slice(0, 80) + (message.length > 80 ? '...' : ''),
               mestresSlugs,
             });

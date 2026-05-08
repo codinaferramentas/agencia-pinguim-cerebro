@@ -76,6 +76,23 @@ const MESTRES_DEF = {
   'jon-benson':      { nomeCurto: 'Benson',     papel: 'VSL Pioneer',
     skin: '#e8b48a', shirt: '#0a0a0a', pants: '#1f2937', hair: 'careca',
     acessorio: 'monitor',  accent: '#374151' },
+
+  // V2.9 — Squad advisory-board (5 conselheiros)
+  'ray-dalio':       { nomeCurto: 'Dalio',      papel: 'Cenários · All Weather',
+    skin: '#e8b48a', shirt: '#1e3a5f', pants: '#1a1f2e', hair: '#a08060',
+    acessorio: 'oculos',   accent: '#1e3a5f' },
+  'charlie-munger':  { nomeCurto: 'Munger',     papel: 'Inversion · Mental Models',
+    skin: '#fcd7b6', shirt: '#475569', pants: '#1f2937', hair: '#a8a8a8',
+    acessorio: 'gravata-borboleta', accent: '#475569' },
+  'peter-thiel':     { nomeCurto: 'Thiel',      papel: 'Monopólio · Zero to One',
+    skin: '#fcd7b6', shirt: '#2563eb', pants: '#1f2937', hair: '#3a1f0a',
+    acessorio: 'oculos',   accent: '#2563eb' },
+  'naval-ravikant':  { nomeCurto: 'Naval',      papel: 'Leverage · Specific Knowledge',
+    skin: '#c89070', shirt: '#0a0a0a', pants: '#1f2937', hair: '#1a0f08',
+    acessorio: null,       accent: '#7c3aed' },
+  'board-chair':     { nomeCurto: 'Chair',      papel: 'Orquestrador do Advisory',
+    skin: '#e8b48a', shirt: '#0a0a0a', pants: '#1a1f2e', hair: '#3a1f0a',
+    acessorio: 'gravata-laranja', accent: '#E85C00' },
 };
 
 // Lista default — usada quando backend nao manda mestres (fallback hardcoded V2.4).
@@ -1013,6 +1030,27 @@ function drawHumano(ctx, x, y, agent, state, frame, direction, holdingPaper) {
     ctx.fillRect(-3, -1 + walkBob, 6, 3);
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
     ctx.fillRect(-3, -1 + walkBob, 2, 1);
+  }
+  // V2.9 — acessorios advisory
+  if (agent.acessorio === 'gravata-borboleta' && direction !== 'up') {
+    // Bow-tie — Munger (vibe academica/eruditas)
+    ctx.fillStyle = '#7c1d1d';
+    // Asa esquerda
+    ctx.fillRect(-4, -2 + walkBob, 3, 3);
+    // No central
+    ctx.fillStyle = '#5a1010';
+    ctx.fillRect(-1, -2 + walkBob, 2, 3);
+    // Asa direita
+    ctx.fillStyle = '#7c1d1d';
+    ctx.fillRect(1, -2 + walkBob, 3, 3);
+  }
+  if (agent.acessorio === 'gravata-laranja' && direction !== 'up') {
+    // Gravata laranja Pinguim — Board Chair (mestre da casa)
+    ctx.fillStyle = '#E85C00';
+    ctx.fillRect(-1, -3 + walkBob, 2, 8);
+    // No
+    ctx.fillStyle = '#a83e00';
+    ctx.fillRect(-1, -3 + walkBob, 2, 1);
   }
 
   ctx.restore();

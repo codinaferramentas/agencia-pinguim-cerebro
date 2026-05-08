@@ -821,7 +821,7 @@ ${fontes.map(f => f.ok
 // Recebe plano produzido por planejarPipeline().
 // ============================================================
 async function executarMestres({ plano, log }) {
-  const { message, fontes, briefingRico, mestresPorBloco, fonteDecisao,
+  const { message, squad, fontes, briefingRico, mestresPorBloco, fonteDecisao,
           skillUsada, mestresValidados, mestresIgnorados,
           blocosFallbackGenerico, blocosTotal } = plano;
 
@@ -880,11 +880,23 @@ Devolva CADA BLOCO separado por cabeçalho \`### NOME-DO-BLOCO\`. Em markdown.`;
   const falhas = resultados.filter(r => !r.ok);
 
   const skillAplicada = skillUsada?.slug || 'nao-identificada';
-  let consolidado = `# Copy — ${message.slice(0, 60)}
+  // Header do entregavel reflete a SQUAD real (V2.5 multi-squad).
+  // Hoje: copy -> "Copy — ..."; advisory-board -> "Parecer estrategico — ..."
+  // Quando popular outras squads, adicionar entry aqui.
+  const HEADERS_POR_SQUAD = {
+    'copy':            { titulo: 'Copy',                emoji: '✍' },
+    'advisory-board':  { titulo: 'Parecer estrategico', emoji: '🏛' },
+    'storytelling':    { titulo: 'Narrativa',           emoji: '📖' },
+    'design':          { titulo: 'Direcao visual',      emoji: '🎨' },
+    'traffic-masters': { titulo: 'Estrategia de trafego', emoji: '📈' },
+    'finops':          { titulo: 'Analise financeira',  emoji: '💰' },
+  };
+  const header = HEADERS_POR_SQUAD[squad] || { titulo: 'Entregavel', emoji: '📋' };
+  let consolidado = `# ${header.emoji} ${header.titulo} — ${message.slice(0, 60)}
 
-**Squad:** copy
+**Squad:** ${squad}
 **Skill aplicada:** ${skillAplicada}
-**Decisao de mestres:** ${fonteDecisao}${fonteDecisao === 'fallback' ? ' (4 hardcoded)' : ` (${mestresValidados.length} validados, ${blocosTotal} blocos)`}
+**Decisao de mestres:** ${fonteDecisao}${fonteDecisao === 'fallback' ? ' (fallback hardcoded)' : ` (${mestresValidados.length} validados, ${blocosTotal} blocos)`}
 **Mestres usados:** ${sucessos.map(r => r.mestre).join(', ')}
 **Tempo total dos mestres (paralelo):** ${dur_total_mestres}s
 
