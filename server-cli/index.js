@@ -155,8 +155,16 @@ function runClaudeCLI(prompt, opts = {}) {
       cwd: PROJECT_DIR,
       env,
       shell: true,
-      timeout: opts.timeout || 480_000, // 8 min — entregavel longo (Chief + 4 mestres) leva tempo
+      // V2.6.1 — NAO passar timeout aqui (so mata fork Node, nao subprocess CLI).
+      // SIGKILL real abaixo.
     });
+
+    const timeoutMs = opts.timeout || 480_000; // 8 min — entregavel longo
+    let killed = false;
+    const killTimer = setTimeout(() => {
+      killed = true;
+      try { proc.kill('SIGKILL'); } catch (_) { /* ignore */ }
+    }, timeoutMs);
 
     let stdout = '';
     let stderr = '';
@@ -168,6 +176,11 @@ function runClaudeCLI(prompt, opts = {}) {
     proc.stderr.on('data', (data) => { stderr += data.toString(); });
 
     proc.on('close', (code) => {
+      clearTimeout(killTimer);
+      if (killed) {
+        reject(new Error(`claude CLI KILLED apos ${(timeoutMs/1000)}s (timeout SIGKILL)`));
+        return;
+      }
       if (code === 0) {
         resolve(stdout.trim());
       } else {
@@ -176,6 +189,7 @@ function runClaudeCLI(prompt, opts = {}) {
     });
 
     proc.on('error', (err) => {
+      clearTimeout(killTimer);
       reject(new Error(`Falha ao spawnar claude CLI: ${err.message}`));
     });
   });

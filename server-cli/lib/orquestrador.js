@@ -209,8 +209,16 @@ function runMestreClaudeCLI(systemPrompt, briefing, opts = {}) {
       cwd: opts.cwd || process.cwd(),
       env,
       shell: true,
-      timeout: opts.timeout || 120_000,
+      // V2.6.1 — NAO passar timeout aqui (so mata fork Node, nao subprocess CLI).
+      // SIGKILL real abaixo.
     });
+
+    const timeoutMs = opts.timeout || 120_000;
+    let killed = false;
+    const killTimer = setTimeout(() => {
+      killed = true;
+      try { proc.kill('SIGKILL'); } catch (_) { /* ignore */ }
+    }, timeoutMs);
 
     const fullPrompt = `${systemPrompt}\n\n---\n\n## BRIEFING\n\n${briefing}\n\n---\n\nEscreva o bloco/copy pedida acima, aplicando seu metodo. Devolva apenas o conteudo do bloco em markdown — sem preambulo, sem explicacao do metodo.`;
 
@@ -221,10 +229,18 @@ function runMestreClaudeCLI(systemPrompt, briefing, opts = {}) {
     proc.stdout.on('data', (d) => { stdout += d.toString(); });
     proc.stderr.on('data', (d) => { stderr += d.toString(); });
     proc.on('close', (code) => {
+      clearTimeout(killTimer);
+      if (killed) {
+        reject(new Error(`mestre KILLED apos ${(timeoutMs/1000)}s (timeout SIGKILL)`));
+        return;
+      }
       if (code === 0) resolve(stdout.trim());
       else reject(new Error(`mestre exit ${code}: ${stderr.slice(-300)}`));
     });
-    proc.on('error', (err) => reject(err));
+    proc.on('error', (err) => {
+      clearTimeout(killTimer);
+      reject(err);
+    });
   });
 }
 

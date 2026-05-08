@@ -50,8 +50,16 @@ function runClaudeAnalise(prompt, opts = {}) {
         CLAUDE_CODE_ENTRYPOINT: '',
       },
       shell: true,
-      timeout: opts.timeout || 30_000,
+      // V2.6.1 — NAO passar timeout aqui (so mata fork Node, nao subprocess CLI).
+      // SIGKILL real abaixo.
     });
+
+    const timeoutMs = opts.timeout || 30_000;
+    let killed = false;
+    const killTimer = setTimeout(() => {
+      killed = true;
+      try { proc.kill('SIGKILL'); } catch (_) { /* ignore */ }
+    }, timeoutMs);
 
     let stdout = '';
     let stderr = '';
@@ -63,11 +71,19 @@ function runClaudeAnalise(prompt, opts = {}) {
     proc.stderr.on('data', (d) => { stderr += d.toString(); });
 
     proc.on('close', (code) => {
+      clearTimeout(killTimer);
+      if (killed) {
+        reject(new Error(`verifier KILLED apos ${(timeoutMs/1000)}s`));
+        return;
+      }
       if (code === 0) resolve(stdout.trim());
       else reject(new Error(`verifier exit ${code}: ${stderr.slice(-500)}`));
     });
 
-    proc.on('error', (err) => reject(new Error(`spawn verifier: ${err.message}`)));
+    proc.on('error', (err) => {
+      clearTimeout(killTimer);
+      reject(new Error(`spawn verifier: ${err.message}`));
+    });
   });
 }
 

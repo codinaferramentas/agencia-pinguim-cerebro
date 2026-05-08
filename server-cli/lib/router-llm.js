@@ -35,8 +35,15 @@ function runHaiku(prompt, opts = {}) {
       cwd: opts.cwd || process.cwd(),
       env: { ...process.env, CLAUDECODE: '', CLAUDE_CODE_ENTRYPOINT: '' },
       shell: true,
-      timeout: opts.timeout || TIMEOUT_MS,
+      // V2.6.1 — NAO passar timeout aqui. SIGKILL real abaixo.
     });
+
+    const timeoutMs = opts.timeout || TIMEOUT_MS;
+    let killed = false;
+    const killTimer = setTimeout(() => {
+      killed = true;
+      try { proc.kill('SIGKILL'); } catch (_) { /* ignore */ }
+    }, timeoutMs);
 
     let stdout = '';
     let stderr = '';
@@ -45,10 +52,18 @@ function runHaiku(prompt, opts = {}) {
     proc.stdout.on('data', (d) => { stdout += d.toString(); });
     proc.stderr.on('data', (d) => { stderr += d.toString(); });
     proc.on('close', (code) => {
+      clearTimeout(killTimer);
+      if (killed) {
+        reject(new Error(`router-llm KILLED apos ${(timeoutMs/1000)}s`));
+        return;
+      }
       if (code === 0) resolve(stdout.trim());
       else reject(new Error(`router-llm exit ${code}: ${stderr.slice(-400)}`));
     });
-    proc.on('error', (err) => reject(new Error(`spawn router-llm: ${err.message}`)));
+    proc.on('error', (err) => {
+      clearTimeout(killTimer);
+      reject(new Error(`spawn router-llm: ${err.message}`));
+    });
   });
 }
 

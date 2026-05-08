@@ -1,5 +1,5 @@
 // ============================================================
-// reviewer.js — V2.6 (Reviewer pós-pipeline)
+// reviewer.js — V2.6.1 hotfix (Reviewer pós-pipeline)
 // Camada de revisão crítica que roda DEPOIS do consolidado dos mestres,
 // ANTES de salvar entregavel + retornar ao usuário.
 //
@@ -7,45 +7,67 @@
 // NÃO substitui Verifier de adequação (esse é EPP Camada 1 do CLI normal).
 // É revisão de polish editorial — leitor crítico final.
 //
-// Modelo: Sonnet (qualidade > Haiku pra detectar nuance de PT-BR).
-// Latência: ~10-20s. Custo: zero externo (Claude Max do sócio).
+// V2.6.1 (2026-05-08 noite final, hotfix do bug que travou pipeline 10min):
+// - Modelo: HAIKU (era Sonnet — Sonnet sem flag virou pesado e travou)
+// - Timeout REAL com SIGKILL no subprocess (era só timeout do fork Node, CLI ficava zumbi)
+// - --allowedTools "" explicito (sem ferramentas — spawn mais leve)
+// - REVIEWER_MAX_CHARS reduzido pra 15k (era 60k — Haiku aguenta, reviewer útil)
+// - Acima de 15k chars, REVIEWER PULA (entregável grande confia nos mestres)
+//
+// Latência alvo: 5-15s. Custo: zero externo (Claude Max do sócio).
 // ============================================================
 
 const { spawn } = require('child_process');
 
 // ============================================================
-// Limites do reviewer
+// Limites do reviewer (V2.6.1)
 // ============================================================
-const REVIEWER_TIMEOUT_MS = 90_000; // 90s
+const REVIEWER_TIMEOUT_MS = 60_000;  // 60s (antes 90s) — Haiku é rápido
 const REVIEWER_MIN_CHARS = 1500;     // se menor, pula reviewer (overhead nao compensa)
-const REVIEWER_MAX_CHARS = 60_000;   // se maior, trunca pra evitar timeout
+const REVIEWER_MAX_CHARS = 15_000;   // se maior, PULA reviewer (era 60k — Sonnet travava)
 
 // ============================================================
-// Spawna Claude CLI sem ferramentas usando modelo padrao (Sonnet).
-// Reviewer le, devolve revisao. Nao toca em arquivo, nao roda script.
+// V2.6.1 — Spawna Claude Haiku sem ferramentas. Reviewer só lê e devolve JSON.
+// FIX CRÍTICO: timeout REAL via SIGKILL no subprocess (era só timeout do
+// fork Node, CLI ficava zumbi e travava /api/chat por 8min).
 // ============================================================
 function runClaudeRevisor(prompt, opts = {}) {
   return new Promise((resolve, reject) => {
     const args = [
       '-p',
       '--output-format', 'text',
-      // Sem --model = padrao da CLI (Sonnet). Pra qualidade editorial.
-      // Sem --allowedTools = sem ferramentas (nao precisa).
+      '--model', opts.model || 'haiku',  // V2.6.1 — Haiku (era padrao Sonnet/Opus, travava)
+      // V2.6.1 — sem --allowedTools (omitir = nenhuma tool. Passar string vazia
+      // da erro "argument missing"). Verificador.js ja usa essa convencao.
     ];
 
     const env = { ...process.env };
     delete env.CLAUDECODE;
     delete env.CLAUDE_CODE_ENTRYPOINT;
 
+    const timeoutMs = opts.timeout || REVIEWER_TIMEOUT_MS;
+
     const proc = spawn('claude', args, {
       cwd: opts.cwd || process.cwd(),
       env,
       shell: true,
-      timeout: opts.timeout || REVIEWER_TIMEOUT_MS,
+      // NAO passa timeout aqui — vamos controlar com SIGKILL explicito abaixo
     });
 
     let stdout = '';
     let stderr = '';
+    let killed = false;
+
+    // V2.6.1 FIX CRITICO — timeout real que mata o subprocess
+    const killTimer = setTimeout(() => {
+      killed = true;
+      try {
+        // SIGKILL forca encerramento (SIGTERM podia ser ignorado pela CLI)
+        proc.kill('SIGKILL');
+        // Em Windows, kill com signal nao funciona como em Unix.
+        // proc.kill() sozinho ja faz tree-kill via shell:true.
+      } catch (e) { /* ignore */ }
+    }, timeoutMs);
 
     proc.stdin.write(prompt);
     proc.stdin.end();
@@ -54,11 +76,19 @@ function runClaudeRevisor(prompt, opts = {}) {
     proc.stderr.on('data', (d) => { stderr += d.toString(); });
 
     proc.on('close', (code) => {
+      clearTimeout(killTimer);
+      if (killed) {
+        reject(new Error(`reviewer KILLED apos ${(timeoutMs/1000)}s (timeout) — entregando original`));
+        return;
+      }
       if (code === 0) resolve(stdout.trim());
-      else reject(new Error(`reviewer exit ${code}: ${stderr.slice(-500)}`));
+      else reject(new Error(`reviewer exit ${code}: ${stderr.slice(-300)}`));
     });
 
-    proc.on('error', (err) => reject(new Error(`spawn reviewer: ${err.message}`)));
+    proc.on('error', (err) => {
+      clearTimeout(killTimer);
+      reject(new Error(`spawn reviewer: ${err.message}`));
+    });
   });
 }
 
@@ -146,19 +176,27 @@ async function revisarConsolidado(markdown, contexto = {}) {
     };
   }
 
-  // Trunca se muito longo (raro — protege contra timeout)
-  let mdParaRevisar = markdown;
+  // V2.6.1 FIX — entregavel longo PULA reviewer (antes truncava — band-aid).
+  // Mestres top-tier escrevem PT-BR razoavel; revisor agrega valor em pecas
+  // medianas. Acima de 15k chars, confia nos mestres + V2 do usuario corrige
+  // se necessario.
   if (markdown.length > REVIEWER_MAX_CHARS) {
-    mdParaRevisar = markdown.slice(0, REVIEWER_MAX_CHARS) + '\n\n[... truncado para revisão — original maior que 60k chars]';
+    return {
+      aplicado: false,
+      output_final: markdown,
+      problemas: [],
+      latencia_ms: 0,
+      motivo: 'pulado-longo',
+    };
   }
 
   try {
-    const prompt = montarPromptReviewer(mdParaRevisar, contexto);
+    const prompt = montarPromptReviewer(markdown, contexto);
     const raw = await runClaudeRevisor(prompt);
     const parsed = parsearOutputReviewer(raw);
 
     const latencia = Date.now() - t0;
-    if (parsed.aprovado === true || !parsed.output_revisado || parsed.output_revisado === mdParaRevisar) {
+    if (parsed.aprovado === true || !parsed.output_revisado || parsed.output_revisado === markdown) {
       return {
         aplicado: false,
         output_final: markdown, // original
