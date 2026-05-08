@@ -35,6 +35,8 @@ const { classificarMensagem } = require('./lib/router-llm'); // V2.9 — LLM rou
 const { renderEntregavel } = require('./lib/template-html'); // V2.10 — entregavel HTML
 const db = require('./lib/db'); // V2.7+V2.11 — persistencia em pinguim.conversas + pinguim.entregaveis
 const { revisarConsolidado } = require('./lib/reviewer'); // V2.6 — revisor pos-pipeline (portugues + clareza)
+const oauthGoogle = require('./lib/oauth-google'); // V2.12 Fase 0 — OAuth Drive + Calendar
+const googleDrive = require('./lib/google-drive'); // V2.12 Fase 1 — busca arquivos no Drive
 
 const app = express();
 const PORT = 3737;
@@ -778,6 +780,181 @@ app.get('/api/entregaveis', async (req, res) => {
     res.json({ entregaveis: lista });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// ============================================================
+// V2.12 Fase 0 — OAuth Google (Drive + Calendar read-only)
+// Tres rotas:
+//   GET /conectar-google           — pagina HTML de status + botao
+//   GET /oauth/google/start        — redirect pro Google authorize
+//   GET /oauth/google/callback     — recebe code, troca por tokens, grava cofre
+// ============================================================
+
+const OAUTH_REDIRECT_URI = `http://localhost:${PORT}/oauth/google/callback`;
+
+app.get('/conectar-google', async (req, res) => {
+  // Verifica estado: refresh_token ja existe pra esse socio?
+  let conectado = false;
+  let escopo = null;
+  let observacoes = null;
+  try {
+    const sql = `SELECT escopo, observacoes, ativo, ultima_rotacao FROM pinguim.cofre_chaves WHERE nome='GOOGLE_OAUTH_REFRESH' AND cliente_id='${db.CLIENTE_ID_PADRAO}'::uuid LIMIT 1;`;
+    const r = await db.rodarSQL(sql);
+    if (Array.isArray(r) && r[0] && r[0].ativo) {
+      conectado = true;
+      escopo = r[0].escopo;
+      observacoes = r[0].observacoes;
+    }
+  } catch (e) {
+    console.warn('  [oauth] erro consultando estado:', e.message);
+  }
+
+  // HTML simples — paleta dark Vercel + laranja Pinguim (nao usa template-html que e pra entregaveis)
+  res.type('html').send(`<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>Conectar Google — Pinguim 🐧</title>
+<style>
+  body{background:#0a0a0f;color:#f1f5f9;font-family:'Inter',-apple-system,sans-serif;
+       display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:2rem;line-height:1.6}
+  .card{background:#111118;border:1px solid #2a2a3e;border-radius:12px;padding:2.5rem;max-width:560px;width:100%}
+  h1{font-size:1.4rem;margin:0 0 .5rem;font-weight:700}
+  h1 span{color:#E85C00}
+  .status{display:inline-flex;align-items:center;gap:.5rem;padding:.4rem .85rem;border-radius:999px;font-size:.8rem;font-weight:600;margin-bottom:1.5rem}
+  .status.on{background:rgba(16,185,129,.12);color:#10b981;border:1px solid rgba(16,185,129,.3)}
+  .status.off{background:rgba(148,163,184,.1);color:#94a3b8;border:1px solid rgba(148,163,184,.25)}
+  p{color:#94a3b8;font-size:.95rem;margin:.75rem 0}
+  ul{color:#94a3b8;font-size:.9rem;margin:.5rem 0 1.5rem 1.5rem}
+  ul li{margin:.35rem 0}
+  code{background:#1a1a28;padding:.15rem .4rem;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:.85em;color:#f1f5f9}
+  .btn{display:inline-block;background:#E85C00;color:white;padding:.85rem 1.5rem;border-radius:8px;text-decoration:none;font-weight:600;font-size:.95rem;border:none;cursor:pointer;transition:opacity .15s}
+  .btn:hover{opacity:.9}
+  .btn-link{background:transparent;color:#94a3b8;border:1px solid #2a2a3e;margin-left:.5rem}
+  .btn-link:hover{color:#E85C00;border-color:#E85C00;opacity:1}
+  .info-box{background:#1a1a28;border:1px solid #2a2a3e;border-radius:8px;padding:1rem;margin:1rem 0;font-size:.85rem;color:#94a3b8}
+  .info-box strong{color:#f1f5f9}
+</style></head><body><div class="card">
+  <h1>🐧 Pinguim <span>OS</span> — Conectar Google</h1>
+  ${conectado
+    ? `<div class="status on">● Conectado</div>
+       <p>Sua conta Google está conectada ao Pinguim OS.</p>
+       <div class="info-box">
+         <strong>Escopo concedido:</strong> ${escopo || 'desconhecido'}<br>
+         ${observacoes ? observacoes.replace(/</g,'&lt;') : ''}
+       </div>
+       <p>Pra revogar, vá em <a href="https://myaccount.google.com/permissions" style="color:#E85C00">myaccount.google.com/permissions</a> e remova "Pinguim OS".</p>
+       <a class="btn" href="/oauth/google/start">Reconectar / trocar escopo</a>
+       <a class="btn btn-link" href="/">Voltar pro chat</a>`
+    : `<div class="status off">○ Não conectado</div>
+       <p>Conecte sua conta Google pra que o Atendente Pinguim possa:</p>
+       <ul>
+         <li>🔍 Buscar arquivos no seu Google Drive (read-only)</li>
+         <li>📅 Ler eventos da sua agenda Google Calendar (read-only)</li>
+       </ul>
+       <p style="font-size:.85em">Tudo read-only por enquanto. Edição e criação de eventos virão em fases futuras com confirmação explícita.</p>
+       <div class="info-box">
+         <strong>Pré-requisito:</strong> as chaves <code>GOOGLE_OAUTH_CLIENT_ID</code> e <code>GOOGLE_OAUTH_CLIENT_SECRET</code> precisam estar cadastradas no cofre.
+         Ver instruções em <code>docs/setup-oauth-google.md</code>.
+       </div>
+       <a class="btn" href="/oauth/google/start">Conectar Google</a>
+       <a class="btn btn-link" href="/">Voltar pro chat</a>`}
+</div></body></html>`);
+});
+
+app.get('/oauth/google/start', async (req, res) => {
+  try {
+    const client_id = await db.lerChaveSistema('GOOGLE_OAUTH_CLIENT_ID', 'oauth-start');
+    if (!client_id) {
+      return res.status(500).type('html').send(`<h1>Erro</h1><p>GOOGLE_OAUTH_CLIENT_ID nao cadastrado no cofre. Ver <code>docs/setup-oauth-google.md</code>.</p><a href="/conectar-google">Voltar</a>`);
+    }
+    const url = oauthGoogle.montarUrlAutorizacao({
+      client_id,
+      redirect_uri: OAUTH_REDIRECT_URI,
+      state: 'pinguim-' + Date.now(),
+    });
+    console.log('[oauth] redirecionando pra Google authorize');
+    res.redirect(url);
+  } catch (e) {
+    res.status(500).type('html').send(`<h1>Erro OAuth</h1><pre>${e.message}</pre><a href="/conectar-google">Voltar</a>`);
+  }
+});
+
+// ============================================================
+// V2.12 Fase 1 — POST /api/drive/buscar
+// Body: { query, cliente_id?, pageSize? }
+// Resposta: { arquivos: [...], total_retornado, proxima_pagina }
+// Atendente Pinguim chama via bash scripts/buscar-drive.sh "<query>".
+// ============================================================
+app.post('/api/drive/buscar', async (req, res) => {
+  try {
+    const { query, cliente_id, pageSize = 10 } = req.body || {};
+    if (!query || !query.trim()) {
+      return res.status(400).json({ ok: false, error: 'query obrigatoria' });
+    }
+    const t0 = Date.now();
+    const r = await googleDrive.buscarArquivos({ query, cliente_id, pageSize });
+    const dur_ms = Date.now() - t0;
+    console.log(`[drive-buscar] ${dur_ms}ms | query="${query.slice(0, 60)}" | retornou=${r.total_retornado}`);
+    res.json({ ok: true, ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[drive-buscar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/oauth/google/callback', async (req, res) => {
+  const { code, error, error_description } = req.query;
+
+  if (error) {
+    return res.status(400).type('html').send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>OAuth erro</title>
+<style>body{background:#0a0a0f;color:#f1f5f9;font-family:sans-serif;padding:3rem;text-align:center}h1{color:#ef4444}a{color:#E85C00}</style></head>
+<body><h1>OAuth erro</h1><p><strong>${error}</strong></p><p>${error_description || ''}</p><a href="/conectar-google">Voltar</a></body></html>`);
+  }
+  if (!code) {
+    return res.status(400).type('html').send(`<h1>Faltou ?code na URL</h1><a href="/conectar-google">Voltar</a>`);
+  }
+
+  try {
+    const [client_id, client_secret] = await Promise.all([
+      db.lerChaveSistema('GOOGLE_OAUTH_CLIENT_ID', 'oauth-callback'),
+      db.lerChaveSistema('GOOGLE_OAUTH_CLIENT_SECRET', 'oauth-callback'),
+    ]);
+    if (!client_id || !client_secret) {
+      throw new Error('GOOGLE_OAUTH_CLIENT_ID/SECRET nao cadastrados no cofre.');
+    }
+
+    const tokens = await oauthGoogle.trocarCodePorTokens({
+      code: String(code),
+      client_id,
+      client_secret,
+      redirect_uri: OAUTH_REDIRECT_URI,
+    });
+
+    await db.salvarRefreshTokenOAuth({
+      refresh_token: tokens.refresh_token,
+      escopo: tokens.scope,
+      observacoes: `Concedido em ${new Date().toISOString()}. Access_token expirava em ${tokens.expires_in}s.`,
+    });
+
+    // Limpa cache de access_token (proxima chamada renova com refresh novo)
+    oauthGoogle.invalidarCacheAccessToken();
+
+    console.log(`[oauth] refresh_token gravado no cofre (escopo: ${tokens.scope})`);
+
+    res.type('html').send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>OAuth ok</title>
+<style>body{background:#0a0a0f;color:#f1f5f9;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:2rem}
+.card{background:#111118;border:1px solid #2a2a3e;border-radius:12px;padding:2.5rem;text-align:center;max-width:480px}
+h1{color:#10b981;margin:0 0 .75rem}p{color:#94a3b8;margin:.75rem 0}
+.btn{display:inline-block;background:#E85C00;color:white;padding:.85rem 1.5rem;border-radius:8px;text-decoration:none;font-weight:600;margin-top:1rem}
+code{background:#1a1a28;padding:.1rem .35rem;border-radius:3px;font-size:.85em}</style></head>
+<body><div class="card"><h1>✓ Conectado</h1>
+<p>Sua conta Google está conectada ao Pinguim OS.</p>
+<p style="font-size:.85em">Escopo: <code>${(tokens.scope || '').replace(/</g,'&lt;')}</code></p>
+<a class="btn" href="/conectar-google">Ver status</a>
+<a href="/" style="color:#94a3b8;margin-left:1rem">Ir pro chat</a>
+</div></body></html>`);
+  } catch (e) {
+    console.error('[oauth-callback] erro:', e.message);
+    res.status(500).type('html').send(`<h1>Erro ao trocar code por tokens</h1><pre style="background:#1a1a28;padding:1rem;border-radius:8px">${e.message}</pre><a href="/conectar-google">Voltar</a>`);
   }
 });
 
