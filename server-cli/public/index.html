@@ -158,6 +158,42 @@
     color: #fca5a5; padding: .75rem 1rem; border-radius: 8px;
     margin: .5rem 0; font-size: .9rem;
   }
+
+  /* V2.10 — Cartao de entregavel HTML pronto */
+  .entregavel-card {
+    background: linear-gradient(135deg, rgba(232, 92, 0, 0.08), rgba(232, 92, 0, 0.02));
+    border: 1px solid rgba(232, 92, 0, 0.25);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-top: .75rem;
+    transition: border-color .2s;
+  }
+  .entregavel-card:hover { border-color: rgba(232, 92, 0, 0.5); }
+  .entregavel-card-head {
+    display: flex; align-items: center; gap: .6rem;
+    margin-bottom: .5rem;
+    font-size: .85rem; font-weight: 600;
+    color: var(--laranja);
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+  .entregavel-card-titulo {
+    font-size: .95rem; font-weight: 500; color: var(--text);
+    margin-bottom: .35rem;
+  }
+  .entregavel-card-preview {
+    font-size: .82rem; color: var(--text2);
+    line-height: 1.5; margin-bottom: .75rem;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .entregavel-card-acao {
+    display: inline-flex; align-items: center; gap: .4rem;
+    background: var(--laranja); color: white;
+    font-size: .8rem; font-weight: 600;
+    padding: .45rem .9rem; border-radius: 6px;
+    text-decoration: none; transition: opacity .15s;
+  }
+  .entregavel-card-acao:hover { opacity: .9; }
 </style>
 </head>
 <body>
@@ -269,14 +305,41 @@ function md(text) {
   return html;
 }
 
-function addMsg(role, content, meta = '') {
+function addMsg(role, content, meta = '', extras = {}) {
   if (emptyEl) emptyEl.remove();
   const msg = document.createElement('div');
   msg.className = 'msg ' + role;
+
+  // V2.10 — quando vier entregavel_url, NAO mostra markdown inteiro inline.
+  // Mostra cartao de entregavel + preview + link pra rota /entregavel/<id>.
+  let bubbleHtml;
+  if (role === 'user') {
+    bubbleHtml = `<p>${content.replace(/\n/g, '<br>')}</p>`;
+  } else if (extras.entregavelUrl) {
+    const titulo = extras.entregavelTitulo || 'Entregável pronto';
+    const preview = extras.entregavelPreview
+      ? `<div class="entregavel-card-preview">${md(extras.entregavelPreview)}</div>`
+      : '';
+    bubbleHtml = `
+      <div class="entregavel-card">
+        <div class="entregavel-card-head">
+          <span>📄</span><span>${titulo}</span>
+        </div>
+        <div class="entregavel-card-titulo">${extras.pedido ? extras.pedido.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').slice(0, 100) : 'Pipeline criativo finalizado'}</div>
+        ${preview}
+        <a class="entregavel-card-acao" href="${extras.entregavelUrl}" target="_blank" rel="noopener">
+          Abrir entregável formatado →
+        </a>
+      </div>
+    `;
+  } else {
+    bubbleHtml = md(content);
+  }
+
   msg.innerHTML = `
     <div class="avatar">${role === 'user' ? '👤' : '🐧'}</div>
     <div>
-      <div class="bubble">${role === 'user' ? `<p>${content.replace(/\n/g, '<br>')}</p>` : md(content)}</div>
+      <div class="bubble">${bubbleHtml}</div>
       ${meta ? `<div class="meta">${meta}</div>` : ''}
     </div>
   `;
@@ -425,7 +488,28 @@ form.addEventListener('submit', async (e) => {
         else if (data.epp.verifier_aprovou === false) metaTxt += ' · ⚠ verifier reprovou';
         if (data.epp.reflection_round > 0) metaTxt += ` · reflection ${data.epp.reflection_round}x`;
       }
-      addMsg('assistant', data.content, metaTxt);
+
+      // V2.10 — backend decide se entregavel vira HTML ou inline.
+      // Se entregavel_url veio, mostra cartao com preview + link (HTML em rota dedicada).
+      // Senao, mostra markdown inline como antes.
+      const extras = {};
+      if (data.entregavel_url) {
+        extras.entregavelUrl = data.entregavel_url;
+        extras.entregavelPreview = data.entregavel_preview;
+        extras.pedido = message;
+        // Titulo do cartao reflete a squad real (mesmo mapping do modal)
+        const TITULOS_ENTREGAVEL = {
+          'copy':            '✍ Copy pronta',
+          'advisory-board':  '🏛 Parecer estratégico pronto',
+          'storytelling':    '📖 Narrativa pronta',
+          'design':          '🎨 Direção visual pronta',
+          'traffic-masters': '📈 Estratégia de tráfego pronta',
+          'finops':          '💰 Análise financeira pronta',
+        };
+        const sq = data.pipeline?.squad;
+        extras.entregavelTitulo = TITULOS_ENTREGAVEL[sq] || '📄 Entregável pronto';
+      }
+      addMsg('assistant', data.content, metaTxt, extras);
       setStatus('ok', 'conectado');
     }
   } catch (err) {
