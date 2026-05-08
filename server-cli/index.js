@@ -34,6 +34,7 @@ const {
 const { classificarMensagem } = require('./lib/router-llm'); // V2.9 — LLM router
 const { renderEntregavel } = require('./lib/template-html'); // V2.10 — entregavel HTML
 const db = require('./lib/db'); // V2.7+V2.11 — persistencia em pinguim.conversas + pinguim.entregaveis
+const { revisarConsolidado } = require('./lib/reviewer'); // V2.6 — revisor pos-pipeline (portugues + clareza)
 
 const app = express();
 const PORT = 3737;
@@ -421,7 +422,19 @@ app.post('/api/chat', async (req, res) => {
 
           const log = (msg) => console.log(`  [orquestrador-edicao] ${msg}`);
           const resultadoPipe = await pipelineCriativo({ message: messageEdicao, log });
-          const respostaPipe = resultadoPipe.conteudo;
+          let respostaPipe = resultadoPipe.conteudo;
+
+          // V2.6 — Reviewer pos-pipeline (portugues + clareza + tabela)
+          const revisao = await revisarConsolidado(respostaPipe, {
+            squad: resultadoPipe.metricas.squad,
+            pedido: message,
+          });
+          if (revisao.aplicado) {
+            console.log(`  [reviewer-edicao] aplicou ${revisao.problemas.length} correcoes em ${revisao.latencia_ms}ms`);
+            respostaPipe = revisao.output_final;
+          } else {
+            console.log(`  [reviewer-edicao] ${revisao.motivo} (${revisao.latencia_ms}ms)`);
+          }
 
           threads[thread_id].push({ role: 'assistant', content: respostaPipe });
           db.salvarMensagem({ papel: 'chief', conteudo: respostaPipe })
@@ -499,13 +512,28 @@ app.post('/api/chat', async (req, res) => {
         resultadoPipe = await pipelineCriativo({ message, log });
       }
 
-      const respostaPipe = resultadoPipe.conteudo;
+      let respostaPipe = resultadoPipe.conteudo;
+
+      // V2.6 — Reviewer pos-pipeline (portugues + clareza + tabela)
+      // Roda DEPOIS dos mestres consolidarem, ANTES de salvar/responder.
+      // Pula se conteudo curto (<1500 chars) ou se reviewer falha.
+      const revisao = await revisarConsolidado(respostaPipe, {
+        squad: resultadoPipe.metricas.squad,
+        pedido: message,
+      });
+      if (revisao.aplicado) {
+        console.log(`  [reviewer] aplicou ${revisao.problemas.length} correcoes em ${revisao.latencia_ms}ms — problemas: ${revisao.problemas.slice(0,2).join('; ')}`);
+        respostaPipe = revisao.output_final;
+      } else {
+        console.log(`  [reviewer] ${revisao.motivo} (${revisao.latencia_ms}ms)`);
+      }
+
       threads[thread_id].push({ role: 'assistant', content: respostaPipe });
       db.salvarMensagem({ papel: 'chief', conteudo: respostaPipe })
         .catch(e => console.warn(`  [persistencia] erro: ${e.message}`));
 
       const dur = ((Date.now() - t0) / 1000).toFixed(1);
-      console.log(`  -> pipeline criativo finalizou em ${dur}s | mestres: ${resultadoPipe.metricas.mestres_sucesso}/${resultadoPipe.metricas.mestres_sucesso + resultadoPipe.metricas.mestres_falha} | tempo paralelo: ${resultadoPipe.metricas.mestres_paralelo_s}s`);
+      console.log(`  -> pipeline criativo finalizou em ${dur}s | mestres: ${resultadoPipe.metricas.mestres_sucesso}/${resultadoPipe.metricas.mestres_sucesso + resultadoPipe.metricas.mestres_falha} | tempo paralelo: ${resultadoPipe.metricas.mestres_paralelo_s}s | reviewer: ${revisao.motivo}`);
 
       // ============================================================
       // V2.10 + V2.7 — Entregavel grande persiste em banco + URL estavel.
@@ -551,9 +579,15 @@ app.post('/api/chat', async (req, res) => {
           verifier_aprovou: null,
           verifier_pulado: true, // pipeline ja tem validacao propria
           reflection_round: 0,
-          problemas_encontrados: [],
+          problemas_encontrados: revisao.problemas || [],
         },
         pipeline: resultadoPipe.metricas,
+        reviewer: { // V2.6 — info do revisor pos-pipeline
+          aplicado: revisao.aplicado,
+          motivo: revisao.motivo,
+          problemas: revisao.problemas || [],
+          latencia_ms: revisao.latencia_ms,
+        },
         entregavel_url,
         entregavel_preview,
         entregavel_id, // V2.7 — UUID estavel, vivel daqui 10/15 dias
