@@ -35,6 +35,45 @@ function ehPedidoCriativoGrande(message) {
 }
 
 // ============================================================
+// V2.11 — Detector: pedido de EDICAO/REFINAMENTO de entregavel anterior?
+// Sinais: verbo de edicao + (referencia a entregavel anterior implicita ou
+// pronome demonstrativo). Diferente de ehPedidoCriativoGrande (que cria
+// do zero) — aqui pega cenarios tipo:
+//   "muda o headline pra X"
+//   "refaz a abertura"
+//   "tira essa parte"
+//   "ajusta a oferta"
+//   "quero v2 com Y"
+//   "compara com v1"
+//   "agora coloca foco em Z"
+// Retorna { ehEdicao: bool, instrucao: string } — instrucao eh a mensagem
+// inteira (mestres recebem como diff a aplicar).
+// ============================================================
+function ehPedidoEdicao(message) {
+  const m = message.toLowerCase();
+
+  // Verbo de edicao explicito
+  const verbosEdicao = /\b(muda|mude|troca|troque|substitui|substitua|ajusta|ajuste|refaz|refa[cç]a|reescreve|reescreva|tira|tire|remove|remova|adiciona|adicione|inclui|inclua|coloca foco|foco em|foque em|altera|altere|modifica|modifique|torna|torne|deixa|deixe)\b/i;
+
+  // Pronome demonstrativo + objeto editavel (ele/isso/essa parte/o headline/a abertura/etc)
+  const referenciaImplicita = /\b(esse|essa|isso|aquele|aquela|esta|este|o\s+(headline|titulo|h1|h2|opening|abertura|cta|p\.s\.|stack|oferta|garantia|bullet|paragrafo|trecho|quadro|tabela|coluna|linha|item|texto|conteudo)|a\s+(headline|abertura|oferta|garantia|stack|tabela|coluna|linha|conclusao|sintese))\b/i;
+
+  // Pedido de versao explicita
+  const pedidoVersao = /\b(v2|v3|versao\s*\d+|nova\s+vers[aã]o|outra\s+vers[aã]o|reformula|reformule)\b/i;
+
+  // "quero" + "com X" (pedido de variacao)
+  const variacaoComputo = /\bquero.{0,30}\bcom\b/i;
+
+  // "compara com" — pedido de visualizacao, nao geracao
+  // (deixa de fora — esse caso o frontend trata via UI, nao re-roda pipeline)
+
+  // pedidoVersao explicito ("v2", "nova versao") sozinho ja indica edicao
+  // mesmo sem verbo de edicao na frase (ex: "quero uma nova versao da copy")
+  if (pedidoVersao.test(m)) return true;
+  return verbosEdicao.test(m) && (referenciaImplicita.test(m) || variacaoComputo.test(m));
+}
+
+// ============================================================
 // Detector: para qual squad delegar?
 // ============================================================
 function detectarSquad(message) {
@@ -1041,6 +1080,7 @@ async function pipelineCriativo({ message, log, squad }) {
 
 module.exports = {
   ehPedidoCriativoGrande,
+  ehPedidoEdicao, // V2.11 — detector de pedido de edicao/V2
   detectarSquad,
   detectarProduto,
   pipelineCriativo,
