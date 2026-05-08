@@ -7,11 +7,18 @@
 
 const db = require('./db');
 
-// Escopos solicitados na Fase 0+1 (read-only — Munger inverte: write tem
-// confirmacao explicita). Gmail/sheets/calendar.events ficam pra Fases 4-5.
+// V2.12 — escopos read+write desde o inicio (decisao 2026-05-08 noite, Andre).
+// Razao: trocar escopo depois exige reconectar todos os socios. Melhor 1
+// conexao unica que cobre tudo. Confirmacao humana obrigatoria pra cada
+// operacao de WRITE acontece NO SERVER-CLI (camada de seguranca movida pra app).
+//
+// drive       = ler + editar + criar + deletar arquivos do socio
+// calendar    = ler + criar/editar/deletar eventos do calendario do socio
+//
+// Gmail fica pra fase futura (tem implicacoes maiores de privacidade).
 const SCOPES_PADRAO = [
-  'https://www.googleapis.com/auth/drive.readonly',     // listar + ler arquivos
-  'https://www.googleapis.com/auth/calendar.readonly',  // ler eventos
+  'https://www.googleapis.com/auth/drive',     // ler + editar + criar arquivos
+  'https://www.googleapis.com/auth/calendar',  // ler + editar eventos
 ];
 
 // Constroi URL de autorizacao do Google.

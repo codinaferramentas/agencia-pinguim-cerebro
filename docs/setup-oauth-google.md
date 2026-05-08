@@ -18,8 +18,8 @@ Pré-requisitos pra conectar o Atendente Pinguim ao Google Drive + Calendar dos 
    - Email de suporte: `contato@agenciapinguim.com`
    - Domínio: deixar vazio (ou `agenciapinguim.com` quando produção)
    - Escopos sensíveis: adicionar
-     - `auth/drive.readonly`
-     - `auth/calendar.readonly`
+     - `https://www.googleapis.com/auth/drive` (ler + editar + criar arquivos)
+     - `https://www.googleapis.com/auth/calendar` (ler + editar eventos)
    - Usuários de teste: adicionar emails dos 4 sócios (Luiz, Micha, Pedro, Codina)
 6. **APIs e Serviços** → **Credenciais** → **Criar credenciais** → **ID do cliente OAuth 2.0**:
    - Tipo de aplicativo: **Aplicativo da Web**
