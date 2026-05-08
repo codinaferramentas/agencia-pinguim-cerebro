@@ -29,6 +29,15 @@
       <button id="nav-collapse" class="nav-collapse-btn" type="button" title="Recolher (Ctrl+B)" aria-label="Recolher">‹‹</button>
     </div>
 
+    <!--
+      ESCONDIDO ATÉ V3 — 2026-05-08
+      Item "Agentes" do sidebar mission-control oculto temporariamente.
+      Razão: o agente desta tela hoje aponta pra Edge Function `atendente-pinguim` na Vercel
+      (versão antiga, OpenAI API paga, sem anatomia 5 fontes vivas + EPP completo).
+      O server-cli local (porta 3737) já tem a versão correta (Claude CLI Max, token externo zero,
+      pipeline criativo com 4 mestres em paralelo, Salão dos Mestres animado).
+      Quando V3 acontecer, frontend mission-control aponta pra server-cli — REATIVAR este botão
+      removendo o comentário envolta. Memória: project_v3_reativar_agentes_mission_control.md
     <div class="nav-destaque">
       <button class="nav-item nav-item-destaque" data-page="agentes" type="button" title="Agentes — Pinguim, squads e execuções">
         <span class="nav-icon">🐧</span>
@@ -36,6 +45,8 @@
         <span class="nav-destaque-badge">Pinguim</span>
       </button>
     </div>
+    -->
+    <!-- /ESCONDIDO ATÉ V3 -->
 
     <div class="nav-list" id="nav-list">
       <!-- Items renderizados pelo JS — cada um pode ter children -->
