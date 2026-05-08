@@ -27,9 +27,13 @@ async function esperarApiComLoop(apiPromise, loopFn, intervaloMs, sig) {
   return { result, error };
 }
 
-// Bolhas/falas por slug. Mestres novos (V2.5) ja tem entrada propria; mestres
-// nao mapeados ganham fallback generico ("rascunhando...").
+// V2.10.1 — Falas de entrada + pools maiores com progressão semântica.
+// Pool em 4 fases: rascunho (0-25%), desenvolvimento (25-65%), revisão (65-90%),
+// finalização (90-100%). Antes: 5 frases ciclando 3-4x em 100s — "finalizando..."
+// aparecia com 60s sobrando (sensação de loop fake). Agora cada fase só ativa
+// quando o elapsed/totalEsperado atinge o threshold.
 const FALAS_ENTRADA = {
+  // Squad copy
   'gary-halbert':    'Vamos lá.',
   'eugene-schwartz': 'Mostra aí.',
   'gary-bencivenga': 'Pode crer.',
@@ -38,21 +42,149 @@ const FALAS_ENTRADA = {
   'john-carlton':    'Saca só.',
   'russell-brunson': 'Vamos pro palco.',
   'jon-benson':      'Roteiro saindo.',
+  // Squad advisory-board (V2.10.1)
+  'charlie-munger':  'Antes de tudo, inverter.',
+  'ray-dalio':       'Vamos aos cenários.',
+  'naval-ravikant':  'Onde está a alavanca?',
+  'peter-thiel':     'Monopólio ou competição?',
+  'board-chair':     'Síntese vindo.',
 };
 
+// Pools por mestre, agora estruturados em 4 fases semânticas.
+// Cada fase tem ~4-5 frases. Total 16-20 frases por mestre.
+// Função proximoTickComProgressao() escolhe da fase certa baseado no progresso.
 const BOLHAS_POR_MESTRE = {
-  'gary-halbert':    ['above-the-fold...', 'P.S. matador...', 'identificação de dor...', 'voz primeira pessoa...', 'especificidade brutal...'],
-  'eugene-schwartz': ['nível de consciência...', 'mecanismo único...', 'apresentação produto...', 'Breakthrough...', 'por que outras falham...'],
-  'gary-bencivenga': ['bullets de fascinação...', 'prova social...', 'depoimento real...', 'autoridade...', 'persuasão...'],
-  'alex-hormozi':    ['stack de bônus...', 'Value Equation...', 'garantia tripla...', 'Grand Slam Offer...', 'oferta...'],
-  'dan-kennedy':     ['Godfather Offer...', 'urgência genuína...', 'risk reversal...', 'oferta clara...', 'preço justificado...'],
-  'john-carlton':    ['voz humana...', 'anti-corporativo...', 'underdog story...', 'ataque ao óbvio...', 'opening cru...'],
-  'russell-brunson': ['Hook Story Offer...', 'tripwire...', 'escada de valor...', 'apresentação...', 'em camadas...'],
-  'jon-benson':      ['call-out...', 'agitação...', 'mecanismo único...', 'demonstração...', 'fechamento VSL...'],
+  'gary-halbert': {
+    rascunho:      ['lendo briefing...', 'pegando dor central...', 'voz primeira pessoa...', 'achei o ângulo...'],
+    desenvolvimento: ['above-the-fold...', 'opening story...', 'identificação de dor...', 'storytelling longo...', 'Halbert touch...'],
+    revisao:       ['relendo opening...', 'cortando engenhosidade...', 'ajustando voz...', 'P.S. matador...'],
+    finalizacao:   ['último ajuste...', 'assinatura Halbert...', 'pronto pra entregar...'],
+  },
+  'eugene-schwartz': {
+    rascunho:      ['nível de consciência...', 'identificando estágio...', 'definindo mercado...', 'desejo dominante...'],
+    desenvolvimento: ['mecanismo único...', 'Breakthrough...', 'por que outras falham...', 'apresentação produto...', 'concorrentes inferiores...'],
+    revisao:       ['testando promessa...', 'reforçando UM...', 'amarração lógica...', 'aderência ao stage...'],
+    finalizacao:   ['Schwartz check...', 'pronto.'],
+  },
+  'gary-bencivenga': {
+    rascunho:      ['lendo briefing...', 'mapeando objeções...', 'caçando especificidade...', 'autoridade onde?...'],
+    desenvolvimento: ['bullets de fascinação...', 'prova social...', 'depoimento real...', 'persuasão...', 'belief x desire...'],
+    revisao:       ['cortando vago...', 'medindo bullets...', 'reforçando prova...', 'cada palavra paga...'],
+    finalizacao:   ['Bencivenga aprovou...', 'entregando...'],
+  },
+  'alex-hormozi': {
+    rascunho:      ['mapeando dream outcome...', 'Value Equation...', 'precificando esforço...', 'pegando promessa...'],
+    desenvolvimento: ['stack de bônus...', 'garantia tripla...', 'Grand Slam Offer...', 'oferta...', 'desidentificando preço...'],
+    revisao:       ['testando irrecusabilidade...', 'reforçando garantia...', 'limpando friction...', 'reduzindo time/effort...'],
+    finalizacao:   ['Grand Slam pronto...', 'entregando.'],
+  },
+  'dan-kennedy': {
+    rascunho:      ['mapeando WIIFM...', 'definindo público...', 'urgência onde?...', 'Godfather angle...'],
+    desenvolvimento: ['Godfather Offer...', 'urgência genuína...', 'risk reversal...', 'preço justificado...', 'oferta clara...'],
+    revisao:       ['testando clareza...', 'cortando hesitação...', 'reforçando urgência...', 'fechando saídas...'],
+    finalizacao:   ['Kennedy approved...', 'pronto.'],
+  },
+  'john-carlton': {
+    rascunho:      ['lendo briefing...', 'voz humana...', 'underdog angle...', 'opening cru...'],
+    desenvolvimento: ['anti-corporativo...', 'underdog story...', 'ataque ao óbvio...', 'big domino...', 'pegando emoção...'],
+    revisao:       ['cortando corporate...', 'reforçando voz...', 'humanizando mais...', 'cru e direto...'],
+    finalizacao:   ['Carlton out...', 'entregando.'],
+  },
+  'russell-brunson': {
+    rascunho:      ['Hook Story Offer...', 'mapeando funil...', 'identificando tripwire...', 'pegando big idea...'],
+    desenvolvimento: ['escada de valor...', 'apresentação...', 'em camadas...', 'storytelling vendedor...', 'soap opera sequence...'],
+    revisao:       ['testando hook...', 'reforçando story...', 'amarrando offer...', 'transição entre fases...'],
+    finalizacao:   ['Brunson check...', 'pronto.'],
+  },
+  'jon-benson': {
+    rascunho:      ['call-out...', 'mapeando audiência...', 'definindo problema...', 'pegando tom VSL...'],
+    desenvolvimento: ['agitação...', 'mecanismo único...', 'demonstração...', 'fechamento VSL...', 'pattern interrupt...'],
+    revisao:       ['testando pacing...', 'cortando filler...', 'reforçando close...', 'ajustando tempo...'],
+    finalizacao:   ['Benson cut...', 'entregando.'],
+  },
+
+  // Squad advisory-board (V2.10.1 — pools novos)
+  'charlie-munger': {
+    rascunho:      ['lendo dilema...', 'invertendo a pergunta...', 'mapeando worldly wisdom...', 'caçando estupidez...'],
+    desenvolvimento: ['inversion ativa...', 'mental models...', 'evitando o óbvio errado...', 'circle of competence...', 'incentivos primeiro...'],
+    revisao:       ['testando "como falha"...', 'cortando otimismo...', 'reforçando margem de segurança...', 'lollapalooza check...'],
+    finalizacao:   ['veredito Munger...', 'entregando.'],
+  },
+  'ray-dalio': {
+    rascunho:      ['mapeando cenários...', 'separando facts/desejos...', 'matriz de probabilidade...', 'caçando blind spots...'],
+    desenvolvimento: ['cenário otimista...', 'cenário pessimista...', 'cenário base...', 'All Weather aplicado...', 'pesando trade-offs...'],
+    revisao:       ['estresse-test...', 'radical truth...', 'algoritmo de decisão...', 'pessoas certas pra job...'],
+    finalizacao:   ['Dalio fechou...', 'pronto.'],
+  },
+  'naval-ravikant': {
+    rascunho:      ['mapeando alavancas...', 'specific knowledge?...', 'capital vs labor vs code...', 'long-term thinking...'],
+    desenvolvimento: ['leverage assimétrico...', 'permissionless leverage...', 'jogos infinitos...', 'compound interest...', 'wealth não dinheiro...'],
+    revisao:       ['testando escalabilidade...', 'tem alavanca real?...', 'cortando ruído...', 'simplifying...'],
+    finalizacao:   ['Naval out...', 'entregando.'],
+  },
+  'peter-thiel': {
+    rascunho:      ['monopólio ou competição?...', 'mapeando 0-1...', 'caçando segredo...', 'última jogada...'],
+    desenvolvimento: ['definite optimism...', 'small market first...', 'mafia effect...', 'last mover advantage...', 'bold thesis...'],
+    revisao:       ['testando contrarian...', 'monopólio defensável?...', 'reforçando segredo...', 'definite plan?...'],
+    finalizacao:   ['Thiel approved...', 'pronto.'],
+  },
+  'board-chair': {
+    rascunho:      ['lendo conselheiros...', 'mapeando convergências...', 'mapeando divergências...', 'sintetizando...'],
+    desenvolvimento: ['amarrando Munger+Dalio...', 'pesando Naval+Thiel...', 'extraindo recomendação...', 'estruturando entregável...', 'achando padrão...'],
+    revisao:       ['veredito final...', 'reforçando ações...', 'declarando incertezas...', 'review estrutural...'],
+    finalizacao:   ['parecer pronto...', 'entregando.'],
+  },
 };
 
 const FALA_ENTRADA_DEFAULT = 'Cheguei.';
-const BOLHAS_DEFAULT = ['rascunhando...', 'método aplicado...', 'estruturando...', 'revisando...', 'finalizando...'];
+// Fallback estruturado em 4 fases — pra mestre desconhecido cair em algo que ainda parece progressão.
+const BOLHAS_DEFAULT = {
+  rascunho:        ['lendo briefing...', 'organizando ideias...', 'pegando ângulo...'],
+  desenvolvimento: ['rascunhando...', 'método aplicado...', 'estruturando...', 'desenvolvendo argumento...'],
+  revisao:         ['revisando...', 'ajustando...', 'limando arestas...'],
+  finalizacao:     ['finalizando...', 'pronto.'],
+};
+
+// Tempo total esperado de pipeline (ms). Se passar disso, congela em "finalização" sem voltar.
+// Calibrado pra advisory (~110s) — copy é mais rápido (~70s) mas mantém pool ativo.
+const TEMPO_TOTAL_ESPERADO_MS = 110_000;
+
+// Thresholds de progressão (% do tempo esperado). Frases de fase X só ativam após
+// elapsed >= threshold X. Distribui assim:
+//   rascunho        0-25%
+//   desenvolvimento 25-65%
+//   revisao         65-90%
+//   finalizacao     90-100%+
+const FASE_THRESHOLDS = [
+  { fase: 'rascunho',        ate: 0.25 },
+  { fase: 'desenvolvimento', ate: 0.65 },
+  { fase: 'revisao',         ate: 0.90 },
+  { fase: 'finalizacao',     ate: 1.10 }, // > 1 = pode passar do esperado, fica em finalizacao
+];
+
+// Decide qual fase está ativa pelo elapsed.
+function faseAtual(elapsed, totalEsperado = TEMPO_TOTAL_ESPERADO_MS) {
+  const ratio = elapsed / totalEsperado;
+  for (const t of FASE_THRESHOLDS) if (ratio < t.ate) return t.fase;
+  return 'finalizacao';
+}
+
+// Devolve próxima frase pro mestre considerando fase atual + índice rotativo.
+// Se a fase ativa não tem frases, cai pra fase anterior.
+function proximoTickComProgressao(slugMestre, idxFase, elapsed) {
+  const pool = BOLHAS_POR_MESTRE[slugMestre] || BOLHAS_DEFAULT;
+  const fase = faseAtual(elapsed);
+  let frases = pool[fase] || [];
+  if (frases.length === 0) {
+    // Fallback em cascata: tenta fase anterior
+    const ordem = ['rascunho', 'desenvolvimento', 'revisao', 'finalizacao'];
+    for (let i = ordem.indexOf(fase) - 1; i >= 0; i--) {
+      if (pool[ordem[i]] && pool[ordem[i]].length > 0) { frases = pool[ordem[i]]; break; }
+    }
+  }
+  if (frases.length === 0) return { fase, frase: '...' };
+  return { fase, frase: frases[idxFase % frases.length] };
+}
 
 // Nome curto pra exibir nos logs/falas (extrai do slug, ex: 'gary-halbert' -> 'Halbert').
 function nomeCurto(slug) {
@@ -174,14 +306,18 @@ export async function roteiroGerarCopy({ engine, log, setStatus, apiCall, pedido
   // ============================== FASE 5: N MESTRES TRABALHANDO EM PARALELO ==============================
   setStatus(`✍ ${totalMestres} mestre(s) escrevendo em paralelo`);
 
-  // Cada mestre gira sua propria bolha em ritmo independente
-  const idxBolha = {};
+  // V2.10.1 — bolhas com progressão semântica.
+  // Cada mestre gira em ritmo proprio E em fase semantica (rascunho/desenvolvimento/
+  // revisao/finalizacao) baseada no elapsed. Sem mais "finalizando..." prematuro.
+  const idxFase = {};      // indice rotativo dentro da fase atual (reseta ao trocar de fase)
+  const ultimaFase = {};   // qual fase estava por ultimo (pra detectar troca)
   const ritmoMs = {};
   const proximoTick = {};
   // Ritmos levemente diferentes pra parecer natural (2200-2800ms)
   mestres.forEach((id, i) => {
-    idxBolha[id] = 0;
-    ritmoMs[id] = 2200 + (i * 137) % 700; // distribui ritmos
+    idxFase[id] = 0;
+    ultimaFase[id] = null;
+    ritmoMs[id] = 2200 + (i * 137) % 700;
     proximoTick[id] = ritmoMs[id];
   });
 
@@ -191,9 +327,14 @@ export async function roteiroGerarCopy({ engine, log, setStatus, apiCall, pedido
     const elapsed = t - loopBolhas._t0;
     mestres.forEach(id => {
       if (elapsed >= proximoTick[id]) {
-        const pool = BOLHAS_POR_MESTRE[id] || BOLHAS_DEFAULT;
-        say(id, pool[idxBolha[id] % pool.length], Math.floor(ritmoMs[id] / 18));
-        idxBolha[id]++;
+        const { fase, frase } = proximoTickComProgressao(id, idxFase[id], elapsed);
+        // Reseta indice ao mudar de fase, pra começar do início da fase nova
+        if (ultimaFase[id] !== fase) {
+          idxFase[id] = 0;
+          ultimaFase[id] = fase;
+        }
+        say(id, frase, Math.floor(ritmoMs[id] / 18));
+        idxFase[id]++;
         proximoTick[id] = elapsed + ritmoMs[id];
       }
     });
