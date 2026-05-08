@@ -21,14 +21,17 @@ const fs = require('fs');
 function ehPedidoCriativoGrande(message) {
   const m = message.toLowerCase();
 
-  // Verbos de criacao/analise
-  const verbos = /\b(monta|cria|escreve|gera|faz|desenvolve|elabora|produz|me d[aá]|analisa|avalia|diagnostica|estrutura)\b/i;
+  // Verbos de criacao/analise/solicitacao/decisao
+  const verbos = /\b(monta|monte|cria|crie|escreve|escreva|gera|gere|faz|fa[cç]a|desenvolve|elabora|produz|me d[aá]|me ajuda|analisa|analise|avalia|avalie|diagnostica|estrutura|estruture|quero|preciso|pode\s+(montar|criar|escrever|fazer)|decidir|escolher|pensar|deveria|devo|cancelar|seguir|apostar|investir|contratar)\b/i;
   // Objeto criativo (entregavel)
   // Squad copy: copy/pagina/VSL/email/anuncio/headline/hook/oferta/etc
-  // Squad advisory-board: conselho/dilema/decisao/cenario/parecer/analise estrategica
-  const objetos = /\b(copy|p[aá]gina de venda|salesletter|carta de venda|vsl|email\s+(de|pra)|sequ[eê]ncia de email|an[uú]ncio|criativo|headline|hook|gancho|oferta|stack|garantia|faq|hist[oó]ria|pitch|roteiro|conselho|dilema|decis[aã]o|cen[aá]rio|parecer|an[aá]lise|veredito|estrat[eé]gia|aposta)\b/i;
+  // Squad advisory-board: conselho/dilema/decisao/cenario/parecer/analise/quadro de perdas/pros e contras/comparativo/tradeoff
+  const objetos = /\b(copy|p[aá]gina de venda|salesletter|carta de venda|vsl|email\s+(de|pra)|sequ[eê]ncia de email|an[uú]ncio|criativo|headline|hook|gancho|oferta|stack|garantia|faq|hist[oó]ria|pitch|roteiro|conselho|dilema|decis[aã]o|cen[aá]rio|parecer|an[aá]lise|an[aá]lise\s+estrat[eé]gica|veredito|estrat[eé]gia|estrat[eé]gic[ao]|aposta|quadro\s+de|perdas\s+e\s+ganhos?|pros\s+e\s+contras|comparativo|tradeoff|trade-off|investir|contratar|entre\s+(a|b|x|y)|lan[cç]amento|funcion[aá]ri|automa[cç][aã]o)\b/i;
 
-  return verbos.test(m) && objetos.test(m);
+  // Padrao "devo X ou Y" / "deveria X ou Y" — alternativa explicita = dilema implicito
+  const dilemaImplicito = /\b(devo|deveria)\s+\w+.{0,40}\bou\b\s+\w+/i.test(m);
+
+  return (verbos.test(m) && objetos.test(m)) || dilemaImplicito;
 }
 
 // ============================================================
@@ -36,10 +39,11 @@ function ehPedidoCriativoGrande(message) {
 // ============================================================
 function detectarSquad(message) {
   const m = message.toLowerCase();
+  // Advisory PRIMEIRO — palavras de advisory sao mais especificas e nao colidem com copy
+  if (/\b(conselho|dilema|decis[aã]o|aposta|prop[oó]sito|estrat[eé]gia|estrat[eé]gic[ao]|an[aá]lise\s+estrat[eé]gica|quadro\s+de|perdas\s+e\s+ganhos?|pros\s+e\s+contras|comparativo|tradeoff|trade-off|investir|contratar|cancelar|seguir|escolher entre|me\s+ajuda\s+a\s+(decidir|escolher|pensar)|deveria|devo|decidir entre)\b/i.test(m)) return 'advisory-board';
   if (/\b(copy|p[aá]gina|vsl|email|an[uú]ncio|headline|oferta|stack|garantia|faq|salesletter|carta)\b/i.test(m)) return 'copy';
   if (/\b(hist[oó]ria|narrativa|gancho|jornada|manifesto|pitch)\b/i.test(m)) return 'storytelling';
   if (/\b(designer|logo|paleta|brand|layout|mockup|wireframe|criativo visual|identidade)\b/i.test(m)) return 'design';
-  if (/\b(conselho|dilema|decis[aã]o|aposta|prop[oó]sito|estrat[eé]gia)\b/i.test(m)) return 'advisory-board';
   return 'copy'; // fallback
 }
 
@@ -634,7 +638,7 @@ function escolherSkillQuery(msg) {
   const m = msg.toLowerCase();
   // === Advisory-board ===
   // Pedidos genericos -> advisory-completo (4 conselheiros + Board Chair)
-  if (/\b(conselho|dilema|decis[aã]o|estrat[eé]gia|aposta|prop[oó]sito)\b/i.test(m)) return 'advisory-completo';
+  if (/\b(conselho|dilema|decis[aã]o|estrat[eé]gia|aposta|prop[oó]sito|quadro\s+de|perdas\s+e\s+ganhos?|pros\s+e\s+contras|comparativo|tradeoff|trade-off|investir|contratar)\b/i.test(m)) return 'advisory-completo';
   // Pedidos especificos por framework -> Skill do conselheiro especifico
   if (/\bmonop[oó]lio\b|competi[cç][aã]o|concorrente|diferencia|10x/i.test(m)) return 'monopolio';
   if (/\binvers[aã]o\b|inversion|como\s+falh|caminho\s+de\s+falha/i.test(m)) return 'inversion';
