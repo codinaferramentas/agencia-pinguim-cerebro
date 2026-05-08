@@ -12,6 +12,34 @@
 const oauth = require('./oauth-google');
 
 // ============================================================
+// V2.13.1 — formatar data RFC 2822 -> America/Sao_Paulo (BRT/BRST)
+// Gmail devolve no header Date o fuso original do remetente (UTC, PDT, etc).
+// Converter pro fuso do sócio é essencial — senão "recebi às 12h56" mostra
+// "08:56" porque o email saiu de servidor PDT (UTC-7). JS Date parseia RFC
+// 2822 corretamente e Intl.DateTimeFormat com timeZone aplica conversão.
+// Mantém valor original num campo separado pra debug.
+// ============================================================
+const FORMATADOR_DATA_BR = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo',
+  day: '2-digit', month: '2-digit', year: 'numeric',
+  hour: '2-digit', minute: '2-digit',
+  hour12: false,
+});
+
+function formatarDataBR(dataRFC) {
+  if (!dataRFC) return '';
+  try {
+    const d = new Date(dataRFC);
+    if (isNaN(d.getTime())) return dataRFC; // não conseguiu parsear, devolve cru
+    // Saída tipo "08/05/2026 11:00" — adicionamos " (BRT)" pra clareza
+    const fmt = FORMATADOR_DATA_BR.format(d);
+    return `${fmt} (BRT)`;
+  } catch (_) {
+    return dataRFC;
+  }
+}
+
+// ============================================================
 // Helper: chama Gmail API com Bearer token, parseia JSON, trata erros
 // ============================================================
 async function gmailFetch({ method = 'GET', endpoint, body, cliente_id }) {
@@ -81,13 +109,15 @@ async function listarEmails({
   const emails = detalhes.map(d => {
     const headers = (d.payload && d.payload.headers) || [];
     const getHeader = (n) => headers.find(h => h.name.toLowerCase() === n.toLowerCase())?.value || '';
+    const dataOrig = getHeader('Date');
     return {
       id: d.id,
       thread_id: d.threadId,
       de: getHeader('From'),
       para: getHeader('To'),
       assunto: getHeader('Subject') || '(sem assunto)',
-      data: getHeader('Date'),
+      data: formatarDataBR(dataOrig), // V2.13.1 — em fuso BRT pro sócio
+      data_raw: dataOrig,             // valor RFC 2822 original (debug)
       snippet: d.snippet || '',
       labels: d.labelIds || [],
       lido: !((d.labelIds || []).includes('UNREAD')),
@@ -154,6 +184,7 @@ async function lerEmail({ cliente_id, messageId } = {}) {
       .trim();
   }
 
+  const dataOrig = getHeader('Date');
   return {
     id: msg.id,
     thread_id: msg.threadId,
@@ -161,7 +192,8 @@ async function lerEmail({ cliente_id, messageId } = {}) {
     para: getHeader('To'),
     cc: getHeader('Cc'),
     assunto: getHeader('Subject') || '(sem assunto)',
-    data: getHeader('Date'),
+    data: formatarDataBR(dataOrig), // V2.13.1 — em fuso BRT pro sócio
+    data_raw: dataOrig,             // valor RFC 2822 original (debug)
     message_id: getHeader('Message-Id'),
     references: getHeader('References'),
     snippet: msg.snippet || '',

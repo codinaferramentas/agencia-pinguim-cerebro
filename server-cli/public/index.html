@@ -451,8 +451,8 @@ async function chamarChatStream({ message, thread_id }) {
         dataFinal = ev;
         // Render final sem cursor
         bubble.innerHTML = md(ev.content || acumulado);
-        // Adiciona meta abaixo da bolha
-        const metaTxt = `${ev.duracao_s || '?'}s · stream${ev.epp?.verifier_aprovou === false ? ' · ⚠ verifier reprovou' : ev.epp?.verifier_aprovou ? ' · ✓ verifier' : ''}`;
+        // V2.13.1 — meta só com duração (verifier/stream são debug interno, não pro sócio)
+        const metaTxt = `${ev.duracao_s || '?'}s`;
         const metaEl = document.createElement('div');
         metaEl.className = 'meta';
         metaEl.textContent = metaTxt;
@@ -599,18 +599,14 @@ form.addEventListener('submit', async (e) => {
       if (squad) squad.sinalizarConclusao(data);
 
       const dur = data.duracao_s || ((Date.now() - t0) / 1000).toFixed(1);
-      let metaTxt = `${dur}s · Max local`;
+      // V2.13.1 — meta simplificado pro sócio. Pipeline criativo mantém info útil
+      // (mestres + skill) porque o sócio vê o Salão dos Mestres animado e o resumo
+      // ajuda a entender o que aconteceu. Verifier/EPP fica em debug interno (logs).
+      let metaTxt = `${dur}s`;
       if (data.pipeline) {
         const p = data.pipeline;
         metaTxt += ` · ${p.mestres_sucesso}/${p.mestres_total} mestres`;
         if (p.fonte_decisao === 'skill') metaTxt += ` · skill: ${p.skill_usada?.slug || '?'}`;
-        else metaTxt += ' · fallback hardcoded';
-      }
-      if (data.epp) {
-        if (data.epp.verifier_pulado) metaTxt += ' · verifier pulado';
-        else if (data.epp.verifier_aprovou) metaTxt += ' · ✓ verifier';
-        else if (data.epp.verifier_aprovou === false) metaTxt += ' · ⚠ verifier reprovou';
-        if (data.epp.reflection_round > 0) metaTxt += ` · reflection ${data.epp.reflection_round}x`;
       }
 
       // V2.10 — backend decide se entregavel vira HTML ou inline.
