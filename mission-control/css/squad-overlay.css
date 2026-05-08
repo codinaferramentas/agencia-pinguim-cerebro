@@ -1,0 +1,280 @@
+/* =====================================================================
+   SQUAD OVERLAY — estilos isolados pro Salao dos Mestres / animacoes squad.
+   V2.5 Commit 3 fix: separado de style.css pra ser importado pelo chat real
+   (server-cli/public/index.html) sem trazer estilos do mission-control que
+   colidem com .app/header/body/etc.
+   Origem: copiado de mission-control/css/style.css linhas 4671-4922 +
+   media query mobile de 5092-5098.
+   Uso: <link rel="stylesheet" href="/mission-control/css/squad-overlay.css">
+   ===================================================================== */
+
+/* Variavel font-mono usada por classes daqui — copio aqui caso o host
+   nao defina (chat real nao tem essa var no :root). */
+:root {
+  --squad-font-mono: ui-monospace, 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+}
+
+.squad-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.82);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  padding: 1.25rem;
+  animation: squad-in 0.3s ease-out;
+}
+.squad-overlay.squad-closing { animation: squad-out 0.25s ease-in forwards; }
+@keyframes squad-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes squad-out { from { opacity: 1; } to { opacity: 0; } }
+
+.squad-modal {
+  width: 100%;
+  max-width: 1400px;
+  max-height: 95vh;
+  background: #070a14;
+  border: 1px solid #1f2937;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.6);
+  color: #e6e9ef;
+}
+.squad-header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #1f2937;
+  background: #0a0e1a;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.squad-badge {
+  display: inline-block;
+  font-family: var(--font-mono, var(--squad-font-mono));
+  font-size: 0.625rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #f472b6;
+  background: rgba(244, 114, 182, 0.14);
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.squad-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0;
+  background: linear-gradient(135deg, #60a5fa, #a78bfa, #f472b6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.squad-subtitle { font-size: 0.75rem; color: #8b95a7; margin-top: 2px; }
+.squad-close-hint {
+  font-family: var(--font-mono, var(--squad-font-mono));
+  font-size: 0.6875rem;
+  color: #8b95a7;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.squad-error-close {
+  margin-left: 0.75rem;
+}
+
+.squad-body {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+}
+@media (max-width: 1100px) {
+  .squad-body { grid-template-columns: 1fr; }
+  .squad-panel { border-left: 0 !important; border-top: 1px solid #1f2937; }
+}
+
+.squad-canvas-wrap {
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0e1a;
+  min-height: 0;
+  overflow: hidden;
+}
+.squad-canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border-radius: 6px;
+  background: #1a1f2e;
+}
+
+.squad-panel {
+  background: #0a0e1a;
+  border-left: 1px solid #1f2937;
+  padding: 14px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.squad-panel-block {
+  background: #141927;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 12px;
+}
+.squad-panel-title {
+  font-family: var(--font-mono, var(--squad-font-mono));
+  font-size: 0.625rem;
+  color: #8b95a7;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.squad-panel-title::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: #60a5fa;
+  border-radius: 50%;
+}
+
+.squad-statusbar {
+  background: #0a0e1a;
+  border: 1px solid rgba(251, 191, 36, 0.27);
+  padding: 9px 11px;
+  border-radius: 5px;
+  font-size: 0.75rem;
+  color: #fbbf24;
+  margin-bottom: 10px;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  line-height: 1.4;
+}
+.squad-counters {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.squad-counters > div {
+  background: #0a0e1a;
+  padding: 8px 6px;
+  border-radius: 5px;
+  text-align: center;
+}
+.squad-counter-num {
+  display: block;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #60a5fa;
+}
+.squad-counter-num .squad-counter-total {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #8b95a7;
+  margin-left: 1px;
+}
+.squad-counter-label {
+  font-size: 0.5625rem;
+  color: #8b95a7;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.squad-agent-list { display: flex; flex-direction: column; gap: 5px; }
+.squad-agent-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  background: #0a0e1a;
+  border-radius: 5px;
+  border-left: 3px solid transparent;
+  transition: all 0.2s;
+  opacity: 0.55;
+}
+.squad-agent-item.squad-agent-ativo {
+  opacity: 1;
+  border-left-color: #fbbf24;
+  background: #1a1610;
+}
+.squad-agent-avatar {
+  width: 24px; height: 24px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.squad-agent-info { flex: 1; min-width: 0; }
+.squad-agent-name { font-weight: 600; color: #e6e9ef; font-size: 0.75rem; }
+.squad-agent-role { font-size: 0.625rem; color: #8b95a7; }
+.squad-agent-status { font-size: 0.625rem; color: #8b95a7; }
+.squad-agent-item.squad-agent-ativo .squad-agent-status {
+  color: #fbbf24;
+  font-weight: 600;
+}
+
+.squad-log {
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.squad-log::-webkit-scrollbar { width: 4px; }
+.squad-log::-webkit-scrollbar-track { background: #0a0e1a; }
+.squad-log::-webkit-scrollbar-thumb { background: #2a3449; border-radius: 2px; }
+
+.squad-log-line {
+  font-size: 0.6875rem;
+  padding: 7px 9px;
+  background: #0a0e1a;
+  border-left: 2px solid #60a5fa;
+  border-radius: 3px;
+  line-height: 1.45;
+  animation: squad-log-in 0.3s;
+  color: #e6e9ef;
+}
+@keyframes squad-log-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.squad-log-line.working { border-left-color: #fbbf24; }
+.squad-log-line.done { border-left-color: #10b981; }
+.squad-log-line.handoff { border-left-color: #f472b6; background: #1a1020; }
+.squad-log-line.final { border-left-color: #a78bfa; background: #1a1028; }
+.squad-log-time { color: #6b7280; font-size: 0.5625rem; }
+.squad-log-author { color: #60a5fa; font-weight: 600; }
+.squad-log-line.working .squad-log-author { color: #fbbf24; }
+.squad-log-line.done .squad-log-author { color: #10b981; }
+.squad-log-line.handoff .squad-log-author { color: #f472b6; }
+
+/* Mobile — squad modal ocupa tela cheia */
+@media (max-width: 768px) {
+  .squad-overlay { padding: 0.5rem; }
+  .squad-modal { max-height: 100vh; border-radius: 8px; }
+  .squad-header { padding: 0.75rem 0.875rem; }
+  .squad-title { font-size: 0.9375rem; }
+  .squad-body { grid-template-columns: 1fr; }
+  .squad-panel { border-left: 0; border-top: 1px solid #1f2937; max-height: 40vh; }
+  .squad-canvas-wrap { padding: 8px; }
+}

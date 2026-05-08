@@ -283,6 +283,34 @@ app.post('/api/chat', async (req, res) => {
     console.log(`[${new Date().toISOString()}] thread=${thread_id} pergunta: ${message.slice(0, 80)}${plan_id ? ` (plan_id=${plan_id})` : ''}`);
 
     // ============================================================
+    // ATALHO HONESTO V2.5 Commit 3 (hotfix) — squad nao populada
+    // Pedido como "monta uma estrategia de trafego pago pra Lyra" cai aqui:
+    // detectarSquad retorna 'advisory-board'/'design'/'storytelling' (nao
+    // implementadas), mas ehPedidoCriativoGrande retorna FALSE (regex so
+    // casa copy/pagina/VSL/etc). Antes do hotfix, pedido caia no CLI normal
+    // e o Atendente gastava 2-3 min consultando Cerebro tentando ajudar.
+    // Agora: se a mensagem tem verbo de criacao + squad nao populada,
+    // responde rapido e honesto. Sem chamar CLI.
+    // Commit 4 substitui isso pelo pipelineCriativo multi-squad.
+    // ============================================================
+    const verboDeCriacao = /\b(monta|cria|escreve|gera|faz|desenvolve|elabora|produz|me d[aá]|planeja|estrutura)\b/i.test(message);
+    const squadDetectada = detectarSquad(message);
+    if (verboDeCriacao && !ehPedidoCriativoGrande(message) && !SQUADS_POPULADAS.has(squadDetectada)) {
+      const dur = ((Date.now() - t0) / 1000).toFixed(1);
+      const respostaHonesta = `Reconheci o pedido como **squad ${squadDetectada}** — ainda não populada no sistema.\n\nHoje só a squad **copy** tem mestres prontos pra entregar trabalho criativo (Halbert, Schwartz, Bencivenga, Hormozi, Kennedy, Carlton, Brunson, Benson). Quando você precisar de copy, página de venda, headline, oferta, VSL, anúncio — tô aqui.\n\nPra **${squadDetectada}** (esse tipo de pedido), o roadmap está em fila — pendente popular mestres no banco.`;
+      threads[thread_id].push({ role: 'assistant', content: respostaHonesta });
+      console.log(`  -> atalho honesto (squad ${squadDetectada} nao populada): ${dur}s`);
+      return res.json({
+        thread_id,
+        content: respostaHonesta,
+        duracao_s: parseFloat(dur),
+        epp: { verifier_aprovou: null, verifier_pulado: true, reflection_round: 0, problemas_encontrados: [] },
+        squad_destino: squadDetectada,
+        squad_disponivel: false,
+      });
+    }
+
+    // ============================================================
     // DESVIO — Pedido criativo grande pula CLI e vai pro orquestrador Node
     // V2.5 Commit 3: se vier plan_id valido no body, usa plano cacheado
     // (frontend ja chamou /api/pipeline-plan e mostrou animacao).

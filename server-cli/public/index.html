@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Atendente Pinguim 🐧 — local</title>
+<!-- V2.5 Commit 3 fix: importa estilos isolados do Salao dos Mestres (.squad-overlay/.squad-modal/etc) -->
+<link rel="stylesheet" href="/mission-control/css/squad-overlay.css">
 <style>
   :root {
     --bg: #0a0a0f;
@@ -268,6 +270,9 @@ function addMsg(role, content, meta = '') {
 }
 
 function addTyping() {
+  // Idempotente: remove typing existente antes de adicionar pra evitar
+  // 2 dots na tela (bug visto em pedido nao-criativo + toggle anim ON).
+  removeTyping();
   const msg = document.createElement('div');
   msg.className = 'msg assistant';
   msg.id = 'typing';
