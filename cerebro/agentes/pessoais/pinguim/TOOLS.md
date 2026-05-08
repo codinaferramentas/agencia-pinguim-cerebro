@@ -63,6 +63,64 @@ bash scripts/editar-drive.sh append 1AbCxyz... "Página1" '[["nova linha","col2"
 - Office bruto (Excel `.xlsx`, Word `.docx`) — devolve metadata + link, sem leitor estruturado
 - Calendar (Fase 3 + Fase 5)
 
+## Tools de Gmail (V2.13 — escopo `gmail.modify`)
+
+Quando o sócio pede operação no Gmail dele (listar/ler/responder), o Atendente tem acesso completo: ler, redigir, enviar, modificar labels, arquivar (sem deletar permanentemente).
+
+| Tool | O que faz | Como acessar |
+|---|---|---|
+| 📥 **Gmail listar** | Lista emails (default `in:inbox`, max 10). Aceita query Gmail (`is:unread`, `from:X`, `newer_than:3d`, etc) | `bash scripts/gmail-listar.sh ["query"] [pageSize]` |
+| 📧 **Gmail ler** | Lê email completo (corpo + headers + labels). Texto truncado em 8000 chars | `bash scripts/gmail-ler.sh <messageId>` |
+| ✉️ **Gmail responder** | Envia email (responder thread ou novo). **EXIGE confirmação humana NO CHAT antes** (ver AGENTS.md → E6) | `bash scripts/gmail-responder.sh reply <msgId> "<corpo>"` ou `... novo "<para>" "<assunto>" "<corpo>"` |
+| 🏷 **Gmail modificar** | Marca lido/star/arquivar/spam/lixo. **arquivar/spam/lixo são destrutivos — confirmação NO CHAT** | `bash scripts/gmail-modificar.sh <msgId> <op>` |
+
+**Exemplos práticos:**
+
+```bash
+# Inbox padrão (10 últimos)
+bash scripts/gmail-listar.sh
+
+# Não-lidos
+bash scripts/gmail-listar.sh "is:unread"
+
+# Email específico de fulano
+bash scripts/gmail-listar.sh "from:fulano@x.com" 5
+
+# Ler email completo
+bash scripts/gmail-ler.sh 18a3b2c1d4e5f6
+
+# Responder (após confirmação no chat)
+bash scripts/gmail-responder.sh reply 18a3b2c1 "Obrigado pelo retorno. Fechado."
+
+# Email novo (após confirmação no chat)
+bash scripts/gmail-responder.sh novo "fulano@x.com" "Sobre nosso call" "Vamos amanhã 15h?"
+
+# Marcar como lido
+bash scripts/gmail-modificar.sh 18a3b2c1 lido
+
+# Arquivar (após confirmação)
+bash scripts/gmail-modificar.sh 18a3b2c1 arquivar
+```
+
+**Sintaxe Gmail query** (https://support.google.com/mail/answer/7190):
+- `is:unread` / `is:read` / `is:starred`
+- `from:email@x.com` / `to:email@x.com`
+- `subject:"X"` (com aspas)
+- `newer_than:3d` / `older_than:1m` / `after:2026/01/01`
+- `has:attachment`
+- `label:INBOX` / `label:SPAM` / `-label:TRASH`
+
+**Fluxo padrão de envio/modificação destrutiva (NUNCA pular):**
+1. `gmail-listar` → acha o email
+2. `gmail-ler` → confirma contexto (de quem é, sobre o quê)
+3. **MOSTRA PLANO + PEDE "sim/não" no chat** (mostra para/assunto/preview do corpo, ou op de modificação)
+4. Só após "sim" explícito → `gmail-responder` ou `gmail-modificar`
+
+**Não implementado nesta versão:**
+- Anexos (enviar arquivo no email)
+- Email com HTML (só plain text por enquanto)
+- Filtros automáticos (criar regra "todos do X vão pra label Y")
+
 ## Mapeamento produto → cerebro_slug
 
 | Sinal na pergunta | cerebro_slug |

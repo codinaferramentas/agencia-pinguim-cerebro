@@ -31,8 +31,26 @@ const ENV_LOCAL = carregarEnvLocal();
 
 // IDs canônicos do Pinguim OS (descobertos via inspeção do banco em 2026-05-08)
 const TENANT_ID_PINGUIM = '00000000-0000-0000-0000-000000000001';
-const CLIENTE_ID_PADRAO = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'; // placeholder — V3 OAuth substitui por sócio
+const CLIENTE_ID_FALLBACK = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'; // fallback histórico (pré-V2.13) — Codina
 const AGENTE_ID_PINGUIM = '2699b1b1-769b-4b76-a8c1-4111d2e1d142'; // Atendente Pinguim
+
+// V2.13 — cliente_id agora vem dinâmico do SOCIO_SLUG via lib/socio.js.
+// Função helper: tenta resolver via socio.js, se falhar retorna fallback.
+// IMPORTANTE: cache em socio.js evita SELECT a cada chamada.
+async function resolverClienteId(passado) {
+  if (passado) return passado; // override explícito tem prioridade
+  try {
+    const socio = require('./socio');
+    const s = await socio.getSocioAtual();
+    return s.cliente_id;
+  } catch (e) {
+    console.warn(`[db] resolverClienteId falhou, usando fallback Codina: ${e.message}`);
+    return CLIENTE_ID_FALLBACK;
+  }
+}
+
+// Compat: nome antigo continua disponível pra import legado
+const CLIENTE_ID_PADRAO = CLIENTE_ID_FALLBACK;
 
 // ============================================================
 // rodarSQL — POST direto na Management API
@@ -74,13 +92,15 @@ function esc(s) {
 // pra um (cliente_id, agente_id).
 // ============================================================
 
-async function salvarMensagem({ cliente_id = CLIENTE_ID_PADRAO, agente_id = AGENTE_ID_PINGUIM, papel, conteudo, artefatos = null }) {
+async function salvarMensagem({ cliente_id, agente_id = AGENTE_ID_PINGUIM, papel, conteudo, artefatos = null }) {
+  // V2.13: cliente_id resolve via SOCIO_SLUG do .env.local se não for passado
+  const cid = await resolverClienteId(cliente_id);
   // papel = 'humano' | 'chief' (convenção do sistema antigo, preservada)
   const sql = `
     INSERT INTO pinguim.conversas (tenant_id, cliente_id, agente_id, papel, conteudo, artefatos)
     VALUES (
       ${esc(TENANT_ID_PINGUIM)},
-      ${esc(cliente_id)},
+      ${esc(cid)},
       ${esc(agente_id)},
       ${esc(papel)},
       ${esc(conteudo)},
@@ -92,16 +112,16 @@ async function salvarMensagem({ cliente_id = CLIENTE_ID_PADRAO, agente_id = AGEN
   return Array.isArray(data) && data[0] ? data[0] : null;
 }
 
-async function carregarHistorico({ cliente_id = CLIENTE_ID_PADRAO, agente_id = AGENTE_ID_PINGUIM, limite = 20 }) {
+async function carregarHistorico({ cliente_id, agente_id = AGENTE_ID_PINGUIM, limite = 20 }) {
+  // V2.13: cliente_id resolve via SOCIO_SLUG do .env.local se não for passado
+  const cid = await resolverClienteId(cliente_id);
   // Retorna últimas N mensagens em ordem cronológica (mais antiga primeiro).
-  // Filtra papel IN ('humano','chief') pra não vazar mensagens 'sistema'
-  // (V2.12 Fix 2 grava drive_op em mensagens 'sistema' que não devem
-  // aparecer no histórico do CLI).
+  // Filtra papel IN ('humano','chief') pra não vazar mensagens 'sistema'.
   const sql = `
     SELECT id, papel, conteudo, criado_em
     FROM pinguim.conversas
     WHERE tenant_id = ${esc(TENANT_ID_PINGUIM)}
-      AND cliente_id = ${esc(cliente_id)}
+      AND cliente_id = ${esc(cid)}
       AND agente_id = ${esc(agente_id)}
       AND papel IN ('humano', 'chief')
     ORDER BY criado_em DESC
@@ -119,7 +139,9 @@ async function carregarHistorico({ cliente_id = CLIENTE_ID_PADRAO, agente_id = A
 // V3: parent_id=V2.id, versao=3 (cadeia)
 // ============================================================
 
-async function salvarEntregavel({ cliente_id = CLIENTE_ID_PADRAO, agente_que_fez = AGENTE_ID_PINGUIM, tipo, titulo, conteudo_md, conteudo_estruturado = null, parent_id = null, versao = null }) {
+async function salvarEntregavel({ cliente_id, agente_que_fez = AGENTE_ID_PINGUIM, tipo, titulo, conteudo_md, conteudo_estruturado = null, parent_id = null, versao = null }) {
+  // V2.13: cliente_id resolve via SOCIO_SLUG do .env.local se não for passado
+  const cid = await resolverClienteId(cliente_id);
   // Se parent_id existe, calcula versao automaticamente (parent.versao + 1)
   let versaoFinal = versao;
   if (parent_id && !versaoFinal) {
@@ -135,7 +157,7 @@ async function salvarEntregavel({ cliente_id = CLIENTE_ID_PADRAO, agente_que_fez
       conteudo_md, conteudo_estruturado, versao, parent_id
     ) VALUES (
       ${esc(TENANT_ID_PINGUIM)},
-      ${esc(cliente_id)},
+      ${esc(cid)},
       ${esc(agente_que_fez)},
       ${esc(tipo)},
       ${esc(titulo)},
@@ -196,13 +218,15 @@ async function carregarCadeiaVersoes(id) {
 }
 
 // Lista entregáveis recentes do cliente — usado pra detectar "mude o entregável anterior"
-async function listarEntregaveisRecentes({ cliente_id = CLIENTE_ID_PADRAO, agente_que_fez = AGENTE_ID_PINGUIM, limite = 5 }) {
+async function listarEntregaveisRecentes({ cliente_id, agente_que_fez = AGENTE_ID_PINGUIM, limite = 5 } = {}) {
+  // V2.13: cliente_id resolve via SOCIO_SLUG do .env.local se não for passado
+  const cid = await resolverClienteId(cliente_id);
   const sql = `
     SELECT id, tipo, titulo, versao, parent_id, criado_em,
            length(conteudo_md) AS tamanho_chars
     FROM pinguim.entregaveis
     WHERE tenant_id = ${esc(TENANT_ID_PINGUIM)}
-      AND cliente_id = ${esc(cliente_id)}
+      AND cliente_id = ${esc(cid)}
       AND agente_que_fez = ${esc(agente_que_fez)}
     ORDER BY criado_em DESC
     LIMIT ${parseInt(limite, 10)};
@@ -212,7 +236,8 @@ async function listarEntregaveisRecentes({ cliente_id = CLIENTE_ID_PADRAO, agent
 }
 
 // Pega o último entregável do cliente (mais recente) — pra detectar edição "muda X" sem ID explícito
-async function ultimoEntregavelDoCliente({ cliente_id = CLIENTE_ID_PADRAO, agente_que_fez = AGENTE_ID_PINGUIM }) {
+async function ultimoEntregavelDoCliente({ cliente_id, agente_que_fez = AGENTE_ID_PINGUIM } = {}) {
+  // resolverClienteId acontece dentro de listarEntregaveisRecentes
   const lista = await listarEntregaveisRecentes({ cliente_id, agente_que_fez, limite: 1 });
   return lista[0] || null;
 }
@@ -238,7 +263,7 @@ async function ultimoEntregavelDoCliente({ cliente_id = CLIENTE_ID_PADRAO, agent
 // Insere uma "mensagem de sistema" registrando a operação Drive.
 // Não aparece no histórico do CLI porque carregarHistorico filtra papel.
 async function registrarOpDrive({
-  cliente_id = CLIENTE_ID_PADRAO,
+  cliente_id,
   agente_id = AGENTE_ID_PINGUIM,
   fileId,
   nome,
@@ -247,12 +272,14 @@ async function registrarOpDrive({
   op, // 'buscar' | 'ler' | 'editar'
 }) {
   if (!fileId || !op) return null; // busca pode não ter fileId específico — não registra
+  // V2.13: cliente_id resolve via SOCIO_SLUG do .env.local se não for passado
+  const cid = await resolverClienteId(cliente_id);
   const artefatos = { drive_op: { fileId, nome: nome || null, link, aba, op } };
   const sql = `
     INSERT INTO pinguim.conversas (tenant_id, cliente_id, agente_id, papel, conteudo, artefatos)
     VALUES (
       ${esc(TENANT_ID_PINGUIM)},
-      ${esc(cliente_id)},
+      ${esc(cid)},
       ${esc(agente_id)},
       'sistema',
       ${esc(`drive_op:${op} ${nome || fileId}`)},
@@ -273,11 +300,13 @@ async function registrarOpDrive({
 // nos últimos K dias. Mais recente vence (dedupa por fileId, mantém o
 // último uso). Retorna lista pronta pra injetar no prompt.
 async function lerDriveContexto({
-  cliente_id = CLIENTE_ID_PADRAO,
+  cliente_id,
   agente_id = AGENTE_ID_PINGUIM,
   dias = 30,
   limite = 5,
 } = {}) {
+  // V2.13: cliente_id resolve via SOCIO_SLUG do .env.local se não for passado
+  const cid = await resolverClienteId(cliente_id);
   const sql = `
     WITH ops AS (
       SELECT
@@ -289,7 +318,7 @@ async function lerDriveContexto({
         criado_em
       FROM pinguim.conversas
       WHERE tenant_id = ${esc(TENANT_ID_PINGUIM)}
-        AND cliente_id = ${esc(cliente_id)}
+        AND cliente_id = ${esc(cid)}
         AND agente_id = ${esc(agente_id)}
         AND artefatos ? 'drive_op'
         AND criado_em > NOW() - INTERVAL '${parseInt(dias, 10)} days'
@@ -348,8 +377,10 @@ async function lerChaveSistema(nome, consumidor = 'server-cli') {
   return Array.isArray(data) && data[0] ? data[0].valor : null;
 }
 
-async function lerChavePorCliente(nome, cliente_id = CLIENTE_ID_PADRAO) {
-  const sql = `SELECT pinguim.get_chave_por_cliente(${esc(nome)}, ${esc(cliente_id)}::uuid) AS valor;`;
+async function lerChavePorCliente(nome, cliente_id) {
+  // V2.13: cliente_id resolve via SOCIO_SLUG do .env.local se não for passado
+  const cid = await resolverClienteId(cliente_id);
+  const sql = `SELECT pinguim.get_chave_por_cliente(${esc(nome)}, ${esc(cid)}::uuid) AS valor;`;
   const data = await rodarSQL(sql);
   return Array.isArray(data) && data[0] ? data[0].valor : null;
 }
@@ -360,10 +391,12 @@ async function salvarRefreshTokenOAuth({
   provedor = 'Google',
   escopo = 'drive.readonly calendar.readonly',
   refresh_token,
-  cliente_id = CLIENTE_ID_PADRAO,
+  cliente_id,
   observacoes = '',
 }) {
   if (!refresh_token) throw new Error('refresh_token obrigatorio');
+  // V2.13: cliente_id resolve via SOCIO_SLUG do .env.local se não for passado
+  const cid = await resolverClienteId(cliente_id);
   // Tenta UPDATE primeiro (se existe pra esse cliente). Se nao afetou linha, INSERT.
   const sql = `
     WITH upd AS (
@@ -375,7 +408,7 @@ async function salvarRefreshTokenOAuth({
           escopo = ${esc(escopo)},
           observacoes = ${esc(observacoes)},
           atualizado_em = now()
-      WHERE nome = ${esc(nome)} AND cliente_id = ${esc(cliente_id)}::uuid
+      WHERE nome = ${esc(nome)} AND cliente_id = ${esc(cid)}::uuid
       RETURNING id
     )
     INSERT INTO pinguim.cofre_chaves
@@ -391,7 +424,7 @@ async function salvarRefreshTokenOAuth({
       'OAuth refresh_token (V2.12 squad operacional)',
       now(),
       true,
-      ${esc(cliente_id)}::uuid,
+      ${esc(cid)}::uuid,
       ${esc(observacoes)}
     WHERE NOT EXISTS (SELECT 1 FROM upd)
     RETURNING id;
@@ -400,18 +433,22 @@ async function salvarRefreshTokenOAuth({
   return Array.isArray(data) && data[0] ? data[0] : null;
 }
 
-async function revogarOAuthToken({ nome = 'GOOGLE_OAUTH_REFRESH', cliente_id = CLIENTE_ID_PADRAO }) {
-  const sql = `SELECT pinguim.revogar_chave_oauth(${esc(nome)}, ${esc(cliente_id)}::uuid) AS revogado;`;
+async function revogarOAuthToken({ nome = 'GOOGLE_OAUTH_REFRESH', cliente_id } = {}) {
+  // V2.13: cliente_id resolve via SOCIO_SLUG do .env.local se não for passado
+  const cid = await resolverClienteId(cliente_id);
+  const sql = `SELECT pinguim.revogar_chave_oauth(${esc(nome)}, ${esc(cid)}::uuid) AS revogado;`;
   const data = await rodarSQL(sql);
   return Array.isArray(data) && data[0] ? !!data[0].revogado : false;
 }
 
 module.exports = {
   TENANT_ID_PINGUIM,
-  CLIENTE_ID_PADRAO,
+  CLIENTE_ID_PADRAO, // alias legado (= CLIENTE_ID_FALLBACK = Codina)
+  CLIENTE_ID_FALLBACK,
   AGENTE_ID_PINGUIM,
   rodarSQL,
   esc,
+  resolverClienteId, // V2.13 — exportado pra outros módulos resolverem identidade do sócio
   // threads/conversas
   salvarMensagem,
   carregarHistorico,

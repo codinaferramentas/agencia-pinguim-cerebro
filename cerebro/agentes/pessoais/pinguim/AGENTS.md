@@ -45,7 +45,7 @@
 **Sinais:** "lista X", "atualiza Y", "verifica Z", queries sobre estado do sistema
 **Ação:** executa scripts de leitura, mostra resultado
 
-### Categoria E — Operações no Drive do sócio (V2.12)
+### Categoria E — Operações Google (Drive V2.12 + Gmail V2.13)
 
 #### Memória de arquivo ativo (V2.12 Fix 2 — LER ANTES de qualquer E)
 
@@ -152,10 +152,101 @@ Confirma? [sim/não]
 - ❌ Editar Doc (texto formatado) — não implementado nesta versão, só planilhas
 - ❌ Inventar célula sem ler a planilha primeiro pra confirmar layout
 
+#### E4 — LISTAR emails do Gmail (V2.13)
+
+**Sinais:** "lê meus emails", "tem alguma coisa importante no inbox", "quais emails não-lidos", "emails de fulano hoje", "última semana de email", "tem algum email sobre X"
+
+**Ação:**
+1. Constrói query Gmail apropriada (`is:unread`, `from:X`, `newer_than:3d`, `subject:"X"`, etc)
+2. Roda `bash scripts/gmail-listar.sh "<query>" [pageSize]` (default `in:inbox`, 10)
+3. Devolve markdown com lista: assunto, remetente, data, snippet, status (lido/star), id pra leitura completa
+
+**Quando refinar query (regra dura):**
+- Sócio fala "emails do João" → query `from:joao` (não `in:inbox` filtrado depois)
+- Sócio fala "essa semana" → `newer_than:7d`
+- Sócio fala "não-lidos" → `is:unread`
+- Sócio fala "sobre X" → `subject:"X"` ou só `X` no fulltext
+- Combina: "não-lidos do João essa semana" → `from:joao is:unread newer_than:7d`
+
+**Limites:**
+- pageSize máximo recomendado: 20 (mais que isso vira muito ruído pra ler no chat)
+- Texto truncado, link `gmail-ler.sh` no final pra abrir completo
+
+#### E5 — LER email completo (V2.13)
+
+**Sinais:** "abre o email do João", "lê esse email completo", "o que diz o email sobre X", após sócio ver lista E4 e querer aprofundar
+
+**Ação:**
+1. Se ainda não tem `messageId`, roda `gmail-listar` primeiro pra achar
+2. Roda `bash scripts/gmail-ler.sh <messageId>`
+3. Devolve em markdown: De, Para, Assunto, Data, Labels, corpo do email (até 8000 chars)
+
+**Limites:**
+- Texto > 8000 chars vira truncado com aviso
+- HTML é convertido pra texto plano (perde formatação fina mas mantém legibilidade)
+- Anexos ainda não são listados/baixados (V2.14+)
+
+#### E6 — ENVIAR/MODIFICAR email (V2.13) — CONFIRMAÇÃO NO CHAT
+
+**Sinais:**
+- Enviar/responder: "responde esse email com X", "manda email pra fulano sobre Y", "responde sim, fechado", "diz que não posso quarta"
+- Modificar: "marca como lido", "arquiva esse", "joga no spam", "estrela esse importante"
+
+**REGRA DURA — fluxo de 3 passos. NUNCA pular o passo 2.**
+
+**Passo 1 — Investiga:** se reply, roda `gmail-ler` pra confirmar contexto (de quem é, sobre o quê). Identifica:
+- ID da mensagem
+- Para qual email vai a resposta (extrai do header From original)
+- Assunto que vai (com `Re: ` prefixo)
+
+**Passo 2 — Mostra plano e PEDE CONFIRMAÇÃO no chat:**
+
+Para responder:
+```
+Vou enviar email:
+  Para: fulano@x.com
+  Assunto: Re: Sobre nosso call
+  Corpo:
+  > Obrigado pelo retorno. Vamos amanhã 15h, fechado.
+
+Confirma envio? [sim/não]
+```
+
+Para modificar:
+```
+Vou arquivar este email:
+  De: fulano@x.com
+  Assunto: Sobre nosso call
+
+Confirma? [sim/não]
+```
+
+**E PARA. Espera o sócio responder.** Não chama scripts antes da confirmação. Não assume "sim implícito".
+
+**Exceção (não precisa confirmar):**
+- `lido` / `nao-lido` / `starred` / `unstarred` — operações **não-destrutivas**, sócio pediu explicitamente. Pode rodar direto.
+
+**Confirmação obrigatória:**
+- Enviar email novo ou responder
+- `arquivar`, `spam`, `lixo` (saem da inbox — destrutivos)
+
+**Passo 3 — Executa só após "sim" explícito:**
+- Reply: `bash scripts/gmail-responder.sh reply <msgId> "<corpo>" [cc]`
+- Novo: `bash scripts/gmail-responder.sh novo "<para>" "<assunto>" "<corpo>" [cc]`
+- Modificar: `bash scripts/gmail-modificar.sh <msgId> <op>`
+
+**Anti-padrões proibidos:**
+- ❌ Enviar email sem mostrar preview do corpo primeiro
+- ❌ Inventar destinatário (sempre extrair do email original quando reply)
+- ❌ Mudar assunto silenciosamente (manter `Re: <original>`, exceto se sócio pedir explícito)
+- ❌ Anexar HTML/imagem (não suportado nesta versão — só plain text)
+- ❌ "Sim" do sócio em arquivar email A ≠ "sim" pra arquivar email B (cada operação destrutiva = nova confirmação)
+
 #### Quando NÃO usar Categoria E
 
 - Pergunta sobre arquivo do sistema (.md no repo) — usa Glob/Grep direto
 - Pedido criativo que menciona arquivo ("monta uma copy parecida com a que está no Drive...") — busca + lê primeiro com `buscar-drive`/`ler-drive`, depois delega criativo
+- "Email" no sentido de **escrever email novo do zero como copy criativa** (campanha, lançamento) — vai pro pipeline criativo squad `copy`, não Gmail. Gmail é pra operação na caixa pessoal do sócio.
 
 ## Mapeamento Categoria C → squad (NUNCA pergunte ao usuário, decida sozinho)
 

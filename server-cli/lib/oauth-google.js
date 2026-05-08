@@ -12,13 +12,16 @@ const db = require('./db');
 // conexao unica que cobre tudo. Confirmacao humana obrigatoria pra cada
 // operacao de WRITE acontece NO SERVER-CLI (camada de seguranca movida pra app).
 //
-// drive       = ler + editar + criar + deletar arquivos do socio
-// calendar    = ler + criar/editar/deletar eventos do calendario do socio
+// drive          = ler + editar + criar + deletar arquivos do socio
+// calendar       = ler + criar/editar/deletar eventos do calendario do socio
+// gmail.modify   = ler + responder + arquivar + marcar (V2.13 — sócios topam ler email)
 //
-// Gmail fica pra fase futura (tem implicacoes maiores de privacidade).
+// Decisão 2026-05-08 noite: gmail incluido no mesmo app OAuth (não app separado).
+// Sócios alinhados, todos vão autorizar Gmail junto com Drive+Calendar.
 const SCOPES_PADRAO = [
-  'https://www.googleapis.com/auth/drive',     // ler + editar + criar arquivos
-  'https://www.googleapis.com/auth/calendar',  // ler + editar eventos
+  'https://www.googleapis.com/auth/drive',         // ler + editar + criar arquivos
+  'https://www.googleapis.com/auth/calendar',      // ler + editar eventos
+  'https://www.googleapis.com/auth/gmail.modify',  // V2.13 — ler + responder + modificar email
 ];
 
 // Constroi URL de autorizacao do Google.
@@ -84,9 +87,11 @@ async function renovarAccessToken({ refresh_token, client_id, client_secret }) {
 // Reduz round-trips ao Google quando agente faz multiplas chamadas Drive/Calendar.
 const _cacheAccessToken = new Map(); // cliente_id -> { token, expira_em_ms }
 
-async function obterAccessTokenAtivo({ cliente_id = db.CLIENTE_ID_PADRAO } = {}) {
+async function obterAccessTokenAtivo({ cliente_id } = {}) {
+  // V2.13: cliente_id resolve via SOCIO_SLUG do .env.local se não for passado
+  const cid = await db.resolverClienteId(cliente_id);
   // Cache hit
-  const cached = _cacheAccessToken.get(cliente_id);
+  const cached = _cacheAccessToken.get(cid);
   if (cached && cached.expira_em_ms > Date.now()) {
     return cached.token;
   }
@@ -95,7 +100,7 @@ async function obterAccessTokenAtivo({ cliente_id = db.CLIENTE_ID_PADRAO } = {})
   const [client_id, client_secret, refresh_token] = await Promise.all([
     db.lerChaveSistema('GOOGLE_OAUTH_CLIENT_ID', 'oauth-google'),
     db.lerChaveSistema('GOOGLE_OAUTH_CLIENT_SECRET', 'oauth-google'),
-    db.lerChavePorCliente('GOOGLE_OAUTH_REFRESH', cliente_id),
+    db.lerChavePorCliente('GOOGLE_OAUTH_REFRESH', cid),
   ]);
 
   if (!client_id || !client_secret) {
@@ -109,7 +114,7 @@ async function obterAccessTokenAtivo({ cliente_id = db.CLIENTE_ID_PADRAO } = {})
 
   // Cache com margem de 60s pra evitar usar token "quase expirado"
   const expira_em_ms = Date.now() + (tokens.expires_in * 1000) - 60_000;
-  _cacheAccessToken.set(cliente_id, { token: tokens.access_token, expira_em_ms });
+  _cacheAccessToken.set(cid, { token: tokens.access_token, expira_em_ms });
 
   return tokens.access_token;
 }
