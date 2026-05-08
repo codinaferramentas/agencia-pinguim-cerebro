@@ -213,6 +213,78 @@ async function ultimoEntregavelDoCliente({ cliente_id = CLIENTE_ID_PADRAO, agent
   return lista[0] || null;
 }
 
+// ============================================================
+// V2.12 — COFRE DE CHAVES (sistema + OAuth por cliente)
+// Chaves de sistema: cliente_id=NULL (ex: GOOGLE_OAUTH_CLIENT_ID,
+// GOOGLE_OAUTH_CLIENT_SECRET). Le com get_chave RPC.
+// Chaves por cliente: cliente_id=<uuid> (ex: GOOGLE_OAUTH_REFRESH).
+// Le com get_chave_por_cliente RPC.
+// ============================================================
+
+async function lerChaveSistema(nome, consumidor = 'server-cli') {
+  const sql = `SELECT pinguim.get_chave(${esc(nome)}, ${esc(consumidor)}, 'server-cli') AS valor;`;
+  const data = await rodarSQL(sql);
+  return Array.isArray(data) && data[0] ? data[0].valor : null;
+}
+
+async function lerChavePorCliente(nome, cliente_id = CLIENTE_ID_PADRAO) {
+  const sql = `SELECT pinguim.get_chave_por_cliente(${esc(nome)}, ${esc(cliente_id)}::uuid) AS valor;`;
+  const data = await rodarSQL(sql);
+  return Array.isArray(data) && data[0] ? data[0].valor : null;
+}
+
+// Upsert de OAuth refresh_token (usa nome+cliente_id como chave logica)
+async function salvarRefreshTokenOAuth({
+  nome = 'GOOGLE_OAUTH_REFRESH',
+  provedor = 'Google',
+  escopo = 'drive.readonly calendar.readonly',
+  refresh_token,
+  cliente_id = CLIENTE_ID_PADRAO,
+  observacoes = '',
+}) {
+  if (!refresh_token) throw new Error('refresh_token obrigatorio');
+  // Tenta UPDATE primeiro (se existe pra esse cliente). Se nao afetou linha, INSERT.
+  const sql = `
+    WITH upd AS (
+      UPDATE pinguim.cofre_chaves
+      SET valor_completo = ${esc(refresh_token)},
+          ultimos_4 = ${esc(refresh_token.slice(-4))},
+          ultima_rotacao = now(),
+          ativo = true,
+          escopo = ${esc(escopo)},
+          observacoes = ${esc(observacoes)},
+          atualizado_em = now()
+      WHERE nome = ${esc(nome)} AND cliente_id = ${esc(cliente_id)}::uuid
+      RETURNING id
+    )
+    INSERT INTO pinguim.cofre_chaves
+      (nome, provedor, escopo, onde_vive, valor_completo, ultimos_4,
+       descricao, criado_em_provedor, ativo, cliente_id, observacoes)
+    SELECT
+      ${esc(nome)},
+      ${esc(provedor)},
+      ${esc(escopo)},
+      'cofre',
+      ${esc(refresh_token)},
+      ${esc(refresh_token.slice(-4))},
+      'OAuth refresh_token (V2.12 squad operacional)',
+      now(),
+      true,
+      ${esc(cliente_id)}::uuid,
+      ${esc(observacoes)}
+    WHERE NOT EXISTS (SELECT 1 FROM upd)
+    RETURNING id;
+  `;
+  const data = await rodarSQL(sql);
+  return Array.isArray(data) && data[0] ? data[0] : null;
+}
+
+async function revogarOAuthToken({ nome = 'GOOGLE_OAUTH_REFRESH', cliente_id = CLIENTE_ID_PADRAO }) {
+  const sql = `SELECT pinguim.revogar_chave_oauth(${esc(nome)}, ${esc(cliente_id)}::uuid) AS revogado;`;
+  const data = await rodarSQL(sql);
+  return Array.isArray(data) && data[0] ? !!data[0].revogado : false;
+}
+
 module.exports = {
   TENANT_ID_PINGUIM,
   CLIENTE_ID_PADRAO,
@@ -228,4 +300,9 @@ module.exports = {
   carregarCadeiaVersoes,
   listarEntregaveisRecentes,
   ultimoEntregavelDoCliente,
+  // cofre + OAuth (V2.12)
+  lerChaveSistema,
+  lerChavePorCliente,
+  salvarRefreshTokenOAuth,
+  revogarOAuthToken,
 };
