@@ -30,6 +30,7 @@ const {
   detectarProduto,
   SQUADS_POPULADAS, // V2.5 Commit 4 — fonte unica da verdade
 } = require('./lib/orquestrador');
+const { classificarMensagem } = require('./lib/router-llm'); // V2.9 — LLM router
 
 const app = express();
 const PORT = 3737;
@@ -159,36 +160,69 @@ function runClaudeCLI(prompt, opts = {}) {
 // V2.5 Commit 4: SQUADS_POPULADAS importado do orquestrador (fonte unica).
 // V3 vai virar tabela em pinguim.squads (coluna populada).
 
-app.post('/api/detectar-tipo', (req, res) => {
+app.post('/api/detectar-tipo', async (req, res) => {
   const { message } = req.body || {};
   if (!message || !message.trim()) {
     return res.status(400).json({ error: 'message obrigatorio' });
   }
 
-  const ehCriativo = ehPedidoCriativoGrande(message);
-  const ctx = detectarPapelEContexto(message);
-  const squad_destino = detectarSquad(message);
+  const t0 = Date.now();
+
+  // V2.9 — Tentar LLM router primeiro. Token zero (Haiku via Claude CLI Max).
+  // Se falhar (timeout/parse-erro), cai pras 3 regex como fallback.
+  const llm = await classificarMensagem(message);
+
+  let tipo, subcategoria, squad_destino, fonte_classificacao, raciocinio, confianca;
+
+  if (llm && llm.confianca >= 0.6) {
+    // === Caminho LLM ===
+    fonte_classificacao = 'llm';
+    raciocinio = llm.raciocinio;
+    confianca = llm.confianca;
+    tipo = (llm.tipo === 'criativo') ? 'criativo' : 'normal';
+    subcategoria = (llm.tipo === 'criativo') ? 'criativo-grande'
+                 : (llm.tipo === 'saudacao') ? 'saudacao'
+                 : (llm.tipo === 'admin') ? 'comando-admin'
+                 : 'factual';
+    squad_destino = llm.squad || detectarSquad(message); // se LLM nao deu squad, regex completa
+  } else {
+    // === Caminho regex (fallback) ===
+    fonte_classificacao = llm ? 'fallback-baixa-confianca' : 'fallback-llm-falhou';
+    raciocinio = llm ? `LLM retornou confianca ${llm.confianca}, usando regex` : 'LLM crashou ou parse falhou';
+    confianca = null;
+
+    const ehCriativo = ehPedidoCriativoGrande(message);
+    const ctx = detectarPapelEContexto(message);
+    squad_destino = detectarSquad(message);
+    tipo = ehCriativo ? 'criativo' : 'normal';
+    if (ctx.pular_verifier) subcategoria = 'saudacao';
+    else if (ehCriativo) subcategoria = 'criativo-grande';
+    else if (/^(quem (e |voce )|o que (e |voce )|qual seu|como funciona|me explica)/i.test(message)) subcategoria = 'factual';
+    else if (/^(lista|atualiza|verifica)/i.test(message)) subcategoria = 'comando-admin';
+    else subcategoria = 'factual';
+  }
+
   const produto_slug = detectarProduto(message);
   const squad_disponivel = SQUADS_POPULADAS.has(squad_destino);
+  const anima = (tipo === 'criativo') && squad_disponivel;
+  const dur_ms = Date.now() - t0;
 
-  let subcategoria;
-  if (ctx.pular_verifier) subcategoria = 'saudacao';
-  else if (ehCriativo) subcategoria = 'criativo-grande';
-  else if (/^(quem (e |voce )|o que (e |voce )|qual seu|como funciona|me explica)/i.test(message)) subcategoria = 'factual';
-  else if (/^(lista|atualiza|verifica)/i.test(message)) subcategoria = 'comando-admin';
-  else subcategoria = 'factual'; // default conservador
-
-  // So anima se for criativo E squad detectada esta populada — frontend evita
-  // abrir Salao vazio pra "estrategia de tráfego" (squad ainda nao populada).
-  const anima = ehCriativo && squad_disponivel;
+  console.log(`[detectar-tipo] ${dur_ms}ms | fonte=${fonte_classificacao} | tipo=${tipo}/${subcategoria} | squad=${squad_destino} (disponivel=${squad_disponivel}) | conf=${confianca ?? '-'} | "${message.slice(0, 60)}"`);
 
   res.json({
-    tipo: ehCriativo ? 'criativo' : 'normal',
+    tipo,
     subcategoria,
     squad_destino,
     squad_disponivel,
     produto_slug,
     anima,
+    // V2.9 — info do classificador, util pra debug e telemetria futura
+    classificacao: {
+      fonte: fonte_classificacao,
+      confianca,
+      raciocinio,
+      latencia_ms: dur_ms,
+    },
   });
 });
 
