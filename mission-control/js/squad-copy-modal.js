@@ -5,8 +5,8 @@
    Reutiliza CSS da .squad-overlay já existente (mesmas classes).
 */
 
-import { criarEngineCopy, listarAgentesParaSidebar, COPY_FONTES, COPY_MESTRES_DEFAULT } from './squad-copy-animation.js?v=20260507b';
-import { ROTEIROS_COPY } from './squad-copy-roteiros.js?v=20260507b';
+import { criarEngineCopy, listarAgentesParaSidebar, COPY_FONTES, COPY_MESTRES_DEFAULT } from './squad-copy-animation.js?v=20260508a';
+import { ROTEIROS_COPY } from './squad-copy-roteiros.js?v=20260508a';
 
 // V2.5 — `mestresSlugs` opcional. Se nao vier, usa o default V2.4 (4 mestres).
 export async function abrirSquadCopyModal({ roteiro, apiCall, titulo, subtitulo, pedido, mestresSlugs }) {

@@ -265,7 +265,8 @@ function drawWalls(ctx, W) {
 
 function drawHeadline(ctx, W) {
   ctx.save();
-  ctx.font = 'bold 12px -apple-system, "Segoe UI", sans-serif';
+  // V2.10.1 — fonte maior pra legibilidade em telas grandes (era 12px)
+  ctx.font = 'bold 14px -apple-system, "Segoe UI", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const text = 'SALÃO DOS MESTRES · PIPELINE CRIATIVO PINGUIM';
@@ -315,7 +316,8 @@ function drawQuadroPinguim(ctx, cx, cy) {
   ctx.fillStyle = 'rgba(232, 92, 0, 0.85)';
   ctx.fillRect(cx - 36, cy + h / 2 + 4, 72, 12);
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 8px -apple-system, "Segoe UI", sans-serif';
+  // V2.10.1 — bump pequeno (era 8px)
+  ctx.font = 'bold 9px -apple-system, "Segoe UI", sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('AGÊNCIA PINGUIM', cx, cy + h / 2 + 12);
   ctx.textAlign = 'left';
@@ -332,7 +334,8 @@ function drawEtiquetaSalao(ctx, cx, cy) {
   ctx.fillStyle = 'rgba(255,255,255,0.06)';
   ctx.fillRect(cx - w / 2 + 2, cy - h / 2 + 2, w - 4, 2);
   // Conteúdo
-  ctx.font = 'bold 9px -apple-system, "Segoe UI", sans-serif';
+  // V2.10.1 — bump pequeno (eram 9px e 7px)
+  ctx.font = 'bold 10px -apple-system, "Segoe UI", sans-serif';
   ctx.textAlign = 'center';
   ctx.fillStyle = '#E85C00';
   ctx.fillText('SALÃO', cx, cy - 6);
@@ -340,7 +343,7 @@ function drawEtiquetaSalao(ctx, cx, cy) {
   ctx.fillStyle = 'rgba(232, 92, 0, 0.5)';
   ctx.fillRect(cx - 16, cy + 12, 32, 1);
   ctx.fillStyle = '#9ca3af';
-  ctx.font = '7px -apple-system, "Segoe UI", sans-serif';
+  ctx.font = '8px -apple-system, "Segoe UI", sans-serif';
   ctx.fillText('mestres', cx, cy + 22);
   ctx.textAlign = 'left';
 }
@@ -474,7 +477,8 @@ function drawFonte(ctx, fonte, gap, frame, ativa) {
     ctx.fillRect(x - 34, y - 54, 68, 80);
     // Título "FUNIL"
     ctx.fillStyle = '#1f2937';
-    ctx.font = 'bold 8px -apple-system, "Segoe UI", sans-serif';
+    // V2.10.1 — bump (era 8px)
+    ctx.font = 'bold 10px -apple-system, "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('FUNIL ATIVO', x, y - 46);
     ctx.fillStyle = '#9ca3af';
@@ -482,7 +486,8 @@ function drawFonte(ctx, fonte, gap, frame, ativa) {
     // 3 caixas em funil invertido
     ctx.fillStyle = '#10b981';
     ctx.fillRect(x - 28, y - 36, 56, 16); // topo (largo)
-    ctx.fillStyle = '#0a0a0a'; ctx.font = 'bold 7px sans-serif';
+    // V2.10.1 — bump (era 7px) — caixinha apertada, +1 só
+    ctx.fillStyle = '#0a0a0a'; ctx.font = 'bold 8px sans-serif';
     ctx.fillText('TOPO', x, y - 27);
     ctx.fillStyle = '#3b82f6';
     ctx.fillRect(x - 20, y - 16, 40, 16); // meio
@@ -503,23 +508,25 @@ function drawFonte(ctx, fonte, gap, frame, ativa) {
   ctx.restore();
 
   // Label da fonte (logo abaixo, dentro da parede ainda)
-  ctx.font = 'bold 12px -apple-system, "Segoe UI", sans-serif';
-  const labelW = ctx.measureText(nome).width + 18;
+  // V2.10.1 — fonte maior + caixa proporcional (era 12px / caixa 18px)
+  ctx.font = 'bold 14px -apple-system, "Segoe UI", sans-serif';
+  const labelW = ctx.measureText(nome).width + 20;
   const lx = x - labelW / 2;
   const ly = y + 42;
   ctx.fillStyle = 'rgba(0,0,0,0.9)';
-  ctx.fillRect(lx, ly, labelW, 18);
+  ctx.fillRect(lx, ly, labelW, 22);
   ctx.fillStyle = gap ? '#ef4444' : '#fbbf24';
-  ctx.fillRect(lx, ly, 4, 18);
+  ctx.fillRect(lx, ly, 4, 22);
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
-  ctx.fillText(nome, x, ly + 13);
+  ctx.fillText(nome, x, ly + 15);
   ctx.textAlign = 'left';
 
   // Marca "GAP" se a fonte deu gap
   if (gap) {
     ctx.fillStyle = '#ef4444';
-    ctx.font = 'bold 11px -apple-system, "Segoe UI", sans-serif';
+    // V2.10.1 — bump (era 11px)
+    ctx.font = 'bold 13px -apple-system, "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('GAP', x, y - 70);
     ctx.textAlign = 'left';
@@ -565,15 +572,16 @@ function drawMesaMestre(ctx, mesa, ocupada, frame) {
   ctx.fillStyle = '#1a1a1a'; ctx.fillRect(x - 14, y + 4, 28, 4);
 
   // Placa com nome
-  ctx.font = 'bold 10px -apple-system, "Segoe UI", sans-serif';
-  const labelW = ctx.measureText(nome).width + 14;
+  // V2.10.1 — bump fonte+caixa (era 10px / caixa 14)
+  ctx.font = 'bold 12px -apple-system, "Segoe UI", sans-serif';
+  const labelW = ctx.measureText(nome).width + 16;
   const lx = x - labelW / 2;
   const ly = y + 30;
-  ctx.fillStyle = '#0a0a0a'; ctx.fillRect(lx, ly, labelW, 14);
-  ctx.fillStyle = accent; ctx.fillRect(lx, ly, 3, 14);
+  ctx.fillStyle = '#0a0a0a'; ctx.fillRect(lx, ly, labelW, 18);
+  ctx.fillStyle = accent; ctx.fillRect(lx, ly, 3, 18);
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
-  ctx.fillText(nome, x, ly + 10);
+  ctx.fillText(nome, x, ly + 12);
   ctx.textAlign = 'left';
 }
 
@@ -609,7 +617,8 @@ function drawMesaAtendente(ctx, x, y) {
   ctx.fillStyle = COL.acentoPinguim;
   ctx.fillRect(x - 19, y + 12, 2, 1); // bico
   // Texto "AGÊNCIA PINGUIM"
-  ctx.font = 'bold 7px -apple-system, "Segoe UI", sans-serif';
+  // V2.10.1 — bump pequeno (era 7px)
+  ctx.font = 'bold 8px -apple-system, "Segoe UI", sans-serif';
   ctx.fillStyle = COL.acentoPinguim;
   ctx.textAlign = 'left';
   ctx.fillText('AGÊNCIA', x - 12, y + 13);
@@ -740,7 +749,8 @@ function drawQuadroTrabalhos(ctx, x, y, pedidoTexto) {
   ctx.beginPath(); ctx.arc(x, y - 38, 3, 0, Math.PI * 2); ctx.fill();
   // Header
   ctx.fillStyle = '#1f2937';
-  ctx.font = 'bold 9px -apple-system, "Segoe UI", sans-serif';
+  // V2.10.1 — bump (era 9px)
+  ctx.font = 'bold 10px -apple-system, "Segoe UI", sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('PEDIDO ATIVO', x, y - 25);
   ctx.textAlign = 'left';
@@ -749,10 +759,11 @@ function drawQuadroTrabalhos(ctx, x, y, pedidoTexto) {
   ctx.fillRect(x - 60, y - 20, 120, 1);
   // Texto do pedido (quebra em linhas)
   ctx.fillStyle = '#1f2937';
-  ctx.font = '9px -apple-system, "Segoe UI", sans-serif';
+  // V2.10.1 — bump (era 9px) + spacing line +1
+  ctx.font = '10px -apple-system, "Segoe UI", sans-serif';
   const linhas = quebrarTexto(ctx, pedidoTexto, 120);
   linhas.slice(0, 6).forEach((linha, i) => {
-    ctx.fillText(linha, x - 60, y - 8 + i * 11);
+    ctx.fillText(linha, x - 60, y - 8 + i * 12);
   });
 }
 
@@ -845,16 +856,17 @@ function drawPinguim(ctx, x, y, state, frame, direction) {
   ctx.restore();
 
   // Tag com nome
-  const tagY = y - 38;
-  ctx.font = 'bold 11px -apple-system, "Segoe UI", sans-serif';
-  const tagW = ctx.measureText('Atendente').width + 14;
+  // V2.10.1 — bump (era 11px / caixa 15)
+  const tagY = y - 40;
+  ctx.font = 'bold 13px -apple-system, "Segoe UI", sans-serif';
+  const tagW = ctx.measureText('Atendente').width + 16;
   ctx.fillStyle = 'rgba(0,0,0,0.85)';
-  ctx.fillRect(x - tagW / 2, tagY, tagW, 15);
+  ctx.fillRect(x - tagW / 2, tagY, tagW, 18);
   ctx.fillStyle = '#E85C00';
-  ctx.fillRect(x - tagW / 2, tagY + 13, tagW, 2);
+  ctx.fillRect(x - tagW / 2, tagY + 16, tagW, 2);
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
-  ctx.fillText('Atendente', x, tagY + 11);
+  ctx.fillText('Atendente', x, tagY + 13);
   ctx.textAlign = 'left';
 }
 
@@ -1056,16 +1068,17 @@ function drawHumano(ctx, x, y, agent, state, frame, direction, holdingPaper) {
   ctx.restore();
 
   // Tag com nome
-  const tagY = y - 36;
-  ctx.font = 'bold 11px -apple-system, "Segoe UI", sans-serif';
-  const tagW = ctx.measureText(agent.nome).width + 14;
+  // V2.10.1 — bump (era 11px / caixa 15)
+  const tagY = y - 38;
+  ctx.font = 'bold 13px -apple-system, "Segoe UI", sans-serif';
+  const tagW = ctx.measureText(agent.nome).width + 16;
   ctx.fillStyle = 'rgba(0,0,0,0.85)';
-  ctx.fillRect(x - tagW / 2, tagY, tagW, 15);
+  ctx.fillRect(x - tagW / 2, tagY, tagW, 18);
   ctx.fillStyle = agent.shirt === '#ffffff' ? '#dc2626' : agent.shirt;
-  ctx.fillRect(x - tagW / 2, tagY + 13, tagW, 2);
+  ctx.fillRect(x - tagW / 2, tagY + 16, tagW, 2);
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
-  ctx.fillText(agent.nome, x, tagY + 11);
+  ctx.fillText(agent.nome, x, tagY + 13);
   ctx.textAlign = 'left';
 
   // Bolinhas pulsantes "..." quando working
@@ -1091,10 +1104,11 @@ function drawHumano(ctx, x, y, agent, state, frame, direction, holdingPaper) {
 }
 
 function drawSpeechBubble(ctx, x, y, text) {
-  ctx.font = 'bold 13px -apple-system, "Segoe UI", sans-serif';
-  const padX = 10, padY = 6;
+  // V2.10.1 — fonte maior + caixa proporcional (era 13px / h=24)
+  ctx.font = 'bold 15px -apple-system, "Segoe UI", sans-serif';
+  const padX = 12, padY = 7;
   const w = ctx.measureText(text).width + padX * 2;
-  const h = 24;
+  const h = 28;
   const bx = x - w / 2;
   const by = y - 56;
   // Sombra
