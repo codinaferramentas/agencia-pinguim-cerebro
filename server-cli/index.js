@@ -297,6 +297,8 @@ app.post('/api/pipeline-plan', async (req, res) => {
       mestres_ignorados: result.plano.mestresIgnorados || [],
       fonte_decisao: result.plano.fonteDecisao,
       skill_usada: result.plano.skillUsada,
+      // V2.10.1 — skills aux aplicadas (so slugs, frontend nao precisa do conteudo)
+      skills_auxiliares: (result.plano.skillsAux || []).map(s => ({ slug: s.slug, ok: s.ok })),
       blocos_total: result.plano.blocosTotal,
       blocos_fallback_generico: result.plano.blocosFallbackGenerico || [],
       fontes_consultadas: result.plano.fontes.length,

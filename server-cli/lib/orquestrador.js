@@ -657,6 +657,29 @@ function escolherSkillQuery(msg) {
 }
 
 // ============================================================
+// V2.10.1 — Skills auxiliares (cross-cutting)
+// Skill principal decide CLONES + BLOCOS. Skills aux decidem FORMATAÇÃO
+// ou ANATOMIA específica que cada mestre aplica no seu briefing.
+// Não substitui a principal — complementa. Pipeline pode ter 0..N aux.
+// Detecção por regex (igual escolherSkillQuery). Vira dívida V3 pra LLM.
+// Memoria: project_skills_principal_e_auxiliares.md
+// ============================================================
+function escolherSkillsAuxiliares(message) {
+  const m = message.toLowerCase();
+  const aux = [];
+
+  // Quadro de decisão (perdas/ganhos, comparativo, tradeoff, scorecard)
+  // Usado em advisory-board, finops, qualquer pipeline que entregue framework
+  // de decisão multi-dimensão. Mestre aprende a escrever tabela markdown válida.
+  if (/\bquadro\b|perdas\s+e\s+ganhos?|pros\s+e\s+contras|comparativo|tradeoff|trade-off|scorecard|matriz\s+de\s+(an[aá]lise|decis[aã]o|avalia[cç][aã]o)/i.test(m)) {
+    aux.push('escrever-quadro-decisao');
+  }
+
+  // Limite de proteção: max 3 skills aux por pipeline (evita briefing inflado)
+  return aux.slice(0, 3);
+}
+
+// ============================================================
 // planejarPipeline — Etapas 1+2: consulta 5 fontes + decide mestres.
 // NAO dispara mestres. Devolve plano completo pra ser executado em separado.
 // V2.5 Commit 4: aceita squad opcional. Se nao vier, detecta da mensagem.
@@ -708,10 +731,38 @@ async function planejarPipeline({ message, log, squad: squadOverride }) {
       .catch(e => ({ tipo: 'skill', ok: false, erro: e.message })),
   );
 
-  const fontes = await Promise.all(consultas);
-  log(`${fontes.length} fontes consultadas em ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+  // V2.10.1 — Skills auxiliares (paralelo com fontes vivas + skill principal)
+  const skillsAuxSlugs = escolherSkillsAuxiliares(message);
+  if (skillsAuxSlugs.length > 0) {
+    log(`skills auxiliares detectadas: [${skillsAuxSlugs.join(', ')}]`);
+    for (const slugAux of skillsAuxSlugs) {
+      consultas.push(
+        rodarScript(path.join(scriptsDir, 'buscar-skill.sh'), [slugAux], { timeout: 15_000 })
+          .then(r => ({ tipo: 'skill_aux', slug: slugAux, ok: true, conteudo: r.slice(0, 2500) }))
+          .catch(e => ({ tipo: 'skill_aux', slug: slugAux, ok: false, erro: e.message })),
+      );
+    }
+  }
+
+  const fontesEAux = await Promise.all(consultas);
+  // V2.10.1 — separa skills auxiliares das 5 fontes vivas. Conceitualmente
+  // distintas: fonte viva = retrieval (cerebro/persona/funil/skill principal/clone).
+  // Skill aux = receita de formatacao injetada como instrucao no briefing.
+  const fontes = fontesEAux.filter(f => f.tipo !== 'skill_aux');
+  const skillsAux = fontesEAux.filter(f => f.tipo === 'skill_aux');
+  log(`${fontes.length} fontes vivas + ${skillsAux.length} skill(s) aux consultadas em ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
   // Briefing rico (montado uma vez, reusado pelos N mestres)
+  // V2.10.1 — secao opcional de INSTRUCOES ADICIONAIS quando ha skills aux
+  // (formatacao cruzada: tabela markdown, anatomia especifica, etc).
+  const skillsAuxOk = skillsAux.filter(s => s.ok);
+  const skillsAuxBlock = skillsAuxOk.length > 0
+    ? `\n## INSTRUÇÕES ADICIONAIS DE FORMATAÇÃO\n\n` +
+      `Aplicar as receitas abaixo na sua resposta. São complementares à Skill principal — ` +
+      `ela define O QUE escrever, estas definem COMO formatar.\n\n` +
+      skillsAuxOk.map(s => `### ${s.slug}\n${s.conteudo}`).join('\n\n')
+    : '';
+
   const briefingRico = `## PEDIDO ORIGINAL
 ${message}
 
@@ -719,6 +770,7 @@ ${message}
 ${fontes.map(f => f.ok
     ? `### ${f.tipo.toUpperCase()}\n${f.conteudo}`
     : `### ${f.tipo.toUpperCase()} — GAP\n${f.erro}`).join('\n\n')}
+${skillsAuxBlock}
 `;
 
   // ============================================================
@@ -802,6 +854,7 @@ ${fontes.map(f => f.ok
       squad,
       produto_slug,
       fontes,
+      skillsAux,           // V2.10.1 — skills auxiliares aplicadas (array de {slug, ok, conteudo|erro})
       briefingRico,
       mestresPorBloco,
       fonteDecisao,
@@ -821,7 +874,7 @@ ${fontes.map(f => f.ok
 // Recebe plano produzido por planejarPipeline().
 // ============================================================
 async function executarMestres({ plano, log }) {
-  const { message, squad, produto_slug, fontes, briefingRico, mestresPorBloco, fonteDecisao,
+  const { message, squad, produto_slug, fontes, skillsAux = [], briefingRico, mestresPorBloco, fonteDecisao,
           skillUsada, mestresValidados, mestresIgnorados,
           blocosFallbackGenerico, blocosTotal } = plano;
 
@@ -943,6 +996,12 @@ Devolva CADA BLOCO separado por cabeçalho \`### NOME-DO-BLOCO\`. Em markdown.`;
       // V2.10 — propagados pro template HTML do entregavel decidir header/cor/skill por squad
       squad,
       produto_slug,
+      // V2.10.1 — skills auxiliares aplicadas no briefing (formatacao cruzada)
+      skills_auxiliares: skillsAux.map(s => ({
+        slug: s.slug,
+        ok: s.ok,
+        erro: s.ok ? null : s.erro,
+      })),
     },
   };
 }
@@ -987,5 +1046,6 @@ module.exports = {
   pipelineCriativo,
   planejarPipeline,
   executarMestres,
+  escolherSkillsAuxiliares, // V2.10.1 — exposto pra debug/teste
   SQUADS_POPULADAS, // V2.5 Commit 4 — fonte unica da verdade
 };
