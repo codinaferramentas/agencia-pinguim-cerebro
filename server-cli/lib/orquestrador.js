@@ -918,9 +918,32 @@ async function executarMestres({ plano, log }) {
           blocosFallbackGenerico, blocosTotal } = plano;
 
   // ============================================================
-  // Etapa 3 — Disparar mestres em PARALELO (N variavel)
+  // V2.6 — SEPARAR SINTETIZADOR DOS CONSELHEIROS PARALELOS
+  // Em squad advisory-board, board-chair NAO pode rodar em paralelo com os
+  // outros — ele PRECISA ler o que eles disseram pra sintetizar. Sai da
+  // pool paralela, vai depois em série.
+  //
+  // Genérico: qualquer mestre que tenha role 'sintetizador' (hoje só Chair,
+  // amanhã pode ser Editor-chefe na squad copy, Director em design, etc).
   // ============================================================
-  log(`disparando ${mestresPorBloco.length} mestre(s) em paralelo (allSettled — 1 trava nao bloqueia outros)...`);
+  const SINTETIZADORES_POR_SQUAD = {
+    'advisory-board': 'board-chair',
+    // futuras squads: 'copy': 'copy-chief', 'storytelling': 'story-director', etc
+  };
+  const slugSintetizador = SINTETIZADORES_POR_SQUAD[squad];
+  const mestresParalelo = mestresPorBloco.filter(m => m.mestre !== slugSintetizador);
+  const mestreSintetizador = slugSintetizador
+    ? mestresPorBloco.find(m => m.mestre === slugSintetizador)
+    : null;
+
+  if (mestreSintetizador) {
+    log(`V2.6 — ${slugSintetizador} sera executado APOS os ${mestresParalelo.length} conselheiros (sintese)`);
+  }
+
+  // ============================================================
+  // Etapa 3a — Disparar conselheiros em PARALELO (N-1 mestres)
+  // ============================================================
+  log(`disparando ${mestresParalelo.length} mestre(s) em paralelo (allSettled — 1 trava nao bloqueia outros)...`);
   const t_mestres_0 = Date.now();
 
   const TIMEOUT_POOL_MS = 120_000;
@@ -934,7 +957,7 @@ async function executarMestres({ plano, log }) {
     ]).catch(e => ({ mestre: mestreSlug, ok: false, erro: e.message, timeout: true }));
   }
 
-  const mestresPromises = mestresPorBloco.map(async (m, i) => {
+  const mestresPromises = mestresParalelo.map(async (m, i) => {
     const t_m0 = Date.now();
     try {
       const systemPrompt = await carregarSystemPromptMestre(m.mestre);
@@ -959,11 +982,76 @@ Devolva CADA BLOCO separado por cabeçalho \`### NOME-DO-BLOCO\`. Em markdown.`;
     }
   });
 
-  const racedPromises = mestresPromises.map((p, i) => comTimeout(p, TIMEOUT_POOL_MS, mestresPorBloco[i].mestre));
+  const racedPromises = mestresPromises.map((p, i) => comTimeout(p, TIMEOUT_POOL_MS, mestresParalelo[i].mestre));
   const settled = await Promise.allSettled(racedPromises);
-  const resultados = settled.map(s => s.status === 'fulfilled' ? s.value : { mestre: 'desconhecido', ok: false, erro: String(s.reason) });
+  const resultadosParalelo = settled.map(s => s.status === 'fulfilled' ? s.value : { mestre: 'desconhecido', ok: false, erro: String(s.reason) });
   const dur_total_mestres = ((Date.now() - t_mestres_0) / 1000).toFixed(1);
-  log(`${mestresPorBloco.length} mestre(s) em paralelo terminaram em ${dur_total_mestres}s`);
+  log(`${mestresParalelo.length} mestre(s) em paralelo terminaram em ${dur_total_mestres}s`);
+
+  // ============================================================
+  // Etapa 3b (V2.6) — Sintetizador em SERIE depois dos conselheiros
+  // Recebe outputs dos conselheiros como contexto pra produzir sintese real.
+  // ============================================================
+  let outputSintese = null;
+  let durSintese = 0;
+  if (mestreSintetizador) {
+    const t_sint_0 = Date.now();
+    const sucessosParalelo = resultadosParalelo.filter(r => r.ok);
+    if (sucessosParalelo.length === 0) {
+      log(`  V2.6 — pulando sintetizador: 0 conselheiros tiveram sucesso (nada pra sintetizar)`);
+    } else {
+      try {
+        log(`  V2.6 — chamando sintetizador ${mestreSintetizador.mestre} com ${sucessosParalelo.length} pareceres como contexto...`);
+        const sysPromptSint = await carregarSystemPromptMestre(mestreSintetizador.mestre);
+        const pareceres = sucessosParalelo.map(r =>
+          `### Parecer de ${r.mestre}\n\n${r.output}`
+        ).join('\n\n---\n\n');
+        const briefingSint = `${briefingRico}
+
+## PARECERES DOS CONSELHEIROS
+
+${pareceres}
+
+## SUA MISSAO COMO SINTETIZADOR
+
+Voce eh o presidente do board. Os ${sucessosParalelo.length} conselheiros acima ja deram suas visoes individuais. Sua função NÃO é dar mais um parecer — é SINTETIZAR + RECOMENDAR.
+
+Devolva o seguinte estrutura em markdown (e SOMENTE isto, sem repetir os pareceres):
+
+### Convergências
+O que TODOS (ou quase todos) os conselheiros concordam? 2-4 bullets curtos com a essência consensual. Se não há convergência clara, declarar honestamente.
+
+### Divergências
+Onde os conselheiros discordam? Para cada divergência: quem defende qual lado, e por que cada um pensa assim. 2-4 itens.
+
+### Recomendação Final
+**Qual caminho seguir.** Uma frase clara, sem hedge. Depois 1-2 paragrafos curtos justificando: por que esse caminho ganha dos outros, baseado nos pareceres. Cite os conselheiros que sustentam essa visão.
+
+### Próximos Passos Concretos
+3-5 ações que o usuário deve tomar essa semana, decorrentes da recomendação. Não conselhos genéricos — passos específicos.
+
+### Nível de Confiança
+Alto / Médio / Baixo + 1 frase por que (ex: "Alto: 4 dos 4 conselheiros apontam mesma direção" / "Baixo: divergencia profunda sobre risco aceitavel").
+
+NAO repita o que os conselheiros disseram nas seções deles. Sua função é amarrar e decidir.`;
+
+        outputSintese = await runMestreClaudeCLI(sysPromptSint, briefingSint, { timeout: 110_000 });
+        durSintese = parseFloat(((Date.now() - t_sint_0) / 1000).toFixed(1));
+        log(`  V2.6 — sintetizador ${mestreSintetizador.mestre} respondeu em ${durSintese}s (${outputSintese.length} chars)`);
+      } catch (e) {
+        log(`  V2.6 — sintetizador FALHOU: ${e.message} — entregavel sai sem sintese`);
+        outputSintese = null;
+      }
+    }
+  }
+
+  // Resultados finais incluem sintetizador (se rodou)
+  const resultados = [...resultadosParalelo];
+  if (mestreSintetizador && outputSintese !== null) {
+    resultados.push({ mestre: mestreSintetizador.mestre, ok: true, output: outputSintese, dur_s: durSintese, eh_sintese: true });
+  } else if (mestreSintetizador && outputSintese === null) {
+    resultados.push({ mestre: mestreSintetizador.mestre, ok: false, erro: 'sintetizador falhou ou pulado', dur_s: 0 });
+  }
 
   // ============================================================
   // Etapa 4 — Consolidar output
@@ -990,19 +1078,37 @@ Devolva CADA BLOCO separado por cabeçalho \`### NOME-DO-BLOCO\`. Em markdown.`;
 **Skill aplicada:** ${skillAplicada}
 **Decisao de mestres:** ${fonteDecisao}${fonteDecisao === 'fallback' ? ' (fallback hardcoded)' : ` (${mestresValidados.length} validados, ${blocosTotal} blocos)`}
 **Mestres usados:** ${sucessos.map(r => r.mestre).join(', ')}
-**Tempo total dos mestres (paralelo):** ${dur_total_mestres}s
+**Tempo total dos mestres (paralelo):** ${dur_total_mestres}s${outputSintese ? ` + sintese ${durSintese}s` : ''}
 
 ---
 
 `;
 
+  // V2.6 — Sintese vai PRIMEIRO no entregavel.
+  // Leitor com pouco tempo le só ela e ja tem a recomendação. Conselheiros
+  // individuais ficam como "ver detalhes" em seções abaixo.
+  const resultadoSintese = resultados.find(r => r.eh_sintese);
+  if (resultadoSintese && resultadoSintese.ok) {
+    consolidado += `## 🎯 Síntese & Recomendação (${resultadoSintese.mestre})\n\n`;
+    consolidado += resultadoSintese.output;
+    consolidado += `\n\n---\n\n## Pareceres individuais dos conselheiros\n\n`;
+    consolidado += `_Abaixo, cada conselheiro com sua visão completa. A síntese acima já amarra._\n`;
+  }
+
+  // Pareceres individuais (todos os outros, exceto a sintese que ja foi)
   for (const r of resultados) {
+    if (r.eh_sintese) continue; // ja entrou no topo
     consolidado += `\n\n## Blocos do ${r.mestre}\n\n`;
     if (r.ok) {
       consolidado += r.output;
     } else {
       consolidado += `_(falha: ${r.erro})_`;
     }
+  }
+
+  // Se sintese falhou ou foi pulada mas eh squad de sintese, declarar honesto
+  if (mestreSintetizador && (!resultadoSintese || !resultadoSintese.ok)) {
+    consolidado = consolidado.replace(/^# /, `# ⚠ Sintese nao gerada (${mestreSintetizador.mestre} indisponivel) — `);
   }
 
   consolidado += `\n\n---\n\n`;
@@ -1041,6 +1147,12 @@ Devolva CADA BLOCO separado por cabeçalho \`### NOME-DO-BLOCO\`. Em markdown.`;
         ok: s.ok,
         erro: s.ok ? null : s.erro,
       })),
+      // V2.6 — sintese de board (advisory-board e similares)
+      sintese: mestreSintetizador ? {
+        sintetizador: mestreSintetizador.mestre,
+        ok: !!(resultadoSintese && resultadoSintese.ok),
+        duracao_s: durSintese,
+      } : null,
     },
   };
 }
