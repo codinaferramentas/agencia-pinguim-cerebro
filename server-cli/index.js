@@ -23,6 +23,7 @@ const {
 } = require('./lib/verificador');
 const {
   ehPedidoCriativoGrande,
+  ehPedidoEdicao, // V2.11 — detector de pedido de edicao
   pipelineCriativo,
   planejarPipeline,
   executarMestres,
@@ -32,6 +33,7 @@ const {
 } = require('./lib/orquestrador');
 const { classificarMensagem } = require('./lib/router-llm'); // V2.9 — LLM router
 const { renderEntregavel } = require('./lib/template-html'); // V2.10 — entregavel HTML
+const db = require('./lib/db'); // V2.7+V2.11 — persistencia em pinguim.conversas + pinguim.entregaveis
 
 const app = express();
 const PORT = 3737;
@@ -327,9 +329,34 @@ app.post('/api/chat', async (req, res) => {
       return res.status(400).json({ error: 'message obrigatorio' });
     }
 
-    // Inicializa thread
-    if (!threads[thread_id]) threads[thread_id] = [];
+    // ============================================================
+    // V2.7 — Thread persistida em pinguim.conversas (banco).
+    // Cache RAM continua existindo como write-through (rapido + sobrevive
+    // ao restart via reload do banco quando aparece thread vazia).
+    // Convencao papel: 'humano' / 'chief' (preserva sistema antigo).
+    // ============================================================
+    if (!threads[thread_id]) {
+      // Primeira mensagem nessa thread (RAM) — tenta hidratar do banco.
+      // Se nada no banco, comeca vazia. Se servidor caiu antes, retoma.
+      try {
+        const historico = await db.carregarHistorico({ limite: 20 });
+        threads[thread_id] = historico.map(m => ({
+          role: m.papel === 'humano' ? 'user' : 'assistant',
+          content: m.conteudo,
+        }));
+        if (threads[thread_id].length > 0) {
+          console.log(`  thread hidratada do banco: ${threads[thread_id].length} mensagens`);
+        }
+      } catch (e) {
+        console.warn(`  falha ao hidratar thread do banco — iniciando vazia: ${e.message}`);
+        threads[thread_id] = [];
+      }
+    }
     threads[thread_id].push({ role: 'user', content: message });
+
+    // Persiste no banco (fire-and-forget — nao bloqueia o /api/chat se falhar)
+    db.salvarMensagem({ papel: 'humano', conteudo: message })
+      .catch(e => console.warn(`  [persistencia] erro salvando mensagem humano: ${e.message}`));
 
     // Monta prompt com historico (ultimas 20 mensagens)
     const recent = threads[thread_id].slice(-20);
@@ -362,6 +389,8 @@ app.post('/api/chat', async (req, res) => {
       const dur = ((Date.now() - t0) / 1000).toFixed(1);
       const respostaHonesta = `Reconheci o pedido como **squad ${squadDetectada}** — ainda não populada no sistema.\n\nHoje só a squad **copy** tem mestres prontos pra entregar trabalho criativo (Halbert, Schwartz, Bencivenga, Hormozi, Kennedy, Carlton, Brunson, Benson). Quando você precisar de copy, página de venda, headline, oferta, VSL, anúncio — tô aqui.\n\nPra **${squadDetectada}** (esse tipo de pedido), o roadmap está em fila — pendente popular mestres no banco.`;
       threads[thread_id].push({ role: 'assistant', content: respostaHonesta });
+      db.salvarMensagem({ papel: 'chief', conteudo: respostaHonesta })
+        .catch(e => console.warn(`  [persistencia] erro salvando atalho honesto: ${e.message}`));
       console.log(`  -> atalho honesto (squad ${squadDetectada} nao populada): ${dur}s`);
       return res.json({
         thread_id,
@@ -374,9 +403,84 @@ app.post('/api/chat', async (req, res) => {
     }
 
     // ============================================================
+    // V2.11 — Pedido de EDICAO/V2 do entregavel anterior
+    // Detector ehPedidoEdicao casa "muda X", "refaz Y", "quero v2", "ajusta Z".
+    // Busca ultimo entregavel do cliente, monta briefing com V1 + instrucao
+    // de mudanca, re-roda pipeline criativo. Resultado vira V2 com
+    // parent_id = V1.id (versionamento built-in da tabela pinguim.entregaveis).
+    // ============================================================
+    if (ehPedidoEdicao(message)) {
+      const ultimo = await db.ultimoEntregavelDoCliente({}).catch(() => null);
+      if (ultimo) {
+        console.log(`  [V2.11] pedido de edicao detectado — base: V${ultimo.versao} (${ultimo.id})`);
+        const v_anterior = await db.carregarEntregavelPorId(ultimo.id);
+        if (v_anterior) {
+          // Constroi mensagem combinada para o pipeline criativo entender:
+          // contexto = V_anterior + instrucao de mudanca
+          const messageEdicao = `${v_anterior.titulo || 'Pedido anterior'}\n\n${message}\n\n--- VERSAO ANTERIOR (V${v_anterior.versao}) ---\n${v_anterior.conteudo_md}\n--- FIM VERSAO ANTERIOR ---\n\nINSTRUCAO DO USUARIO: ${message}\n\nGere uma NOVA VERSAO incorporando a instrucao acima. Mantenha o que estava bom, ajuste o que foi pedido. NAO refaca tudo do zero — preserve estrutura e voz da versao anterior.`;
+
+          const log = (msg) => console.log(`  [orquestrador-edicao] ${msg}`);
+          const resultadoPipe = await pipelineCriativo({ message: messageEdicao, log });
+          const respostaPipe = resultadoPipe.conteudo;
+
+          threads[thread_id].push({ role: 'assistant', content: respostaPipe });
+          db.salvarMensagem({ papel: 'chief', conteudo: respostaPipe })
+            .catch(e => console.warn(`  [persistencia] erro: ${e.message}`));
+
+          const dur = ((Date.now() - t0) / 1000).toFixed(1);
+
+          // Salva V2 no banco com parent_id = V1.id
+          let entregavel_url = null;
+          let entregavel_preview = null;
+          let nova_versao = null;
+          if (resultadoPipe.ok && respostaPipe.length >= ENTREGAVEL_MIN_CHARS) {
+            try {
+              const novo = await db.salvarEntregavel({
+                tipo: v_anterior.tipo, // mesma tipologia
+                titulo: v_anterior.titulo, // mesmo titulo (eh a mesma "peca")
+                conteudo_md: respostaPipe,
+                conteudo_estruturado: { metricas: resultadoPipe.metricas, pedido_edicao: message },
+                parent_id: v_anterior.id,
+              });
+              if (novo) {
+                entregavel_url = `/entregavel/${novo.id}`;
+                nova_versao = novo.versao;
+                console.log(`  -> V${novo.versao} salva (id=${novo.id}, parent=${v_anterior.id})`);
+              }
+            } catch (e) {
+              console.warn(`  [persistencia] erro salvando V${v_anterior.versao + 1}: ${e.message}`);
+            }
+            const headerEnd = respostaPipe.indexOf('---');
+            const blocosTxt = headerEnd > -1 ? respostaPipe.slice(headerEnd + 3) : respostaPipe;
+            entregavel_preview = blocosTxt.replace(/^#+\s.*$/gm, '').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\s+/g, ' ').trim().slice(0, 200);
+          }
+
+          return res.json({
+            thread_id,
+            content: respostaPipe,
+            duracao_s: parseFloat(dur),
+            epp: { verifier_aprovou: null, verifier_pulado: true, reflection_round: 0, problemas_encontrados: [] },
+            pipeline: resultadoPipe.metricas,
+            entregavel_url,
+            entregavel_preview,
+            edicao: {
+              eh_edicao: true,
+              parent_id: v_anterior.id,
+              parent_versao: v_anterior.versao,
+              nova_versao,
+            },
+          });
+        }
+      } else {
+        console.log(`  [V2.11] pedido parecia edicao mas nao ha entregavel anterior — segue como pedido novo`);
+      }
+    }
+
+    // ============================================================
     // DESVIO — Pedido criativo grande pula CLI e vai pro orquestrador Node
     // V2.5 Commit 3: se vier plan_id valido no body, usa plano cacheado
     // (frontend ja chamou /api/pipeline-plan e mostrou animacao).
+    // V2.7+V2.11: persiste entregavel em pinguim.entregaveis (V1, parent_id=null).
     // ============================================================
     if (ehPedidoCriativoGrande(message)) {
       const log = (msg) => console.log(`  [orquestrador] ${msg}`);
@@ -397,37 +501,46 @@ app.post('/api/chat', async (req, res) => {
 
       const respostaPipe = resultadoPipe.conteudo;
       threads[thread_id].push({ role: 'assistant', content: respostaPipe });
+      db.salvarMensagem({ papel: 'chief', conteudo: respostaPipe })
+        .catch(e => console.warn(`  [persistencia] erro: ${e.message}`));
 
       const dur = ((Date.now() - t0) / 1000).toFixed(1);
       console.log(`  -> pipeline criativo finalizou em ${dur}s | mestres: ${resultadoPipe.metricas.mestres_sucesso}/${resultadoPipe.metricas.mestres_sucesso + resultadoPipe.metricas.mestres_falha} | tempo paralelo: ${resultadoPipe.metricas.mestres_paralelo_s}s`);
 
       // ============================================================
-      // V2.10 — Entregavel grande vira HTML em rota dedicada.
-      // Decisao: pipeline criativo + sucesso + conteudo >= MIN_CHARS.
-      // (squad nao populada nem entra aqui — ehPedidoCriativoGrande filtra
-      //  no atalho honesto, ou planejarPipeline retorna ok=false.)
+      // V2.10 + V2.7 — Entregavel grande persiste em banco + URL estavel.
+      // Antes (V2.10): cache RAM com plan_id efemero (TTL 60min).
+      // Agora (V2.7): pinguim.entregaveis (UUID estavel, dura sempre).
       // ============================================================
       let entregavel_url = null;
       let entregavel_preview = null;
+      let entregavel_id = null;
       if (resultadoPipe.ok && respostaPipe.length >= ENTREGAVEL_MIN_CHARS) {
-        const entregavelId = plan_id || gerarPlanId();
-        guardarEntregavel(entregavelId, {
-          markdown: respostaPipe,
-          metricas: resultadoPipe.metricas,
-          pedido: message,
-          criadoEm: Date.now(),
-        });
-        entregavel_url = `/entregavel/${entregavelId}`;
-        // Preview = primeiras 200 chars do conteudo dos mestres (pula o header de metadata)
+        try {
+          const tipoEntregavel = resultadoPipe.metricas.squad
+            ? `${resultadoPipe.metricas.squad}-output`
+            : 'criativo';
+          const novo = await db.salvarEntregavel({
+            tipo: tipoEntregavel,
+            titulo: message.slice(0, 200),
+            conteudo_md: respostaPipe,
+            conteudo_estruturado: { metricas: resultadoPipe.metricas, pedido_original: message },
+          });
+          if (novo) {
+            entregavel_id = novo.id;
+            entregavel_url = `/entregavel/${novo.id}`;
+            console.log(`  -> entregavel V1 salvo no banco (id=${novo.id})`);
+          }
+        } catch (e) {
+          console.warn(`  [persistencia] erro salvando entregavel: ${e.message}`);
+          // Fallback: cache RAM antigo (V2.10) se banco falhar
+          const fallbackId = plan_id || gerarPlanId();
+          guardarEntregavel(fallbackId, { markdown: respostaPipe, metricas: resultadoPipe.metricas, pedido: message, criadoEm: Date.now() });
+          entregavel_url = `/entregavel/${fallbackId}`;
+        }
         const headerEnd = respostaPipe.indexOf('---');
         const blocosTxt = headerEnd > -1 ? respostaPipe.slice(headerEnd + 3) : respostaPipe;
-        entregavel_preview = blocosTxt
-          .replace(/^#+\s.*$/gm, '')      // remove headers
-          .replace(/\*\*([^*]+)\*\*/g, '$1') // tira bold marker
-          .replace(/\s+/g, ' ')
-          .trim()
-          .slice(0, 200);
-        console.log(`  -> entregavel HTML em ${entregavel_url} (${respostaPipe.length} chars >= ${ENTREGAVEL_MIN_CHARS})`);
+        entregavel_preview = blocosTxt.replace(/^#+\s.*$/gm, '').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\s+/g, ' ').trim().slice(0, 200);
       }
 
       return res.json({
@@ -441,8 +554,9 @@ app.post('/api/chat', async (req, res) => {
           problemas_encontrados: [],
         },
         pipeline: resultadoPipe.metricas,
-        entregavel_url,        // V2.10 — URL pra abrir HTML formatado (null se conteudo curto)
-        entregavel_preview,    // V2.10 — primeiras ~200 chars pra cartao de preview no chat
+        entregavel_url,
+        entregavel_preview,
+        entregavel_id, // V2.7 — UUID estavel, vivel daqui 10/15 dias
       });
     }
 
@@ -496,6 +610,8 @@ app.post('/api/chat', async (req, res) => {
     }
 
     threads[thread_id].push({ role: 'assistant', content: resposta });
+    db.salvarMensagem({ papel: 'chief', conteudo: resposta })
+      .catch(e => console.warn(`  [persistencia] erro: ${e.message}`));
 
     const dur = ((Date.now() - t0) / 1000).toFixed(1);
     console.log(`  -> resposta final em ${dur}s, ${resposta.length} chars (reflection_round=${reflection_round})`);
@@ -533,17 +649,63 @@ app.get('/api/health', async (req, res) => {
 });
 
 // ============================================================
-// GET /entregavel/:id  —  V2.10
-// Renderiza entregavel grande do pipeline criativo como HTML standalone.
-// Cache em RAM (TTL 60min). Chat manda link aqui em vez de inline quando
-// conteudo > ENTREGAVEL_MIN_CHARS chars + tipo criativo.
+// GET /entregavel/:id  —  V2.10 + V2.7
+// Renderiza entregavel grande como HTML standalone.
+// V2.7: aceita UUID e busca em pinguim.entregaveis (durável).
+// V2.10 fallback: cache RAM (plan_id) se UUID nao bater no banco.
+// V2.11: cadeia de versoes (parent_id) eh exibida no header pra navegacao V1<->V2.
 // ============================================================
-app.get('/entregavel/:id', (req, res) => {
-  const entry = recuperarEntregavel(req.params.id);
-  if (!entry) {
-    res.status(404)
-      .type('html')
-      .send(`<!DOCTYPE html>
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+app.get('/entregavel/:id', async (req, res) => {
+  const id = req.params.id;
+
+  // 1) Tenta banco se for UUID valido
+  if (UUID_RE.test(id)) {
+    try {
+      const ent = await db.carregarEntregavelPorId(id);
+      if (ent) {
+        // V2.11 — busca cadeia de versoes pra navegacao V1<->V2 no template
+        const cadeia = await db.carregarCadeiaVersoes(id).catch(() => []);
+        const metricas = (ent.conteudo_estruturado && ent.conteudo_estruturado.metricas) || {};
+        const pedidoOriginal = (ent.conteudo_estruturado && ent.conteudo_estruturado.pedido_original) || ent.titulo || 'Entregável';
+        const html = renderEntregavel({
+          markdown: ent.conteudo_md,
+          metricas,
+          criadoEm: new Date(ent.criado_em).getTime(),
+          pedido: pedidoOriginal,
+          versionamento: {
+            entregavel_id: ent.id,
+            versao_atual: ent.versao,
+            parent_id: ent.parent_id,
+            cadeia: cadeia.map(c => ({ id: c.id, versao: c.versao, criado_em: c.criado_em })),
+          },
+        });
+        res.type('html').send(html);
+        return;
+      }
+    } catch (e) {
+      console.warn(`[entregavel] erro ao buscar UUID ${id}:`, e.message);
+    }
+  }
+
+  // 2) Fallback: cache RAM (plan_id efêmero do V2.10)
+  const entry = recuperarEntregavel(id);
+  if (entry) {
+    const html = renderEntregavel({
+      markdown: entry.markdown,
+      metricas: entry.metricas,
+      criadoEm: entry.criadoEm,
+      pedido: entry.pedido,
+    });
+    res.type('html').send(html);
+    return;
+  }
+
+  // 3) 404 estilizado
+  res.status(404)
+    .type('html')
+    .send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head><meta charset="UTF-8"><title>Entregável não encontrado</title>
 <style>body{background:#0a0a0f;color:#f1f5f9;font-family:system-ui,sans-serif;
@@ -552,18 +714,23 @@ h1{font-size:1.5rem;margin-bottom:.5rem}p{color:#94a3b8;max-width:500px}
 a{color:#E85C00}</style></head>
 <body><div>
 <h1>🐧 Entregável não encontrado</h1>
-<p>Esse entregável expirou (TTL 60 min) ou o servidor reiniciou.<br>
+<p>ID inválido ou entregável removido.<br>
 Volta pro <a href="/">chat</a> e refaz o pedido.</p>
 </div></body></html>`);
-    return;
+});
+
+// ============================================================
+// GET /api/entregaveis  —  V2.7
+// Lista entregaveis recentes do cliente. Usado por painel + cartao chat.
+// ============================================================
+app.get('/api/entregaveis', async (req, res) => {
+  try {
+    const limite = parseInt(req.query.limite || '20', 10);
+    const lista = await db.listarEntregaveisRecentes({ limite });
+    res.json({ entregaveis: lista });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
-  const html = renderEntregavel({
-    markdown: entry.markdown,
-    metricas: entry.metricas,
-    criadoEm: entry.criadoEm,
-    pedido: entry.pedido,
-  });
-  res.type('html').send(html);
 });
 
 // ============================================================
