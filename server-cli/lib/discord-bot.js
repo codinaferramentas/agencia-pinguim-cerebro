@@ -113,16 +113,22 @@ class DiscordBot {
 
     this.log(`[discord-bot] backfill: ${canaisTexto.length} canais texto, janela ${horas}h`);
 
+    const canaisOk = [];
+    const canaisProibidos = [];
     for (const [canalId, canalInfo] of canaisTexto) {
       try {
         const resp = await fetch(`${API_BASE}/channels/${canalId}/messages?limit=${maxPorCanal}`, {
           headers: { 'Authorization': `Bot ${this.token}` },
         });
         if (!resp.ok) {
-          // 403 = sem permissao no canal (esperado, ignora silencioso)
-          if (resp.status !== 403) this.err(`[discord-bot] backfill canal ${canalId} HTTP ${resp.status}`);
+          if (resp.status === 403) {
+            canaisProibidos.push(canalInfo.nome || canalId);
+          } else {
+            this.err(`[discord-bot] backfill canal ${canalInfo.nome || canalId} HTTP ${resp.status}`);
+          }
           continue;
         }
+        canaisOk.push(canalInfo.nome || canalId);
         const msgs = await resp.json();
         processados++;
         for (const m of msgs) {
@@ -139,7 +145,14 @@ class DiscordBot {
       await new Promise(r => setTimeout(r, 250));
     }
     this.log(`[discord-bot] backfill OK: ${processados} canais lidos, ${ingeridas} mensagens ingeridas`);
-    return { canais_processados: processados, mensagens_ingeridas: ingeridas };
+    if (canaisOk.length) this.log(`[discord-bot]   permitidos: ${canaisOk.join(', ')}`);
+    if (canaisProibidos.length) this.log(`[discord-bot]   PROIBIDOS (403): ${canaisProibidos.join(', ')}`);
+    return {
+      canais_processados: processados,
+      mensagens_ingeridas: ingeridas,
+      canais_permitidos: canaisOk,
+      canais_proibidos: canaisProibidos,
+    };
   }
 
   getStatus() {
