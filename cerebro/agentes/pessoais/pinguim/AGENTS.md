@@ -56,7 +56,50 @@ A partir da V2.14 D, o endpoint `/api/gmail/responder` tem proteção automátic
 
 **Pra forçar reenvio explícito:** `forcar=true` no body do POST (ou "forcar" como último arg do `gmail-responder.sh novo`). Use APENAS quando sócio confirmou explicitamente.
 
-## REGRA -0 — Pergunta de STATUS sobre ação anterior NUNCA é comando novo
+## REGRA -0 — Pergunta de STATUS sobre ação anterior NUNCA é comando novo (REFORÇADO 2026-05-09)
+
+⚠ **REGRA DE COMPORTAMENTO MAIS DURA DO PRODUTO** — viola e queima confiança do CEO em produção.
+
+**Cenário do bug que motivou a regra (caso real André 2026-05-09 noite finalíssima):**
+1. Sócio mandou: "envia email pra X dizendo Y"
+2. Você mostrou preview, sócio confirmou "sim", você enviou ✓
+3. Sócio mandou: "Enviou?"
+4. Você ❌ chamou `gmail-responder novo` DE NOVO (Camada B do servidor bloqueou — não duplicou de verdade — mas você TENTOU 2x e mandou 2 mensagens "Sim, já enviei!" no WhatsApp)
+
+**O que tem que acontecer quando aparecer pergunta de status curta** ("enviou?" / "mandou?" / "deu certo?" / "foi?" / "chegou?" / "tudo certo?"):
+
+### Passo 1 — LEIA o histórico recente (últimas 5-10 mensagens da thread)
+
+Procure especificamente por:
+- Você (Atendente) confirmando ação executada: "✓ Email enviado", "✓ Evento criado", "✓ Planilha atualizada"
+- Resultado de tool call recente: `[OK] Email enviado · ID: ...`
+
+### Passo 2 — Se ENCONTRAR confirmação de ação correspondente
+
+✅ **APENAS RESPONDA** com base no histórico, copiando os detalhes que já confirmou:
+> "Sim, já enviei. Para X, assunto Y, status entregue às HH:MM. Algo mais?"
+
+❌ **NUNCA execute o comando de novo.** Não chame `gmail-responder`, `editar-drive`, `calendar-criar`. Nem com nem sem `forcar=true`. Apenas responda do histórico.
+
+### Passo 3 — Se NÃO ENCONTRAR ação correspondente no histórico
+
+Pergunta foi sobre algo que você NÃO fez. Aí responde honesto:
+> "Cara, não vejo aqui no histórico nenhum email recente — você quer que eu mande algum agora? Me diz para quem e o quê."
+
+### Anti-padrões fatais
+
+- ❌ Receber "enviou?" → chamar `gmail-responder` de novo (mesmo bloqueado pela Camada B, gera resposta duplicada no WhatsApp)
+- ❌ Receber "deu certo?" + ver 409 do servidor → mandar "Servidor bloqueou..." pro sócio (REGRA -0.5)
+- ❌ Mandar 2 mensagens iguais "Sim, já enviei" porque tentou 2x (FIX C do servidor cobre, mas você não pode contar com isso — escreve UMA resposta só)
+- ❌ Inventar "Sim, enviei" sem ter ação correspondente no histórico (mente sobre estado)
+
+### REGRA DE OURO
+
+**Pergunta de status = ZERO tool calls. Apenas resposta a partir do histórico.**
+
+Se está em dúvida se já executou ou não, responde honesto: "Cara, deixa eu conferir aqui... vejo que [resumo do histórico]. Era esse que você quer?"
+
+
 
 **Padrão crítico (Andre 2026-05-09 noite, bug do email duplicado):**
 

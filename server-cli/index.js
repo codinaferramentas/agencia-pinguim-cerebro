@@ -1817,6 +1817,37 @@ async function ingerirMsgRecebida(parsed, payloadBruto) {
   let respostaSalvaId = null;
   let envioOk = false;
   try {
+    // V2.14 D fix C — dedup de resposta no servidor (defense in depth)
+    // Andre pegou bug 2026-05-09 noite: bot mandou 2 mensagens iguais quando
+    // pergunta de status disparou 2 tentativas de gmail-enviar (Camada B
+    // bloqueou o email mas LLM gerou 2 respostas WhatsApp). Solucao: hash da
+    // resposta + checa se MESMA resposta foi enviada nos ultimos 60s pro
+    // mesmo numero. Se sim, suprime a 2a com warn no log.
+    const respostaHash = require('crypto').createHash('sha1')
+      .update(r.resposta.replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 500))
+      .digest('hex').slice(0, 16);
+    const sqlDedup = `
+      SELECT count(*) AS qtd FROM pinguim.whatsapp_mensagens
+      WHERE direcao = 'enviada'
+        AND remote_jid = ${escTxt(parsed.remote_jid)}
+        AND md5(left(coalesce(texto, ''), 500)) = md5(${escTxt(r.resposta.replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 500))})
+        AND postada_em >= now() - interval '60 seconds';
+    `;
+    const dedupR = await db.rodarSQL(sqlDedup).catch(() => [{ qtd: 0 }]);
+    const jaEnviada = parseInt(dedupR[0]?.qtd || 0, 10) > 0;
+    if (jaEnviada) {
+      console.warn(`[whatsapp] DEDUP SUPRIMIU resposta duplicada pra ${parsed.numero_remetente} (hash=${respostaHash}) — msg "${r.resposta.slice(0, 60)}"`);
+      // Marca recebida como processada (LLM bug, mas servidor cobriu)
+      const sqlUpdSup = `
+        UPDATE pinguim.whatsapp_mensagens
+        SET processada = true, processada_em = now(), latencia_ms = ${lat},
+            erro = 'resposta_duplicada_suprimida_servidor'
+        WHERE id = ${escTxt(msgRecebidaId)};
+      `;
+      await db.rodarSQL(sqlUpdSup).catch(_ => {});
+      return { msg_recebida_id: msgRecebidaId, msg_enviada_id: null, latencia_ms: lat, envio_ok: false, suprimida_dedup: true };
+    }
+
     // Envia texto principal
     const env = await evolution.enviarTexto({
       instancia: parsed.instancia,
