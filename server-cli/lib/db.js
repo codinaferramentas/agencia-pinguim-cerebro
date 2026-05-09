@@ -441,6 +441,149 @@ async function revogarOAuthToken({ nome = 'GOOGLE_OAUTH_REFRESH', cliente_id } =
   return Array.isArray(data) && data[0] ? !!data[0].revogado : false;
 }
 
+// ============================================================
+// V2.14 Frente D Fix 3 — Mutex por sócio via advisory lock (Postgres)
+// ============================================================
+// Anatomia canônica + Princípio 12: persistência no banco, funciona em V3
+// multi-server. Postgres advisory locks são leves (pg_advisory_lock) e
+// presos à sessão — soltam automaticamente se conexão cai. Não precisa
+// tabela nova, não precisa worker dedicado.
+//
+// Como funciona: deriva uma chave numérica estável do thread_id (hash 31bits)
+// e tenta adquirir lock. Se outro turno do mesmo thread já tem o lock,
+// pg_advisory_lock BLOQUEIA até soltar. Garante serialização por sócio.
+//
+// Cada chamada do PostgREST/RPC é uma sessão nova → o lock vive só
+// durante a transação RPC. Por isso usamos lockKey + try/finally em volta
+// do bloco que precisa ser serial. Implementação: tabela leve
+// pinguim.thread_locks como fallback portátil (não depende de session
+// persistente da RPC).
+
+async function adquirirLockThread(thread_id, timeoutMs = 60000) {
+  // Tenta INSERT na tabela de locks. Se já existe, aguarda e retenta.
+  // PK é (thread_id) → 2ª INSERT trava com unique violation.
+  const lockId = require('crypto').randomBytes(16).toString('hex');
+  const inicio = Date.now();
+  const t0Iso = new Date().toISOString();
+  while (Date.now() - inicio < timeoutMs) {
+    const sql = `
+      INSERT INTO pinguim.thread_locks (thread_id, lock_id, adquirido_em)
+      VALUES (${esc(thread_id)}, ${esc(lockId)}, now())
+      ON CONFLICT (thread_id) DO UPDATE
+        SET lock_id = EXCLUDED.lock_id,
+            adquirido_em = EXCLUDED.adquirido_em
+        WHERE pinguim.thread_locks.adquirido_em < now() - interval '120 seconds'
+      RETURNING lock_id;
+    `;
+    try {
+      const r = await rodarSQL(sql);
+      if (Array.isArray(r) && r[0] && r[0].lock_id === lockId) {
+        return { lockId, adquiridoEm: t0Iso, esperaMs: Date.now() - inicio };
+      }
+    } catch (e) {
+      // Tabela pode não existir ainda — cria e tenta de novo
+      if (/relation .* does not exist/i.test(e.message)) {
+        await criarTabelaLocks();
+        continue;
+      }
+      throw e;
+    }
+    // Lock está com outro turno — espera 200ms e tenta de novo
+    await new Promise(r => setTimeout(r, 200));
+  }
+  throw new Error(`Timeout adquirindo lock pra thread ${thread_id} (>${timeoutMs}ms)`);
+}
+
+async function liberarLockThread(thread_id, lockId) {
+  const sql = `
+    DELETE FROM pinguim.thread_locks
+    WHERE thread_id = ${esc(thread_id)} AND lock_id = ${esc(lockId)};
+  `;
+  try { await rodarSQL(sql); } catch (e) {
+    console.warn(`[lock] erro liberando lock ${thread_id}: ${e.message}`);
+  }
+}
+
+let _tabelaLocksCriada = false;
+async function criarTabelaLocks() {
+  if (_tabelaLocksCriada) return;
+  const sql = `
+    CREATE TABLE IF NOT EXISTS pinguim.thread_locks (
+      thread_id     text PRIMARY KEY,
+      lock_id       text NOT NULL,
+      adquirido_em  timestamptz NOT NULL DEFAULT now()
+    );
+    -- Stale locks (>120s) são sobrescritos automaticamente no INSERT acima.
+    -- TTL hard via cleanup periódico opcional.
+  `;
+  try {
+    await rodarSQL(sql);
+    _tabelaLocksCriada = true;
+    console.log('[lock] tabela pinguim.thread_locks criada/confirmada');
+  } catch (e) {
+    console.warn(`[lock] falha criando tabela: ${e.message}`);
+  }
+}
+
+// ============================================================
+// V2.14 Frente D Fix 4 — EPP: log em pinguim.agente_execucoes
+// ============================================================
+// Anatomia canônica (project_memoria_individual_dna_agente.md):
+//   "Toda execução loga em pinguim.execucoes. Sem exceção."
+//
+// Cada turno do /api/chat (e /api/chat-stream) grava uma linha aqui com
+// input/output, latência, EPP. Permite UI futura de feedback (👍/👎/✏️)
+// alimentar APRENDIZADOS via essa linha como matéria-prima.
+async function logarExecucaoAtendente({
+  agente_id = AGENTE_ID_PINGUIM,
+  input,        // { mensagem, thread_id, canal }
+  output,       // { resposta, entregavel_id?, entregavel_url? }
+  contexto_usado = null, // { historico_n, fontes_consultadas?, plan_id? }
+  latencia_ms,
+  custo_usd = null,
+  tokens_entrada = null,
+  tokens_saida = null,
+  tokens_cached = null,
+}) {
+  const sql = `
+    INSERT INTO pinguim.agente_execucoes
+      (agente_id, input, output, contexto_usado,
+       custo_usd, latencia_ms, tokens_entrada, tokens_saida, tokens_cached)
+    VALUES (
+      ${esc(agente_id)},
+      ${esc(JSON.stringify(input || {}))}::jsonb,
+      ${esc(JSON.stringify(output || {}))}::jsonb,
+      ${contexto_usado ? esc(JSON.stringify(contexto_usado)) + '::jsonb' : 'NULL'},
+      ${custo_usd == null ? 'NULL' : Number(custo_usd)},
+      ${latencia_ms == null ? 'NULL' : parseInt(latencia_ms, 10)},
+      ${tokens_entrada == null ? 'NULL' : parseInt(tokens_entrada, 10)},
+      ${tokens_saida == null ? 'NULL' : parseInt(tokens_saida, 10)},
+      ${tokens_cached == null ? 'NULL' : parseInt(tokens_cached, 10)}
+    )
+    RETURNING id;
+  `;
+  try {
+    const r = await rodarSQL(sql);
+    return Array.isArray(r) && r[0] ? r[0].id : null;
+  } catch (e) {
+    console.warn(`[epp] erro logando execução: ${e.message}`);
+    return null;
+  }
+}
+
+// Wrapper que adquire lock, executa função, libera (mesmo em erro).
+async function comLockThread(thread_id, fn, opts = {}) {
+  const lock = await adquirirLockThread(thread_id, opts.timeoutMs || 60000);
+  if (lock.esperaMs > 100) {
+    console.log(`  [lock] thread ${thread_id} esperou ${lock.esperaMs}ms pelo lock`);
+  }
+  try {
+    return await fn();
+  } finally {
+    await liberarLockThread(thread_id, lock.lockId);
+  }
+}
+
 module.exports = {
   TENANT_ID_PINGUIM,
   CLIENTE_ID_PADRAO, // alias legado (= CLIENTE_ID_FALLBACK = Codina)
@@ -467,4 +610,10 @@ module.exports = {
   registrarOpDrive,
   lerDriveContexto,
   formatarDriveContextoPraPrompt,
+  // V2.14 Frente D Fix 3 — fila por thread via lock em banco
+  adquirirLockThread,
+  liberarLockThread,
+  comLockThread,
+  // V2.14 Frente D Fix 4 — log de execução EPP
+  logarExecucaoAtendente,
 };

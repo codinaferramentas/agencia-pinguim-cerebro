@@ -392,6 +392,37 @@ app.post('/api/pipeline-plan', async (req, res) => {
 });
 
 // ============================================================
+// V2.14 Frente D Fix 1 — Banco como fonte da verdade do histórico
+// ============================================================
+// Anatomia canônica (project_memoria_individual_dna_agente.md):
+//   "Banco é fonte da verdade. Disco/RAM são espelhos."
+//
+// ANTES (V2.7): hidratava RAM do banco apenas na 1ª mensagem da thread.
+// Depois disso, RAM era a fonte. Quando 2 webhooks WhatsApp chegavam
+// quase simultâneos, cada Promise tinha sua visão da RAM e divergia
+// (Task B não via resposta da Task A ainda em andamento).
+//
+// AGORA: a cada turno, recarrega o histórico do banco. RAM vira só
+// fallback de leitura quando banco falha. Garante que turnos paralelos
+// SEMPRE veem o estado mais recente persistido.
+//
+// Funciona local E no V3 (multi-server) sem mudança — banco é shared.
+async function carregarThreadDoBanco(thread_id, limite = 20) {
+  try {
+    const historico = await db.carregarHistorico({ limite });
+    const mensagens = historico.map(m => ({
+      role: m.papel === 'humano' ? 'user' : 'assistant',
+      content: m.conteudo,
+    }));
+    threads[thread_id] = mensagens; // atualiza cache RAM
+    return mensagens;
+  } catch (e) {
+    console.warn(`  [historico] falha ao recarregar do banco — usando RAM (${threads[thread_id]?.length || 0} msgs): ${e.message}`);
+    return threads[thread_id] || [];
+  }
+}
+
+// ============================================================
 // POST /api/chat
 // body: { message, thread_id, plan_id? }
 // V2.5 Commit 3: plan_id opcional. Se vier e for valido, executa direto
@@ -399,41 +430,40 @@ app.post('/api/pipeline-plan', async (req, res) => {
 // ============================================================
 app.post('/api/chat', async (req, res) => {
   const t0 = Date.now();
+  const { message, thread_id = 'default', plan_id } = req.body || {};
+
+  if (!message || !message.trim()) {
+    return res.status(400).json({ error: 'message obrigatorio' });
+  }
+
+  // V2.14 D Fix 3 — Fila por thread. 2 turnos paralelos do mesmo sócio
+  // (ex: WhatsApp "sim" + "enviou?" com 3s de gap) são serializados aqui.
+  // Lock em banco → funciona local E V3 multi-server. Anatomia canônica.
+  return db.comLockThread(thread_id, async () => processarChat({ req, res, t0, message, thread_id, plan_id }))
+    .catch(err => {
+      console.error('Erro /api/chat (lock wrapper):', err);
+      if (!res.headersSent) res.status(500).json({ error: err.message || String(err) });
+    });
+});
+
+async function processarChat({ req, res, t0, message, thread_id, plan_id }) {
   try {
-    const { message, thread_id = 'default', plan_id } = req.body || {};
+    // V2.14 D Fix 1 — SEMPRE recarrega histórico do banco (fonte da verdade).
+    // Garante que mensagens novas veem respostas anteriores já persistidas.
+    // Como o lock acima serializa turnos do mesmo thread, esse SELECT
+    // sempre vê a resposta do turno anterior já persistida.
+    const historicoBanco = await carregarThreadDoBanco(thread_id, 20);
+    console.log(`  [historico] carregadas ${historicoBanco.length} mensagens do banco pra thread ${thread_id}`);
 
-    if (!message || !message.trim()) {
-      return res.status(400).json({ error: 'message obrigatorio' });
-    }
-
-    // ============================================================
-    // V2.7 — Thread persistida em pinguim.conversas (banco).
-    // Cache RAM continua existindo como write-through (rapido + sobrevive
-    // ao restart via reload do banco quando aparece thread vazia).
-    // Convencao papel: 'humano' / 'chief' (preserva sistema antigo).
-    // ============================================================
-    if (!threads[thread_id]) {
-      // Primeira mensagem nessa thread (RAM) — tenta hidratar do banco.
-      // Se nada no banco, comeca vazia. Se servidor caiu antes, retoma.
-      try {
-        const historico = await db.carregarHistorico({ limite: 20 });
-        threads[thread_id] = historico.map(m => ({
-          role: m.papel === 'humano' ? 'user' : 'assistant',
-          content: m.conteudo,
-        }));
-        if (threads[thread_id].length > 0) {
-          console.log(`  thread hidratada do banco: ${threads[thread_id].length} mensagens`);
-        }
-      } catch (e) {
-        console.warn(`  falha ao hidratar thread do banco — iniciando vazia: ${e.message}`);
-        threads[thread_id] = [];
-      }
-    }
     threads[thread_id].push({ role: 'user', content: message });
 
-    // Persiste no banco (fire-and-forget — nao bloqueia o /api/chat se falhar)
-    db.salvarMensagem({ papel: 'humano', conteudo: message })
-      .catch(e => console.warn(`  [persistencia] erro salvando mensagem humano: ${e.message}`));
+    // V2.14 D Fix 2 — Persistência SÍNCRONA (await) antes de processar.
+    // Garante que outros turnos paralelos verão essa mensagem ao recarregar.
+    try {
+      await db.salvarMensagem({ papel: 'humano', conteudo: message });
+    } catch (e) {
+      console.warn(`  [persistencia] erro salvando mensagem humano: ${e.message}`);
+    }
 
     // Monta prompt com historico (ultimas 20 mensagens)
     const recent = threads[thread_id].slice(-20);
@@ -484,8 +514,9 @@ app.post('/api/chat', async (req, res) => {
       const dur = ((Date.now() - t0) / 1000).toFixed(1);
       const respostaHonesta = `Reconheci o pedido como **squad ${squadDetectada}** — ainda não populada no sistema.\n\nHoje só a squad **copy** tem mestres prontos pra entregar trabalho criativo (Halbert, Schwartz, Bencivenga, Hormozi, Kennedy, Carlton, Brunson, Benson). Quando você precisar de copy, página de venda, headline, oferta, VSL, anúncio — tô aqui.\n\nPra **${squadDetectada}** (esse tipo de pedido), o roadmap está em fila — pendente popular mestres no banco.`;
       threads[thread_id].push({ role: 'assistant', content: respostaHonesta });
-      db.salvarMensagem({ papel: 'chief', conteudo: respostaHonesta })
-        .catch(e => console.warn(`  [persistencia] erro salvando atalho honesto: ${e.message}`));
+      // V2.14 D Fix 2 — persistência SÍNCRONA antes de retornar
+      try { await db.salvarMensagem({ papel: 'chief', conteudo: respostaHonesta }); }
+      catch (e) { console.warn(`  [persistencia] erro salvando atalho honesto: ${e.message}`); }
       console.log(`  -> atalho honesto (squad ${squadDetectada} nao populada): ${dur}s`);
       return res.json({
         thread_id,
@@ -531,8 +562,9 @@ app.post('/api/chat', async (req, res) => {
           }
 
           threads[thread_id].push({ role: 'assistant', content: respostaPipe });
-          db.salvarMensagem({ papel: 'chief', conteudo: respostaPipe })
-            .catch(e => console.warn(`  [persistencia] erro: ${e.message}`));
+          // V2.14 D Fix 2 — persistência SÍNCRONA antes de retornar
+          try { await db.salvarMensagem({ papel: 'chief', conteudo: respostaPipe }); }
+          catch (e) { console.warn(`  [persistencia] erro: ${e.message}`); }
 
           const dur = ((Date.now() - t0) / 1000).toFixed(1);
 
@@ -623,8 +655,9 @@ app.post('/api/chat', async (req, res) => {
       }
 
       threads[thread_id].push({ role: 'assistant', content: respostaPipe });
-      db.salvarMensagem({ papel: 'chief', conteudo: respostaPipe })
-        .catch(e => console.warn(`  [persistencia] erro: ${e.message}`));
+      // V2.14 D Fix 2 — persistência SÍNCRONA antes de retornar
+      try { await db.salvarMensagem({ papel: 'chief', conteudo: respostaPipe }); }
+      catch (e) { console.warn(`  [persistencia] erro: ${e.message}`); }
 
       const dur = ((Date.now() - t0) / 1000).toFixed(1);
       console.log(`  -> pipeline criativo finalizou em ${dur}s | mestres: ${resultadoPipe.metricas.mestres_sucesso}/${resultadoPipe.metricas.mestres_sucesso + resultadoPipe.metricas.mestres_falha} | tempo paralelo: ${resultadoPipe.metricas.mestres_paralelo_s}s | reviewer: ${revisao.motivo}`);
@@ -738,11 +771,26 @@ app.post('/api/chat', async (req, res) => {
     }
 
     threads[thread_id].push({ role: 'assistant', content: resposta });
-    db.salvarMensagem({ papel: 'chief', conteudo: resposta })
-      .catch(e => console.warn(`  [persistencia] erro: ${e.message}`));
+    // V2.14 D Fix 2 — persistência SÍNCRONA antes de retornar
+    try { await db.salvarMensagem({ papel: 'chief', conteudo: resposta }); }
+    catch (e) { console.warn(`  [persistencia] erro: ${e.message}`); }
 
     const dur = ((Date.now() - t0) / 1000).toFixed(1);
+    const lat_ms = Date.now() - t0;
     console.log(`  -> resposta final em ${dur}s, ${resposta.length} chars (reflection_round=${reflection_round})`);
+
+    // V2.14 D Fix 4 — log EPP em pinguim.agente_execucoes
+    db.logarExecucaoAtendente({
+      input: { mensagem: message, thread_id, canal: thread_id.startsWith('whatsapp-') ? 'whatsapp' : 'chat-web' },
+      output: { resposta, plan_id: plan_id || null },
+      contexto_usado: {
+        historico_n: recent.length,
+        verifier_aprovou: verifier ? verifier.aprovado : null,
+        verifier_pulado: ctx.pular_verifier,
+        reflection_round,
+      },
+      latencia_ms: lat_ms,
+    }).catch(() => {});
 
     res.json({
       thread_id,
@@ -757,12 +805,14 @@ app.post('/api/chat', async (req, res) => {
     });
   } catch (err) {
     console.error('Erro:', err);
-    res.status(500).json({
-      error: err.message || String(err),
-      hint: 'Verifique se rodou `claude login` e se a CLI esta no PATH (`which claude`)',
-    });
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: err.message || String(err),
+        hint: 'Verifique se rodou `claude login` e se a CLI esta no PATH (`which claude`)',
+      });
+    }
   }
-});
+}
 
 // ============================================================
 // V2.13 — POST /api/chat-stream (SSE)
@@ -817,6 +867,18 @@ app.post('/api/chat-stream', async (req, res) => {
     });
   }
 
+  // V2.14 D Fix 3 — Adquire lock ANTES de abrir SSE. Se outro turno do
+  // mesmo thread está em curso, este aguarda. Garante serialização.
+  let lock;
+  try {
+    lock = await db.adquirirLockThread(thread_id, 60000);
+    if (lock.esperaMs > 100) {
+      console.log(`  [stream-lock] thread ${thread_id} esperou ${lock.esperaMs}ms pelo lock`);
+    }
+  } catch (e) {
+    return res.status(503).json({ error: 'thread ocupada', detail: e.message });
+  }
+
   // Abre SSE
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -841,21 +903,18 @@ app.post('/api/chat-stream', async (req, res) => {
   });
 
   try {
-    // Hidrata thread se vazia (mesma lógica do /api/chat)
-    if (!threads[thread_id]) {
-      try {
-        const historico = await db.carregarHistorico({ limite: 20 });
-        threads[thread_id] = historico.map(m => ({
-          role: m.papel === 'humano' ? 'user' : 'assistant',
-          content: m.conteudo,
-        }));
-      } catch (_) {
-        threads[thread_id] = [];
-      }
-    }
+    // V2.14 D Fix 1 — SEMPRE recarrega do banco (fonte da verdade).
+    const historicoBanco = await carregarThreadDoBanco(thread_id, 20);
+    console.log(`  [historico-stream] carregadas ${historicoBanco.length} mensagens do banco pra thread ${thread_id}`);
+
     threads[thread_id].push({ role: 'user', content: message });
-    db.salvarMensagem({ papel: 'humano', conteudo: message })
-      .catch(e => console.warn(`  [persistencia-stream] erro: ${e.message}`));
+
+    // V2.14 D Fix 2 — Persistência SÍNCRONA antes de processar.
+    try {
+      await db.salvarMensagem({ papel: 'humano', conteudo: message });
+    } catch (e) {
+      console.warn(`  [persistencia-stream] erro: ${e.message}`);
+    }
 
     // Monta prompt (idêntico ao /api/chat)
     const recent = threads[thread_id].slice(-20);
@@ -922,11 +981,26 @@ app.post('/api/chat-stream', async (req, res) => {
     // Se Verifier reprovou, marca no done — frontend pode mostrar aviso.
 
     threads[thread_id].push({ role: 'assistant', content: resposta });
-    db.salvarMensagem({ papel: 'chief', conteudo: resposta })
-      .catch(e => console.warn(`  [persistencia-stream] erro: ${e.message}`));
+    // V2.14 D Fix 2 — persistência SÍNCRONA antes de emitir 'done'
+    try { await db.salvarMensagem({ papel: 'chief', conteudo: resposta }); }
+    catch (e) { console.warn(`  [persistencia-stream] erro: ${e.message}`); }
 
     const dur = ((Date.now() - t0) / 1000).toFixed(1);
+    const lat_ms = Date.now() - t0;
     console.log(`  -> [stream] resposta final em ${dur}s, ${resposta.length} chars`);
+
+    // V2.14 D Fix 4 — log EPP em pinguim.agente_execucoes
+    db.logarExecucaoAtendente({
+      input: { mensagem: message, thread_id, canal: thread_id.startsWith('whatsapp-') ? 'whatsapp' : 'chat-web' },
+      output: { resposta },
+      contexto_usado: {
+        historico_n: recent.length,
+        stream: true,
+        verifier_aprovou: verifier ? verifier.aprovado : null,
+        verifier_pulado: ctx.pular_verifier,
+      },
+      latencia_ms: lat_ms,
+    }).catch(() => {});
 
     sse('done', {
       content: resposta,
@@ -944,6 +1018,9 @@ app.post('/api/chat-stream', async (req, res) => {
     console.error('[stream] erro:', err);
     sse('error', { error: err.message || String(err) });
     res.end();
+  } finally {
+    // V2.14 D Fix 3 — sempre libera o lock, mesmo em erro
+    if (lock) await db.liberarLockThread(thread_id, lock.lockId);
   }
 });
 
