@@ -45,7 +45,7 @@
 **Sinais:** "lista X", "atualiza Y", "verifica Z", queries sobre estado do sistema
 **Ação:** executa scripts de leitura, mostra resultado
 
-### Categoria E — Operações Google (Drive V2.12 + Gmail V2.13)
+### Categoria E — Operações Google (Drive V2.12 + Gmail V2.13 + Calendar V2.14)
 
 #### Memória de arquivo ativo (V2.12 Fix 2 — LER ANTES de qualquer E)
 
@@ -65,7 +65,7 @@ Antes de cada turno, se houver arquivos manipulados nos últimos 30 dias na conv
 - ❌ Ignorar o bloco e rodar `buscar-drive` quando há contexto óbvio (desperdiça 3s + procura imprecisa + irrita o sócio)
 - ❌ Inventar fileId que não está no contexto (se o sócio nomear arquivo novo, busca; nunca chuta)
 
-A Categoria E tem **3 sub-categorias** — saber qual disparar é o que faz o agente útil:
+A Categoria E tem **4 sub-áreas** (Drive E1-E3, Gmail E4-E6, Calendar E7) — saber qual disparar é o que faz o agente útil:
 
 #### E1 — BUSCAR arquivo (acha pelo nome/conteúdo)
 
@@ -242,12 +242,68 @@ Confirma? [sim/não]
 - ❌ Anexar HTML/imagem (não suportado nesta versão — só plain text)
 - ❌ "Sim" do sócio em arquivar email A ≠ "sim" pra arquivar email B (cada operação destrutiva = nova confirmação)
 
+#### E7 — LER agenda do Calendar (V2.14 Fase 1.7) — READ-only
+
+**Sinais:** "minha agenda hoje", "o que tenho hoje", "tenho reunião quarta?", "quais compromissos amanhã", "como tá minha semana", "qual é meu próximo evento", "tem call com Pedro?", "alguém marcou comigo na sexta?"
+
+**Ação:**
+
+1. Identifica a **janela** que o sócio quer:
+   - "hoje" → janela de hoje BRT (00:00-23:59)
+   - "amanhã" → janela de amanhã BRT
+   - "quarta", "sexta", dia da semana específico → calcula a próxima ocorrência desse dia (BRT)
+   - "essa semana", "próximos 7 dias" → janela `now → +7d`
+   - "essa semana toda" / "próxima semana" → ajustar timeMin/timeMax conforme contexto
+   - Sem indicação clara → assume **hoje** + linha resumindo amanhã (padrão do módulo de relatório)
+2. Chama `POST /api/calendar/listar-eventos` com `{calendarId: 'primary', timeMin, timeMax}`
+3. Devolve em markdown:
+   - Lista cronológica: `**HH:MM → HH:MM** (Nmin) · **<título>** · N participantes · [Meet] se houver`
+   - Eventos `dia_inteiro=true` aparecem com marca `[dia inteiro]` separada
+   - Se 0 eventos: "Nada na agenda em <janela>" (honesto)
+4. Para janela "hoje" sem qualificação extra, **adicionar linha de amanhã resumido** (decisão André 2026-05-09): "Amanhã: N reuniões, primeira HH:MM com <quem>"
+
+**Quando refinar busca (regra de bom uso):**
+
+- Sócio fala "reunião com Pedro" → não tem filtro de participante via API simples — listar janela ampla e filtrar mentalmente o título/participantes que batem
+- Sócio fala "call de automações" → idem, listar janela ampla e procurar por título
+- Sócio fala "feriado" → calendário `pt-br.brazilian#holiday@group.v.calendar.google.com` (não `primary`)
+
+**Calcular dia da semana específico (algoritmo):**
+
+```js
+// "quarta" → próxima quarta BRT
+// dias: dom=0, seg=1, ter=2, qua=3, qui=4, sex=5, sab=6
+const hoje = new Date();
+const diaHoje = hoje.getDay();
+const diaAlvo = 3; // quarta
+let delta = (diaAlvo - diaHoje + 7) % 7;
+if (delta === 0) delta = 7; // se hoje é quarta, pega a próxima
+// timeMin = inicio do dia alvo BRT, timeMax = fim do dia alvo BRT
+```
+
+Quando agente não souber o dia exato (ex: "quarta", e hoje já é quinta), perguntar "essa quarta-feira que vem?" antes de chutar.
+
+**Limites:**
+
+- Default lê só calendário `primary` (`ferramenta@agenciapinguim.com` no caso do Codina). Se sócio tem outro calendário ativo (ex: "Reuniões internas"), pedir explícito ou usar `POST /api/calendar/listar-calendarios` pra descobrir e perguntar qual.
+- maxResults default 50 — janelas longas (mês inteiro) podem truncar. Aumentar se necessário.
+- **NUNCA cria/edita/cancela evento** — esta sub-área é **READ-only**. Pedido de criar/alterar evento vai pra **squad operacional `hybrid-ops-squad`** (frente futura V2.15). Hoje, declarar honesto: "Pra criar evento ainda não tenho a Skill operacional pronta — frente V2.15. Por enquanto só consigo LER agenda."
+
+**Anti-padrões proibidos:**
+
+- ❌ Inventar evento (se 0, devolver "Nada na agenda" honesto)
+- ❌ Usar fuso UTC nos horários (sempre BRT — wrapper já formata)
+- ❌ Detalhar amanhã quando o sócio pediu hoje (decisão André: amanhã = uma linha de resumo)
+- ❌ Chutar "essa quarta" sem confirmar (se ambíguo, perguntar)
+- ❌ Tentar criar/editar evento (hoje só lê — declarar honesto, frente V2.15)
+
 #### Quando NÃO usar Categoria E
 
 - Pergunta sobre arquivo do sistema (.md no repo) — usa Glob/Grep direto
 - Pedido criativo que menciona arquivo ("monta uma copy parecida com a que está no Drive...") — busca + lê primeiro com `buscar-drive`/`ler-drive`, depois delega criativo
 - "Email" no sentido de **escrever email novo do zero como copy criativa** (campanha, lançamento) — vai pro pipeline criativo squad `copy`, não Gmail. Gmail é pra operação na caixa pessoal do sócio.
 - "Triagem", "diagnóstico" da inbox, "relatório" de email/financeiro — vai pra **Categoria F** (Squad Data) abaixo, não Gmail direto
+- "**Cria reunião com X**", "**marca call quarta 14h**", "**cancela aquela reunião**" — operação de ESCRITA no Calendar. Esta versão NÃO faz. Vai pra `hybrid-ops-squad` quando frente V2.15 entregar. Declarar honesto.
 
 ### Categoria F — Relatórios e diagnósticos (V2.14 — Squad Data)
 
