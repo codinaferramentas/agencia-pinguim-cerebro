@@ -41,6 +41,7 @@ const googleDriveContent = require('./lib/google-drive-content'); // V2.12 Fase 
 const googleGmail = require('./lib/google-gmail'); // V2.13 — listar/ler/responder/modificar Gmail
 const googleCalendar = require('./lib/google-calendar'); // V2.14 Fase 1.7 — leitura Calendar (squad data)
 const contextoTemporal = require('./lib/contexto-temporal'); // V2.14 Fase 1.7 hotfix — bloco de data BRT no prompt (evita LLM chutar dia da semana)
+const discordBot = require('./lib/discord-bot'); // V2.14 Frente B — bot Discord (Gateway WebSocket, ingest tempo real)
 
 const app = express();
 const PORT = 3737;
@@ -1404,6 +1405,130 @@ app.post('/api/calendar/ler-evento', async (req, res) => {
   }
 });
 
+// ============================================================
+// V2.14 Frente B — endpoints DISCORD (LEITURA, squad data)
+// ============================================================
+// Bot Discord conecta no Gateway via WebSocket no boot do server-cli e
+// salva mensagens em pinguim.discord_mensagens em tempo real. Endpoints
+// abaixo expoem leitura (status do bot + mensagens 24h + busca por canal).
+// ESCRITA no Discord NAO esta aqui — sera squad hybrid-ops-squad em V2.15.
+// ============================================================
+
+app.post('/api/discord/backfill', async (req, res) => {
+  try {
+    const { horas = 24, maxPorCanal = 100 } = req.body || {};
+    const bot = discordBot.getBot();
+    if (!bot) return res.status(503).json({ ok: false, error: 'bot nao iniciado' });
+    const t0 = Date.now();
+    const r = await bot.backfillHorasRecentes({ horas, maxPorCanal });
+    const dur_ms = Date.now() - t0;
+    console.log(`[discord-backfill] ${dur_ms}ms | canais=${r.canais_processados} | ingeridas=${r.mensagens_ingeridas}`);
+    res.json({ ok: true, ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[discord-backfill] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/discord/status', async (req, res) => {
+  try {
+    const bot = discordBot.getBot();
+    if (!bot) {
+      return res.json({
+        ok: true, ativo: false,
+        motivo: 'Bot nao inicializado (DISCORD_BOT_TOKEN nao no cofre ou erro no boot).',
+      });
+    }
+    res.json({ ok: true, ativo: true, ...bot.getStatus() });
+  } catch (e) {
+    console.error('[discord-status] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/discord/listar-24h', async (req, res) => {
+  try {
+    const { horas = 24, incluir_bots = false, canal_id = null, limite = 500 } = req.body || {};
+    const t0 = Date.now();
+
+    // Janela: ultimas N horas em UTC
+    const desde = new Date(Date.now() - horas * 60 * 60 * 1000).toISOString();
+    const wheres = [`postado_em >= '${desde}'`];
+    if (!incluir_bots) wheres.push('autor_bot = false');
+    if (canal_id) wheres.push(`canal_id = '${canal_id.replace(/'/g, "''")}'`);
+
+    const sql = `
+      SELECT message_id, guild_id, guild_nome, canal_id, canal_nome, canal_tipo,
+             autor_id, autor_nome, autor_bot,
+             conteudo, postado_em, editado_em,
+             mencoes_users, mencoes_roles, menciona_everyone,
+             reacoes_qtd, anexos_qtd, embed_qtd, parent_canal_id, thread_id
+      FROM pinguim.discord_mensagens
+      WHERE ${wheres.join(' AND ')}
+      ORDER BY postado_em ASC
+      LIMIT ${Math.min(parseInt(limite) || 500, 2000)};
+    `;
+    const r = await db.rodarSQL(sql);
+    const dur_ms = Date.now() - t0;
+    console.log(`[discord-listar-24h] ${dur_ms}ms | janela=${horas}h | retornou=${r.length}${canal_id ? ` | canal=${canal_id.slice(0,8)}` : ''}`);
+
+    // Agrupa por canal pra resumo
+    const porCanal = new Map();
+    for (const m of r) {
+      const k = m.canal_id;
+      if (!porCanal.has(k)) {
+        porCanal.set(k, { canal_id: k, canal_nome: m.canal_nome || '?', canal_tipo: m.canal_tipo, qtd: 0, autores: new Set() });
+      }
+      const c = porCanal.get(k);
+      c.qtd++;
+      if (m.autor_id) c.autores.add(m.autor_id);
+    }
+    const resumo_canais = Array.from(porCanal.values())
+      .map(c => ({ canal_id: c.canal_id, canal_nome: c.canal_nome, canal_tipo: c.canal_tipo, mensagens: c.qtd, autores_distintos: c.autores.size }))
+      .sort((a, b) => b.mensagens - a.mensagens);
+
+    res.json({
+      ok: true,
+      janela_horas: horas,
+      desde,
+      total: r.length,
+      mensagens: r,
+      resumo_canais,
+      latencia_ms: dur_ms,
+    });
+  } catch (e) {
+    console.error('[discord-listar-24h] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/discord/buscar', async (req, res) => {
+  try {
+    const { query, horas = 168, limite = 50 } = req.body || {};
+    if (!query || query.length < 2) return res.status(400).json({ ok: false, error: 'query >= 2 chars' });
+    const t0 = Date.now();
+    const desde = new Date(Date.now() - horas * 60 * 60 * 1000).toISOString();
+    const escQ = query.replace(/'/g, "''").replace(/%/g, '\\%').replace(/_/g, '\\_');
+    const sql = `
+      SELECT message_id, guild_nome, canal_nome, autor_nome, autor_bot,
+             conteudo, postado_em, reacoes_qtd
+      FROM pinguim.discord_mensagens
+      WHERE postado_em >= '${desde}'
+        AND autor_bot = false
+        AND conteudo ILIKE '%${escQ}%'
+      ORDER BY postado_em DESC
+      LIMIT ${Math.min(parseInt(limite) || 50, 200)};
+    `;
+    const r = await db.rodarSQL(sql);
+    const dur_ms = Date.now() - t0;
+    console.log(`[discord-buscar] ${dur_ms}ms | query="${query.slice(0,40)}" | retornou=${r.length}`);
+    res.json({ ok: true, query, janela_horas: horas, total: r.length, mensagens: r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[discord-buscar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 app.get('/oauth/google/callback', async (req, res) => {
   const { code, error, error_description } = req.query;
 
@@ -1510,4 +1635,22 @@ app.listen(PORT, () => {
   console.log('============================================================');
   console.log('Pre-requisito: rodar `claude login` 1 vez na maquina.');
   console.log('Ctrl+C pra parar.');
+
+  // V2.14 Frente B — inicia bot Discord se DISCORD_BOT_TOKEN estiver no cofre.
+  // Falha silenciosa (warn) se nao tem token — dev local sem Discord segue rodando normal.
+  discordBot.iniciarBot()
+    .then(bot => {
+      if (bot) console.log('  [discord-bot] iniciado, conectando ao Gateway...');
+      else     console.log('  [discord-bot] DESLIGADO (sem DISCORD_BOT_TOKEN no cofre)');
+    })
+    .catch(e => console.warn(`  [discord-bot] falha ao iniciar (nao bloqueia server): ${e.message}`));
 });
+
+// Shutdown gracioso — fecha bot Discord antes de sair (evita reconexao spam quando reiniciar)
+function shutdownGracioso(sinal) {
+  console.log(`\n[server] recebido ${sinal}, fechando bot Discord...`);
+  try { discordBot.pararBot(); } catch (_) {}
+  process.exit(0);
+}
+process.on('SIGINT', () => shutdownGracioso('SIGINT'));
+process.on('SIGTERM', () => shutdownGracioso('SIGTERM'));

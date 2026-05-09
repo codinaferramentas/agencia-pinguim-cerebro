@@ -201,6 +201,58 @@ const amanha = cal.janelaAmanhaBRT(); // idem pra amanhã
 
 **Quando o agente precisar criar evento, declarar honesto:** "Pra criar/alterar evento ainda não tenho a Skill operacional pronta — frente V2.15 (squad `hybrid-ops-squad`). Por enquanto só consigo LER agenda."
 
+## Tools de Discord (V2.14 Frente B — bot READ-only)
+
+Bot **Pinguim Bot** conecta no Gateway WebSocket do Discord no boot do server-cli e salva mensagens em `pinguim.discord_mensagens` em **tempo real**. Sem cron, sem polling — stream contínuo.
+
+**Token + Server ID** vivem no cofre (`DISCORD_BOT_TOKEN` + `DISCORD_GUILD_ID`).
+
+| Tool | O que faz | Como acessar |
+|---|---|---|
+| 📊 **Discord status** | Healthcheck do bot (conectado? quantas guilds? quantas mensagens ingeridas?) | `GET /api/discord/status` |
+| 💬 **Discord listar 24h** | Mensagens das últimas N horas + `resumo_canais` (canal + qtd msg + autores distintos) | `POST /api/discord/listar-24h` body `{horas?, incluir_bots?, canal_id?}` |
+| 🔍 **Discord buscar** | Busca ILIKE por palavra-chave (default últimos 7 dias) | `POST /api/discord/buscar` body `{query, horas?, limite?}` |
+| ⏪ **Discord backfill** | Backfill histórico via REST API (uso pontual após reinicio) | `POST /api/discord/backfill` body `{horas?, maxPorCanal?}` |
+
+**Exemplos via curl:**
+
+```bash
+# Status do bot
+curl -s http://localhost:3737/api/discord/status
+
+# Mensagens últimas 24h (sem bots)
+curl -s -X POST http://localhost:3737/api/discord/listar-24h \
+  -H "Content-Type: application/json" \
+  -d '{"horas":24,"incluir_bots":false}'
+
+# Buscar quem citou "Lyra" últimos 7 dias
+curl -s -X POST http://localhost:3737/api/discord/buscar \
+  -H "Content-Type: application/json" \
+  -d '{"query":"Lyra","horas":168}'
+
+# Backfill 48h (uso 1x após boot, se quiser cobrir downtime)
+curl -s -X POST http://localhost:3737/api/discord/backfill \
+  -H "Content-Type: application/json" \
+  -d '{"horas":48,"maxPorCanal":100}'
+```
+
+**Não implementado nesta versão (vai pra `hybrid-ops-squad` em V2.15):**
+
+- Enviar mensagem em canal
+- Responder thread / mention
+- Adicionar reação (👍 etc)
+- Criar canal / thread
+- Mudar permissão de canal
+
+**Quando agente precisar enviar mensagem no Discord, declarar honesto:** "Pra enviar/responder no Discord ainda não tenho a Skill operacional pronta — frente V2.15 (squad `hybrid-ops-squad`). Por enquanto só consigo LER."
+
+**Cofre (no servidor):**
+
+- `DISCORD_BOT_TOKEN` — token do bot "Pinguim Bot" (App ID `1502712279907696801`)
+- `DISCORD_GUILD_ID` — Server ID do "Agência Pinguim" (`1083429941300969574`). Bot ingere SÓ mensagens dessa guild (filtro hard).
+
+**Permissão por canal:** em canais privados (suporte, dev, restritos a role), o admin precisa adicionar Pinguim Bot manualmente com "View Channel" + "Read Message History". Em canais públicos do servidor, bot lê automaticamente.
+
 ## Mapeamento produto → cerebro_slug
 
 | Sinal na pergunta | cerebro_slug |
@@ -240,6 +292,10 @@ const amanha = cal.janelaAmanhaBRT(); // idem pra amanhã
 | `POST /api/calendar/listar-calendarios` | V2.14 Fase 1.7 — lista calendários do sócio (primary + secundários). |
 | `POST /api/calendar/listar-eventos` | V2.14 Fase 1.7 — lista eventos numa janela BRT. Body: `{calendarId?, timeMin, timeMax, maxResults?}`. |
 | `POST /api/calendar/ler-evento` | V2.14 Fase 1.7 — detalhe completo de um evento. Body: `{calendarId?, eventId}`. |
+| `GET /api/discord/status` | V2.14 Frente B — status do bot Discord (conectado, total ingerido, guilds, ultimo erro). |
+| `POST /api/discord/listar-24h` | V2.14 Frente B — mensagens das ultimas N horas. Body: `{horas?, incluir_bots?, canal_id?, limite?}`. Retorna `mensagens` + `resumo_canais`. |
+| `POST /api/discord/buscar` | V2.14 Frente B — busca por palavra-chave nas ultimas N horas (default 7d). Body: `{query, horas?, limite?}`. |
+| `POST /api/discord/backfill` | V2.14 Frente B — popula historico via REST API (uso pontual quando bot reinicia). Body: `{horas?, maxPorCanal?}`. |
 | `GET /conectar-google` | V2.12 — página de status + botão OAuth. |
 | `GET /api/health` | Checa CLI Claude |
 | `GET /api/info` | Lista skills + scripts disponíveis |

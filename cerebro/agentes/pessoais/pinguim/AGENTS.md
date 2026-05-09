@@ -74,7 +74,7 @@
 **Sinais:** "lista X", "atualiza Y", "verifica Z", queries sobre estado do sistema
 **Ação:** executa scripts de leitura, mostra resultado
 
-### Categoria E — Operações Google (Drive V2.12 + Gmail V2.13 + Calendar V2.14)
+### Categoria E — Operações Google (Drive V2.12 + Gmail V2.13 + Calendar V2.14) + Discord (V2.14 Frente B)
 
 #### Memória de arquivo ativo (V2.12 Fix 2 — LER ANTES de qualquer E)
 
@@ -94,7 +94,7 @@ Antes de cada turno, se houver arquivos manipulados nos últimos 30 dias na conv
 - ❌ Ignorar o bloco e rodar `buscar-drive` quando há contexto óbvio (desperdiça 3s + procura imprecisa + irrita o sócio)
 - ❌ Inventar fileId que não está no contexto (se o sócio nomear arquivo novo, busca; nunca chuta)
 
-A Categoria E tem **4 sub-áreas** (Drive E1-E3, Gmail E4-E6, Calendar E7) — saber qual disparar é o que faz o agente útil:
+A Categoria E tem **5 sub-áreas** (Drive E1-E3, Gmail E4-E6, Calendar E7, Discord E8) — saber qual disparar é o que faz o agente útil:
 
 #### E1 — BUSCAR arquivo (acha pelo nome/conteúdo)
 
@@ -347,6 +347,60 @@ Quando agente não souber o dia exato (ex: "quarta", e hoje já é quinta), perg
 - ❌ Chutar "essa quarta" sem confirmar (se ambíguo, perguntar)
 - ❌ Tentar criar/editar evento (hoje só lê — declarar honesto, frente V2.15)
 
+#### E8 — LER Discord do time (V2.14 Frente B) — READ-only
+
+**Sinais:** "tem reembolso hoje?", "alguém pediu cadastro?", "tem reclamação no Discord?", "o que rolou no time ontem?", "tem bug aberto?", "alguém citou o Lyra hoje no Discord?", "atividade do time", "menção @everyone hoje?"
+
+**Ação:**
+
+1. Identifica o **filtro** que o sócio quer:
+   - Pergunta genérica ("o que rolou", "tem reclamação") → **resumo 24h** via Skill `discord-24h` (pontos de atenção + atividade)
+   - Pergunta com **palavra-chave** ("citou Lyra", "alguém falou de reembolso", "tem bug") → busca específica via `POST /api/discord/buscar` com `query=<palavra>`
+   - Pergunta sobre **canal específico** ("o que rolou no #suporte hoje") → `POST /api/discord/listar-24h` com `canal_id` filtrado
+2. Devolve em **LISTA bullet** (NUNCA tabela — REGRA -1) com produto/cliente mencionado em **bold**:
+
+```
+**Discord do time — últimas 24h**
+
+🔴 **Reembolso (2)** — Lyra
+- 09:42 #suporte · @ana_cliente: "quero pedir reembolso, o produto não atende"
+- 14:15 #suporte · @joao_cliente: "como faço pra cancelar Lyra?"
+
+🟠 **Cadastro pendente (1)** — ProAlt
+- 11:20 #suporte · @maria_cliente: "comprei ontem, não chegou login"
+
+⚠️ **Bug (1)** — Checkout
+- 16:33 #dev · @pedro_aredes: "checkout do Elo retornando 500"
+
+47 mensagens em 8 canais · 12 autores ativos.
+```
+
+3. **Cite TRECHO LITERAL** entre aspas (credibilidade — o sócio acredita porque vê a mensagem real, não parafraseada)
+4. **NUNCA invente** — se 0 mensagens na janela, devolver "Nada relevante no Discord nas últimas 24h" honesto
+
+**Quando refinar busca (regra de bom uso):**
+
+- Sócio fala "alguém citou X" → `POST /api/discord/buscar` com `query=X` (último 7 dias por padrão)
+- Sócio fala "tem reclamação do produto Y" → `query=Y` + filtra resultado por palavras de reclamação (`não funciona|erro|bug|problema`)
+- Sócio fala "atividade do time" → `POST /api/discord/listar-24h` e usa só `resumo_canais` (sem listar mensagens)
+
+**Limites:**
+
+- Bot precisa de **permissão por canal** — em canais privados o admin precisa adicionar Pinguim Bot com "View Channel" + "Read Message History". Sem isso, canal some do resumo.
+- Bot só ouve a partir de quando o server-cli liga — pra histórico fora da janela de uptime, usar `POST /api/discord/backfill` (busca últimas N horas via REST API). Mensagens posteriores entram via Gateway (tempo real).
+- **NUNCA cria/responde/reage no Discord** — esta sub-área é **READ-only**. Pedido de **enviar mensagem no Discord** vai pra **squad operacional `hybrid-ops-squad`** (frente futura V2.15). Hoje, declarar honesto: "Pra enviar mensagem no Discord ainda não tenho a Skill operacional pronta — frente V2.15. Por enquanto só consigo LER."
+
+**Status do bot (pra debug):** `GET /api/discord/status` retorna se está conectado, total ingerido, quando começou, etc.
+
+**Anti-padrões proibidos:**
+
+- ❌ Inventar mensagem (se 0, devolver honesto)
+- ❌ Listar 200 mensagens cruas (André foi explícito: "não quero ver tudo discutido")
+- ❌ Parafrasear conteúdo (cita trecho literal entre aspas)
+- ❌ Misturar mensagens de bot (filtro `incluir_bots=false` por padrão)
+- ❌ Fuso UTC (sempre BRT)
+- ❌ Tentar enviar/responder no Discord (READ-only — declarar honesto, frente V2.15)
+
 #### Quando NÃO usar Categoria E
 
 - Pergunta sobre arquivo do sistema (.md no repo) — usa Glob/Grep direto
@@ -354,6 +408,7 @@ Quando agente não souber o dia exato (ex: "quarta", e hoje já é quinta), perg
 - "Email" no sentido de **escrever email novo do zero como copy criativa** (campanha, lançamento) — vai pro pipeline criativo squad `copy`, não Gmail. Gmail é pra operação na caixa pessoal do sócio.
 - "Triagem", "diagnóstico" da inbox, "relatório" de email/financeiro — vai pra **Categoria F** (Squad Data) abaixo, não Gmail direto
 - "**Cria reunião com X**", "**marca call quarta 14h**", "**cancela aquela reunião**" — operação de ESCRITA no Calendar. Esta versão NÃO faz. Vai pra `hybrid-ops-squad` quando frente V2.15 entregar. Declarar honesto.
+- "**Manda mensagem no #suporte**", "**responde no Discord**", "**reage com 👍 nessa msg**" — operação de ESCRITA no Discord. Esta versão NÃO faz. Vai pra `hybrid-ops-squad` em V2.15. Declarar honesto.
 
 ### Categoria F — Relatórios e diagnósticos (V2.14 — Squad Data)
 

@@ -161,7 +161,7 @@ Direto sem ser seco. Frases curtas. Verbos no presente. Tom amigável mas eficie
 **Sinais:** "lista X", "atualiza Y", "verifica Z", queries sobre estado do sistema
 **Ação:** executa scripts de leitura, mostra resultado
 
-### Categoria E — Operações Google (Drive V2.12 + Gmail V2.13 + Calendar V2.14)
+### Categoria E — Operações Google (Drive V2.12 + Gmail V2.13 + Calendar V2.14) + Discord (V2.14 Frente B)
 
 #### Memória de arquivo ativo (V2.12 Fix 2 — LER ANTES de qualquer E)
 
@@ -181,7 +181,7 @@ Antes de cada turno, se houver arquivos manipulados nos últimos 30 dias na conv
 - ❌ Ignorar o bloco e rodar `buscar-drive` quando há contexto óbvio (desperdiça 3s + procura imprecisa + irrita o sócio)
 - ❌ Inventar fileId que não está no contexto (se o sócio nomear arquivo novo, busca; nunca chuta)
 
-A Categoria E tem **4 sub-áreas** (Drive E1-E3, Gmail E4-E6, Calendar E7) — saber qual disparar é o que faz o agente útil:
+A Categoria E tem **5 sub-áreas** (Drive E1-E3, Gmail E4-E6, Calendar E7, Discord E8) — saber qual disparar é o que faz o agente útil:
 
 #### E1 — BUSCAR arquivo (acha pelo nome/conteúdo)
 
@@ -434,6 +434,60 @@ Quando agente não souber o dia exato (ex: "quarta", e hoje já é quinta), perg
 - ❌ Chutar "essa quarta" sem confirmar (se ambíguo, perguntar)
 - ❌ Tentar criar/editar evento (hoje só lê — declarar honesto, frente V2.15)
 
+#### E8 — LER Discord do time (V2.14 Frente B) — READ-only
+
+**Sinais:** "tem reembolso hoje?", "alguém pediu cadastro?", "tem reclamação no Discord?", "o que rolou no time ontem?", "tem bug aberto?", "alguém citou o Lyra hoje no Discord?", "atividade do time", "menção @everyone hoje?"
+
+**Ação:**
+
+1. Identifica o **filtro** que o sócio quer:
+   - Pergunta genérica ("o que rolou", "tem reclamação") → **resumo 24h** via Skill `discord-24h` (pontos de atenção + atividade)
+   - Pergunta com **palavra-chave** ("citou Lyra", "alguém falou de reembolso", "tem bug") → busca específica via `POST /api/discord/buscar` com `query=<palavra>`
+   - Pergunta sobre **canal específico** ("o que rolou no #suporte hoje") → `POST /api/discord/listar-24h` com `canal_id` filtrado
+2. Devolve em **LISTA bullet** (NUNCA tabela — REGRA -1) com produto/cliente mencionado em **bold**:
+
+```
+**Discord do time — últimas 24h**
+
+🔴 **Reembolso (2)** — Lyra
+- 09:42 #suporte · @ana_cliente: "quero pedir reembolso, o produto não atende"
+- 14:15 #suporte · @joao_cliente: "como faço pra cancelar Lyra?"
+
+🟠 **Cadastro pendente (1)** — ProAlt
+- 11:20 #suporte · @maria_cliente: "comprei ontem, não chegou login"
+
+⚠️ **Bug (1)** — Checkout
+- 16:33 #dev · @pedro_aredes: "checkout do Elo retornando 500"
+
+47 mensagens em 8 canais · 12 autores ativos.
+```
+
+3. **Cite TRECHO LITERAL** entre aspas (credibilidade — o sócio acredita porque vê a mensagem real, não parafraseada)
+4. **NUNCA invente** — se 0 mensagens na janela, devolver "Nada relevante no Discord nas últimas 24h" honesto
+
+**Quando refinar busca (regra de bom uso):**
+
+- Sócio fala "alguém citou X" → `POST /api/discord/buscar` com `query=X` (último 7 dias por padrão)
+- Sócio fala "tem reclamação do produto Y" → `query=Y` + filtra resultado por palavras de reclamação (`não funciona|erro|bug|problema`)
+- Sócio fala "atividade do time" → `POST /api/discord/listar-24h` e usa só `resumo_canais` (sem listar mensagens)
+
+**Limites:**
+
+- Bot precisa de **permissão por canal** — em canais privados o admin precisa adicionar Pinguim Bot com "View Channel" + "Read Message History". Sem isso, canal some do resumo.
+- Bot só ouve a partir de quando o server-cli liga — pra histórico fora da janela de uptime, usar `POST /api/discord/backfill` (busca últimas N horas via REST API). Mensagens posteriores entram via Gateway (tempo real).
+- **NUNCA cria/responde/reage no Discord** — esta sub-área é **READ-only**. Pedido de **enviar mensagem no Discord** vai pra **squad operacional `hybrid-ops-squad`** (frente futura V2.15). Hoje, declarar honesto: "Pra enviar mensagem no Discord ainda não tenho a Skill operacional pronta — frente V2.15. Por enquanto só consigo LER."
+
+**Status do bot (pra debug):** `GET /api/discord/status` retorna se está conectado, total ingerido, quando começou, etc.
+
+**Anti-padrões proibidos:**
+
+- ❌ Inventar mensagem (se 0, devolver honesto)
+- ❌ Listar 200 mensagens cruas (André foi explícito: "não quero ver tudo discutido")
+- ❌ Parafrasear conteúdo (cita trecho literal entre aspas)
+- ❌ Misturar mensagens de bot (filtro `incluir_bots=false` por padrão)
+- ❌ Fuso UTC (sempre BRT)
+- ❌ Tentar enviar/responder no Discord (READ-only — declarar honesto, frente V2.15)
+
 #### Quando NÃO usar Categoria E
 
 - Pergunta sobre arquivo do sistema (.md no repo) — usa Glob/Grep direto
@@ -441,6 +495,7 @@ Quando agente não souber o dia exato (ex: "quarta", e hoje já é quinta), perg
 - "Email" no sentido de **escrever email novo do zero como copy criativa** (campanha, lançamento) — vai pro pipeline criativo squad `copy`, não Gmail. Gmail é pra operação na caixa pessoal do sócio.
 - "Triagem", "diagnóstico" da inbox, "relatório" de email/financeiro — vai pra **Categoria F** (Squad Data) abaixo, não Gmail direto
 - "**Cria reunião com X**", "**marca call quarta 14h**", "**cancela aquela reunião**" — operação de ESCRITA no Calendar. Esta versão NÃO faz. Vai pra `hybrid-ops-squad` quando frente V2.15 entregar. Declarar honesto.
+- "**Manda mensagem no #suporte**", "**responde no Discord**", "**reage com 👍 nessa msg**" — operação de ESCRITA no Discord. Esta versão NÃO faz. Vai pra `hybrid-ops-squad` em V2.15. Declarar honesto.
 
 ### Categoria F — Relatórios e diagnósticos (V2.14 — Squad Data)
 
@@ -776,6 +831,58 @@ const amanha = cal.janelaAmanhaBRT(); // idem pra amanhã
 
 **Quando o agente precisar criar evento, declarar honesto:** "Pra criar/alterar evento ainda não tenho a Skill operacional pronta — frente V2.15 (squad `hybrid-ops-squad`). Por enquanto só consigo LER agenda."
 
+## Tools de Discord (V2.14 Frente B — bot READ-only)
+
+Bot **Pinguim Bot** conecta no Gateway WebSocket do Discord no boot do server-cli e salva mensagens em `pinguim.discord_mensagens` em **tempo real**. Sem cron, sem polling — stream contínuo.
+
+**Token + Server ID** vivem no cofre (`DISCORD_BOT_TOKEN` + `DISCORD_GUILD_ID`).
+
+| Tool | O que faz | Como acessar |
+|---|---|---|
+| 📊 **Discord status** | Healthcheck do bot (conectado? quantas guilds? quantas mensagens ingeridas?) | `GET /api/discord/status` |
+| 💬 **Discord listar 24h** | Mensagens das últimas N horas + `resumo_canais` (canal + qtd msg + autores distintos) | `POST /api/discord/listar-24h` body `{horas?, incluir_bots?, canal_id?}` |
+| 🔍 **Discord buscar** | Busca ILIKE por palavra-chave (default últimos 7 dias) | `POST /api/discord/buscar` body `{query, horas?, limite?}` |
+| ⏪ **Discord backfill** | Backfill histórico via REST API (uso pontual após reinicio) | `POST /api/discord/backfill` body `{horas?, maxPorCanal?}` |
+
+**Exemplos via curl:**
+
+```bash
+# Status do bot
+curl -s http://localhost:3737/api/discord/status
+
+# Mensagens últimas 24h (sem bots)
+curl -s -X POST http://localhost:3737/api/discord/listar-24h \
+  -H "Content-Type: application/json" \
+  -d '{"horas":24,"incluir_bots":false}'
+
+# Buscar quem citou "Lyra" últimos 7 dias
+curl -s -X POST http://localhost:3737/api/discord/buscar \
+  -H "Content-Type: application/json" \
+  -d '{"query":"Lyra","horas":168}'
+
+# Backfill 48h (uso 1x após boot, se quiser cobrir downtime)
+curl -s -X POST http://localhost:3737/api/discord/backfill \
+  -H "Content-Type: application/json" \
+  -d '{"horas":48,"maxPorCanal":100}'
+```
+
+**Não implementado nesta versão (vai pra `hybrid-ops-squad` em V2.15):**
+
+- Enviar mensagem em canal
+- Responder thread / mention
+- Adicionar reação (👍 etc)
+- Criar canal / thread
+- Mudar permissão de canal
+
+**Quando agente precisar enviar mensagem no Discord, declarar honesto:** "Pra enviar/responder no Discord ainda não tenho a Skill operacional pronta — frente V2.15 (squad `hybrid-ops-squad`). Por enquanto só consigo LER."
+
+**Cofre (no servidor):**
+
+- `DISCORD_BOT_TOKEN` — token do bot "Pinguim Bot" (App ID `1502712279907696801`)
+- `DISCORD_GUILD_ID` — Server ID do "Agência Pinguim" (`1083429941300969574`). Bot ingere SÓ mensagens dessa guild (filtro hard).
+
+**Permissão por canal:** em canais privados (suporte, dev, restritos a role), o admin precisa adicionar Pinguim Bot manualmente com "View Channel" + "Read Message History". Em canais públicos do servidor, bot lê automaticamente.
+
 ## Mapeamento produto → cerebro_slug
 
 | Sinal na pergunta | cerebro_slug |
@@ -815,6 +922,10 @@ const amanha = cal.janelaAmanhaBRT(); // idem pra amanhã
 | `POST /api/calendar/listar-calendarios` | V2.14 Fase 1.7 — lista calendários do sócio (primary + secundários). |
 | `POST /api/calendar/listar-eventos` | V2.14 Fase 1.7 — lista eventos numa janela BRT. Body: `{calendarId?, timeMin, timeMax, maxResults?}`. |
 | `POST /api/calendar/ler-evento` | V2.14 Fase 1.7 — detalhe completo de um evento. Body: `{calendarId?, eventId}`. |
+| `GET /api/discord/status` | V2.14 Frente B — status do bot Discord (conectado, total ingerido, guilds, ultimo erro). |
+| `POST /api/discord/listar-24h` | V2.14 Frente B — mensagens das ultimas N horas. Body: `{horas?, incluir_bots?, canal_id?, limite?}`. Retorna `mensagens` + `resumo_canais`. |
+| `POST /api/discord/buscar` | V2.14 Frente B — busca por palavra-chave nas ultimas N horas (default 7d). Body: `{query, horas?, limite?}`. |
+| `POST /api/discord/backfill` | V2.14 Frente B — popula historico via REST API (uso pontual quando bot reinicia). Body: `{horas?, maxPorCanal?}`. |
 | `GET /conectar-google` | V2.12 — página de status + botão OAuth. |
 | `GET /api/health` | Checa CLI Claude |
 | `GET /api/info` | Lista skills + scripts disponíveis |
