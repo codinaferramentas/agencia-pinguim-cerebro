@@ -39,6 +39,7 @@ const oauthGoogle = require('./lib/oauth-google'); // V2.12 Fase 0 — OAuth Dri
 const googleDrive = require('./lib/google-drive'); // V2.12 Fase 1 — busca arquivos no Drive
 const googleDriveContent = require('./lib/google-drive-content'); // V2.12 Fase 2+4 — ler e editar conteudo
 const googleGmail = require('./lib/google-gmail'); // V2.13 — listar/ler/responder/modificar Gmail
+const googleCalendar = require('./lib/google-calendar'); // V2.14 Fase 1.7 — leitura Calendar (squad data)
 
 const app = express();
 const PORT = 3737;
@@ -1340,6 +1341,57 @@ app.post('/api/gmail/perfil', async (req, res) => {
     res.json({ ok: true, ...r, latencia_ms: dur_ms });
   } catch (e) {
     console.error('[gmail-perfil] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
+// V2.14 Fase 1.7 — endpoints CALENDAR (LEITURA apenas, squad data)
+// ============================================================
+// 3 endpoints. Cada sócio vê APENAS a agenda dele (refresh_token isolado
+// por cliente_id no cofre). Criar/editar evento NÃO está aqui — vai pra
+// squad hybrid-ops-squad em frente futura V2.15.
+// ============================================================
+
+app.post('/api/calendar/listar-calendarios', async (req, res) => {
+  try {
+    const { cliente_id } = req.body || {};
+    const t0 = Date.now();
+    const r = await googleCalendar.listarCalendarios({ cliente_id });
+    const dur_ms = Date.now() - t0;
+    console.log(`[calendar-listar-cals] ${dur_ms}ms | total=${r.length}`);
+    res.json({ ok: true, calendarios: r, total: r.length, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[calendar-listar-cals] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/calendar/listar-eventos', async (req, res) => {
+  try {
+    const { calendarId = 'primary', timeMin, timeMax, maxResults = 50, cliente_id } = req.body || {};
+    const t0 = Date.now();
+    const r = await googleCalendar.listarEventos({ calendarId, timeMin, timeMax, maxResults, cliente_id });
+    const dur_ms = Date.now() - t0;
+    console.log(`[calendar-listar-evts] ${dur_ms}ms | cal=${calendarId} | janela=[${(timeMin||'now').slice(0,10)}..${(timeMax||'+24h').slice(0,10)}] | retornou=${r.total}`);
+    res.json({ ok: true, ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[calendar-listar-evts] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/calendar/ler-evento', async (req, res) => {
+  try {
+    const { calendarId = 'primary', eventId, cliente_id } = req.body || {};
+    if (!eventId) return res.status(400).json({ ok: false, error: 'eventId obrigatorio' });
+    const t0 = Date.now();
+    const r = await googleCalendar.lerEvento({ calendarId, eventId, cliente_id });
+    const dur_ms = Date.now() - t0;
+    console.log(`[calendar-ler-evt] ${dur_ms}ms | id=${eventId.slice(0, 12)} | titulo="${(r.titulo || '').slice(0, 40)}"`);
+    res.json({ ok: true, ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[calendar-ler-evt] erro:', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
