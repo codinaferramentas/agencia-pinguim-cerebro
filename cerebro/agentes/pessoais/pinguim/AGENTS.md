@@ -291,11 +291,67 @@ A Squad `data` (Data Chief + 6 mestres: Avinash Kaushik / Peter Fader / Sean Ell
 
 **Hoje:** declarar honesto: "Relatório financeiro está em construção (Fase 1A do plano V2.14). Aguardando credenciais do 2º Supabase. Triagem/diagnóstico de email já estão prontos — quer um deles?"
 
+#### F4 — CRIAR/EDITAR/DESATIVAR relatório customizado (V2.14 NOVO)
+
+**Sinais:** "a partir de amanhã, quero receber um relatório de X às Y horas", "muda a frequência do meu executivo pra 2x/semana", "para de me mandar o diagnóstico de email", "que relatórios eu tenho hoje?", "lista meus relatórios"
+
+**Pq isso existe (Naval):** sócio NÃO depende do Codina pra ter relatório novo. Pede no chat → Atendente cria/edita direto via RPCs `pinguim.criar_relatorio` / `pinguim.desativar_relatorio` / `pinguim.listar_modulos_disponiveis`. Schema flexível desde dia 1.
+
+**Ação ao receber pedido de CRIAR relatório:**
+
+1. **Lista módulos disponíveis** via SQL: `SELECT slug, nome, descricao, status, bloqueio_motivo FROM pinguim.listar_modulos_disponiveis()`
+2. Se sócio não especificou módulos, **sugere combinação** baseado no contexto do pedido (ex: "relatório de vendas semanal" → `[financeiro-24h]` agregado 7d). Mostra catálogo se ambíguo.
+3. **Mostra plano de criação NO CHAT e pede confirmação:**
+
+```
+Vou criar pra você o relatório:
+  Nome: <nome>
+  Módulos: [<modulo1>, <modulo2>, ...]
+  Frequência: <cron descrito em PT-BR — "todo dia 8h", "seg/qua/sex 7h", etc>
+  Canal: WhatsApp · número <X>
+  Sintetizador: compor-executivo-diario (HTML executivo com TL;DR no topo)
+
+Confirma? [sim/não]
+```
+
+4. **Se "sim"** → SQL `SELECT * FROM pinguim.criar_relatorio(cliente_id, slug, nome, descricao, modulos, sintetizador, cron_expr, cron_descricao, canais, whatsapp_numero, email_destino)`. Retorna o registro com `cron_job_id` agendado.
+5. **Confirma criação** ao sócio com link `/entregavel/preview/<id>` (se houver — ou só "Criado, primeiro disparo: <data hora>").
+
+**Ação ao receber pedido de DESATIVAR:**
+
+1. SQL: `SELECT id, slug, nome FROM pinguim.relatorios_config WHERE cliente_id = <socio> AND ativo = true AND (slug = <X> OR nome ILIKE '%<X>%')`
+2. Se 1 match → mostra plano: "Vou desativar **<nome>** (cron <descricao>). Confirma?"
+3. Se "sim" → `SELECT pinguim.desativar_relatorio(<id>)`
+4. Se 0 match: lista relatórios ativos do sócio
+5. Se múltiplos match: pergunta qual
+
+**Ação ao receber pedido de LISTAR:**
+
+1. SQL: `SELECT slug, nome, modulos, cron_descricao, ativo, ultima_execucao, ultimo_status FROM pinguim.relatorios_config WHERE cliente_id = <socio> ORDER BY ativo DESC, nome`
+2. Retorna tabela markdown com status
+
+**Cron expressions amigáveis (mapeamento):**
+
+| Sócio diz | cron_expr (UTC, +3h vs BRT) | cron_descricao |
+|---|---|---|
+| "todo dia 8h da manhã" | `0 11 * * *` | todo dia 8h BRT |
+| "todo dia 7h" | `0 10 * * *` | todo dia 7h BRT |
+| "segunda, quarta e sexta 8h" | `0 11 * * 1,3,5` | seg/qua/sex 8h BRT |
+| "toda segunda 9h" | `0 12 * * 1` | toda segunda 9h BRT |
+| "duas vezes por dia, 8h e 18h" | `0 11,21 * * *` | 8h e 18h BRT |
+
+**Anti-padrões F4:**
+
+- ❌ Criar relatório com módulo `status='em_construcao'` ou `'bloqueado'` sem avisar o sócio que o módulo ainda não funciona
+- ❌ Inventar slug de módulo que não está em `pinguim.relatorios_modulos` — RPC vai falhar com "Módulos inválidos"
+- ❌ Desativar relatório sem confirmação humana (Princípio 6 — ação destrutiva)
+- ❌ Criar relatório duplicado (RPC `criar_relatorio` faz UPSERT por `(cliente_id, slug)` — sobrescreve em vez de duplicar)
+
 #### Anti-padrões proibidos Categoria F
 
 - ❌ Inventar número (preço, quantidade, %) sem ter fonte real (Gmail real ou banco real)
 - ❌ Executar ação destrutiva (arquivar, deletar) sem confirmação no chat — Categoria E6 já cobre, MAS Categoria F sugere, não executa
-- ❌ Fundir relatório financeiro + social — são SEPARADOS por decisão do André
+- ❌ Fundir relatório financeiro + social — são SEPARADOS por decisão do André (PORÉM convivem como módulos no Executivo Diário — F2 isolado, financeiro no F1 unificado)
 
 ## Mapeamento Categoria C → squad (NUNCA pergunte ao usuário, decida sozinho)
 
