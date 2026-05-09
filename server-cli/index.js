@@ -44,6 +44,7 @@ const contextoTemporal = require('./lib/contexto-temporal'); // V2.14 Fase 1.7 h
 const discordBot = require('./lib/discord-bot'); // V2.14 Frente B — bot Discord (Gateway WebSocket, ingest tempo real)
 const relatorioExecutivo = require('./lib/relatorio-executivo'); // V2.14 Frente C1 — orquestrador relatorio executivo diario
 const templateRelatorioExec = require('./lib/template-relatorio-executivo'); // V2.14 Frente C1 — template HTML dedicado
+const evolution = require('./lib/evolution'); // V2.14 Frente D — WhatsApp Evolution
 
 const app = express();
 const PORT = 3737;
@@ -1544,6 +1545,405 @@ app.post('/api/discord/buscar', async (req, res) => {
     res.json({ ok: true, query, janela_horas: horas, total: r.length, mensagens: r, latencia_ms: dur_ms });
   } catch (e) {
     console.error('[discord-buscar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
+// V2.14 Frente D — endpoints WHATSAPP EVOLUTION
+// ============================================================
+// 3 endpoints:
+//   POST /api/whatsapp/webhook  — Evolution chama AQUI quando socio manda msg
+//   POST /api/whatsapp/enviar   — admin manda mensagem manual via API
+//   GET  /api/whatsapp/status   — healthcheck (instancia conectada? msgs hoje?)
+// ============================================================
+
+// V2.14 D — imports adicionais
+const ackInteligente = require('./lib/ack-inteligente');
+const audioTranscricao = require('./lib/audio-transcricao');
+
+// Cache em RAM da PUBLIC_BASE_URL pra nao consultar cofre todo turno
+let _publicBaseUrl = null;
+async function getPublicBaseUrl() {
+  if (_publicBaseUrl) return _publicBaseUrl;
+  try {
+    _publicBaseUrl = (await db.lerChaveSistema('PUBLIC_BASE_URL', 'whatsapp')).trim().replace(/\/+$/, '');
+  } catch (_) {
+    _publicBaseUrl = `http://localhost:${PORT}`;
+  }
+  return _publicBaseUrl;
+}
+
+// Limpa response do Atendente pra envio em canal externo (WhatsApp/Telegram):
+// - troca localhost no link por URL publica
+// - corta footer tecnico ("Latencia: ... · sintetizador OK · modulos: ...")
+// - remove blocos de metadados que vazaram (verifier, EPP, etc)
+function polirRespostaPraCanal(texto, publicUrl) {
+  if (!texto) return '';
+  let t = texto;
+  // localhost -> publica
+  if (publicUrl && publicUrl !== `http://localhost:${PORT}`) {
+    t = t.replace(/https?:\/\/localhost:\d+/g, publicUrl);
+  }
+  // Remove linhas de footer tecnico
+  t = t.replace(/^Lat[êe]ncia:\s*\d+s\s*[·•|]\s*sintetizador.*$/gim, '');
+  t = t.replace(/^M[óo]dulos\s+rodados:\s*\d+\/\d+.*$/gim, '');
+  t = t.replace(/^Pinguim OS\s*[·•|]\s*Relat[óo]rio.*$/gim, '');
+  t = t.replace(/^Discrep[âa]ncia\?\s*Avisa o Codina.*$/gim, '');
+  t = t.replace(/^\s*Verifier:.*$/gim, '');
+  return t.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// Helper: chama /api/chat internamente (mesmo cerebro do chat web)
+async function processarMsgWhatsapp({ texto, remoteJid, pushName, instancia, message_id }) {
+  const numero = String(remoteJid || '').replace(/@.*$/, '').replace(/\D/g, '');
+
+  const sqlSocio = `SELECT cliente_id, socio_slug, apelido FROM pinguim.whatsapp_socios WHERE numero = '${numero.replace(/'/g, "''")}' AND ativo = true LIMIT 1`;
+  const socioRows = await db.rodarSQL(sqlSocio).catch(() => []);
+  const socioMap = Array.isArray(socioRows) && socioRows[0] ? socioRows[0] : null;
+
+  if (!socioMap) {
+    return {
+      cliente_id: null,
+      thread_id: null,
+      resposta: `Olá! Sou o Atendente Pinguim 🐧.\n\nSeu número (${numero}) ainda não está autorizado a falar comigo. Pede pro Codina te cadastrar.`,
+      processada: true,
+    };
+  }
+
+  const thread_id = `whatsapp-${socioMap.socio_slug || numero}`;
+  const publicUrl = await getPublicBaseUrl();
+
+  try {
+    const resp = await fetch(`http://localhost:${PORT}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: texto, thread_id, cliente_id: socioMap.cliente_id }),
+    });
+    const j = await resp.json();
+    if (!resp.ok || j.error) {
+      return { cliente_id: socioMap.cliente_id, thread_id, resposta: `Erro processando: ${j.error || 'desconhecido'}.`, processada: false, erro: j.error };
+    }
+    const respostaCrua = j.content || j.response || '(resposta vazia)';
+    const respostaPolida = polirRespostaPraCanal(respostaCrua, publicUrl);
+
+    // Detecta se gerou entregavel: payload direto OU UUID achado no texto
+    let entregavelUrl = j.entregavel_url ? `${publicUrl}${j.entregavel_url}` : null;
+    let entregavelId  = j.entregavel_id || null;
+
+    if (!entregavelId) {
+      // Tenta extrair UUID v4 do tipo /entregavel/<UUID> que o Atendente colocou no texto
+      const m = respostaCrua.match(/\/entregavel\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+      if (m) {
+        entregavelId = m[1];
+        entregavelUrl = `${publicUrl}/entregavel/${entregavelId}`;
+      }
+    }
+
+    return {
+      cliente_id: socioMap.cliente_id,
+      thread_id,
+      resposta: respostaPolida,
+      entregavel_url: entregavelUrl,
+      entregavel_id: entregavelId,
+      processada: true,
+    };
+  } catch (e) {
+    return { cliente_id: socioMap.cliente_id, thread_id, resposta: `Erro técnico: ${e.message}. Tenta de novo.`, processada: false, erro: e.message };
+  }
+}
+
+// Helper: dispara ack ASYNC (não bloqueia, fire-and-forget)
+async function dispararAck(parsed, textoUsuario) {
+  try {
+    const { ack, fonte } = await ackInteligente.gerarAck(textoUsuario);
+    if (!ack) {
+      console.log(`[whatsapp-ack] heuristica decidiu NAO enviar ack (msg curta/saudacao)`);
+      return;
+    }
+    await evolution.enviarTexto({
+      instancia: parsed.instancia,
+      numero: parsed.numero_remetente,
+      texto: ack,
+    });
+    console.log(`[whatsapp-ack] enviado (fonte=${fonte}) "${ack.slice(0,60)}"`);
+  } catch (e) {
+    console.warn(`[whatsapp-ack] falhou (nao bloqueante): ${e.message}`);
+  }
+}
+
+// Helper: salva msg recebida + envia resposta + salva msg enviada
+async function ingerirMsgRecebida(parsed, payloadBruto) {
+  const escTxt = (s) => s == null ? 'NULL' : "'" + String(s).replace(/'/g, "''") + "'";
+  const escBool = (b) => b ? 'true' : 'false';
+
+  // 1. Salva msg recebida
+  const sqlIns = `
+    INSERT INTO pinguim.whatsapp_mensagens
+      (message_id, instancia, direcao, remote_jid, numero_remetente, push_name,
+       is_group, is_status, tipo, texto, postada_em, metadata)
+    VALUES
+      (${escTxt(parsed.message_id)}, ${escTxt(parsed.instancia)}, 'recebida',
+       ${escTxt(parsed.remote_jid)}, ${escTxt(parsed.numero_remetente)}, ${escTxt(parsed.push_name)},
+       ${escBool(parsed.is_group)}, ${escBool(parsed.is_status)},
+       ${escTxt(parsed.tipo)}, ${escTxt(parsed.texto)},
+       ${escTxt(parsed.timestamp_evt)}, ${escTxt(JSON.stringify(payloadBruto))}::jsonb)
+    ON CONFLICT (message_id, direcao) DO NOTHING
+    RETURNING id;
+  `;
+  const insR = await db.rodarSQL(sqlIns);
+  const msgRecebidaId = Array.isArray(insR) && insR[0] ? insR[0].id : null;
+
+  if (!msgRecebidaId) {
+    console.log(`[whatsapp] msg ${parsed.message_id.slice(0,12)} ja ingerida (dedup)`);
+    return null;
+  }
+
+  // 2. Filtros
+  if (parsed.from_me)    { console.log(`[whatsapp] from_me=true, ignorando ${parsed.message_id.slice(0,12)}`); return null; }
+  if (parsed.is_status)  { console.log(`[whatsapp] is_status, ignorando`); return null; }
+  if (parsed.is_group)   { console.log(`[whatsapp] is_group, ignorando (V2.14: bot so responde 1:1)`); return null; }
+
+  // 2.1 Áudio recebido — transcreve via Whisper, depois trata como texto
+  let textoUsuario = parsed.texto;
+  let respostaPorAudio = false;
+  if (parsed.tipo === 'audio') {
+    respostaPorAudio = true; // resposta sairá em áudio (TTS) pra fechar o loop natural
+    try {
+      console.log(`[whatsapp-audio] recebido audio de ${parsed.numero_remetente}, baixando...`);
+      const midia = await evolution.baixarMidia({
+        instancia: parsed.instancia,
+        message_id: parsed.message_id,
+        payload_data: payloadBruto?.data,
+      });
+      if (!midia.base64) throw new Error('base64 do audio vazio');
+      const audioBuf = Buffer.from(midia.base64, 'base64');
+      console.log(`[whatsapp-audio] ${audioBuf.length} bytes, transcrevendo via Whisper...`);
+      const t = await audioTranscricao.transcrever({
+        audio_buffer: audioBuf,
+        filename: 'audio.ogg',
+        mimetype: 'audio/ogg',
+        language: 'pt',
+      });
+      textoUsuario = t.texto;
+      console.log(`[whatsapp-audio] transcrito em ${t.duracao_ms}ms: "${textoUsuario.slice(0,80)}"`);
+      // Avisa o usuario que a gente entendeu
+      try {
+        await evolution.enviarTexto({
+          instancia: parsed.instancia,
+          numero: parsed.numero_remetente,
+          texto: `🎙 Entendi: _"${textoUsuario.slice(0,200)}"_\n\nVou processar...`,
+        });
+      } catch (_) {}
+    } catch (e) {
+      console.error(`[whatsapp-audio] erro transcrevendo: ${e.message}`);
+      try {
+        await evolution.enviarTexto({
+          instancia: parsed.instancia,
+          numero: parsed.numero_remetente,
+          texto: `⚠ Não consegui entender o áudio (${e.message}). Pode escrever ou tentar de novo?`,
+        });
+      } catch (_) {}
+      return null;
+    }
+  }
+
+  if (!textoUsuario || !textoUsuario.trim()) {
+    console.log(`[whatsapp] texto vazio (tipo=${parsed.tipo}), ignorando`);
+    return null;
+  }
+
+  // 3. Dispara ACK em paralelo (não bloqueia processamento)
+  const ackPromise = dispararAck(parsed, textoUsuario);
+
+  // 4. Processa via /api/chat
+  const t0 = Date.now();
+  const r = await processarMsgWhatsapp({
+    texto: textoUsuario,
+    remoteJid: parsed.remote_jid,
+    pushName: parsed.push_name,
+    instancia: parsed.instancia,
+    message_id: parsed.message_id,
+  });
+  const lat = Date.now() - t0;
+
+  // 5. Aguarda ack chegar antes da resposta (evita ordem invertida)
+  await ackPromise.catch(() => {});
+
+  // 6. Envia resposta via Evolution (texto + opcionalmente HTML anexo + áudio TTS)
+  let respostaSalvaId = null;
+  let envioOk = false;
+  try {
+    // Envia texto principal
+    const env = await evolution.enviarTexto({
+      instancia: parsed.instancia,
+      numero: parsed.numero_remetente,
+      texto: r.resposta,
+    });
+    envioOk = true;
+
+    // Se tem entregável, anexa HTML logo depois
+    if (r.entregavel_id) {
+      try {
+        const ent = await db.carregarEntregavelPorId(r.entregavel_id);
+        if (ent) {
+          // Pega o HTML renderizado direto do endpoint
+          const htmlResp = await fetch(`http://localhost:${PORT}/entregavel/${r.entregavel_id}`);
+          const htmlConteudo = await htmlResp.text();
+          const dataStr = new Date().toISOString().slice(0,10);
+          const filename = `executivo-${dataStr}-${r.entregavel_id.slice(0,8)}.html`;
+          await evolution.enviarArquivo({
+            instancia: parsed.instancia,
+            numero: parsed.numero_remetente,
+            mediatype: 'document',
+            mimetype: 'text/html',
+            filename,
+            conteudo: htmlConteudo,
+          });
+          console.log(`[whatsapp-anexo] HTML enviado: ${filename} (${htmlConteudo.length} chars)`);
+        }
+      } catch (e) {
+        console.warn(`[whatsapp-anexo] falhou (nao bloqueante): ${e.message}`);
+      }
+    }
+
+    // Se sócio mandou áudio, responde também por áudio (TTS) — mantém canal natural
+    if (respostaPorAudio) {
+      try {
+        // Limita texto pra TTS (4000 chars max)
+        const textoTts = r.resposta.length > 1500 ? r.resposta.slice(0, 1500) + '. Mandei o resto por escrito acima.' : r.resposta;
+        const audio = await audioTranscricao.sintetizar({
+          texto: textoTts,
+          voice: 'nova',
+          formato: 'opus',
+        });
+        await evolution.enviarAudio({
+          instancia: parsed.instancia,
+          numero: parsed.numero_remetente,
+          audio_buffer: audio.buffer,
+        });
+        console.log(`[whatsapp-tts] audio enviado (${audio.bytes} bytes, ${audio.duracao_ms}ms)`);
+      } catch (e) {
+        console.warn(`[whatsapp-tts] falhou (nao bloqueante): ${e.message}`);
+      }
+    }
+
+    const sqlEnv = `
+      INSERT INTO pinguim.whatsapp_mensagens
+        (message_id, instancia, direcao, remote_jid, numero_remetente,
+         is_group, is_status, tipo, texto, cliente_id, thread_id,
+         processada, processada_em, latencia_ms, postada_em)
+      VALUES
+        (${escTxt(env.id || ('local-' + Date.now()))}, ${escTxt(parsed.instancia)}, 'enviada',
+         ${escTxt(parsed.remote_jid)}, ${escTxt(parsed.numero_remetente)},
+         false, false, 'texto', ${escTxt(r.resposta)},
+         ${r.cliente_id ? escTxt(r.cliente_id) : 'NULL'}, ${escTxt(r.thread_id)},
+         true, now(), ${lat}, now())
+      ON CONFLICT (message_id, direcao) DO NOTHING
+      RETURNING id;
+    `;
+    const envR = await db.rodarSQL(sqlEnv);
+    respostaSalvaId = Array.isArray(envR) && envR[0] ? envR[0].id : null;
+  } catch (e) {
+    console.error(`[whatsapp] erro enviando resposta: ${e.message}`);
+  }
+
+  // 7. Atualiza msg recebida
+  if (respostaSalvaId || r.processada) {
+    const sqlUpd = `
+      UPDATE pinguim.whatsapp_mensagens
+      SET cliente_id = ${r.cliente_id ? escTxt(r.cliente_id) : 'NULL'},
+          thread_id = ${escTxt(r.thread_id)},
+          processada = true,
+          processada_em = now(),
+          latencia_ms = ${lat},
+          resposta_id = ${respostaSalvaId ? escTxt(respostaSalvaId) : 'NULL'},
+          erro = ${escTxt(r.erro || null)}
+      WHERE id = ${escTxt(msgRecebidaId)};
+    `;
+    await db.rodarSQL(sqlUpd).catch(e => console.error(`[whatsapp] update recebida: ${e.message}`));
+  }
+
+  return { msg_recebida_id: msgRecebidaId, msg_enviada_id: respostaSalvaId, latencia_ms: lat, envio_ok: envioOk };
+}
+
+app.post('/api/whatsapp/webhook', async (req, res) => {
+  // Sempre 200 imediato pra Evolution nao re-tentar (processamento async)
+  res.json({ ok: true });
+
+  try {
+    const payload = req.body || {};
+    const evento = payload.event || 'unknown';
+    if (evento !== 'messages.upsert') {
+      console.log(`[whatsapp-webhook] ignorando evento ${evento}`);
+      return;
+    }
+    const parsed = evolution.parseMensagemRecebida(payload);
+    if (!parsed) { console.log('[whatsapp-webhook] payload invalido'); return; }
+
+    console.log(`[whatsapp-webhook] msg ${parsed.from_me ? 'OUT' : 'IN'} | ${parsed.numero_remetente} | "${parsed.texto.slice(0,60)}"`);
+
+    await ingerirMsgRecebida(parsed, payload);
+  } catch (e) {
+    console.error('[whatsapp-webhook] erro:', e.message);
+  }
+});
+
+app.post('/api/whatsapp/enviar', async (req, res) => {
+  try {
+    const { numero, texto, instancia } = req.body || {};
+    if (!numero) return res.status(400).json({ ok: false, error: 'numero obrigatorio' });
+    if (!texto)  return res.status(400).json({ ok: false, error: 'texto obrigatorio' });
+    const t0 = Date.now();
+    const r = await evolution.enviarTexto({ numero, texto, instancia });
+    const dur = Date.now() - t0;
+    console.log(`[whatsapp-enviar] ${dur}ms | para=${numero} | inst=${r.instancia} | id=${(r.id||'').slice(0,12)}`);
+    res.json({ ok: true, ...r, latencia_ms: dur });
+  } catch (e) {
+    console.error('[whatsapp-enviar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/whatsapp/status', async (req, res) => {
+  try {
+    const cfg = await evolution.getConfig();
+    const inst = req.query.instancia || cfg.instanceBot;
+    if (!inst) {
+      return res.json({ ok: true, configurado: false, motivo: 'EVOLUTION_INSTANCE_BOT nao no cofre — definir antes de usar' });
+    }
+    const i = await evolution.buscarInstancia(inst).catch(() => null);
+    if (!i) return res.json({ ok: true, configurado: true, instancia: inst, encontrada: false });
+
+    // Stats da tabela whatsapp_mensagens
+    const sql = `
+      SELECT
+        count(*) FILTER (WHERE direcao='recebida' AND postada_em >= now() - interval '24 hours') AS recebidas_24h,
+        count(*) FILTER (WHERE direcao='enviada'  AND postada_em >= now() - interval '24 hours') AS enviadas_24h,
+        count(*) FILTER (WHERE processada = false) AS pendentes,
+        count(*) FILTER (WHERE direcao='recebida' AND erro IS NOT NULL) AS com_erro
+      FROM pinguim.whatsapp_mensagens;
+    `;
+    const [stats] = await db.rodarSQL(sql).catch(() => [{}]);
+
+    res.json({
+      ok: true,
+      configurado: true,
+      instancia: inst,
+      conectada: i.connectionStatus === 'open',
+      status: i.connectionStatus,
+      numero: i.number,
+      profile_name: i.profileName,
+      msgs_total: i._count?.Message,
+      stats_24h: {
+        recebidas: parseInt(stats.recebidas_24h || 0, 10),
+        enviadas: parseInt(stats.enviadas_24h || 0, 10),
+        pendentes: parseInt(stats.pendentes || 0, 10),
+        com_erro: parseInt(stats.com_erro || 0, 10),
+      },
+    });
+  } catch (e) {
+    console.error('[whatsapp-status] erro:', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
