@@ -114,13 +114,37 @@ def categorizar_transacao(transacao, configs_ativos):
 
 ### 1.7 Receita Total vs Receita Produto
 
+> 🎯 **CORREÇÃO 2026-05-09 (descoberta lendo `dashboard/src/lib/produto-queries.ts`):**
+> A fórmula original do MD inicial estava incompleta. **Bump/Upsell/Downsell têm filtro de `buyer_id`** — só contam quando comprados pelo MESMO comprador que levou um produto principal (semântica real de bump/upsell). Smoke test 08/05 fechou no centavo após esta correção.
+
 ```
-Receita_Produto    = SUM(my_commission) onde product_id ∈ main_ids
-Receita_Bump       = SUM(my_commission) onde product_id ∈ bump_ids
-Receita_Upsell     = SUM(my_commission) onde product_id ∈ upsell_ids
-Receita_Downsell   = SUM(my_commission) onde product_id ∈ downsell_ids
-Receita_Total      = Produto + Bump + Upsell + Downsell
+Passo 1 — Identificar mainBuyerIds:
+  rows_main = SELECT my_commission, buyer_id
+              FROM hotmart_transactions
+              WHERE status IN ('approved','completed')
+                AND price_currency = X
+                AND purchase_date in BRT range
+                [AND product_id IN [filtro] se aplicável; sem filtro = TODOS]
+
+  Receita_Produto = SUM(rows_main.my_commission)
+  Vendas          = COUNT(rows_main)
+  mainBuyerIds    = SET(rows_main.buyer_id)  ← chave da regra
+
+Passo 2 — Bump/Upsell/Downsell filtrados por buyer:
+  Receita_Bump     = SUM(my_commission) WHERE
+                     product_id IN bump_ids
+                     AND buyer_id IN mainBuyerIds  ← REGRA CRÍTICA
+                     AND mesmo status/currency/range
+  Receita_Upsell   = idem com upsell_ids
+  Receita_Downsell = idem com downsell_ids
+
+Passo 3 — Total:
+  Receita_Total    = Receita_Produto + Receita_Bump + Receita_Upsell + Receita_Downsell
 ```
+
+**Por que o filtro de buyer:** "bump" é semântico — o cliente comprou o produto principal **e levou o bump junto** no mesmo checkout. Vendas isoladas do produto-bump (alguém comprou só o bump, sem o principal) NÃO contam como bump nesse contexto, são produto standalone.
+
+**Implicação:** quando filtro de produto = "Todos", `mainBuyerIds` = TODOS os buyers do dia → bump praticamente sempre cai em alguém que também tem main → bump efetivo bate com a soma simples. Quando filtro = produto específico, `mainBuyerIds` = só buyers daquele produto → bump filtra mais.
 
 | KPI | Numerador |
 |---|---|

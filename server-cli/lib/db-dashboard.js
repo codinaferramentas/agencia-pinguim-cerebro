@@ -162,45 +162,82 @@ function keywordsAtivas(configs) {
 
 // Resumo executivo de UM dia (bate com KPIs do TV Dash Produto sem filtro de produto, moeda BRL).
 // Retorna objeto pronto pra Skill `compor-executivo-diario` consumir.
+//
+// FORMULA EXATA (validada lendo dashboard/src/lib/produto-queries.ts):
+// 1. PRODUTO = SUM(my_commission) de TODAS transacoes approved/completed/moeda/range
+//    (sem filtrar por main_ids quando filtro=Todos os Produtos)
+//    VENDAS = COUNT dessas mesmas transacoes
+//    mainBuyerIds = Set de buyer_id dessas transacoes
+// 2. BUMP/UPSELL/DOWNSELL = SUM(my_commission) WHERE
+//    product_id IN bumpIds/upsellIds/downsellIds  (lista de tv_launch_configs)
+//    AND buyer_id IN mainBuyerIds                 ← REGRA CRUCIAL
+//    AND status + currency + range iguais
+//
+// O filtro por buyer_id existe porque "bump" é semântico: alguém comprou o
+// produto principal E levou o bump junto no mesmo checkout. Vendas isoladas
+// do produto bump (sem ter comprado main) NÃO contam como bump.
 async function resumo_dia(data_iso = null, moeda = 'BRL') {
   const dia = data_iso || ontemBRT();
   const { from_utc, to_utc } = janelaBRT(dia);
 
   const configs = await carregarConfigsAtivos();
-  const { main, bump, upsell, downsell } = categorizarProductIds(configs);
-  const keywords = keywordsAtivas(configs);
+  const { bump, upsell, downsell } = categorizarProductIds(configs);
+  // Quando filtro=Todos, NAO categorizamos main por config — main = TODAS vendas.
 
   const moedaSafe = String(moeda).replace(/'/g, "''");
 
-  // === Receita por categoria + Vendas (apenas main) ===
-  // Validado contra screenshot 08/05/2026:
-  // - bump/upsell/downsell saem dos arrays de tv_launch_configs
-  // - PRODUTO no dashboard = TUDO que NAO eh bump/upsell/downsell
-  //   (inclui main_ids + recorrencias + produtos antigos sem config)
-  // - VENDAS no dashboard = COUNT do que cai em PRODUTO (mesmo criterio)
-  const sqlReceita = `
-    WITH base AS (
-      SELECT product_id, my_commission
+  // === Passo 1: PRODUTO = TODAS vendas approved/completed/moeda/range ===
+  // (corresponde a "main" no dashboard quando filtro=Todos os Produtos)
+  const sqlMain = `
+    SELECT my_commission, buyer_id
+    FROM hotmart_transactions
+    WHERE status IN ('approved','completed')
+      AND price_currency = '${moedaSafe}'
+      AND purchase_date >= '${from_utc}'
+      AND purchase_date <  '${to_utc}';
+  `;
+  const mainRows = await rodarSQL(sqlMain);
+  const mainReceita = mainRows.reduce((s, r) => s + parseFloat(r.my_commission || 0), 0);
+  const mainVendas = mainRows.length;
+  const mainBuyerIds = new Set(mainRows.map(r => r.buyer_id).filter(Boolean));
+
+  // === Passo 2: BUMP/UPSELL/DOWNSELL filtrados por mainBuyerIds ===
+  // Helper inline pra puxar receita de uma lista de product_ids restrita aos buyers main
+  async function receitaPorBuyerMain(productIds) {
+    if (!productIds || productIds.length === 0 || mainBuyerIds.size === 0) {
+      return { receita: 0, vendas: 0 };
+    }
+    const sql = `
+      SELECT my_commission, buyer_id
       FROM hotmart_transactions
       WHERE status IN ('approved','completed')
         AND price_currency = '${moedaSafe}'
         AND purchase_date >= '${from_utc}'
         AND purchase_date <  '${to_utc}'
-    )
-    SELECT
-      sum(my_commission) FILTER (
-        WHERE product_id NOT IN (${inClause(bump)})
-          AND product_id NOT IN (${inClause(upsell)})
-          AND product_id NOT IN (${inClause(downsell)})
-      ) AS receita_produto,
-      sum(my_commission) FILTER (WHERE product_id IN (${inClause(bump)}))     AS receita_bump,
-      sum(my_commission) FILTER (WHERE product_id IN (${inClause(upsell)}))   AS receita_upsell,
-      sum(my_commission) FILTER (WHERE product_id IN (${inClause(downsell)})) AS receita_downsell,
-      sum(my_commission) AS receita_total_filtro,
-      count(*) AS vendas_main
-    FROM base;
-  `;
-  const [resR] = await rodarSQL(sqlReceita);
+        AND product_id IN (${inClause(productIds)});
+    `;
+    const rows = await rodarSQL(sql);
+    const filtered = rows.filter(r => mainBuyerIds.has(r.buyer_id));
+    const receita = filtered.reduce((s, r) => s + parseFloat(r.my_commission || 0), 0);
+    return { receita, vendas: filtered.length };
+  }
+
+  const [bumpR, upsellR, downsellR] = await Promise.all([
+    receitaPorBuyerMain(bump),
+    receitaPorBuyerMain(upsell),
+    receitaPorBuyerMain(downsell),
+  ]);
+
+  // ATENCAO: buyers main JA contam as vendas main. Bump/upsell/downsell sao
+  // ADICIONAIS desses mesmos buyers, somados ao TOTAL mas NAO incrementam VENDAS.
+  // Match com fetchKpis dashboard/src/lib/produto-queries.ts.
+  const resR = {
+    receita_produto:  mainReceita,
+    receita_bump:     bumpR.receita,
+    receita_upsell:   upsellR.receita,
+    receita_downsell: downsellR.receita,
+    vendas_main:      mainVendas,
+  };
 
   // === Reembolsos (purchase_date no range, status='refunded') ===
   const sqlReemb = `
@@ -334,7 +371,7 @@ async function resumo_dia(data_iso = null, moeda = 'BRL') {
     audit: {
       configs_ativos: configs.length,
       configs_nomes: configs.map(c => c.name),
-      qtd_main_ids: main.length,
+      qtd_buyers_main: mainBuyerIds.size,
       qtd_bump_ids: bump.length,
       qtd_upsell_ids: upsell.length,
       qtd_downsell_ids: downsell.length,
@@ -369,55 +406,29 @@ async function resumo_com_comparacao(data_iso = null, moeda = 'BRL') {
   };
 }
 
-// Faturamento agregado N dias (ja com Receita_Total + Vendas main)
+// Faturamento agregado N dias.
+// Pra evitar custo (uma transacao por dia x N dias x filtragem por buyer),
+// chama resumo_dia em paralelo. Mais lento mas exato — espelha dashboard.
 async function faturamento_diario(dias = 7, moeda = 'BRL') {
-  const configs = await carregarConfigsAtivos();
-  const { main, bump, upsell, downsell } = categorizarProductIds(configs);
-  const moedaSafe = String(moeda).replace(/'/g, "''");
-
-  // Janela: ultimos N dias BRT terminando ontem
   const ontem = ontemBRT();
   const dataDe = new Date(`${ontem}T03:00:00Z`);
-  dataDe.setUTCDate(dataDe.getUTCDate() - (dias - 1));
-  const dataDeIso = dataDe.toISOString().slice(0, 10);
-
-  const { from_utc } = janelaBRT(dataDeIso);
-  const { to_utc } = janelaBRT(ontem);
-
-  // PRODUTO = tudo que NAO eh bump/upsell/downsell (validado contra dashboard 08/05)
-  const sql = `
-    SELECT
-      ((purchase_date AT TIME ZONE 'America/Sao_Paulo')::date) AS dia,
-      sum(my_commission) FILTER (
-        WHERE product_id NOT IN (${inClause(bump)})
-          AND product_id NOT IN (${inClause(upsell)})
-          AND product_id NOT IN (${inClause(downsell)})
-      ) AS produto,
-      sum(my_commission) FILTER (WHERE product_id IN (${inClause(bump)}))     AS bump,
-      sum(my_commission) FILTER (WHERE product_id IN (${inClause(upsell)}))   AS upsell,
-      sum(my_commission) FILTER (WHERE product_id IN (${inClause(downsell)})) AS downsell,
-      count(*) AS vendas
-    FROM hotmart_transactions
-    WHERE status IN ('approved','completed')
-      AND price_currency = '${moedaSafe}'
-      AND purchase_date >= '${from_utc}'
-      AND purchase_date <  '${to_utc}'
-    GROUP BY 1
-    ORDER BY 1 DESC;
-  `;
-  const rows = await rodarSQL(sql);
-  return rows.map(r => {
-    const p = parseFloat(r.produto || 0);
-    const b = parseFloat(r.bump || 0);
-    const u = parseFloat(r.upsell || 0);
-    const d = parseFloat(r.downsell || 0);
-    return {
-      dia: r.dia,
-      produto: p, bump: b, upsell: u, downsell: d,
-      total: p + b + u + d,
-      vendas: parseInt(r.vendas || 0, 10),
-    };
-  });
+  const promises = [];
+  for (let i = 0; i < dias; i++) {
+    const d = new Date(dataDe);
+    d.setUTCDate(d.getUTCDate() - i);
+    const isoDay = d.toISOString().slice(0, 10);
+    promises.push(resumo_dia(isoDay, moeda).then(r => ({
+      dia: isoDay,
+      produto: r.receita_produto,
+      bump: r.receita_bump,
+      upsell: r.receita_upsell,
+      downsell: r.receita_downsell,
+      total: r.receita_total,
+      vendas: r.vendas,
+    })));
+  }
+  const all = await Promise.all(promises);
+  return all.sort((a, b) => b.dia.localeCompare(a.dia));
 }
 
 // Lista produtos cadastrados
