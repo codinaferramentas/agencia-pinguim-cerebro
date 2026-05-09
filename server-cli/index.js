@@ -42,6 +42,8 @@ const googleGmail = require('./lib/google-gmail'); // V2.13 — listar/ler/respo
 const googleCalendar = require('./lib/google-calendar'); // V2.14 Fase 1.7 — leitura Calendar (squad data)
 const contextoTemporal = require('./lib/contexto-temporal'); // V2.14 Fase 1.7 hotfix — bloco de data BRT no prompt (evita LLM chutar dia da semana)
 const discordBot = require('./lib/discord-bot'); // V2.14 Frente B — bot Discord (Gateway WebSocket, ingest tempo real)
+const relatorioExecutivo = require('./lib/relatorio-executivo'); // V2.14 Frente C1 — orquestrador relatorio executivo diario
+const templateRelatorioExec = require('./lib/template-relatorio-executivo'); // V2.14 Frente C1 — template HTML dedicado
 
 const app = express();
 const PORT = 3737;
@@ -975,6 +977,28 @@ app.get('/entregavel/:id', async (req, res) => {
       if (ent) {
         // V2.11 — busca cadeia de versoes pra navegacao V1<->V2 no template
         const cadeia = await db.carregarCadeiaVersoes(id).catch(() => []);
+        const versionamento = {
+          entregavel_id: ent.id,
+          versao_atual: ent.versao,
+          parent_id: ent.parent_id,
+          cadeia: cadeia.map(c => ({ id: c.id, versao: c.versao, criado_em: c.criado_em })),
+        };
+
+        // V2.14 Frente C1 — relatorio executivo usa template proprio
+        if (ent.tipo === 'relatorio-executivo-diario') {
+          const html = templateRelatorioExec.renderRelatorioExecutivo({
+            markdown: ent.conteudo_md,
+            titulo: ent.titulo,
+            tipo: ent.tipo,
+            conteudo_estruturado: ent.conteudo_estruturado || {},
+            criadoEm: new Date(ent.criado_em).getTime(),
+            versionamento,
+          });
+          res.type('html').send(html);
+          return;
+        }
+
+        // Default — entregavel criativo (copy/parecer/etc)
         const metricas = (ent.conteudo_estruturado && ent.conteudo_estruturado.metricas) || {};
         const pedidoOriginal = (ent.conteudo_estruturado && ent.conteudo_estruturado.pedido_original) || ent.titulo || 'Entregável';
         const html = renderEntregavel({
@@ -982,12 +1006,7 @@ app.get('/entregavel/:id', async (req, res) => {
           metricas,
           criadoEm: new Date(ent.criado_em).getTime(),
           pedido: pedidoOriginal,
-          versionamento: {
-            entregavel_id: ent.id,
-            versao_atual: ent.versao,
-            parent_id: ent.parent_id,
-            cadeia: cadeia.map(c => ({ id: c.id, versao: c.versao, criado_em: c.criado_em })),
-          },
+          versionamento,
         });
         res.type('html').send(html);
         return;
@@ -1525,6 +1544,39 @@ app.post('/api/discord/buscar', async (req, res) => {
     res.json({ ok: true, query, janela_horas: horas, total: r.length, mensagens: r, latencia_ms: dur_ms });
   } catch (e) {
     console.error('[discord-buscar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
+// V2.14 Frente C1 — endpoint RELATORIO EXECUTIVO (sob demanda)
+// ============================================================
+// Mesma funcao chamada pelo cron das 8h (Frente C2 futura) e por on-demand
+// no chat ("gera meu executivo agora"). Janela flexivel — default 24h, mas
+// aceita 6h ("o que rolou desde o ultimo envio"), 72h, etc.
+//
+// Body:
+//   { janela_horas?: 24, dia_alvo_brt?: '2026-05-09', moeda?: 'BRL',
+//     modulos_incluir?: ['financeiro','agenda','triagem-email','discord'],
+//     salvar?: true }
+//
+// Resposta:
+//   { ok, entregavel_id, entregavel_url, titulo, modulos: [{slug, ok, latencia_ms}],
+//     sintetizador: {ok, motivo?}, duracao_ms }
+// ============================================================
+app.post('/api/relatorio/gerar', async (req, res) => {
+  try {
+    const { janela_horas = 24, dia_alvo_brt, moeda, modulos_incluir, cliente_id, salvar = true } = req.body || {};
+    console.log(`[relatorio-gerar] iniciando | janela=${janela_horas}h | dia_alvo=${dia_alvo_brt || 'auto'} | modulos=${modulos_incluir ? modulos_incluir.join(',') : 'default'}`);
+    const t0 = Date.now();
+    const r = await relatorioExecutivo.gerarRelatorioExecutivo({
+      cliente_id, janela_horas, dia_alvo_brt, moeda, modulos_incluir, salvar,
+    });
+    const dur_ms = Date.now() - t0;
+    console.log(`[relatorio-gerar] OK ${dur_ms}ms | entregavel=${r.entregavel_id || 'NAO_SALVO'} | sintetizador_ok=${r.sintetizador.ok}`);
+    res.json({ ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[relatorio-gerar] erro:', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });

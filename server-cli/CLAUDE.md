@@ -595,6 +595,55 @@ Confirma? [sim/não]
 - ❌ Desativar relatório sem confirmação humana (Princípio 6 — ação destrutiva)
 - ❌ Criar relatório duplicado (RPC `criar_relatorio` faz UPSERT por `(cliente_id, slug)` — sobrescreve em vez de duplicar)
 
+#### F5 — GERAR Relatório Executivo Diário sob demanda (V2.14 Frente C1)
+
+**Sinais:** "gera meu relatório executivo agora", "manda meu executivo de hoje", "atualiza o relatório das 8h", "me dá um overview do dia", "como tá tudo agora", "monta meu briefing executivo", "executivo das últimas 6h", "executivo da semana"
+
+**Ação:**
+
+1. Identifica a **janela** que o sócio quer:
+   - "agora" / "de hoje" / sem qualificação → `janela_horas=24`
+   - "atualiza" / "desde o último" → `janela_horas=6` (cobre desde a última leitura típica)
+   - "últimas X horas" / "últimas X dias" → calcula explicitamente
+   - "da semana" / "últimos 7 dias" → `janela_horas=168`
+2. Chama `POST /api/relatorio/gerar` com `{janela_horas}` (e `dia_alvo_brt` opcional se sócio especificou data)
+3. **Resposta dura ~30-60 segundos** — diga ao sócio que está rodando: *"Gerando seu executivo (rodando 5 módulos em paralelo + síntese pelo Board) — leva ~30s..."*
+4. Quando voltar, devolve link clicável + preview compacto:
+
+```
+**Executivo diário pronto** — janela 24h, 5 módulos rodaram
+
+🔗 Acesse: http://localhost:3737/entregavel/<UUID>
+
+**Preview (TL;DR):**
+[primeiras 8-10 linhas do md_final, do "Bom dia" até a linha divisória]
+
+Latência: 47s · sintetizador OK · módulos: 5/5 ✓
+```
+
+5. Se algum módulo falhou, **AVISA HONESTO**: *"financeiro indisponível (motivo X)"* — não esconde
+
+**Quando refinar parâmetros (regra de bom uso):**
+
+- Sócio fala "moeda USD" / "em dólar" → `moeda='USD'`
+- Sócio fala "só financeiro e discord" → `modulos_incluir=['financeiro','discord']`
+- Sócio fala "do dia 06/05" → `dia_alvo_brt='2026-05-06'` (financeiro recalcula pra esse dia)
+- Sócio fala "não salva, só me mostra" → `salvar=false` (devolve só o md_final inline)
+
+**Limites:**
+
+- Latência alta (~30-60s) — síntese pelo Claude CLI demora
+- Cada chamada gera 1 entregável novo no banco — cuidado com loop de "atualiza, atualiza, atualiza" (se sócio insistir, sugerir esperar 5-10min entre)
+- **NUNCA inventa dado** — se módulo falhou, output mostra "INDISPONÍVEL" honesto
+
+**Anti-padrões proibidos:**
+
+- ❌ Fingir que está pronto enquanto roda (sempre avisa "leva ~30s")
+- ❌ Esconder módulo que falhou (Munger — transparência sobre falha isolada)
+- ❌ Inventar TL;DR sem cruzar dado real dos módulos
+- ❌ Misturar relatório executivo com triagem solo / financeiro solo (cada um tem Skill própria — F1/F2/F3)
+- ❌ Mandar markdown gigante inline no chat (sempre devolve **link** pro entregável + preview de TL;DR)
+
 #### Anti-padrões proibidos Categoria F
 
 - ❌ Inventar número (preço, quantidade, %) sem ter fonte real (Gmail real ou banco real)

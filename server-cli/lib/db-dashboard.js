@@ -260,8 +260,11 @@ async function resumo_dia(data_iso = null, moeda = 'BRL') {
       sum(spend) AS gasto_total,
       sum(impressions) AS impressoes,
       sum(clicks) AS cliques,
+      sum(unique_clicks) AS cliques_unicos,
       sum(reach) AS alcance,
-      avg(NULLIF(frequency, 0)) AS frequencia_media
+      sum(inline_link_clicks) AS cliques_link,
+      avg(NULLIF(frequency, 0)) AS frequencia_media,
+      count(DISTINCT conta_id) FILTER (WHERE spend > 0) AS contas_ativas
     FROM metricas_diarias
     WHERE data = '${dia}'
       AND nivel = 'campaign';
@@ -341,6 +344,27 @@ async function resumo_dia(data_iso = null, moeda = 'BRL') {
     cpa: vendas > 0 ? investimento / vendas : null,
     ticket_medio: vendas > 0 ? receita_total / vendas : null,
     frequencia: parseFloat(resAds.frequencia_media || 0),
+
+    // Meta Ads — métricas adicionais (V2.14 C1.1 — André pediu paridade com dashboard)
+    ads: {
+      gasto_total:    parseFloat(resAds.gasto_total || 0),
+      impressoes:     parseInt(resAds.impressoes || 0, 10),
+      cliques:        parseInt(resAds.cliques || 0, 10),
+      cliques_unicos: parseInt(resAds.cliques_unicos || 0, 10),
+      cliques_link:   parseInt(resAds.cliques_link || 0, 10),
+      alcance:        parseInt(resAds.alcance || 0, 10),
+      frequencia:     parseFloat(resAds.frequencia_media || 0),
+      contas_ativas:  parseInt(resAds.contas_ativas || 0, 10),
+      cpm: parseInt(resAds.impressoes || 0, 10) > 0
+        ? (parseFloat(resAds.gasto_total || 0) * 1000) / parseInt(resAds.impressoes || 0, 10)
+        : null,
+      ctr_pct: parseInt(resAds.impressoes || 0, 10) > 0
+        ? (parseInt(resAds.cliques || 0, 10) * 100) / parseInt(resAds.impressoes || 0, 10)
+        : null,
+      cpa_unico: parseInt(resAds.cliques_unicos || 0, 10) > 0
+        ? parseFloat(resAds.gasto_total || 0) / parseInt(resAds.cliques_unicos || 0, 10)
+        : null,
+    },
 
     // Reembolsos
     reembolsos_qtd,
