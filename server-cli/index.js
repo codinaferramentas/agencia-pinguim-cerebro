@@ -1321,19 +1321,62 @@ app.post('/api/gmail/ler', async (req, res) => {
 });
 
 // V2.13 — RESPONDER/ENVIAR EMAIL
+// V2.14 D — agora com Camada B anti-duplicacao (5min janela)
 // Atendente Pinguim DEVE mostrar plano e pedir confirmação no chat antes
 // de bater aqui. Esta camada apenas executa.
+const antiDup = require('./lib/anti-duplicacao');
+
 app.post('/api/gmail/responder', async (req, res) => {
   try {
-    const { para, assunto, corpo, reply_to_message_id, thread_id, cc, bcc, cliente_id } = req.body || {};
+    const { para, assunto, corpo, reply_to_message_id, thread_id, cc, bcc, cliente_id, origem_canal = 'chat-web', origem_message_id, forcar = false } = req.body || {};
     if (!para) return res.status(400).json({ ok: false, error: 'para obrigatorio' });
     if (!assunto) return res.status(400).json({ ok: false, error: 'assunto obrigatorio' });
     if (!corpo) return res.status(400).json({ ok: false, error: 'corpo obrigatorio' });
 
     const t0 = Date.now();
+
+    // Anti-duplicacao: hash = tipo + para + assunto + corpo (normalizado)
+    // Se mesma combinacao foi enviada nos ultimos 5min, BLOQUEIA (a menos que forcar=true)
+    if (!forcar) {
+      const hash = antiDup.hashAcao({
+        tipo_acao: 'gmail-enviar',
+        destino: para,
+        corpo: `${assunto}|${corpo}`,
+      });
+      const dup = await antiDup.checarDuplicata({ cliente_id, hash, janela_min: 5 });
+      if (dup.duplicata) {
+        console.warn(`[gmail-enviar] BLOQUEADO duplicata pra ${para} (${dup.minutos_atras}min atras)`);
+        await antiDup.registrar({
+          cliente_id, tipo_acao: 'gmail-enviar', hash_acao: hash,
+          destino: para, resumo: assunto.slice(0, 100),
+          origem_canal, origem_message_id,
+          status: 'bloqueado_duplicata',
+          motivo: `Email identico enviado ${dup.minutos_atras}min atras (id=${dup.acao_anterior_id})`,
+        }).catch(_ => {});
+        return res.status(409).json({
+          ok: false,
+          bloqueado_duplicata: true,
+          error: `Email identico foi enviado ha ${dup.minutos_atras} minutos. Pra reenviar mesmo assim, chame com forcar=true.`,
+          acao_anterior_id: dup.acao_anterior_id,
+          minutos_atras: dup.minutos_atras,
+        });
+      }
+    }
+
     const r = await googleGmail.enviarEmail({ para, assunto, corpo, reply_to_message_id, thread_id, cc, bcc, cliente_id });
     const dur_ms = Date.now() - t0;
-    console.log(`[gmail-enviar] ${dur_ms}ms | para="${para.slice(0, 40)}" | assunto="${assunto.slice(0, 40)}" | reply_to=${reply_to_message_id ? reply_to_message_id.slice(0, 12) : 'novo'}`);
+
+    // Registra sucesso
+    const hashOk = antiDup.hashAcao({ tipo_acao: 'gmail-enviar', destino: para, corpo: `${assunto}|${corpo}` });
+    await antiDup.registrar({
+      cliente_id, tipo_acao: 'gmail-enviar', hash_acao: hashOk,
+      destino: para, resumo: assunto.slice(0, 100),
+      origem_canal, origem_message_id,
+      status: 'sucesso',
+      metadata: { gmail_id: r.id, latencia_ms: dur_ms, forcado: !!forcar },
+    }).catch(e => console.warn(`[gmail-enviar] registro falhou: ${e.message}`));
+
+    console.log(`[gmail-enviar] ${dur_ms}ms | para="${para.slice(0, 40)}" | assunto="${assunto.slice(0, 40)}" | reply_to=${reply_to_message_id ? reply_to_message_id.slice(0, 12) : 'novo'}${forcar ? ' | FORCADO' : ''}`);
     res.json({ ok: true, ...r, latencia_ms: dur_ms });
   } catch (e) {
     console.error('[gmail-enviar] erro:', e.message);

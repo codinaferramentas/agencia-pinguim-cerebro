@@ -242,15 +242,29 @@ async function enviarEmail({
     usarThreadId = usarThreadId || orig.thread_id;
   }
 
-  // Monta MIME (RFC 2822) em base64url
+  // V2.14 D fix UTF-8: headers MIME (Subject/To/From) PRECISAM de encoding
+  // RFC 2047 quando tem caractere non-ASCII (acentos, em-dash, emoji, etc).
+  // Sem isso, Gmail interpreta Subject como ISO-8859-1 e mostra mojibake.
+  // Solucao: encoda em base64 com prefixo =?UTF-8?B?...?= se necessario.
+  function encodarHeaderRFC2047(s) {
+    if (!s) return s;
+    // ASCII puro nao precisa de encoding
+    if (/^[\x00-\x7F]*$/.test(s)) return s;
+    const b64 = Buffer.from(s, 'utf-8').toString('base64');
+    return `=?UTF-8?B?${b64}?=`;
+  }
+
+  // Monta MIME (RFC 2822) em base64url, com Subject UTF-8 encodado
   const linhas = [
     `To: ${para}`,
     cc ? `Cc: ${cc}` : null,
     bcc ? `Bcc: ${bcc}` : null,
-    `Subject: ${assunto}`,
+    `Subject: ${encodarHeaderRFC2047(assunto)}`,
     inReplyTo ? `In-Reply-To: ${inReplyTo}` : null,
     references ? `References: ${references}` : null,
+    'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: 8bit',
     '',
     corpo,
   ].filter(Boolean).join('\r\n');
