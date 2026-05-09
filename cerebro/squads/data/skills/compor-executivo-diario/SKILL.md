@@ -50,6 +50,30 @@ Bloco que responde **"preciso fazer alguma coisa agora?"** em 3-7 linhas. Cruza 
 
 **Se NÃO há ação necessária**, escreve: `✅ NADA URGENTE HOJE — relaxa, lê o resto se quiser.` (Dalio: best case do relatório é o sócio fechar em 30 segundos.)
 
+### 2.1 — Conselho do Board (1 linha — V2.14 NOVO)
+
+Logo embaixo do TL;DR de Ação Necessária, 1 linha do conselheiro DESTAQUE do dia:
+
+```
+🏛 Conselho de hoje:
+   <emoji> <Conselheiro>: <1 frase aguda cruzando módulos>
+
+Ex:
+🏛 Conselho de hoje:
+   🦉 Munger: anúncio Meta parado + Lo-Fi caindo 40% — não é coincidência. Resolve a conta antes da reunião 10h.
+```
+
+**Como escolher o conselheiro destaque:**
+- Sintetizador (Data Chief) escolhe quem tem o insight MAIS forte do dia, baseado nos módulos
+- Cada conselheiro tem natureza própria:
+  - 🦉 **Munger** — quando tem padrão de risco/falha (anúncio parado, churn, contradição)
+  - ⚖️ **Dalio** — quando tem cenário de pressão (vendas caindo, reembolso alto, deadline)
+  - 🧘 **Naval** — quando tem alavanca não-óbvia (oportunidade escondida, padrão temporal)
+  - ♟️ **Thiel** — quando tem decisão monopolística travada (escalar vs estabilizar, parceria, foco)
+- Se nenhum tem insight forte: omite a linha (não força filler)
+
+**Bloco completo dos 4 vai no FIM do relatório (§7.1 abaixo).**
+
 ### 3. Bloco NÚMEROS (resumo financeiro 1 linha cada)
 
 ```
@@ -97,12 +121,49 @@ Cada seção tem cabeçalho próprio em estilo "kicker monospace caps":
 [conteúdo do módulo]
 ```
 
-### 7. Footer
+### 7. PARECER DO BOARD (V2.14 NOVO — 4 vozes, perguntas duras)
+
+Antes do footer técnico, bloco com 4 conselheiros respondendo cada um UMA pergunta dura específica (Naval). Compacto, máx 2 linhas por conselheiro:
+
+```
+═════════════════════════════════════════
+🏛 PARECER DO BOARD — perguntas duras de hoje
+
+🦉 Munger — "O que pode dar errado essa semana?"
+   <2 linhas. Cruzando dados do relatório, NÃO inventando.>
+   Ex: "Reembolsos do Lyra crescendo 40% semana sobre semana. Se não responder
+        os 3 emails pendentes hoje, taxa pode chegar em 12% (alerta zona Hotmart)."
+
+⚖️ Dalio — "Em qual cenário esses números viram problema?"
+   <2 linhas. Cenários best/base/worst aplicados ao dado real.>
+   Ex: "Worst: ROAS 0.81 do Pixel + agenda lotada essa semana = você pode não
+        ter tempo de otimizar Ads. Resultado: gasto continua, vendas caem mais."
+
+🧘 Naval — "Onde tem alavanca não-óbvia hoje?"
+   <2 linhas. Padrão estrutural (não pontual).>
+   Ex: "78% dos emails críticos chegam entre 8h-11h. Bloqueia agenda essa janela
+        pra responder. Vira hábito → 3h/semana de produtividade."
+
+♟️ Thiel — "Que decisão monopolística está sendo deixada na mesa?"
+   <2 linhas. Decisão de longo prazo aparente nos dados.>
+   Ex: "ELO Recorrente está 30% das vendas, mas sem campanha dedicada. Diferencial
+        do produto está oculto — campanha 'recorrência' é monopólio que ninguém faz."
+═════════════════════════════════════════
+```
+
+**Regras DURAS pro Board:**
+1. **NUNCA inventar número.** Cada afirmação cita dado de uma seção concreta acima.
+2. **NUNCA parafrasear** ("3 emails críticos hoje" não é parecer — é leitura). Tem que **CRUZAR** módulos ou identificar **PADRÃO**.
+3. **Se conselheiro não tem insight forte hoje**, escreve: `<emoji> <Nome> — passa o turno hoje (sem padrão claro nos dados).` E pula.
+4. **Cada conselheiro responde APENAS sua pergunta** — não opina sobre tudo. Disciplina.
+5. **Sintetizador (Data Chief) escolhe destaque** pra linha do TL;DR (§2.1) baseado em qual conselheiro trouxe insight mais acionável.
+
+### 8. Footer técnico
 
 ```
 ═════════════════════════════════════════
 Pinguim OS · Relatório executivo diário · gerado <timestamp BRT>
-Módulos rodados: 4/4 · Verifier: ✓ todos passaram
+Módulos rodados: 4/4 · Verifier: ✓ todos passaram · Board: 4 vozes
 Discrepância? Avisa o Codina.
 ```
 
