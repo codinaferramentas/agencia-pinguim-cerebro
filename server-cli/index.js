@@ -40,6 +40,7 @@ const googleDrive = require('./lib/google-drive'); // V2.12 Fase 1 — busca arq
 const googleDriveContent = require('./lib/google-drive-content'); // V2.12 Fase 2+4 — ler e editar conteudo
 const googleGmail = require('./lib/google-gmail'); // V2.13 — listar/ler/responder/modificar Gmail
 const googleCalendar = require('./lib/google-calendar'); // V2.14 Fase 1.7 — leitura Calendar (squad data)
+const contextoTemporal = require('./lib/contexto-temporal'); // V2.14 Fase 1.7 hotfix — bloco de data BRT no prompt (evita LLM chutar dia da semana)
 
 const app = express();
 const PORT = 3737;
@@ -456,6 +457,10 @@ app.post('/api/chat', async (req, res) => {
       console.warn(`  [drive-contexto] erro lendo contexto (nao bloqueante): ${e.message}`);
     }
 
+    // V2.14 Fase 1.7 hotfix — bloco de data BRT no TOPO. Sem isso, LLM
+    // chuta dia da semana baseado em treinamento (cutoff defasado).
+    prompt = `${contextoTemporal.blocoDataAtual()}\n\n${prompt}`;
+
     console.log(`[${new Date().toISOString()}] thread=${thread_id} pergunta: ${message.slice(0, 80)}${plan_id ? ` (plan_id=${plan_id})` : ''}`);
 
     // ============================================================
@@ -868,6 +873,9 @@ app.post('/api/chat-stream', async (req, res) => {
         prompt = `${blocoCtx}\n\n${prompt}`;
       }
     } catch (_) { /* não bloqueia */ }
+
+    // V2.14 Fase 1.7 hotfix — bloco de data BRT no TOPO
+    prompt = `${contextoTemporal.blocoDataAtual()}\n\n${prompt}`;
 
     console.log(`[${new Date().toISOString()}] thread=${thread_id} STREAM pergunta: ${message.slice(0, 80)}`);
     sse('start', { thread_id });

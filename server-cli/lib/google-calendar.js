@@ -32,6 +32,35 @@ const FORMATADOR_HORA_BR = new Intl.DateTimeFormat('pt-BR', {
   hour12: false,
 });
 
+// Dia da semana e data curta em PT-BR (pra Atendente NÃO inventar rótulo)
+const FORMATADOR_DIA_SEMANA_BR = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo',
+  weekday: 'long',
+});
+
+const FORMATADOR_DATA_CURTA_BR = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo',
+  day: '2-digit', month: '2-digit',
+});
+
+function diaSemanaBR(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return FORMATADOR_DIA_SEMANA_BR.format(d); // "segunda-feira", "sábado"
+  } catch (_) { return ''; }
+}
+
+function dataCurtaBR(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return FORMATADOR_DATA_CURTA_BR.format(d); // "11/05"
+  } catch (_) { return ''; }
+}
+
 function formatarDataBR(iso) {
   if (!iso) return '';
   try {
@@ -182,6 +211,8 @@ async function listarEventos({
       hora_fim_br: diaInteiro ? null : formatarHoraBR(endIso),
       duracao_min: diaInteiro ? null : duracaoMin(startIso, endIso),
       dia_inteiro: diaInteiro,
+      dia_semana_br: diaSemanaBR(startIso),    // "segunda-feira"
+      data_curta_br: dataCurtaBR(startIso),    // "11/05"
       status: e.status || 'confirmed',
       link_meet: meetLink,
       link_evento: e.htmlLink || null,
@@ -297,5 +328,7 @@ module.exports = {
   janelaAmanhaBRT,
   formatarHoraBR,
   formatarDataBR,
+  diaSemanaBR,
+  dataCurtaBR,
   duracaoMin,
 };

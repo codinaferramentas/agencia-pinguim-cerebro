@@ -121,6 +121,86 @@ bash scripts/gmail-modificar.sh 18a3b2c1 arquivar
 - Email com HTML (só plain text por enquanto)
 - Filtros automáticos (criar regra "todos do X vão pra label Y")
 
+## Tools de Calendar (V2.14 Fase 1.7 — escopo `calendar`, READ-only)
+
+Quando o sócio pede pra ler agenda dele (eventos do dia, próxima semana, reunião quarta), o Atendente lê o Google Calendar dele. **Cada sócio vê APENAS a agenda dele** — refresh_token isolado por cliente_id no cofre.
+
+**ESTA versão é READ-only.** Criar/editar/cancelar evento é responsabilidade da **squad operacional `hybrid-ops-squad`** em frente futura V2.15.
+
+| Tool | O que faz | Como acessar |
+|---|---|---|
+| 📅 **Calendar listar (eventos)** | Lista eventos numa janela (default `primary`, max 50). Aceita janelas pré-definidas ou ISO custom | `bash scripts/calendar-listar.sh [hoje\|amanha\|proximos7] [calendarId]` |
+| 📚 **Calendar listar (calendários)** | Descobre calendários do sócio (primary + secundários). Útil quando há mais de um calendário ativo | `POST /api/calendar/listar-calendarios` (sem script — usar via `curl` ou Atendente) |
+| 🔍 **Calendar ler evento** | Detalhe completo de um evento específico (descrição, local, todos os participantes) | `POST /api/calendar/ler-evento` com `{calendarId, eventId}` |
+
+**Exemplos práticos via script:**
+
+```bash
+# Eventos de hoje (primary, BRT 00:00 → 23:59)
+bash scripts/calendar-listar.sh hoje
+
+# Eventos de amanhã
+bash scripts/calendar-listar.sh amanha
+
+# Próximos 7 dias (now → +7d)
+bash scripts/calendar-listar.sh proximos7
+
+# Próximos 7 dias num calendário específico (ex: Feriados Brasil)
+bash scripts/calendar-listar.sh proximos7 pt-br.brazilian#holiday@group.v.calendar.google.com
+```
+
+**Exemplos via endpoint HTTP** (Atendente usa quando precisa de janela custom):
+
+```bash
+# Janela custom: quarta-feira 13/05 BRT inteira
+curl -s -X POST http://localhost:3737/api/calendar/listar-eventos \
+  -H "Content-Type: application/json" \
+  -d '{"calendarId":"primary","timeMin":"2026-05-13T03:00:00Z","timeMax":"2026-05-14T02:59:59Z"}'
+
+# Listar calendários disponíveis (descobrir secundários)
+curl -s -X POST http://localhost:3737/api/calendar/listar-calendarios -d '{}'
+```
+
+**Resposta padrão de `listar-eventos`:**
+
+```json
+{
+  "ok": true,
+  "calendario_id": "primary",
+  "eventos": [
+    {
+      "id": "...",
+      "titulo": "Daily CS (Discord)",
+      "hora_inicio_br": "09:30",
+      "hora_fim_br": "10:00",
+      "duracao_min": 30,
+      "qtd_participantes": 11,
+      "link_meet": "https://meet.google.com/ney-srqr-eba",
+      "dia_inteiro": false,
+      "recorrente": true
+    }
+  ],
+  "total": 1
+}
+```
+
+**Janelas BRT pré-calculadas (helpers do wrapper):**
+
+```js
+const cal = require('./lib/google-calendar');
+const hoje = cal.janelaHojeBRT();     // {inicio_iso, fim_iso, data_br}
+const amanha = cal.janelaAmanhaBRT(); // idem pra amanhã
+```
+
+**Não implementado nesta versão (vai pra squad `hybrid-ops-squad` em V2.15):**
+- Criar evento novo
+- Alterar título/horário/participantes de evento existente
+- Cancelar/deletar evento
+- Aceitar/recusar convite
+- Bloquear horário (focal time / "não disponível")
+
+**Quando o agente precisar criar evento, declarar honesto:** "Pra criar/alterar evento ainda não tenho a Skill operacional pronta — frente V2.15 (squad `hybrid-ops-squad`). Por enquanto só consigo LER agenda."
+
 ## Mapeamento produto → cerebro_slug
 
 | Sinal na pergunta | cerebro_slug |
@@ -157,6 +237,9 @@ bash scripts/gmail-modificar.sh 18a3b2c1 arquivar
 | `POST /api/drive/buscar` | V2.12 — busca arquivos no Drive do sócio. |
 | `POST /api/drive/ler` | V2.12 Fase 2 — lê conteúdo de Doc/Sheet/PDF. Body: `{fileId, tipo?, aba?, range?}`. |
 | `POST /api/drive/editar` | V2.12 Fase 4 — edita planilha (célula/range/append). Confirmação humana é responsabilidade de quem chama. |
+| `POST /api/calendar/listar-calendarios` | V2.14 Fase 1.7 — lista calendários do sócio (primary + secundários). |
+| `POST /api/calendar/listar-eventos` | V2.14 Fase 1.7 — lista eventos numa janela BRT. Body: `{calendarId?, timeMin, timeMax, maxResults?}`. |
+| `POST /api/calendar/ler-evento` | V2.14 Fase 1.7 — detalhe completo de um evento. Body: `{calendarId?, eventId}`. |
 | `GET /conectar-google` | V2.12 — página de status + botão OAuth. |
 | `GET /api/health` | Checa CLI Claude |
 | `GET /api/info` | Lista skills + scripts disponíveis |

@@ -212,6 +212,18 @@ function detectarPapelEContexto(userMessage, output) {
     };
   }
 
+  // V2.14 Fase 1.7 hotfix — operacoes de leitura Google (agenda/email/drive)
+  // sao determinísticas: dado vem da API real, agente apenas formata. Verifier
+  // (que roda Sonnet 30s+) era overkill aqui — agenda/inbox de 0 eventos ja é
+  // factualmente correto. Pular reduz latência de 44s pra ~15s nestes casos.
+  if (/\b(agenda|reuni[ãa]o|reuniões|compromisso|calendar|evento|reuniao|call de|meeting|inbox|email[s]?|gmail|drive|planilha|documento|arquivo)\b/i.test(msg)) {
+    return {
+      papel: 'atendente',
+      expectativa: 'Resposta baseada em payload real da API Google (Calendar/Gmail/Drive). Formato em LISTA bullet (NUNCA tabela). Usar dia_semana_br/data_curta_br do payload. Honesto sobre 0 resultados.',
+      pular_verifier: true, // dado vem da API real, formatacao nao inventa
+    };
+  }
+
   // Pergunta factual sobre sistema
   if (/^(quem (e |voce )|o que (e |voce )|qual seu|como funciona|me explica)/.test(msg)) {
     return {
