@@ -91,7 +91,7 @@ async function consultarCompradorPorEmail({ email }) {
         ok: true,
         fonte: 'supabase',
         ...fontes.supabase,
-        aviso_escopo: 'ESTES DADOS SÃO DE TRANSAÇÕES DE COMPRA, NÃO DE ESTADO DE ACESSO. Para confirmar se o aluno realmente TEM ACESSO ATIVO à área de membros (Club), a Members Area API ainda não está habilitada na credencial Hotmart — solicitação pendente. Até lá, NÃO afirmar "tem acesso" — apenas listar o que comprou.',
+        aviso_escopo: 'ESTES DADOS SÃO DE TRANSAÇÕES DE COMPRA, NÃO DE ESTADO DE ACESSO REAL. Para confirmar acesso ativo à área de membros (Club), STATUS, último login e progresso, USE a função verificarAcessoAreaMembros (G4b) — ela consulta a Members Area API real. NÃO afirmar "tem acesso" baseado só em compra.',
       };
     }
   } catch (e) {
@@ -133,7 +133,7 @@ async function consultarCompradorPorEmail({ email }) {
       })),
       total_vendas: items.length,
       latencia_ms: Date.now() - t1,
-      aviso_escopo: 'ESTES DADOS SÃO DE TRANSAÇÕES DE COMPRA, NÃO DE ESTADO DE ACESSO. Para confirmar se o aluno realmente TEM ACESSO ATIVO à área de membros (Club), a Members Area API ainda não está habilitada na credencial Hotmart — solicitação pendente. Até lá, NÃO afirmar "tem acesso" — apenas listar o que comprou.',
+      aviso_escopo: 'ESTES DADOS SÃO DE TRANSAÇÕES DE COMPRA, NÃO DE ESTADO DE ACESSO REAL. Para confirmar acesso ativo à área de membros (Club), STATUS, último login e progresso, USE a função verificarAcessoAreaMembros (G4b) — ela consulta a Members Area API real. NÃO afirmar "tem acesso" baseado só em compra.',
     };
   } catch (e) {
     return { ok: false, fonte: 'hotmart_api', error: e.message, latencia_ms: Date.now() - t0 };
@@ -244,27 +244,39 @@ async function verificarAssinaturaAtiva({ email, produto_id }) {
 }
 
 // ============================================================
-// G4b — Verificar acesso real à área de membros (Members Area API)
+// G4b — Verificar acesso REAL à área de membros (Members Area API)
 // ============================================================
-// ⚠ Members Area API requer habilitação explícita na credencial Hotmart.
-// Solicitação pendente em 2026-05-10. Até lá, esta função declara HONESTO
-// que não tem como verificar acesso real — só vê o que o aluno comprou.
+// V2.14 D 2026-05-10: investigação real descobriu que Members Area API
+// usa MESMO Bearer token (não precisava habilitação extra). Bug do SDK
+// Python era chamar /students (404) em vez de /users.
 //
-// Quando Members Area API liberar, esta função vira a chamada real ao
-// /club/api/v1/users?subdomain=...&email=... e retorna lista de produtos
-// com acesso ativo + último acesso/login.
+// Endpoint correto: GET /club/api/v1/users?subdomain=<sub>&email=<email>
+// Cobre acesso real, último login, status, progresso, engajamento.
+//
+// Subdomain por produto vem de pinguim.hotmart_clubs (tabela cadastrada
+// pelo sócio quando descobre via URL https://hotmart.com/pt-br/club/SLUG/products/...).
+// Subdomain real = SLUG sem hífen. Ex: 'proalt' (URL e subdomain coincidem).
+//
+// Cadastro de aluno (POST /users) NÃO existe na API — caso Princípia Pay
+// continua via G8 (ticket suporte humano).
 async function verificarAcessoAreaMembros({ email, produto_id }) {
   if (!email) throw new Error('email obrigatório');
-  return {
-    ok: true,
-    fonte: 'gap-honesto',
-    disponivel: false,
-    motivo: 'Members Area API ainda não está habilitada na credencial Hotmart Pinguim. Solicitação aberta junto ao suporte Hotmart em 2026-05-10. Enquanto não libera, NÃO conseguimos verificar estado real de acesso à área de membros (Club), nem último login, nem produtos com acesso ativo.',
-    sugestao: 'Pra confirmar acesso desse aluno HOJE, entrar manualmente em https://app-vlc.hotmart.com → Hotmart Club → buscar pelo email. Quando Members Area API liberar, esta função vai retornar a lista real automaticamente.',
-    info_disponivel: 'Posso te dizer o que esse email COMPROU (transações Hotmart) via consultarCompradorPorEmail. Mas compra não é o mesmo que acesso ativo — aluno pode ter sido removido manualmente do Club, ou ter recebido produto-bônus que não está nas transações.',
-    email_consultado: email,
-    produto_id_consultado: produto_id || null,
-  };
+  const club = require('./hotmart-club');
+  try {
+    const r = await club.buscarAlunoEmTodosClubs({ email });
+    return {
+      ok: true,
+      fonte: 'hotmart_club_api',
+      ...r,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      fonte: 'hotmart_club_api',
+      error: e.message,
+      sugestao: 'Falha consultando Members Area API. Pra confirmar manualmente: https://app-vlc.hotmart.com → Hotmart Club → buscar pelo email.',
+    };
+  }
 }
 
 module.exports = {

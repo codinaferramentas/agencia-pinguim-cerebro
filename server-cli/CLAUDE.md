@@ -691,21 +691,36 @@ A Pinguim vende seus produtos pela Hotmart. Esta categoria cobre **TODA a opera�
 
 ⚠ **Atenção crítica — diferença entre ASSINATURA ativa e ACESSO à área de membros:** assinatura ativa significa que o aluno está **pagando** a recorrência. NÃO significa automaticamente que ele tem **acesso ativo** à área de membros (Club). O aluno pode estar pagando mas ter sido removido manualmente do Club, ou ter recebido produto-bônus que não está vinculado à venda. Pra confirmar **acesso real**, usar G4b (não G4).
 
-#### G4b — VERIFICAR ACESSO REAL à área de membros (Members Area API)
+#### G4b — VERIFICAR ACESSO REAL à área de membros (Members Area API) — V2.14 D ATIVO
 
-**Sinais:** "esse cara tem acesso?", "ele ainda consegue entrar na área de membros?", "qual último acesso desse aluno?", "ele viu as aulas?", "fulano tá vendo o conteúdo?", "lista produtos que esse cara tem acesso ativo"
+**Sinais:** "esse cara tem acesso?", "ele ainda consegue entrar na área de membros?", "qual último acesso desse aluno?", "ele viu as aulas?", "fulano tá vendo o conteúdo?", "lista produtos que esse cara tem acesso ativo", "qual o engajamento do aluno X?"
 
 **Ação:**
-1. Roda `bash scripts/hotmart-verificar-acesso-membros.sh "<email>" [produto_id]`
-2. **HOJE retorna GAP HONESTO** — Members Area API ainda não habilitada na credencial Hotmart Pinguim (solicitação aberta junto ao suporte Hotmart 2026-05-10). Devolve sugestão: entrar manualmente em https://app-vlc.hotmart.com → Hotmart Club → buscar pelo email
-3. **Quando Members Area API liberar**, este script passa a retornar lista real (produtos ativos + último acesso + progresso). Sem mudança no agente.
+1. Roda `bash scripts/hotmart-verificar-acesso-membros.sh "<email>"`
+2. Sistema itera nos Clubs cadastrados em `pinguim.hotmart_clubs` e devolve onde o aluno tem acesso, com **status real (ACTIVE/INACTIVE)**, **último login**, **primeiro acesso**, **número de acessos**, **engajamento (LOW/MEDIUM/HIGH)**, **progresso (X de Y aulas, %)** e **tipo de entrada (BUYER = comprou via Hotmart, IMPORTED = cadastro manual tipo Princípia Pay)**.
+3. Devolve resposta natural pro sócio (REGRA -1: bullet, sem template enlatado).
+
+**Quando NÃO TEM Club cadastrado em `pinguim.hotmart_clubs`:**
+- Sistema retorna aviso "Nenhum Club cadastrado".
+- Agente declara honesto e SUGERE: *"pra cadastrar o subdomain do Club, me passa a URL do produto na Hotmart (algo tipo `https://hotmart.com/pt-br/club/SLUG/products/<id>`) — eu cadastro pra você."* Roda `bash scripts/hotmart-cadastrar-club.sh "<subdomain>" "<produto_nome>"`. **Subdomain real = SLUG da URL, geralmente igual ao SLUG mas pode ser sem hífen** (Hotmart varia: `proalt` mantém igual, `turbo-x` vira `turbox`).
+
+**Quando aluno NÃO tem acesso a nenhum Club cadastrado:**
+- Resposta honesta: *"Procurei nos N Clubs cadastrados (lista) e não achei o email X em nenhum. Pode ser que (a) o aluno realmente não tenha acesso a esses produtos, OU (b) tem acesso a um Club que ainda não cadastrei. Quer que eu confira algum produto específico? Me passa a URL do Club."*
 
 **REGRA DURA — anti-padrão fatal:**
-- ❌ **NUNCA dizer "tem acesso a X áreas de membros"** baseado em transações Hotmart (G1 ou G2). Compra ≠ acesso atual. Andre 2026-05-10 pegou esse furo: agente respondeu confiante "tem acesso a 2 áreas" baseado em assinatura ativa Supabase, sem nem chegar perto da Members Area API.
-- ❌ Inventar timestamp de "último acesso" — esse dado SÓ vem da Members Area API. Se ela não está disponível, declarar honesto.
-- ✅ Resposta correta enquanto API não libera: *"Posso te dizer o que ele comprou (X assinatura ativa, Y compra avulsa). Pra confirmar acesso real e último login, hoje preciso que você olhe manualmente no painel Hotmart Club — Members Area API ainda não foi habilitada na nossa credencial. Solicitação pendente."*
+- ❌ **NUNCA dizer "tem acesso a X áreas de membros"** baseado em transações Hotmart (G1 ou G2). Compra ≠ acesso atual. Andre 2026-05-10 pegou esse furo: agente respondeu confiante "tem acesso a 2 áreas" pro Marcos baseado em assinatura ativa Supabase, sem chegar perto da Members Area API. **A resposta correta vem do G4b agora.**
+- ❌ Inventar timestamp de "último acesso" — esse dado SÓ vem da Members Area API. Sempre rodar G4b.
+- ✅ Resposta correta natural pro sócio: *"Olhei o Marcos no Club do ProAlt: status ACTIVE, último login 21/02/2026, acessou 6 vezes, engajamento LOW (5 de 101 aulas concluídas, 4%). Foi cadastrado como IMPORTED — provavelmente entrou manualmente."* — variar a forma, NUNCA template enlatado.
 
-**Quando perguntar G1+G4b juntos:** se sócio pergunta "esse aluno comprou e tem acesso?", roda G1 (mostra compras) e DECLARA gap pra acesso (G4b retorna gap honesto).
+**Caso Princípia Pay confirmado:** quando o `tipo_entrada` é `IMPORTED`, significa que alguém da equipe **cadastrou manualmente** (caminho que a API NÃO oferece — testado e confirmado: `POST /club/api/v1/users` retorna 404 redirect /docs/). Pra cadastrar novo aluno via Princípia Pay, continua via G8 (ticket pra suporte humano).
+
+**Casos de uso combinados (G1 + G4b):**
+- Sócio: "Esse cara comprou e tem acesso?"
+  - G1 (compras + assinatura) → "Comprou X em DD/MM, assinatura Y ativa desde MM/AA"
+  - G4b (acesso real) → "No Club do produto Z: status ACTIVE, último login HH em DD/MM/AA"
+- Sócio: "Fulano paga ProAlt mas tá usando?"
+  - G4 (assinatura) → confirma pagamento ativo
+  - G4b → vê engajamento + progresso real ("paga mas só viu 4% das aulas em 6 acessos — engajamento LOW")
 
 #### G5 — APROVAR REEMBOLSO (escrita — confirmação NO CHAT)
 
@@ -1243,7 +1258,8 @@ A Pinguim vende pela Hotmart. Esta categoria cobre TODA a operação Hotmart via
 | 📊 **G2 Listar vendas** | Vendas por período BRT, opcional filtro produto/status/moeda | `bash scripts/hotmart-listar-vendas.sh <start> <end> [produto] [status] [moeda]` |
 | ↩️ **G3 Listar reembolsos** | Refunds por período BRT, com receita perdida | `bash scripts/hotmart-listar-reembolsos.sh <start> <end> [moeda]` |
 | ✅ **G4 Verificar assinatura** | Se aluno tem assinatura ATIVA (pagando recorrência). NÃO confunde com acesso ao Club | `bash scripts/hotmart-verificar-assinatura.sh <email> [produto_id]` |
-| ⚠ **G4b Verificar ACESSO Club** | Estado real de acesso à área de membros + último login. **Members Area API pendente de aprovação Hotmart (2026-05-10)** — hoje retorna gap honesto | `bash scripts/hotmart-verificar-acesso-membros.sh <email> [produto_id]` |
+| ✅ **G4b Verificar ACESSO Club** | Estado real de acesso (ACTIVE/INACTIVE), último login, primeiro acesso, engajamento, progresso por produto. Itera nos Clubs cadastrados em `pinguim.hotmart_clubs`. V2.14 D 2026-05-10 ATIVO | `bash scripts/hotmart-verificar-acesso-membros.sh <email>` |
+| ✅ **G4c Cadastrar Club** | Adiciona subdomain de Club novo em `pinguim.hotmart_clubs`. Valida via API antes de gravar. | `bash scripts/hotmart-cadastrar-club.sh <subdomain> [produto_nome] [produto_id]` |
 | 💸 **G5 Aprovar refund** | Reembolsa venda. **EXIGE confirmação humana NO CHAT** + Camada B janela 60min | `bash scripts/hotmart-reembolsar.sh <transaction> [forcar]` |
 | ❌ **G6 Cancelar assinatura** | Cancela. **EXIGE confirmação NO CHAT** + Camada B 30min | `bash scripts/hotmart-cancelar-assinatura.sh <subscriber_code>` |
 | 🎟 **G7 Criar cupom** | Discount DECIMAL 0-1 (0.10=10%). **EXIGE confirmação NO CHAT** + Camada B 60min | `bash scripts/hotmart-cupom-criar.sh <product_id> <code> <discount> [start] [end] [max_uses]` |
@@ -1254,7 +1270,9 @@ A Pinguim vende pela Hotmart. Esta categoria cobre TODA a operação Hotmart via
 - `POST /api/hotmart/listar-vendas` (body: `{start_date_brt, end_date_brt, produto_id?, status?, moeda?}`)
 - `POST /api/hotmart/listar-reembolsos` (body: `{start_date_brt, end_date_brt, moeda?}`)
 - `POST /api/hotmart/verificar-assinatura` (body: `{email, produto_id?}`)
-- `POST /api/hotmart/verificar-acesso-membros` (body: `{email, produto_id?}`) — gap honesto até Members Area API aprovar
+- `POST /api/hotmart/verificar-acesso-membros` (body: `{email, produto_id?}`) — chamada REAL Members Area API
+- `POST /api/hotmart/cadastrar-club` (body: `{subdomain, produto_id?, produto_nome?}`) — adiciona Club novo
+- `GET /api/hotmart/clubs` — lista todos Clubs cadastrados
 - `POST /api/hotmart/reembolsar` (body: `{transaction, forcar?}`)
 - `POST /api/hotmart/cancelar-assinatura` (body: `{subscriber_code, send_mail?, forcar?}`)
 - `POST /api/hotmart/reativar-assinatura` (body: `{subscriber_code, charge?}`)
@@ -1273,9 +1291,8 @@ A Pinguim vende pela Hotmart. Esta categoria cobre TODA a operação Hotmart via
 **OAuth2 client_credentials.** Token vale 6h, wrapper renova automaticamente (refresh proativo 5min antes de expirar).
 
 **Não implementado nesta versão (frente futura):**
-- Cadastrar aluno na área de membros (Hotmart NÃO oferece via API — passa por G8 com cadastro manual humano)
+- **Cadastrar aluno na área de membros via API** (Hotmart NÃO oferece — confirmado via investigação real 2026-05-10: `POST /club/api/v1/users` retorna 404 redirect `/docs/`). UI manual continua o caminho. Caso Princípia Pay passa por G8.
 - Webhook real-time direto Hotmart→Pinguim (hoje vem indireto via 2º Supabase do Pedro)
-- **Members Area API (G4b) — solicitação pendente Hotmart 2026-05-10.** Quando liberar, retorna lista real de produtos com acesso ativo + último login. Hoje retorna gap honesto.
 
 ## Mapeamento produto → cerebro_slug
 

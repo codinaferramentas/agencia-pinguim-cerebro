@@ -292,7 +292,8 @@ A Pinguim vende pela Hotmart. Esta categoria cobre TODA a operação Hotmart via
 | 📊 **G2 Listar vendas** | Vendas por período BRT, opcional filtro produto/status/moeda | `bash scripts/hotmart-listar-vendas.sh <start> <end> [produto] [status] [moeda]` |
 | ↩️ **G3 Listar reembolsos** | Refunds por período BRT, com receita perdida | `bash scripts/hotmart-listar-reembolsos.sh <start> <end> [moeda]` |
 | ✅ **G4 Verificar assinatura** | Se aluno tem assinatura ATIVA (pagando recorrência). NÃO confunde com acesso ao Club | `bash scripts/hotmart-verificar-assinatura.sh <email> [produto_id]` |
-| ⚠ **G4b Verificar ACESSO Club** | Estado real de acesso à área de membros + último login. **Members Area API pendente de aprovação Hotmart (2026-05-10)** — hoje retorna gap honesto | `bash scripts/hotmart-verificar-acesso-membros.sh <email> [produto_id]` |
+| ✅ **G4b Verificar ACESSO Club** | Estado real de acesso (ACTIVE/INACTIVE), último login, primeiro acesso, engajamento, progresso por produto. Itera nos Clubs cadastrados em `pinguim.hotmart_clubs`. V2.14 D 2026-05-10 ATIVO | `bash scripts/hotmart-verificar-acesso-membros.sh <email>` |
+| ✅ **G4c Cadastrar Club** | Adiciona subdomain de Club novo em `pinguim.hotmart_clubs`. Valida via API antes de gravar. | `bash scripts/hotmart-cadastrar-club.sh <subdomain> [produto_nome] [produto_id]` |
 | 💸 **G5 Aprovar refund** | Reembolsa venda. **EXIGE confirmação humana NO CHAT** + Camada B janela 60min | `bash scripts/hotmart-reembolsar.sh <transaction> [forcar]` |
 | ❌ **G6 Cancelar assinatura** | Cancela. **EXIGE confirmação NO CHAT** + Camada B 30min | `bash scripts/hotmart-cancelar-assinatura.sh <subscriber_code>` |
 | 🎟 **G7 Criar cupom** | Discount DECIMAL 0-1 (0.10=10%). **EXIGE confirmação NO CHAT** + Camada B 60min | `bash scripts/hotmart-cupom-criar.sh <product_id> <code> <discount> [start] [end] [max_uses]` |
@@ -303,7 +304,9 @@ A Pinguim vende pela Hotmart. Esta categoria cobre TODA a operação Hotmart via
 - `POST /api/hotmart/listar-vendas` (body: `{start_date_brt, end_date_brt, produto_id?, status?, moeda?}`)
 - `POST /api/hotmart/listar-reembolsos` (body: `{start_date_brt, end_date_brt, moeda?}`)
 - `POST /api/hotmart/verificar-assinatura` (body: `{email, produto_id?}`)
-- `POST /api/hotmart/verificar-acesso-membros` (body: `{email, produto_id?}`) — gap honesto até Members Area API aprovar
+- `POST /api/hotmart/verificar-acesso-membros` (body: `{email, produto_id?}`) — chamada REAL Members Area API
+- `POST /api/hotmart/cadastrar-club` (body: `{subdomain, produto_id?, produto_nome?}`) — adiciona Club novo
+- `GET /api/hotmart/clubs` — lista todos Clubs cadastrados
 - `POST /api/hotmart/reembolsar` (body: `{transaction, forcar?}`)
 - `POST /api/hotmart/cancelar-assinatura` (body: `{subscriber_code, send_mail?, forcar?}`)
 - `POST /api/hotmart/reativar-assinatura` (body: `{subscriber_code, charge?}`)
@@ -322,9 +325,8 @@ A Pinguim vende pela Hotmart. Esta categoria cobre TODA a operação Hotmart via
 **OAuth2 client_credentials.** Token vale 6h, wrapper renova automaticamente (refresh proativo 5min antes de expirar).
 
 **Não implementado nesta versão (frente futura):**
-- Cadastrar aluno na área de membros (Hotmart NÃO oferece via API — passa por G8 com cadastro manual humano)
+- **Cadastrar aluno na área de membros via API** (Hotmart NÃO oferece — confirmado via investigação real 2026-05-10: `POST /club/api/v1/users` retorna 404 redirect `/docs/`). UI manual continua o caminho. Caso Princípia Pay passa por G8.
 - Webhook real-time direto Hotmart→Pinguim (hoje vem indireto via 2º Supabase do Pedro)
-- **Members Area API (G4b) — solicitação pendente Hotmart 2026-05-10.** Quando liberar, retorna lista real de produtos com acesso ativo + último login. Hoje retorna gap honesto.
 
 ## Mapeamento produto → cerebro_slug
 

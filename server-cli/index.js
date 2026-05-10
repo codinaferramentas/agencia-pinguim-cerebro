@@ -2173,9 +2173,9 @@ app.post('/api/hotmart/verificar-assinatura', async (req, res) => {
   }
 });
 
-// ---------- G4b — Verificar acesso real à área de membros (Members Area API) ----------
-// Hoje retorna gap honesto (Members Area API pendente de aprovação Hotmart).
-// Quando a credencial liberar, vira a chamada real automaticamente.
+// ---------- G4b — Verificar acesso REAL à área de membros (Members Area API) ----------
+// V2.14 D 2026-05-10: chamada real ao /club/api/v1/users (não mais gap honesto).
+// Itera nos clubs cadastrados em pinguim.hotmart_clubs e devolve onde acha o aluno.
 app.post('/api/hotmart/verificar-acesso-membros', async (req, res) => {
   try {
     const { email, produto_id } = req.body || {};
@@ -2184,6 +2184,35 @@ app.post('/api/hotmart/verificar-acesso-membros', async (req, res) => {
     res.json(r);
   } catch (e) {
     console.error('[hotmart-verificar-acesso-membros] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ---------- G4c — Cadastrar/atualizar Club no banco (subdomain → produto) ----------
+app.post('/api/hotmart/cadastrar-club', async (req, res) => {
+  try {
+    const club = require('./lib/hotmart-club');
+    const { subdomain, produto_id, produto_nome, produto_ucode, descricao, observacoes } = req.body || {};
+    if (!subdomain) return res.status(400).json({ ok: false, error: 'subdomain obrigatório' });
+    // Valida primeiro
+    const v = await club.validarSubdomain(subdomain);
+    if (!v.valido) return res.status(400).json({ ok: false, error: 'subdomain inválido na Hotmart Members Area API', detalhe: v.motivo });
+    const r = await club.cadastrarClub({ subdomain, produto_id, produto_nome, produto_ucode, descricao, total_modulos: v.total_modulos, observacoes });
+    res.json({ ok: true, ...r, total_modulos: v.total_modulos });
+  } catch (e) {
+    console.error('[hotmart-cadastrar-club] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ---------- G4d — Listar Clubs cadastrados ----------
+app.get('/api/hotmart/clubs', async (req, res) => {
+  try {
+    const club = require('./lib/hotmart-club');
+    const lista = await club.listarClubs();
+    res.json({ ok: true, total: lista.length, clubs: lista });
+  } catch (e) {
+    console.error('[hotmart-clubs] erro:', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
