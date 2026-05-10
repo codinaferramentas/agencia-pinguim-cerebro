@@ -2173,6 +2173,21 @@ app.post('/api/hotmart/verificar-assinatura', async (req, res) => {
   }
 });
 
+// ---------- G4b — Verificar acesso real à área de membros (Members Area API) ----------
+// Hoje retorna gap honesto (Members Area API pendente de aprovação Hotmart).
+// Quando a credencial liberar, vira a chamada real automaticamente.
+app.post('/api/hotmart/verificar-acesso-membros', async (req, res) => {
+  try {
+    const { email, produto_id } = req.body || {};
+    if (!email) return res.status(400).json({ ok: false, error: 'email obrigatório' });
+    const r = await hotmartHibrido.verificarAcessoAreaMembros({ email, produto_id });
+    res.json(r);
+  } catch (e) {
+    console.error('[hotmart-verificar-acesso-membros] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ---------- G5 — Aprovar reembolso (escrita + Camada B) ----------
 app.post('/api/hotmart/reembolsar', async (req, res) => {
   try {

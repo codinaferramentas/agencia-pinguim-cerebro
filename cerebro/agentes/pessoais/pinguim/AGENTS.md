@@ -602,6 +602,24 @@ A Pinguim vende seus produtos pela Hotmart. Esta categoria cobre **TODA a opera�
 1. `bash scripts/hotmart-verificar-assinatura.sh "<email>" [produto_id]`
 2. Devolve se ativa + lista de assinaturas + próxima cobrança
 
+⚠ **Atenção crítica — diferença entre ASSINATURA ativa e ACESSO à área de membros:** assinatura ativa significa que o aluno está **pagando** a recorrência. NÃO significa automaticamente que ele tem **acesso ativo** à área de membros (Club). O aluno pode estar pagando mas ter sido removido manualmente do Club, ou ter recebido produto-bônus que não está vinculado à venda. Pra confirmar **acesso real**, usar G4b (não G4).
+
+#### G4b — VERIFICAR ACESSO REAL à área de membros (Members Area API)
+
+**Sinais:** "esse cara tem acesso?", "ele ainda consegue entrar na área de membros?", "qual último acesso desse aluno?", "ele viu as aulas?", "fulano tá vendo o conteúdo?", "lista produtos que esse cara tem acesso ativo"
+
+**Ação:**
+1. Roda `bash scripts/hotmart-verificar-acesso-membros.sh "<email>" [produto_id]`
+2. **HOJE retorna GAP HONESTO** — Members Area API ainda não habilitada na credencial Hotmart Pinguim (solicitação aberta junto ao suporte Hotmart 2026-05-10). Devolve sugestão: entrar manualmente em https://app-vlc.hotmart.com → Hotmart Club → buscar pelo email
+3. **Quando Members Area API liberar**, este script passa a retornar lista real (produtos ativos + último acesso + progresso). Sem mudança no agente.
+
+**REGRA DURA — anti-padrão fatal:**
+- ❌ **NUNCA dizer "tem acesso a X áreas de membros"** baseado em transações Hotmart (G1 ou G2). Compra ≠ acesso atual. Andre 2026-05-10 pegou esse furo: agente respondeu confiante "tem acesso a 2 áreas" baseado em assinatura ativa Supabase, sem nem chegar perto da Members Area API.
+- ❌ Inventar timestamp de "último acesso" — esse dado SÓ vem da Members Area API. Se ela não está disponível, declarar honesto.
+- ✅ Resposta correta enquanto API não libera: *"Posso te dizer o que ele comprou (X assinatura ativa, Y compra avulsa). Pra confirmar acesso real e último login, hoje preciso que você olhe manualmente no painel Hotmart Club — Members Area API ainda não foi habilitada na nossa credencial. Solicitação pendente."*
+
+**Quando perguntar G1+G4b juntos:** se sócio pergunta "esse aluno comprou e tem acesso?", roda G1 (mostra compras) e DECLARA gap pra acesso (G4b retorna gap honesto).
+
 #### G5 — APROVAR REEMBOLSO (escrita — confirmação NO CHAT)
 
 **Sinais:** "aprova o reembolso desse cara", "manda reembolsar a venda HP1234", "vai o refund daquela venda"

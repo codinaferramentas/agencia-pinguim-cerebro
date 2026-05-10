@@ -4,16 +4,25 @@
 // Camada híbrida que decide ENTRE 2º Supabase (db-dashboard) e API direta
 // Hotmart (lib/hotmart.js) pra cada operação:
 //
-// LEITURAS (consulta):
+// LEITURAS DE COMPRA (transações):
 //   1. Tenta 2º Supabase primeiro (rápido, sem token, dados webhook)
-//   2. Se vazio OU dado parecer incompleto → fallback API direta Hotmart
+//   2. Se vazio → fallback API direta Hotmart Sales API
 //   3. Retorna estrutura unificada
 //
-// ESCRITAS (refund, cupom, assinatura, members area):
-//   → SEMPRE API direta (Hotmart é fonte da verdade pra operações)
+// ESCRITAS (refund, cupom, assinatura):
+//   → SEMPRE API direta (Hotmart é fonte da verdade)
 //
-// Princípio: usa fonte rápida quando confia, API direta quando precisa
-// fonte da verdade ou quando webhook ainda não chegou.
+// ⚠ REGRA DURA — NÃO MISTURAR "compra" COM "acesso a área de membros":
+//   Andre 2026-05-10 pegou furo: agente dizia "tem acesso a 2 áreas" baseado
+//   em transações COMPLETE no Supabase. Errado. Compra ≠ acesso atual.
+//   Aluno pode ter sido removido manualmente do Club, ou cadastrado em
+//   produto-bônus que não está nas transações. Estado real de acesso só
+//   vem da Members Area API (Club) — que precisa habilitação separada na
+//   credencial Hotmart (pendente de solicitação 2026-05-10).
+//
+//   Enquanto Members Area API NÃO está disponível, esta camada SÓ retorna
+//   dados de TRANSAÇÃO (o que comprou, quando, status da venda). Agente
+//   declara honesto que não tem como confirmar acesso/login real.
 // ============================================================
 
 const dashboard = require('./db-dashboard');
@@ -78,7 +87,12 @@ async function consultarCompradorPorEmail({ email }) {
         latencia_ms: Date.now() - t0,
       };
       // Se achou no Supabase, retorna direto (rápido). Sem fallback API.
-      return { ok: true, fonte: 'supabase', ...fontes.supabase };
+      return {
+        ok: true,
+        fonte: 'supabase',
+        ...fontes.supabase,
+        aviso_escopo: 'ESTES DADOS SÃO DE TRANSAÇÕES DE COMPRA, NÃO DE ESTADO DE ACESSO. Para confirmar se o aluno realmente TEM ACESSO ATIVO à área de membros (Club), a Members Area API ainda não está habilitada na credencial Hotmart — solicitação pendente. Até lá, NÃO afirmar "tem acesso" — apenas listar o que comprou.',
+      };
     }
   } catch (e) {
     console.warn(`[hotmart-hibrido] Supabase falhou pra ${email}: ${e.message}`);
@@ -119,6 +133,7 @@ async function consultarCompradorPorEmail({ email }) {
       })),
       total_vendas: items.length,
       latencia_ms: Date.now() - t1,
+      aviso_escopo: 'ESTES DADOS SÃO DE TRANSAÇÕES DE COMPRA, NÃO DE ESTADO DE ACESSO. Para confirmar se o aluno realmente TEM ACESSO ATIVO à área de membros (Club), a Members Area API ainda não está habilitada na credencial Hotmart — solicitação pendente. Até lá, NÃO afirmar "tem acesso" — apenas listar o que comprou.',
     };
   } catch (e) {
     return { ok: false, fonte: 'hotmart_api', error: e.message, latencia_ms: Date.now() - t0 };
@@ -228,9 +243,34 @@ async function verificarAssinaturaAtiva({ email, produto_id }) {
   }
 }
 
+// ============================================================
+// G4b — Verificar acesso real à área de membros (Members Area API)
+// ============================================================
+// ⚠ Members Area API requer habilitação explícita na credencial Hotmart.
+// Solicitação pendente em 2026-05-10. Até lá, esta função declara HONESTO
+// que não tem como verificar acesso real — só vê o que o aluno comprou.
+//
+// Quando Members Area API liberar, esta função vira a chamada real ao
+// /club/api/v1/users?subdomain=...&email=... e retorna lista de produtos
+// com acesso ativo + último acesso/login.
+async function verificarAcessoAreaMembros({ email, produto_id }) {
+  if (!email) throw new Error('email obrigatório');
+  return {
+    ok: true,
+    fonte: 'gap-honesto',
+    disponivel: false,
+    motivo: 'Members Area API ainda não está habilitada na credencial Hotmart Pinguim. Solicitação aberta junto ao suporte Hotmart em 2026-05-10. Enquanto não libera, NÃO conseguimos verificar estado real de acesso à área de membros (Club), nem último login, nem produtos com acesso ativo.',
+    sugestao: 'Pra confirmar acesso desse aluno HOJE, entrar manualmente em https://app-vlc.hotmart.com → Hotmart Club → buscar pelo email. Quando Members Area API liberar, esta função vai retornar a lista real automaticamente.',
+    info_disponivel: 'Posso te dizer o que esse email COMPROU (transações Hotmart) via consultarCompradorPorEmail. Mas compra não é o mesmo que acesso ativo — aluno pode ter sido removido manualmente do Club, ou ter recebido produto-bônus que não está nas transações.',
+    email_consultado: email,
+    produto_id_consultado: produto_id || null,
+  };
+}
+
 module.exports = {
   consultarCompradorPorEmail,
   listarVendasPorPeriodo,
   listarReembolsosPorPeriodo,
   verificarAssinaturaAtiva,
+  verificarAcessoAreaMembros,
 };
