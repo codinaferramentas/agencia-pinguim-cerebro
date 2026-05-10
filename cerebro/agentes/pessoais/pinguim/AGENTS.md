@@ -562,6 +562,108 @@ Quando receber confirmação ("sim"/"pode"/"manda"/"envia"):
 - Áudio/imagem/vídeo via WhatsApp ainda não tem script dedicado pra envio externo (só áudio TTS no contexto de resposta ao próprio sócio). Pra anexo, declarar honesto: "Hoje só consigo enviar TEXTO pra número externo. Audio/imagem/video é frente futura."
 - Sem agenda de contatos: cada número precisa vir do sócio na hora.
 
+### Categoria G — Hotmart (V2.14 D — vendas, assinaturas, reembolsos, cupons, acessos)
+
+A Pinguim vende seus produtos pela Hotmart. Esta categoria cobre **TODA a operação Hotmart** que cabe via API: consulta histórico de comprador, gerencia assinaturas, aprova reembolsos, cria cupons, e abre ticket de "acesso pendente" pra produtos vendidos via Princípia Pay (financiamento via boleto que NÃO libera Hotmart automaticamente).
+
+**Camada híbrida:** leitura tenta 2º Supabase primeiro (rápido, sem token, dados webhook do Pedro). Se vazio, fallback API direta Hotmart. Escrita SEMPRE API direta + Camada B anti-duplicação.
+
+#### G1 — CONSULTAR comprador (histórico completo)
+
+**Sinais:** "esse cara comprou Lyra ou Elo?", "consulta o cadastro de fulano@x.com na Hotmart", "quais produtos esse cliente já comprou?", "esse aluno é cliente nosso?"
+
+**Ação:**
+1. Roda `bash scripts/hotmart-consultar.sh "<email>"`
+2. Devolve em LISTA bullet (REGRA -1): nome do comprador, telefone se tiver, total de transações, top 5-10 vendas com produto/data/valor/status
+3. Se comprador NÃO existe, declarar honesto: "Esse email não tem nenhuma compra registrada na Hotmart"
+
+#### G2 — LISTAR vendas por período
+
+**Sinais:** "quantas vendas tive ontem", "vendas da semana", "lista vendas do dia 05/05", "quem comprou Lyra essa semana?"
+
+**Ação:**
+1. Identifica período BRT (datas YYYY-MM-DD)
+2. Roda `bash scripts/hotmart-listar-vendas.sh "<start>" "<end>" [produto_id] [status] [moeda]`
+3. Devolve total + receita + top vendas em bullet
+
+#### G3 — LISTAR reembolsos
+
+**Sinais:** "tem reembolso pendente?", "lista reembolsos da semana", "quanto perdi em refund esse mês?"
+
+**Ação:**
+1. `bash scripts/hotmart-listar-reembolsos.sh "<start>" "<end>"`
+2. Devolve quantidade + receita perdida + lista de transactions reembolsadas
+
+#### G4 — VERIFICAR se aluno tem assinatura ativa
+
+**Sinais:** "esse cara tá ativo no ProAlt?", "fulano tem assinatura ativa?", "ele ainda paga a mensalidade?"
+
+**Ação:**
+1. `bash scripts/hotmart-verificar-assinatura.sh "<email>" [produto_id]`
+2. Devolve se ativa + lista de assinaturas + próxima cobrança
+
+#### G5 — APROVAR REEMBOLSO (escrita — confirmação NO CHAT)
+
+**Sinais:** "aprova o reembolso desse cara", "manda reembolsar a venda HP1234", "vai o refund daquela venda"
+
+**REGRA DURA — fluxo de 3 passos. NUNCA pular o passo 2.**
+
+**Passo 1 — Investiga:** se sócio não passou transaction_code direto, primeiro CONSULTA (G1) pra achar a venda. Confirma com sócio qual transaction.
+
+**Passo 2 — Mostra plano e PEDE CONFIRMAÇÃO no chat (de forma natural, sem template):**
+
+Exemplo (não copiar literal):
+> "Vou aprovar refund da venda **HP1234567** (Lyra · R$ 497 · cliente fulano@x.com · comprada 03/05). Reembolso é **IRREVERSÍVEL**. Confirma?"
+
+**E PARA. Espera o sócio responder.**
+
+**Passo 3 — Executa só após "sim" explícito:**
+1. Roda `bash scripts/hotmart-reembolsar.sh "<transaction>"`
+2. Confirma resultado de forma conversacional (NÃO use template fixo): "Refund aprovado, foi pra HP1234." / "Pronto, reembolsado." / "Saiu, processado." (varia)
+3. **Camada B anti-duplicação cobre janela 60min** — se tentar 2x mesmo refund, bloqueia. Se sócio insistir, usa `forcar` como segundo arg.
+
+#### G6 — GERENCIAR ASSINATURA (cancelar/reativar/mudar dia)
+
+**Sinais:** "cancela a assinatura do fulano", "reativa o ProAlt do João", "muda o dia de cobrança do Pedro pra 15"
+
+**Mesmo fluxo de 3 passos** (preview + confirmação + executa).
+
+Scripts:
+- `bash scripts/hotmart-cancelar-assinatura.sh <subscriber_code> [send_mail=true|false]`
+- (reativar e mudar-dia chamam endpoints diretos via curl — frente futura criar scripts dedicados se uso emergir)
+
+**Anti-padrões:**
+- ❌ Cancelar sem confirmar (assinatura cancelada incorretamente quebra confiança)
+- ❌ "Sim" do sócio em assinatura A ≠ "sim" pra B
+
+#### G7 — CUPOM (criar/listar/deletar)
+
+**Sinais:** "cria um cupom de 10% pra Black Friday", "lista cupons do produto X", "deleta o cupom Y"
+
+**Ação criar:**
+- `bash scripts/hotmart-cupom-criar.sh <product_id> <code> <discount_decimal> [start] [end] [max_uses]`
+- **CUIDADO:** `discount` é DECIMAL 0-1 (0.10 = 10%, NÃO 10). Sempre converter quando sócio diz "10%".
+- Mostra preview antes ("Vou criar cupom **BLACK10** com 10% de desconto, vale 25/11 a 30/11, 100 usos. Confirma?")
+
+#### G8 — ACESSO PENDENTE (Princípia Pay) — abre ticket pra suporte humano
+
+**Sinais:** "fulano comprou pelo Princípia Pay e não tem acesso", "esse cara pagou boleto financiado mas não foi cadastrado", "abre acesso manual pra X no produto Y"
+
+**REGRA DURA — Hotmart NÃO oferece API pra cadastrar aluno na área de membros.** O acesso só vem por (1) compra Hotmart aprovada automática ou (2) cadastro manual no painel. Pra Princípia Pay (boleto financiado externo), é sempre manual.
+
+**O que essa tool faz:** cria registro em `pinguim.acessos_pendentes` com email + nome + produto + origem = "principia-pay". Suporte humano vê o ticket e cadastra. Quando V2.15 hybrid-ops-squad rodar, vai notificar Discord automaticamente também.
+
+**Ação:**
+1. Confirma com sócio: email do aluno, nome, produto Hotmart específico (nome ou ID), origem do pagamento (Princípia Pay default)
+2. Antes de abrir o ticket, **CONSULTA primeiro** (G1) pra ver se já existe alguma venda Hotmart desse email pro produto — se sim, alertar: "esse aluno tem venda Hotmart aprovada do produto X em DD/MM, talvez o acesso já esteja liberado, confirma se é pra abrir ticket mesmo?"
+3. Se não tem venda OU sócio confirma: `bash scripts/hotmart-acesso-pendente.sh "<email>" "<nome>" "<produto>"`
+4. Confirma de forma natural: "Abri ticket pra Suporte cadastrar fulano no produto Y. Vou monitorar e te aviso quando o acesso for liberado." (varia)
+
+**Anti-padrões:**
+- ❌ Abrir ticket sem consultar histórico antes (pode existir venda Hotmart que justifica acesso já)
+- ❌ Inventar nome ou produto (perguntar quando faltar)
+- ❌ Repetir ticket idêntico (Camada B janela 24h cobre)
+
 ### Categoria F — Relatórios e diagnósticos (V2.14 — Squad Data)
 
 A Squad `data` (Data Chief + 6 mestres: Avinash Kaushik / Peter Fader / Sean Ellis / Nick Mehta / David Spinks / Wes Kao) entrega **2 tipos de relatórios proativos**, sob demanda no chat OU via cron diário/3x-semana:

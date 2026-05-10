@@ -280,6 +280,50 @@ bash scripts/whatsapp-enviar.sh "5511984290116" "Oi Katia, tudo bem?" forcar
 
 **Permissão por canal:** em canais privados (suporte, dev, restritos a role), o admin precisa adicionar Pinguim Bot manualmente com "View Channel" + "Read Message History". Em canais públicos do servidor, bot lê automaticamente.
 
+## Tools de Hotmart (V2.14 D — Categoria G)
+
+A Pinguim vende pela Hotmart. Esta categoria cobre TODA a operação Hotmart via API + tabela auxiliar `pinguim.acessos_pendentes` pra casos de Princípia Pay (cadastro manual humano).
+
+**Camada híbrida** (`lib/hotmart-hibrido.js`): leitura tenta 2º Supabase primeiro (tabelas `hotmart_transactions`/`hotmart_buyers`/`hotmart_products` populadas pelo webhook do Pedro) — se vazio, fallback API direta Hotmart. Escrita SEMPRE API direta + Camada B anti-duplicação.
+
+| Tool | O que faz | Como acessar |
+|---|---|---|
+| 🔍 **G1 Consultar comprador** | Histórico completo de compras por email (todos produtos, do primeiro ao último) | `bash scripts/hotmart-consultar.sh "<email>"` |
+| 📊 **G2 Listar vendas** | Vendas por período BRT, opcional filtro produto/status/moeda | `bash scripts/hotmart-listar-vendas.sh <start> <end> [produto] [status] [moeda]` |
+| ↩️ **G3 Listar reembolsos** | Refunds por período BRT, com receita perdida | `bash scripts/hotmart-listar-reembolsos.sh <start> <end> [moeda]` |
+| ✅ **G4 Verificar assinatura** | Se aluno tem assinatura ativa | `bash scripts/hotmart-verificar-assinatura.sh <email> [produto_id]` |
+| 💸 **G5 Aprovar refund** | Reembolsa venda. **EXIGE confirmação humana NO CHAT** + Camada B janela 60min | `bash scripts/hotmart-reembolsar.sh <transaction> [forcar]` |
+| ❌ **G6 Cancelar assinatura** | Cancela. **EXIGE confirmação NO CHAT** + Camada B 30min | `bash scripts/hotmart-cancelar-assinatura.sh <subscriber_code>` |
+| 🎟 **G7 Criar cupom** | Discount DECIMAL 0-1 (0.10=10%). **EXIGE confirmação NO CHAT** + Camada B 60min | `bash scripts/hotmart-cupom-criar.sh <product_id> <code> <discount> [start] [end] [max_uses]` |
+| 📩 **G8 Acesso pendente** | Abre ticket em `pinguim.acessos_pendentes` pra suporte cadastrar aluno (Princípia Pay) | `bash scripts/hotmart-acesso-pendente.sh <email> <nome> <produto>` |
+
+**Endpoints HTTP** (chamáveis direto se preferir):
+- `POST /api/hotmart/consultar-comprador` (body: `{email}`)
+- `POST /api/hotmart/listar-vendas` (body: `{start_date_brt, end_date_brt, produto_id?, status?, moeda?}`)
+- `POST /api/hotmart/listar-reembolsos` (body: `{start_date_brt, end_date_brt, moeda?}`)
+- `POST /api/hotmart/verificar-assinatura` (body: `{email, produto_id?}`)
+- `POST /api/hotmart/reembolsar` (body: `{transaction, forcar?}`)
+- `POST /api/hotmart/cancelar-assinatura` (body: `{subscriber_code, send_mail?, forcar?}`)
+- `POST /api/hotmart/reativar-assinatura` (body: `{subscriber_code, charge?}`)
+- `POST /api/hotmart/mudar-dia-cobranca` (body: `{subscriber_code, due_day}`)
+- `POST /api/hotmart/cupom-listar` (body: `{product_id}`)
+- `POST /api/hotmart/cupom-criar` (body: `{product_id, code, discount, start_date?, end_date?, max_uses?, forcar?}`)
+- `POST /api/hotmart/cupom-deletar` (body: `{coupon_id}`)
+- `POST /api/hotmart/notificar-acesso-pendente` (body: `{email_aluno, produto_hotmart_nome|id, nome_aluno?, origem_pagamento?, evidencia?}`)
+
+**Cofre Pinguim (V2.14 D — credenciais Hotmart Developers):**
+
+- `HOTMART_CLIENT_ID` — do painel Hotmart > Ferramentas > Hotmart Credentials
+- `HOTMART_CLIENT_SECRET` — idem
+- `HOTMART_BASIC_TOKEN` — string base64 que aparece pronto no painel
+
+**OAuth2 client_credentials.** Token vale 6h, wrapper renova automaticamente (refresh proativo 5min antes de expirar).
+
+**Não implementado nesta versão (frente futura):**
+- Cadastrar aluno na área de membros (Hotmart NÃO oferece via API — passa por G8 com cadastro manual humano)
+- Webhook real-time direto Hotmart→Pinguim (hoje vem indireto via 2º Supabase do Pedro)
+- Lista de alunos por produto (Members Area API existe mas não foi exposta — emergente)
+
 ## Mapeamento produto → cerebro_slug
 
 | Sinal na pergunta | cerebro_slug |

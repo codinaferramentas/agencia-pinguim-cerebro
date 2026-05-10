@@ -2107,6 +2107,284 @@ app.get('/api/whatsapp/status', async (req, res) => {
 });
 
 // ============================================================
+// V2.14 D — Categoria G: HOTMART (G1-G8)
+// ============================================================
+// Endpoints que cobrem o caso de uso completo do sócio:
+// G1 consultar comprador  G2 listar vendas    G3 listar reembolsos
+// G4 verificar assinatura G5 reembolsar       G6 gerenciar assinatura
+// G7 cupom (criar/listar/deletar)             G8 notificar suporte (acesso pendente)
+//
+// Camada híbrida (lib/hotmart-hibrido.js) tenta 2º Supabase primeiro pra leitura
+// e cai pra API direta se faltar dado. Escrita SEMPRE API direta + Camada B.
+// ============================================================
+
+const hotmart = require('./lib/hotmart');
+const hotmartHibrido = require('./lib/hotmart-hibrido');
+
+// ---------- G1 — Consultar comprador (histórico completo) ----------
+app.post('/api/hotmart/consultar-comprador', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ ok: false, error: 'email obrigatório' });
+    const r = await hotmartHibrido.consultarCompradorPorEmail({ email });
+    res.json(r);
+  } catch (e) {
+    console.error('[hotmart-consultar-comprador] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ---------- G2 — Listar vendas por período ----------
+app.post('/api/hotmart/listar-vendas', async (req, res) => {
+  try {
+    const { start_date_brt, end_date_brt, produto_id, status, moeda } = req.body || {};
+    if (!start_date_brt || !end_date_brt) return res.status(400).json({ ok: false, error: 'start_date_brt e end_date_brt obrigatórios (YYYY-MM-DD)' });
+    const r = await hotmartHibrido.listarVendasPorPeriodo({ start_date_brt, end_date_brt, produto_id, status, moeda });
+    res.json(r);
+  } catch (e) {
+    console.error('[hotmart-listar-vendas] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ---------- G3 — Listar reembolsos por período ----------
+app.post('/api/hotmart/listar-reembolsos', async (req, res) => {
+  try {
+    const { start_date_brt, end_date_brt, moeda } = req.body || {};
+    if (!start_date_brt || !end_date_brt) return res.status(400).json({ ok: false, error: 'start_date_brt e end_date_brt obrigatórios' });
+    const r = await hotmartHibrido.listarReembolsosPorPeriodo({ start_date_brt, end_date_brt, moeda });
+    res.json(r);
+  } catch (e) {
+    console.error('[hotmart-listar-reembolsos] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ---------- G4 — Verificar assinatura ativa ----------
+app.post('/api/hotmart/verificar-assinatura', async (req, res) => {
+  try {
+    const { email, produto_id } = req.body || {};
+    if (!email) return res.status(400).json({ ok: false, error: 'email obrigatório' });
+    const r = await hotmartHibrido.verificarAssinaturaAtiva({ email, produto_id });
+    res.json(r);
+  } catch (e) {
+    console.error('[hotmart-verificar-assinatura] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ---------- G5 — Aprovar reembolso (escrita + Camada B) ----------
+app.post('/api/hotmart/reembolsar', async (req, res) => {
+  try {
+    const { transaction, origem_canal = 'chat-web', forcar = false } = req.body || {};
+    if (!transaction) return res.status(400).json({ ok: false, error: 'transaction obrigatório' });
+
+    const t0 = Date.now();
+    if (forcar === true) {
+      const r = await hotmart.reembolsarVenda({ transaction });
+      const { hashAcao, registrar } = require('./lib/anti-duplicacao');
+      const hash = hashAcao({ tipo_acao: 'hotmart-refund', destino: transaction, corpo: 'refund' });
+      await registrar({
+        tipo_acao: 'hotmart-refund', hash_acao: hash, destino: transaction,
+        resumo: `Refund ${transaction}`, origem_canal, status: 'sucesso',
+        motivo: 'forcar=true', metadata: { resultado: r },
+      }).catch(() => {});
+      return res.json({ ok: true, ...r, latencia_ms: Date.now() - t0, forcado: true });
+    }
+
+    const { executarComCheck } = require('./lib/anti-duplicacao');
+    const result = await executarComCheck({
+      tipo_acao: 'hotmart-refund',
+      destino: transaction,
+      corpo: 'refund',
+      resumo: `Refund ${transaction}`,
+      origem_canal,
+      janela_min: 60, // janela maior — refund acidental é catastrófico
+      fn: async () => hotmart.reembolsarVenda({ transaction }),
+    });
+
+    if (result.bloqueada) {
+      console.warn(`[hotmart-refund] BLOQUEADO duplicata pra ${transaction} (${result.minutos_atras}min atrás)`);
+      return res.status(409).json({ ok: false, bloqueado_duplicata: true, alerta: result.alerta, anterior_em: result.anterior_em, minutos_atras: result.minutos_atras });
+    }
+    res.json({ ok: true, ...result.resultado, latencia_ms: Date.now() - t0 });
+  } catch (e) {
+    console.error('[hotmart-refund] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ---------- G6 — Gerenciar assinatura (cancelar/reativar/mudar dia) ----------
+app.post('/api/hotmart/cancelar-assinatura', async (req, res) => {
+  try {
+    const { subscriber_code, send_mail = true, origem_canal = 'chat-web', forcar = false } = req.body || {};
+    if (!subscriber_code) return res.status(400).json({ ok: false, error: 'subscriber_code obrigatório' });
+
+    if (forcar === true) {
+      const r = await hotmart.cancelarAssinatura({ subscriber_code, send_mail });
+      return res.json({ ok: true, ...r, forcado: true });
+    }
+
+    const { executarComCheck } = require('./lib/anti-duplicacao');
+    const codes = Array.isArray(subscriber_code) ? subscriber_code.join(',') : subscriber_code;
+    const result = await executarComCheck({
+      tipo_acao: 'hotmart-cancel-sub',
+      destino: codes,
+      corpo: `cancel send_mail=${send_mail}`,
+      resumo: `Cancelar ${codes}`,
+      origem_canal,
+      janela_min: 30,
+      fn: async () => hotmart.cancelarAssinatura({ subscriber_code, send_mail }),
+    });
+    if (result.bloqueada) return res.status(409).json({ ok: false, bloqueado_duplicata: true, ...result });
+    res.json({ ok: true, ...result.resultado });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/hotmart/reativar-assinatura', async (req, res) => {
+  try {
+    const { subscriber_code, charge = false } = req.body || {};
+    if (!subscriber_code) return res.status(400).json({ ok: false, error: 'subscriber_code obrigatório' });
+    const r = await hotmart.reativarAssinatura({ subscriber_code, charge });
+    res.json({ ok: true, ...r });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/hotmart/mudar-dia-cobranca', async (req, res) => {
+  try {
+    const { subscriber_code, due_day } = req.body || {};
+    if (!subscriber_code || !due_day) return res.status(400).json({ ok: false, error: 'subscriber_code e due_day obrigatórios' });
+    const r = await hotmart.mudarDiaCobranca({ subscriber_code, due_day });
+    res.json({ ok: true, ...r });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ---------- G7 — Cupom (criar/listar/deletar) ----------
+app.post('/api/hotmart/cupom-listar', async (req, res) => {
+  try {
+    const { product_id } = req.body || {};
+    if (!product_id) return res.status(400).json({ ok: false, error: 'product_id obrigatório' });
+    const r = await hotmart.listarCupons({ product_id });
+    res.json({ ok: true, ...r });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/hotmart/cupom-criar', async (req, res) => {
+  try {
+    const { product_id, code, discount, start_date, end_date, max_uses, offer_ids, origem_canal = 'chat-web', forcar = false } = req.body || {};
+    if (!product_id || !code || discount == null) return res.status(400).json({ ok: false, error: 'product_id, code, discount obrigatórios' });
+
+    if (forcar === true) {
+      const r = await hotmart.criarCupom({ product_id, code, discount, start_date, end_date, max_uses, offer_ids });
+      return res.json({ ok: true, ...r, forcado: true });
+    }
+
+    const { executarComCheck } = require('./lib/anti-duplicacao');
+    const result = await executarComCheck({
+      tipo_acao: 'hotmart-cupom-criar',
+      destino: `${product_id}:${code}`,
+      corpo: `discount=${discount}`,
+      resumo: `Cupom ${code} ${(discount * 100).toFixed(0)}%`,
+      origem_canal,
+      janela_min: 60,
+      fn: async () => hotmart.criarCupom({ product_id, code, discount, start_date, end_date, max_uses, offer_ids }),
+    });
+    if (result.bloqueada) return res.status(409).json({ ok: false, bloqueado_duplicata: true, ...result });
+    res.json({ ok: true, ...result.resultado });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/hotmart/cupom-deletar', async (req, res) => {
+  try {
+    const { coupon_id } = req.body || {};
+    if (!coupon_id) return res.status(400).json({ ok: false, error: 'coupon_id obrigatório' });
+    const r = await hotmart.deletarCupom({ coupon_id });
+    res.json({ ok: true, ...r });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ---------- G8 — Notificar suporte interno (acesso pendente Princípia Pay) ----------
+// Caso de uso: aluno comprou via Princípia Pay (boleto financiado), Hotmart NÃO
+// vai liberar acesso automático. Atendente abre ticket aqui pra suporte humano
+// cadastrar manualmente. Notifica Discord + grava em pinguim.acessos_pendentes.
+app.post('/api/hotmart/notificar-acesso-pendente', async (req, res) => {
+  try {
+    const {
+      email_aluno,
+      nome_aluno,
+      produto_hotmart_id,
+      produto_hotmart_nome,
+      origem_pagamento = 'principia-pay',
+      evidencia,
+      cliente_id,
+      origem_canal = 'chat-web',
+    } = req.body || {};
+    if (!email_aluno) return res.status(400).json({ ok: false, error: 'email_aluno obrigatório' });
+    if (!produto_hotmart_id && !produto_hotmart_nome) return res.status(400).json({ ok: false, error: 'produto_hotmart_id ou produto_hotmart_nome obrigatório' });
+
+    const { executarComCheck } = require('./lib/anti-duplicacao');
+    const destino = `${email_aluno}:${produto_hotmart_id || produto_hotmart_nome}`;
+
+    const result = await executarComCheck({
+      cliente_id,
+      tipo_acao: 'hotmart-acesso-pendente',
+      destino,
+      corpo: JSON.stringify({ origem_pagamento, evidencia }),
+      resumo: `Acesso pendente: ${email_aluno} → ${produto_hotmart_nome || produto_hotmart_id}`,
+      origem_canal,
+      janela_min: 60 * 24, // 24h — não notificar 2x o mesmo aluno-produto no dia
+      fn: async () => {
+        // Grava registro
+        const cid = await db.resolverClienteId(cliente_id);
+        const sqlIns = `
+          INSERT INTO pinguim.acessos_pendentes
+            (cliente_id, email_aluno, nome_aluno, produto_hotmart_id, produto_hotmart_nome,
+             origem_pagamento, evidencia, status, metadata)
+          VALUES
+            ('${cid}', '${email_aluno.replace(/'/g, "''")}', ${nome_aluno ? "'" + nome_aluno.replace(/'/g, "''") + "'" : 'NULL'},
+             ${produto_hotmart_id ? "'" + produto_hotmart_id.replace(/'/g, "''") + "'" : 'NULL'},
+             ${produto_hotmart_nome ? "'" + produto_hotmart_nome.replace(/'/g, "''") + "'" : 'NULL'},
+             '${origem_pagamento.replace(/'/g, "''")}',
+             ${evidencia ? "'" + JSON.stringify(evidencia).replace(/'/g, "''") + "'::jsonb" : "'{}'::jsonb"},
+             'pendente',
+             '{}'::jsonb)
+          RETURNING id, criado_em;
+        `;
+        const insR = await db.rodarSQL(sqlIns);
+        const registro = Array.isArray(insR) && insR[0] ? insR[0] : null;
+
+        // TODO V2.15 hybrid-ops-squad: notificar Discord automaticamente (canal #acessos-pendentes)
+        // Por enquanto retorna registro pra agente avisar o sócio.
+        return {
+          id: registro?.id,
+          criado_em: registro?.criado_em,
+          status: 'pendente',
+          aviso: 'Registro criado em pinguim.acessos_pendentes. Notificação Discord será adicionada quando hybrid-ops-squad estiver populada (V2.15).',
+        };
+      },
+    });
+
+    if (result.bloqueada) return res.status(409).json({ ok: false, bloqueado_duplicata: true, ...result });
+    res.json({ ok: true, ...result.resultado });
+  } catch (e) {
+    console.error('[hotmart-acesso-pendente] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
 // V2.14 Frente C1 — endpoint RELATORIO EXECUTIVO (sob demanda)
 // ============================================================
 // Mesma funcao chamada pelo cron das 8h (Frente C2 futura) e por on-demand
