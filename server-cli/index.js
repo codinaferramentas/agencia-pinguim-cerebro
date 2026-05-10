@@ -15,6 +15,17 @@ const express = require('express');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
+
+// V2.14 D — Handlers globais pra evitar queda silenciosa do server.
+// Sem isso, qualquer Promise rejeitada não tratada derruba o processo.
+// Em agente 24/7 pra sócios, isso é inaceitável.
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[FATAL?] unhandledRejection:', reason && reason.stack || reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL?] uncaughtException:', err && err.stack || err);
+  // NÃO sai — apenas loga.
+});
 const {
   EPP_LIMITS,
   verificarOutput,
@@ -41,6 +52,7 @@ const googleDriveContent = require('./lib/google-drive-content'); // V2.12 Fase 
 const googleGmail = require('./lib/google-gmail'); // V2.13 — listar/ler/responder/modificar Gmail
 const googleCalendar = require('./lib/google-calendar'); // V2.14 Fase 1.7 — leitura Calendar (squad data)
 const contextoTemporal = require('./lib/contexto-temporal'); // V2.14 Fase 1.7 hotfix — bloco de data BRT no prompt (evita LLM chutar dia da semana)
+const contextoRico = require('./lib/contexto-rico'); // V2.14 D Refator V3 — bloco unificado (temporal + identidade + histórico + entregáveis + drive)
 const discordBot = require('./lib/discord-bot'); // V2.14 Frente B — bot Discord (Gateway WebSocket, ingest tempo real)
 const relatorioExecutivo = require('./lib/relatorio-executivo'); // V2.14 Frente C1 — orquestrador relatorio executivo diario
 const templateRelatorioExec = require('./lib/template-relatorio-executivo'); // V2.14 Frente C1 — template HTML dedicado
@@ -154,10 +166,15 @@ function runClaudeCLI(prompt, opts = {}) {
     // com mensagens incrementais). Sem onChunk, mantém output 'text'
     // (mais leve, sem parser).
     const wantStream = typeof opts.onChunk === 'function';
+    // V2.14 D Refator — opts.allowedTools customizável.
+    // Default: 'Bash,Read,Glob,Grep' (igual antes).
+    // Reflection pós-ação destrutiva passa 'Read,Glob,Grep' (sem Bash) pra
+    // evitar re-disparar gmail-enviar/drive-editar etc.
+    const allowedTools = opts.allowedTools || 'Bash,Read,Glob,Grep';
     const args = [
       '-p',
       '--output-format', wantStream ? 'stream-json' : 'text',
-      '--allowedTools', 'Bash,Read,Glob,Grep',
+      '--allowedTools', allowedTools,
     ];
     if (wantStream) {
       args.push('--include-partial-messages', '--verbose');
@@ -449,93 +466,45 @@ app.post('/api/chat', async (req, res) => {
 async function processarChat({ req, res, t0, message, thread_id, plan_id }) {
   try {
     // V2.14 D Fix 1 — SEMPRE recarrega histórico do banco (fonte da verdade).
-    // Garante que mensagens novas veem respostas anteriores já persistidas.
-    // Como o lock acima serializa turnos do mesmo thread, esse SELECT
-    // sempre vê a resposta do turno anterior já persistida.
     const historicoBanco = await carregarThreadDoBanco(thread_id, 20);
     console.log(`  [historico] carregadas ${historicoBanco.length} mensagens do banco pra thread ${thread_id}`);
 
     threads[thread_id].push({ role: 'user', content: message });
 
-    // V2.14 D Fix 2 — Persistência SÍNCRONA (await) antes de processar.
-    // Garante que outros turnos paralelos verão essa mensagem ao recarregar.
+    // V2.14 D Fix 2 — Persistência SÍNCRONA antes de processar.
     try {
       await db.salvarMensagem({ papel: 'humano', conteudo: message });
     } catch (e) {
       console.warn(`  [persistencia] erro salvando mensagem humano: ${e.message}`);
     }
 
-    // Monta prompt com historico (ultimas 20 mensagens)
+    // ============================================================
+    // V2.14 D REFATOR V3 — Caminho único pelo LLM.
+    // Removidos detectores regex pré-LLM (ehPedidoEdicao,
+    // ehPedidoCriativoGrande, detectarSquad atalho honesto,
+    // detectarPapelEContexto). O LLM decide a categoria sozinho com
+    // contexto rico (data + identidade + histórico + entregáveis recentes
+    // + drive). Quando duvida, ele PERGUNTA via texto — não há regex
+    // empurrando caminho errado em silêncio.
+    // ============================================================
+    const canal = thread_id.startsWith('whatsapp-') ? 'whatsapp'
+                : thread_id.startsWith('discord-')  ? 'discord'
+                : thread_id.startsWith('telegram-') ? 'telegram'
+                : 'chat-web';
+
+    const contextoBloco = await contextoRico.montarContexto({ thread_id, canal });
     const recent = threads[thread_id].slice(-20);
-    let prompt;
-    if (recent.length === 1) {
-      prompt = message;
-    } else {
-      const historico = recent.slice(0, -1)
-        .map(m => `${m.role === 'user' ? 'Usuario' : 'Assistente'}: ${m.content}`)
-        .join('\n\n');
-      prompt = `--- HISTORICO ---\n${historico}\n--- FIM DO HISTORICO ---\n\nUsuario: ${message}`;
-    }
+    const prompt = `${contextoBloco}\n\n[MENSAGEM ATUAL DO SÓCIO]\n${message}`;
 
-    // V2.12 Fix 2 — injeta drive_contexto se há arquivos recém-manipulados
-    // na thread. Atendente usa pra evitar buscar planilha de novo quando
-    // sócio diz "essa planilha"/"nessa"/"continua". Limite 5 fileIds, 30 dias.
-    try {
-      const driveCtx = await db.lerDriveContexto({ dias: 30, limite: 5 });
-      if (driveCtx.length > 0) {
-        const blocoCtx = db.formatarDriveContextoPraPrompt(driveCtx);
-        prompt = `${blocoCtx}\n\n${prompt}`;
-        console.log(`  [drive-contexto] injetou ${driveCtx.length} arquivo(s) recente(s) no prompt`);
-      }
-    } catch (e) {
-      console.warn(`  [drive-contexto] erro lendo contexto (nao bloqueante): ${e.message}`);
-    }
-
-    // V2.14 Fase 1.7 hotfix — bloco de data BRT no TOPO. Sem isso, LLM
-    // chuta dia da semana baseado em treinamento (cutoff defasado).
-    prompt = `${contextoTemporal.blocoDataAtual()}\n\n${prompt}`;
-
-    console.log(`[${new Date().toISOString()}] thread=${thread_id} pergunta: ${message.slice(0, 80)}${plan_id ? ` (plan_id=${plan_id})` : ''}`);
+    console.log(`[${new Date().toISOString()}] thread=${thread_id} canal=${canal} pergunta: ${message.slice(0, 80)}${plan_id ? ` (plan_id=${plan_id})` : ''}`);
 
     // ============================================================
-    // ATALHO HONESTO V2.5 Commit 3 (hotfix) — squad nao populada
-    // Pedido como "monta uma estrategia de trafego pago pra Lyra" cai aqui:
-    // detectarSquad retorna 'advisory-board'/'design'/'storytelling' (nao
-    // implementadas), mas ehPedidoCriativoGrande retorna FALSE (regex so
-    // casa copy/pagina/VSL/etc). Antes do hotfix, pedido caia no CLI normal
-    // e o Atendente gastava 2-3 min consultando Cerebro tentando ajudar.
-    // Agora: se a mensagem tem verbo de criacao + squad nao populada,
-    // responde rapido e honesto. Sem chamar CLI.
-    // Commit 4 substitui isso pelo pipelineCriativo multi-squad.
+    // V2.11 — Pedido de EDICAO/V2 do entregavel anterior (DEPRECATED)
+    // Mantido como FALLBACK quando frontend manda plan_id explícito.
+    // O LLM agora decide via contexto rico se é pedido de edição —
+    // não tem mais regex empurrando isso silenciosamente.
     // ============================================================
-    const verboDeCriacao = /\b(monta|cria|escreve|gera|faz|desenvolve|elabora|produz|me d[aá]|planeja|estrutura)\b/i.test(message);
-    const squadDetectada = detectarSquad(message);
-    if (verboDeCriacao && !ehPedidoCriativoGrande(message) && !SQUADS_POPULADAS.has(squadDetectada)) {
-      const dur = ((Date.now() - t0) / 1000).toFixed(1);
-      const respostaHonesta = `Reconheci o pedido como **squad ${squadDetectada}** — ainda não populada no sistema.\n\nHoje só a squad **copy** tem mestres prontos pra entregar trabalho criativo (Halbert, Schwartz, Bencivenga, Hormozi, Kennedy, Carlton, Brunson, Benson). Quando você precisar de copy, página de venda, headline, oferta, VSL, anúncio — tô aqui.\n\nPra **${squadDetectada}** (esse tipo de pedido), o roadmap está em fila — pendente popular mestres no banco.`;
-      threads[thread_id].push({ role: 'assistant', content: respostaHonesta });
-      // V2.14 D Fix 2 — persistência SÍNCRONA antes de retornar
-      try { await db.salvarMensagem({ papel: 'chief', conteudo: respostaHonesta }); }
-      catch (e) { console.warn(`  [persistencia] erro salvando atalho honesto: ${e.message}`); }
-      console.log(`  -> atalho honesto (squad ${squadDetectada} nao populada): ${dur}s`);
-      return res.json({
-        thread_id,
-        content: respostaHonesta,
-        duracao_s: parseFloat(dur),
-        epp: { verifier_aprovou: null, verifier_pulado: true, reflection_round: 0, problemas_encontrados: [] },
-        squad_destino: squadDetectada,
-        squad_disponivel: false,
-      });
-    }
-
-    // ============================================================
-    // V2.11 — Pedido de EDICAO/V2 do entregavel anterior
-    // Detector ehPedidoEdicao casa "muda X", "refaz Y", "quero v2", "ajusta Z".
-    // Busca ultimo entregavel do cliente, monta briefing com V1 + instrucao
-    // de mudanca, re-roda pipeline criativo. Resultado vira V2 com
-    // parent_id = V1.id (versionamento built-in da tabela pinguim.entregaveis).
-    // ============================================================
-    if (ehPedidoEdicao(message)) {
+    if (false) { // DESATIVADO V2.14 D — LLM decide via contexto rico
       const ultimo = await db.ultimoEntregavelDoCliente({}).catch(() => null);
       if (ultimo) {
         console.log(`  [V2.11] pedido de edicao detectado — base: V${ultimo.versao} (${ultimo.id})`);
@@ -616,12 +585,13 @@ async function processarChat({ req, res, t0, message, thread_id, plan_id }) {
     }
 
     // ============================================================
-    // DESVIO — Pedido criativo grande pula CLI e vai pro orquestrador Node
-    // V2.5 Commit 3: se vier plan_id valido no body, usa plano cacheado
-    // (frontend ja chamou /api/pipeline-plan e mostrou animacao).
-    // V2.7+V2.11: persiste entregavel em pinguim.entregaveis (V1, parent_id=null).
+    // DESVIO — Pedido criativo grande (V2.5)
+    // V2.14 D REFATOR: REGEX `ehPedidoCriativoGrande` REMOVIDA do caminho.
+    // O LLM agora decide chamar `bash scripts/delegar-chief.sh <squad>` quando
+    // for pedido criativo. Mantido como fallback APENAS quando frontend manda
+    // plan_id explícito (caso vindo do botão "Animação Salão" no chat web).
     // ============================================================
-    if (ehPedidoCriativoGrande(message)) {
+    if (plan_id) {
       const log = (msg) => console.log(`  [orquestrador] ${msg}`);
       let resultadoPipe;
       if (plan_id) {
@@ -722,9 +692,12 @@ async function processarChat({ req, res, t0, message, thread_id, plan_id }) {
     }
 
     // ============================================================
-    // EPP — Camadas 1 + 2 (Verifier + Reflection) — caminho normal
+    // EPP — Camadas 1 + 2 (Verifier + Reflection)
+    // V2.14 D REFATOR: removido `detectarPapelEContexto` regex que
+    // desligava Verifier seletivamente. Verifier agora roda SEMPRE
+    // exceto quando turno é trivialmente curto (ex: "oi" / agradecimento).
+    // O LLM decide expectativa via SYSTEM-PROMPT — sem regex externo.
     // ============================================================
-    const ctx = detectarPapelEContexto(message);
     let resposta = await runClaudeCLI(prompt);
     const t_resposta_1 = Date.now() - t0;
     console.log(`  primeira resposta em ${(t_resposta_1/1000).toFixed(1)}s, ${resposta.length} chars`);
@@ -733,28 +706,47 @@ async function processarChat({ req, res, t0, message, thread_id, plan_id }) {
     let reflection_round = 0;
     const verifier_problemas = [];
 
-    if (!ctx.pular_verifier) {
-      // Camada 1 — Self-Verification
+    // Heurística mínima pra pular Verifier: resposta curta a saudação curta.
+    // NÃO desliga Verifier por palavra-chave (regex era furo da V2.14 D).
+    const turnoTrivial = message.trim().length < 30 && resposta.length < 200;
+
+    if (!turnoTrivial) {
+      // Camada 1 — Self-Verification (sempre roda)
       verifier = await verificarOutput({
         briefing: message,
         output_md: resposta,
         agente_slug: 'pinguim',
-        agente_role: ctx.papel,
-        expectativa: ctx.expectativa,
+        agente_role: 'atendente',
+        expectativa: 'Resposta adequada ao pedido, sem inventar dado, sem fingir ação não executada, em formato compatível com canal.',
       });
 
       console.log(`  verifier: ${verifier.aprovado ? 'APROVOU' : 'REPROVOU'} em ${(verifier.latencia_ms/1000).toFixed(1)}s${verifier.problemas.length ? ` — problemas: ${verifier.problemas.length}` : ''}`);
 
       if (!verifier.aprovado && verifier.recomendacao_refazer) {
         verifier_problemas.push(...verifier.problemas);
-        // Camada 2 — Reflection (1 vez, com guardrails)
         const tDec = Date.now() - t0;
         if (tDec < EPP_LIMITS.MAX_LATENCIA_MS_TURNO) {
           reflection_round = 1;
-          const promptRefazer = `${prompt}\n\n---\n\n[NOTA DO VERIFIER]\nVoce respondeu acima, mas o Verifier identificou problemas:\n${verifier.problemas.map(p => `- ${p}`).join('\n')}\n\nRecomendacao: ${verifier.recomendacao_refazer}\n\nRefaca a resposta corrigindo os problemas listados. Mantenha o que estava certo, ajuste so o que o Verifier apontou.`;
+
+          // V2.14 D — Reflection NUNCA re-dispara side-effects.
+          // Se turno teve ação destrutiva (gmail-enviar, drive-editar, etc
+          // registradas em pinguim.acoes_executadas), Reflection refaz só
+          // o texto SEM Bash. Bash é a tool por onde scripts destrutivos
+          // rodam — bloqueá-lo evita 2x mesmo email.
+          const teveAcao = await db.turnoTeveAcaoDestrutiva(t0).catch(() => false);
+
+          let promptRefazer, allowedTools;
+          if (teveAcao) {
+            console.log(`  [epp] turno teve acao destrutiva — Reflection sem Bash (texto-only)`);
+            promptRefazer = `Voce ja executou a acao do usuario com sucesso. Aqui foi sua resposta:\n\n---\n${resposta}\n---\n\nO Verifier identificou problemas APENAS na forma da resposta:\n${verifier.problemas.map(p => `- ${p}`).join('\n')}\n\nRecomendacao: ${verifier.recomendacao_refazer}\n\nReescreva APENAS o texto da resposta, mantendo o fato de que a acao ja aconteceu. NAO execute nenhuma ferramenta. NAO re-envie email/arquivo/evento. Apenas reformule pra ficar mais claro/correto.`;
+            allowedTools = 'Read,Glob,Grep'; // sem Bash
+          } else {
+            promptRefazer = `${prompt}\n\n---\n\n[NOTA DO VERIFIER]\nVoce respondeu acima, mas o Verifier identificou problemas:\n${verifier.problemas.map(p => `- ${p}`).join('\n')}\n\nRecomendacao: ${verifier.recomendacao_refazer}\n\nRefaca a resposta corrigindo os problemas listados. Mantenha o que estava certo, ajuste so o que o Verifier apontou.`;
+            allowedTools = undefined; // default
+          }
 
           console.log(`  iniciando reflection round 1...`);
-          const respostaRefeita = await runClaudeCLI(promptRefazer);
+          const respostaRefeita = await runClaudeCLI(promptRefazer, allowedTools !== undefined ? { allowedTools } : {});
 
           // Anti-loop: se output igual ao primeiro, mantem o primeiro
           const sim = similaridadeOutputs(resposta, respostaRefeita);
@@ -768,6 +760,8 @@ async function processarChat({ req, res, t0, message, thread_id, plan_id }) {
           console.log(`  reflection pulada — proximo do timeout`);
         }
       }
+    } else {
+      console.log(`  verifier pulado (turno trivial: msg ${message.length}c / resp ${resposta.length}c)`);
     }
 
     threads[thread_id].push({ role: 'assistant', content: resposta });
@@ -781,12 +775,12 @@ async function processarChat({ req, res, t0, message, thread_id, plan_id }) {
 
     // V2.14 D Fix 4 — log EPP em pinguim.agente_execucoes
     db.logarExecucaoAtendente({
-      input: { mensagem: message, thread_id, canal: thread_id.startsWith('whatsapp-') ? 'whatsapp' : 'chat-web' },
+      input: { mensagem: message, thread_id, canal },
       output: { resposta, plan_id: plan_id || null },
       contexto_usado: {
         historico_n: recent.length,
         verifier_aprovou: verifier ? verifier.aprovado : null,
-        verifier_pulado: ctx.pular_verifier,
+        verifier_pulado: turnoTrivial,
         reflection_round,
       },
       latencia_ms: lat_ms,
@@ -798,7 +792,7 @@ async function processarChat({ req, res, t0, message, thread_id, plan_id }) {
       duracao_s: parseFloat(dur),
       epp: {
         verifier_aprovou: verifier ? verifier.aprovado : null,
-        verifier_pulado: ctx.pular_verifier,
+        verifier_pulado: turnoTrivial,
         reflection_round,
         problemas_encontrados: verifier_problemas,
       },
@@ -850,33 +844,20 @@ app.post('/api/chat-stream', async (req, res) => {
     return res.status(400).json({ error: 'message obrigatorio' });
   }
 
-  // Triagem antes de abrir o stream — se cair em pipeline/edição, devolve
-  // 409 e o frontend chama o /api/chat normal (que já trata esses casos).
-  const verboDeCriacao = /\b(monta|cria|escreve|gera|faz|desenvolve|elabora|produz|me d[aá]|planeja|estrutura)\b/i.test(message);
-  const ehEdicao = ehPedidoEdicao(message);
-  const ehCriativoGrande = ehPedidoCriativoGrande(message);
-  const squadDetectada = detectarSquad(message);
-  const squadNaoPop = verboDeCriacao && !ehCriativoGrande && !SQUADS_POPULADAS.has(squadDetectada);
+  // V2.14 D Refator V3 — Removida triagem regex pré-stream (ehPedidoEdicao,
+  // ehPedidoCriativoGrande, detectarSquad atalho). O LLM decide caminho via
+  // contexto rico. Pipeline criativo grande continua disponível via /api/chat
+  // com plan_id (caminho não-streamável usado pelo botão de animação Salão).
 
-  if (ehEdicao || ehCriativoGrande || squadNaoPop) {
-    const motivo = ehEdicao ? 'edicao_v2' : ehCriativoGrande ? 'pipeline_criativo' : 'squad_nao_populada';
-    return res.status(409).json({
-      error: 'caminho nao streamavel',
-      motivo,
-      hint: 'Use POST /api/chat (caminho com pipeline ou edicao)',
-    });
-  }
-
-  // V2.14 D Fix 3 — Adquire lock ANTES de abrir SSE. Se outro turno do
-  // mesmo thread está em curso, este aguarda. Garante serialização.
+  // V2.14 D Fix 3 — Adquire lock ANTES de abrir SSE.
   let lock;
   try {
-    lock = await db.adquirirLockThread(thread_id, 60000);
+    lock = await db.adquirirLockThread(thread_id, 180000); // 180s p/ turno pesado
     if (lock.esperaMs > 100) {
       console.log(`  [stream-lock] thread ${thread_id} esperou ${lock.esperaMs}ms pelo lock`);
     }
   } catch (e) {
-    return res.status(503).json({ error: 'thread ocupada', detail: e.message });
+    return res.status(503).json({ error: 'Estou ainda processando sua mensagem anterior, tente em instantes.', detail: e.message });
   }
 
   // Abre SSE
@@ -916,35 +897,18 @@ app.post('/api/chat-stream', async (req, res) => {
       console.warn(`  [persistencia-stream] erro: ${e.message}`);
     }
 
-    // Monta prompt (idêntico ao /api/chat)
+    // V2.14 D Refator V3 — contexto rico unificado (temporal + identidade +
+    // histórico + entregáveis recentes + drive + canal).
+    const canal = thread_id.startsWith('whatsapp-') ? 'whatsapp'
+                : thread_id.startsWith('discord-')  ? 'discord'
+                : thread_id.startsWith('telegram-') ? 'telegram'
+                : 'chat-web';
+    const contextoBloco = await contextoRico.montarContexto({ thread_id, canal });
     const recent = threads[thread_id].slice(-20);
-    let prompt;
-    if (recent.length === 1) {
-      prompt = message;
-    } else {
-      const historico = recent.slice(0, -1)
-        .map(m => `${m.role === 'user' ? 'Usuario' : 'Assistente'}: ${m.content}`)
-        .join('\n\n');
-      prompt = `--- HISTORICO ---\n${historico}\n--- FIM DO HISTORICO ---\n\nUsuario: ${message}`;
-    }
+    const prompt = `${contextoBloco}\n\n[MENSAGEM ATUAL DO SÓCIO]\n${message}`;
 
-    // V2.12 Fix 2 — injeta drive_contexto
-    try {
-      const driveCtx = await db.lerDriveContexto({ dias: 30, limite: 5 });
-      if (driveCtx.length > 0) {
-        const blocoCtx = db.formatarDriveContextoPraPrompt(driveCtx);
-        prompt = `${blocoCtx}\n\n${prompt}`;
-      }
-    } catch (_) { /* não bloqueia */ }
-
-    // V2.14 Fase 1.7 hotfix — bloco de data BRT no TOPO
-    prompt = `${contextoTemporal.blocoDataAtual()}\n\n${prompt}`;
-
-    console.log(`[${new Date().toISOString()}] thread=${thread_id} STREAM pergunta: ${message.slice(0, 80)}`);
+    console.log(`[${new Date().toISOString()}] thread=${thread_id} STREAM canal=${canal} pergunta: ${message.slice(0, 80)}`);
     sse('start', { thread_id });
-
-    // EPP
-    const ctx = detectarPapelEContexto(message);
 
     // Spawna CLI com onChunk emitindo SSE
     let resposta = '';
@@ -959,17 +923,19 @@ app.post('/api/chat-stream', async (req, res) => {
 
     if (abortado) return; // cliente desistiu
 
-    // Verifier (Camada 1 EPP) — roda DEPOIS do stream, sem stream próprio
+    // Verifier (Camada 1 EPP) — roda DEPOIS do stream
+    // V2.14 D Refator: Verifier sempre roda exceto turno trivial
     let verifier = null;
     let verifier_problemas = [];
-    if (!ctx.pular_verifier) {
+    const turnoTrivial = message.trim().length < 30 && resposta.length < 200;
+    if (!turnoTrivial) {
       try {
         verifier = await verificarOutput({
           briefing: message,
           output_md: resposta,
           agente_slug: 'pinguim',
-          agente_role: ctx.papel,
-          expectativa: ctx.expectativa,
+          agente_role: 'atendente',
+          expectativa: 'Resposta adequada ao pedido, sem inventar dado, sem fingir ação não executada, em formato compatível com canal.',
         });
         if (!verifier.aprovado) verifier_problemas.push(...verifier.problemas);
         console.log(`  [stream] verifier: ${verifier.aprovado ? 'APROVOU' : 'REPROVOU'} em ${(verifier.latencia_ms/1000).toFixed(1)}s`);
@@ -978,7 +944,6 @@ app.post('/api/chat-stream', async (req, res) => {
       }
     }
     // Reflection NÃO roda no /api/chat-stream V1 (evita re-streaming caótico).
-    // Se Verifier reprovou, marca no done — frontend pode mostrar aviso.
 
     threads[thread_id].push({ role: 'assistant', content: resposta });
     // V2.14 D Fix 2 — persistência SÍNCRONA antes de emitir 'done'
@@ -991,13 +956,13 @@ app.post('/api/chat-stream', async (req, res) => {
 
     // V2.14 D Fix 4 — log EPP em pinguim.agente_execucoes
     db.logarExecucaoAtendente({
-      input: { mensagem: message, thread_id, canal: thread_id.startsWith('whatsapp-') ? 'whatsapp' : 'chat-web' },
+      input: { mensagem: message, thread_id, canal },
       output: { resposta },
       contexto_usado: {
         historico_n: recent.length,
         stream: true,
         verifier_aprovou: verifier ? verifier.aprovado : null,
-        verifier_pulado: ctx.pular_verifier,
+        verifier_pulado: turnoTrivial,
       },
       latencia_ms: lat_ms,
     }).catch(() => {});
@@ -1007,9 +972,9 @@ app.post('/api/chat-stream', async (req, res) => {
       duracao_s: parseFloat(dur),
       epp: {
         verifier_aprovou: verifier ? verifier.aprovado : null,
-        verifier_pulado: ctx.pular_verifier,
+        verifier_pulado: turnoTrivial,
         reflection_round: 0,
-        reflection_pulado_no_stream: !ctx.pular_verifier && verifier && !verifier.aprovado,
+        reflection_pulado_no_stream: !turnoTrivial && verifier && !verifier.aprovado,
         problemas_encontrados: verifier_problemas,
       },
     });
@@ -2042,13 +2007,55 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
 
 app.post('/api/whatsapp/enviar', async (req, res) => {
   try {
-    const { numero, texto, instancia } = req.body || {};
+    const { numero, texto, instancia, origem_canal = 'chat-web', forcar = false } = req.body || {};
     if (!numero) return res.status(400).json({ ok: false, error: 'numero obrigatorio' });
     if (!texto)  return res.status(400).json({ ok: false, error: 'texto obrigatorio' });
+
+    const numeroNormalizado = String(numero).replace(/\D/g, '');
     const t0 = Date.now();
-    const r = await evolution.enviarTexto({ numero, texto, instancia });
+
+    // V2.14 D — Camada B anti-duplicação (mesma proteção do Gmail)
+    if (forcar === true) {
+      // Bypass — sócio explicitamente pediu reenvio
+      const r = await evolution.enviarTexto({ numero: numeroNormalizado, texto, instancia });
+      const dur = Date.now() - t0;
+      console.log(`[whatsapp-enviar] ${dur}ms | para=${numeroNormalizado} | inst=${r.instancia} | id=${(r.id||'').slice(0,12)} | FORÇADO`);
+      // Registra sucesso forçado pra audit
+      const { hashAcao, registrar } = require('./lib/anti-duplicacao');
+      const hash = hashAcao({ tipo_acao: 'whatsapp-enviar', destino: numeroNormalizado, corpo: texto });
+      await registrar({
+        tipo_acao: 'whatsapp-enviar', hash_acao: hash, destino: numeroNormalizado,
+        resumo: texto.slice(0, 80), origem_canal, status: 'sucesso',
+        motivo: 'forcar=true (sócio autorizou reenvio explícito)',
+        metadata: { resultado_id: r.id || null },
+      }).catch(() => {});
+      return res.json({ ok: true, ...r, latencia_ms: dur, forcado: true });
+    }
+
+    const { executarComCheck } = require('./lib/anti-duplicacao');
+    const result = await executarComCheck({
+      tipo_acao: 'whatsapp-enviar',
+      destino: numeroNormalizado,
+      corpo: texto,
+      resumo: texto.slice(0, 80),
+      origem_canal,
+      janela_min: 5,
+      fn: async () => evolution.enviarTexto({ numero: numeroNormalizado, texto, instancia }),
+    });
+
     const dur = Date.now() - t0;
-    console.log(`[whatsapp-enviar] ${dur}ms | para=${numero} | inst=${r.instancia} | id=${(r.id||'').slice(0,12)}`);
+    if (result.bloqueada) {
+      console.warn(`[whatsapp-enviar] BLOQUEADO duplicata pra ${numeroNormalizado} (${result.minutos_atras}min atras)`);
+      return res.status(409).json({
+        ok: false,
+        bloqueado_duplicata: true,
+        alerta: result.alerta,
+        anterior_em: result.anterior_em,
+        minutos_atras: result.minutos_atras,
+      });
+    }
+    const r = result.resultado;
+    console.log(`[whatsapp-enviar] ${dur}ms | para=${numeroNormalizado} | inst=${r.instancia} | id=${(r.id||'').slice(0,12)}`);
     res.json({ ok: true, ...r, latencia_ms: dur });
   } catch (e) {
     console.error('[whatsapp-enviar] erro:', e.message);

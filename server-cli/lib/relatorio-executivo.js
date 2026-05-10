@@ -137,26 +137,45 @@ async function modulo_financeiro({ janela_horas, dia_alvo_brt, moeda = 'BRL' }) 
 // ============================================================
 // MÓDULO: agenda (hoje detalhada + amanhã resumida)
 // ============================================================
-async function modulo_agenda({ cliente_id }) {
+async function modulo_agenda({ cliente_id, dia_alvo_brt }) {
   const t0 = Date.now();
   try {
-    const hoje = googleCalendar.janelaHojeBRT();
-    const amanha = googleCalendar.janelaAmanhaBRT();
+    // V2.14 D Fix — janela = dia_alvo BRT (não sempre "hoje" real).
+    // Quando dia_alvo é hoje real → comportamento idêntico ao antigo.
+    // Quando dia_alvo é dia passado → mostra agenda daquele dia + dia seguinte.
+    const alvo = googleCalendar.janelaDiaBRT(dia_alvo_brt);
+    const [yA, mA, dA] = dia_alvo_brt.split('-');
+    // Calcula próximo dia BRT (dia seguinte ao alvo)
+    const dataAlvoMs = new Date(alvo.inicio_iso).getTime();
+    const proximoUTC = new Date(dataAlvoMs + 24 * 60 * 60 * 1000);
+    const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const partsProx = fmt.formatToParts(proximoUTC);
+    const yP = partsProx.find(p => p.type === 'year').value;
+    const mP = partsProx.find(p => p.type === 'month').value;
+    const dP = partsProx.find(p => p.type === 'day').value;
+    const proximoStr = `${yP}-${mP}-${dP}`;
+    const proximo = googleCalendar.janelaDiaBRT(proximoStr);
 
-    const [rHoje, rAmanha] = await Promise.all([
-      googleCalendar.listarEventos({ cliente_id, calendarId: 'primary', timeMin: hoje.inicio_iso, timeMax: hoje.fim_iso }),
-      googleCalendar.listarEventos({ cliente_id, calendarId: 'primary', timeMin: amanha.inicio_iso, timeMax: amanha.fim_iso }),
+    const [rAlvo, rProximo] = await Promise.all([
+      googleCalendar.listarEventos({ cliente_id, calendarId: 'primary', timeMin: alvo.inicio_iso, timeMax: alvo.fim_iso }),
+      googleCalendar.listarEventos({ cliente_id, calendarId: 'primary', timeMin: proximo.inicio_iso, timeMax: proximo.fim_iso }),
     ]);
+
+    // Decide se rotula como "Hoje" ou usa data exata
+    const hojeRealJanela = googleCalendar.janelaHojeBRT();
+    const ehHoje = alvo.data_br === hojeRealJanela.data_br;
+    const labelAlvo = ehHoje ? 'Hoje' : alvo.data_br;
+    const labelProximo = ehHoje ? 'Amanhã' : 'Dia seguinte';
 
     const linhas = ['## 📅 Agenda', ''];
 
-    // HOJE
-    const diaHoje = (rHoje.eventos[0]?.dia_semana_br) || googleCalendar.diaSemanaBR(hoje.inicio_iso) || '';
-    linhas.push(`### Hoje — ${diaHoje} ${hoje.data_br}`);
-    if (rHoje.total === 0) {
+    // DIA ALVO
+    const diaAlvoNome = (rAlvo.eventos[0]?.dia_semana_br) || googleCalendar.diaSemanaBR(alvo.inicio_iso) || '';
+    linhas.push(`### ${labelAlvo} — ${diaAlvoNome} ${alvo.data_br}`);
+    if (rAlvo.total === 0) {
       linhas.push('Livre.');
     } else {
-      rHoje.eventos.forEach(e => {
+      rAlvo.eventos.forEach(e => {
         if (e.dia_inteiro) {
           linhas.push(`- **[dia inteiro]** · **${e.titulo}**`);
         } else {
@@ -169,19 +188,19 @@ async function modulo_agenda({ cliente_id }) {
     }
     linhas.push('');
 
-    // AMANHÃ — resumo de uma linha (decisão André 2026-05-09)
-    const diaAmanha = (rAmanha.eventos[0]?.dia_semana_br) || googleCalendar.diaSemanaBR(amanha.inicio_iso) || '';
-    linhas.push(`### Amanhã — ${diaAmanha} ${amanha.data_br}`);
-    if (rAmanha.total === 0) {
+    // DIA SEGUINTE — resumo de uma linha
+    const diaProxNome = (rProximo.eventos[0]?.dia_semana_br) || googleCalendar.diaSemanaBR(proximo.inicio_iso) || '';
+    linhas.push(`### ${labelProximo} — ${diaProxNome} ${proximo.data_br}`);
+    if (rProximo.total === 0) {
       linhas.push('Livre.');
-    } else if (rAmanha.total === 1) {
-      const e = rAmanha.eventos[0];
+    } else if (rProximo.total === 1) {
+      const e = rProximo.eventos[0];
       const horaTxt = e.dia_inteiro ? '[dia inteiro]' : e.hora_inicio_br;
       linhas.push(`1 reunião · **${horaTxt}** — ${e.titulo}`);
     } else {
-      const e = rAmanha.eventos[0];
+      const e = rProximo.eventos[0];
       const horaTxt = e.dia_inteiro ? '[dia inteiro]' : e.hora_inicio_br;
-      linhas.push(`${rAmanha.total} reuniões · primeira **${horaTxt}** — ${e.titulo}`);
+      linhas.push(`${rProximo.total} reuniões · primeira **${horaTxt}** — ${e.titulo}`);
     }
 
     return {
@@ -189,9 +208,10 @@ async function modulo_agenda({ cliente_id }) {
       ok: true,
       conteudo_md: linhas.join('\n'),
       conteudo_estruturado: {
-        hoje_total: rHoje.total,
-        hoje_eventos: rHoje.eventos.map(e => ({ titulo: e.titulo, hora_inicio: e.hora_inicio_br, duracao_min: e.duracao_min, qtd_participantes: e.qtd_participantes, link_meet: e.link_meet })),
-        amanha_total: rAmanha.total,
+        dia_alvo_brt,
+        alvo_total: rAlvo.total,
+        alvo_eventos: rAlvo.eventos.map(e => ({ titulo: e.titulo, hora_inicio: e.hora_inicio_br, duracao_min: e.duracao_min, qtd_participantes: e.qtd_participantes, link_meet: e.link_meet })),
+        proximo_total: rProximo.total,
       },
       latencia_ms: Date.now() - t0,
     };
@@ -210,21 +230,45 @@ async function modulo_agenda({ cliente_id }) {
 // (LLM-classifier vai entrar quando houver tempo). Por enquanto, classificação
 // por palavra-chave + status lido/não-lido.
 // ============================================================
-async function modulo_triagem_email({ cliente_id, janela_horas = 24 }) {
+async function modulo_triagem_email({ cliente_id, dia_alvo_brt }) {
   const t0 = Date.now();
   try {
-    const dias = Math.max(1, Math.ceil(janela_horas / 24));
+    // V2.14 D Fix — query Gmail com janela de dia BRT específico.
+    // Gmail aceita 'after:YYYY/MM/DD before:YYYY/MM/DD' (UTC).
+    // BRT = UTC-3. Janela "dia X BRT inteiro" = [X 03:00 UTC → X+1 02:59 UTC].
+    // Pra Gmail (que filtra por DATA, não timestamp), basta `after:X-1 before:X+1`
+    // que o dia BRT cabe dentro. Fica um pouco frouxo (~3h overlap nas pontas)
+    // mas pega tudo do dia. Filtragem fina seria por internalDate.
+    const j = googleCalendar.janelaDiaBRT(dia_alvo_brt); // valida formato
+    const [yA, mA, dA] = dia_alvo_brt.split('-');
+    const inicioGmail = `${yA}/${mA}/${parseInt(dA, 10) - 1 || dA}`; // dia anterior pra cobrir BRT 00:00
+    const fimGmail    = `${yA}/${mA}/${parseInt(dA, 10) + 1}`;        // dia seguinte pra cobrir BRT 23:59
+    const queryGmail  = `after:${yA}/${mA}/${parseInt(dA, 10) - 1 || dA} before:${yA}/${mA}/${parseInt(dA, 10) + 1}`;
+
     const r = await googleGmail.listarEmails({
       cliente_id,
-      query: `newer_than:${dias}d`,
+      query: queryGmail,
       pageSize: 50,
     });
+
+    // Filtra final em JS pra confinar exatamente na janela BRT (data_raw RFC 2822)
+    if (r.emails && r.emails.length > 0) {
+      const t0Ms = new Date(j.inicio_iso).getTime();
+      const t1Ms = new Date(j.fim_iso).getTime();
+      r.emails = r.emails.filter(e => {
+        if (!e.data_raw) return true; // sem data, mantém (pouco provável)
+        const t = new Date(e.data_raw).getTime();
+        if (isNaN(t)) return true;
+        return t >= t0Ms && t <= t1Ms;
+      });
+      r.total_retornado = r.emails.length;
+    }
 
     if (!r.emails || r.emails.length === 0) {
       return {
         slug: 'triagem-emails-24h', ok: true,
-        conteudo_md: '## 📧 Triagem de emails\n\nInbox vazia nas últimas 24h.',
-        conteudo_estruturado: { total: 0, por_categoria: {} },
+        conteudo_md: `## 📧 Triagem de emails — ${j.data_br}\n\nInbox vazia neste dia.`,
+        conteudo_estruturado: { total: 0, por_categoria: {}, dia_alvo_brt },
         latencia_ms: Date.now() - t0,
       };
     }
@@ -246,7 +290,7 @@ async function modulo_triagem_email({ cliente_id, janela_horas = 24 }) {
       buckets[cat].push(e);
     }
 
-    const linhas = [`## 📧 Triagem de emails — ${r.total_retornado} emails (${janela_horas}h)`, ''];
+    const linhas = [`## 📧 Triagem de emails — ${r.total_retornado} emails em ${j.data_br}`, ''];
     const ordem = [
       ['critico',     '🔴 **Crítico/Urgente**'],
       ['oportunidade','🟡 **Oportunidade**'],
@@ -271,7 +315,7 @@ async function modulo_triagem_email({ cliente_id, janela_horas = 24 }) {
       conteudo_md: linhas.join('\n').trim(),
       conteudo_estruturado: {
         total: r.total_retornado,
-        janela_horas,
+        dia_alvo_brt,
         por_categoria: { critico: buckets.critico.length, oportunidade: buckets.oportunidade.length, informativo: buckets.informativo.length, ruido: buckets.ruido.length },
       },
       latencia_ms: Date.now() - t0,
@@ -289,15 +333,39 @@ async function modulo_triagem_email({ cliente_id, janela_horas = 24 }) {
 // MÓDULO: diagnóstico inbox (3 dias) — só roda se janela_horas >= 48
 // (relatório diário não inclui — só quando seg/qua/sex)
 // ============================================================
-async function modulo_diagnostico_inbox({ cliente_id, janela_horas = 24 }) {
-  // Não inclui em janela curta (<48h). Sócio vê diagnóstico 3x/semana, não diário.
-  if (janela_horas < 48) {
-    return { slug: 'diagnostico-inbox-3dias', ok: true, skipped: true, conteudo_md: '', conteudo_estruturado: {}, latencia_ms: 0 };
-  }
+async function modulo_diagnostico_inbox({ cliente_id, dia_alvo_brt }) {
+  // Diagnóstico cobre 3 dias terminando em dia_alvo_brt.
+  // V2.14 D Fix — sempre roda quando incluído (sem mais if `janela_horas < 48`),
+  // já que dia_alvo_brt define a janela. Quem decide se inclui é
+  // `modulos_incluir` em gerarRelatorioExecutivo.
   const t0 = Date.now();
   try {
-    const dias = Math.max(3, Math.ceil(janela_horas / 24));
-    const r = await googleGmail.listarEmails({ cliente_id, query: `newer_than:${dias}d`, pageSize: 100 });
+    // Janela = [dia_alvo - 2d → dia_alvo] (3 dias)
+    const [yA, mA, dA] = dia_alvo_brt.split('-');
+    const dataAlvo = new Date(`${yA}-${mA}-${dA}T23:59:59-03:00`);
+    const dataInicio = new Date(dataAlvo.getTime() - 3 * 24 * 60 * 60 * 1000);
+    const fmtData = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const partsIni = fmtData.formatToParts(dataInicio);
+    const yI = partsIni.find(p => p.type === 'year').value;
+    const mI = partsIni.find(p => p.type === 'month').value;
+    const dI = partsIni.find(p => p.type === 'day').value;
+    const queryGmail = `after:${yI}/${mI}/${dI} before:${yA}/${mA}/${parseInt(dA, 10) + 1}`;
+
+    const r = await googleGmail.listarEmails({ cliente_id, query: queryGmail, pageSize: 100 });
+
+    // Filtra final em JS pra confinar [inicio, dia_alvo 23:59 BRT]
+    if (r.emails && r.emails.length > 0) {
+      const t0Ms = dataInicio.getTime();
+      const t1Ms = dataAlvo.getTime();
+      r.emails = r.emails.filter(e => {
+        if (!e.data_raw) return true;
+        const t = new Date(e.data_raw).getTime();
+        if (isNaN(t)) return true;
+        return t >= t0Ms && t <= t1Ms;
+      });
+      r.total_retornado = r.emails.length;
+    }
+
     const total = r.total_retornado || 0;
 
     // Métricas simples (sem LLM ainda)
@@ -305,13 +373,13 @@ async function modulo_diagnostico_inbox({ cliente_id, janela_horas = 24 }) {
     const taxaLidos = total > 0 ? Math.round(((total - naoLidos) / total) * 100) : 100;
 
     const linhas = [
-      `## 🔍 Diagnóstico da inbox (${dias} dias)`,
+      `## 🔍 Diagnóstico da inbox (3 dias até ${dia_alvo_brt})`,
       '',
       `**Volume:** ${total} emails`,
       `**Saúde:** ${taxaLidos}% lidos (${naoLidos} não-lidos)`,
     ];
 
-    return { slug: 'diagnostico-inbox-3dias', ok: true, conteudo_md: linhas.join('\n'), conteudo_estruturado: { total, naoLidos, taxaLidos }, latencia_ms: Date.now() - t0 };
+    return { slug: 'diagnostico-inbox-3dias', ok: true, conteudo_md: linhas.join('\n'), conteudo_estruturado: { total, naoLidos, taxaLidos, dia_alvo_brt }, latencia_ms: Date.now() - t0 };
   } catch (e) {
     return { slug: 'diagnostico-inbox-3dias', ok: false, motivo: e.message, conteudo_md: `## 🔍 Diagnóstico inbox — INDISPONÍVEL\n\n⚠ ${e.message}`, latencia_ms: Date.now() - t0 };
   }
@@ -320,14 +388,17 @@ async function modulo_diagnostico_inbox({ cliente_id, janela_horas = 24 }) {
 // ============================================================
 // MÓDULO: discord 24h
 // ============================================================
-async function modulo_discord({ janela_horas = 24 }) {
+async function modulo_discord({ dia_alvo_brt }) {
   const t0 = Date.now();
   try {
-    const desde = new Date(Date.now() - janela_horas * 60 * 60 * 1000).toISOString();
+    // V2.14 D Fix — janela = dia_alvo BRT inteiro [00:00 → 23:59]
+    const j = googleCalendar.janelaDiaBRT(dia_alvo_brt);
     const sql = `
       SELECT message_id, canal_nome, autor_nome, conteudo, postado_em, mencoes_users
       FROM pinguim.discord_mensagens
-      WHERE postado_em >= '${desde}' AND autor_bot = false
+      WHERE postado_em >= '${j.inicio_iso}'
+        AND postado_em <= '${j.fim_iso}'
+        AND autor_bot = false
       ORDER BY postado_em DESC
       LIMIT 200;
     `;
@@ -336,8 +407,8 @@ async function modulo_discord({ janela_horas = 24 }) {
     if (msgs.length === 0) {
       return {
         slug: 'discord-24h', ok: true,
-        conteudo_md: `## 💬 Discord do time\n\nNada relevante nas últimas ${janela_horas}h.`,
-        conteudo_estruturado: { total: 0, janela_horas },
+        conteudo_md: `## 💬 Discord do time — ${j.data_br}\n\nNada relevante neste dia.`,
+        conteudo_estruturado: { total: 0, dia_alvo_brt },
         latencia_ms: Date.now() - t0,
       };
     }
@@ -367,7 +438,7 @@ async function modulo_discord({ janela_horas = 24 }) {
       porCanal.set(k, (porCanal.get(k) || 0) + 1);
     }
 
-    const linhas = [`## 💬 Discord do time — últimas ${janela_horas}h`, ''];
+    const linhas = [`## 💬 Discord do time — ${j.data_br}`, ''];
     const totalSinais = sinais.reembolso.length + sinais.cadastro.length + sinais.bug.length + sinais.decisao.length;
     if (totalSinais > 0) {
       linhas.push(`**Pontos de atenção (${totalSinais})**`);
@@ -403,7 +474,7 @@ async function modulo_discord({ janela_horas = 24 }) {
       conteudo_md: linhas.join('\n').trim(),
       conteudo_estruturado: {
         total: msgs.length,
-        janela_horas,
+        dia_alvo_brt,
         sinais: { reembolso: sinais.reembolso.length, cadastro: sinais.cadastro.length, bug: sinais.bug.length, decisao: sinais.decisao.length },
         por_canal: Object.fromEntries(porCanal),
       },
@@ -474,7 +545,7 @@ async function sintetizarExecutivoDiario({ socioInfo, modulosOutputs, dataBrt, d
   const prompt = `Você é o sintetizador do Relatório Executivo Diário do Pinguim OS.
 
 ## Contexto temporal
-Hoje: ${dataBrt} (${diaSemana}), janela de ${janela_horas}h.
+Dia alvo do relatório: ${dataBrt} (${diaSemana}). Os dados dos módulos abaixo são desse dia específico.
 Destinatário: ${socioInfo.nome} (${socioInfo.empresa}, slug ${socioInfo.slug}).
 
 ## Sua tarefa
@@ -601,10 +672,9 @@ async function gerarRelatorioExecutivo({
     dia_alvo_brt = `${y}-${m}-${d}`;
   }
 
-  const fmtLongo = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'long' });
-  const dataLongaBR = fmtLongo.format(agora);
-  const fmtDia = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long' });
-  const diaSemana = fmtDia.format(agora);
+  // V2.14 D Fix — headline e contexto temporal usam dia_alvo_brt (não 'agora')
+  const dataLongaBR = googleCalendar.dataLongaBRdoDiaAlvo(dia_alvo_brt); // ex: "05 de maio"
+  const diaSemana   = googleCalendar.diaSemanaBRdoDiaAlvo(dia_alvo_brt); // ex: "terça-feira"
 
   // Saudacao dinamica BRT (manha < 12h / tarde 12-18h / noite >= 18h)
   const horaBRT = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false }).format(agora), 10);
@@ -613,12 +683,13 @@ async function gerarRelatorioExecutivo({
   else if (horaBRT >= 18 || horaBRT < 5) saudacao = 'Boa noite';
 
   // 3) Roda módulos em paralelo (Munger — falhas isoladas)
+  // V2.14 D Fix — TODOS os módulos recebem dia_alvo_brt pra honrar data passada
   const promises = [];
   if (modulos_incluir.includes('financeiro'))     promises.push(modulo_financeiro({ janela_horas, dia_alvo_brt, moeda }));
-  if (modulos_incluir.includes('agenda'))         promises.push(modulo_agenda({ cliente_id: cid }));
-  if (modulos_incluir.includes('triagem-email'))  promises.push(modulo_triagem_email({ cliente_id: cid, janela_horas }));
-  if (modulos_incluir.includes('diagnostico-email')) promises.push(modulo_diagnostico_inbox({ cliente_id: cid, janela_horas }));
-  if (modulos_incluir.includes('discord'))        promises.push(modulo_discord({ janela_horas }));
+  if (modulos_incluir.includes('agenda'))         promises.push(modulo_agenda({ cliente_id: cid, dia_alvo_brt }));
+  if (modulos_incluir.includes('triagem-email'))  promises.push(modulo_triagem_email({ cliente_id: cid, dia_alvo_brt }));
+  if (modulos_incluir.includes('diagnostico-email')) promises.push(modulo_diagnostico_inbox({ cliente_id: cid, dia_alvo_brt }));
+  if (modulos_incluir.includes('discord'))        promises.push(modulo_discord({ dia_alvo_brt }));
 
   const modulosOutputs = await Promise.all(promises);
 

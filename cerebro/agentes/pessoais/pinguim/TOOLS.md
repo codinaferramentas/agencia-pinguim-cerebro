@@ -244,6 +244,33 @@ curl -s -X POST http://localhost:3737/api/discord/backfill \
 - Criar canal / thread
 - Mudar permissão de canal
 
+## Tool de WhatsApp ENVIO pra número externo (V2.14 D)
+
+A instância Evolution "Agente Pinguim" (5511933397541) pode enviar **texto** pra qualquer número de WhatsApp. Camada B anti-duplicação cobre (5min, igual Gmail).
+
+| Tool | O que faz | Como acessar |
+|---|---|---|
+| 💬 **WhatsApp enviar** | Envia mensagem de texto pra qualquer número. **EXIGE confirmação humana NO CHAT antes** (ver AGENTS.md → E9) | `bash scripts/whatsapp-enviar.sh "<numero>" "<texto>" [forcar]` |
+
+**Exemplos práticos:**
+
+```bash
+# Envio simples (após confirmação no chat)
+bash scripts/whatsapp-enviar.sh "5511984290116" "Oi Katia, tudo bem?"
+
+# Forçar reenvio (bypass anti-duplicacao — só após sócio confirmar explícito)
+bash scripts/whatsapp-enviar.sh "5511984290116" "Oi Katia, tudo bem?" forcar
+```
+
+**Fluxo padrão (NUNCA pular):**
+1. Investiga (se faltou número/texto, perguntar)
+2. **MOSTRA PREVIEW + PEDE "sim/não" no chat**
+3. Só após "sim" explícito → roda script
+
+**Limites desta versão:**
+- Só TEXTO (não áudio/imagem/vídeo pra número externo)
+- Sem agenda de contatos (sócio fornece o número)
+
 **Quando agente precisar enviar mensagem no Discord, declarar honesto:** "Pra enviar/responder no Discord ainda não tenho a Skill operacional pronta — frente V2.15 (squad `hybrid-ops-squad`). Por enquanto só consigo LER."
 
 **Cofre (no servidor):**

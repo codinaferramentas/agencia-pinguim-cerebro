@@ -571,6 +571,27 @@ async function logarExecucaoAtendente({
   }
 }
 
+// ============================================================
+// V2.14 D Refator V3 — Detecta side-effect destrutivo no turno
+// ============================================================
+// Usado pelo EPP Camada 2 (Reflection) pra decidir se pode chamar
+// Claude CLI com Bash liberado (re-pode chamar gmail-enviar) OU se
+// deve refazer APENAS texto (sem Bash). Anatomia: Reflection nunca
+// re-dispara side-effects.
+async function turnoTeveAcaoDestrutiva(t0Ms, cliente_id = null) {
+  const t0Iso = new Date(t0Ms).toISOString();
+  let where = `executada_em >= '${t0Iso}'::timestamptz`;
+  if (cliente_id) where += ` AND cliente_id = ${esc(cliente_id)}`;
+  const sql = `SELECT count(*)::int AS n FROM pinguim.acoes_executadas WHERE ${where}`;
+  try {
+    const r = await rodarSQL(sql);
+    return Array.isArray(r) && r[0] ? r[0].n > 0 : false;
+  } catch (e) {
+    console.warn(`[epp] erro consultando acoes destrutivas: ${e.message}`);
+    return false;
+  }
+}
+
 // Wrapper que adquire lock, executa função, libera (mesmo em erro).
 async function comLockThread(thread_id, fn, opts = {}) {
   const lock = await adquirirLockThread(thread_id, opts.timeoutMs || 60000);
@@ -616,4 +637,6 @@ module.exports = {
   comLockThread,
   // V2.14 Frente D Fix 4 — log de execução EPP
   logarExecucaoAtendente,
+  // V2.14 D Refator V3 — detector pra Reflection sem side-effect
+  turnoTeveAcaoDestrutiva,
 };

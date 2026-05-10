@@ -320,12 +320,46 @@ function janelaAmanhaBRT() {
   };
 }
 
+// V2.14 D — Janela de dia específico BRT
+// Aceita 'YYYY-MM-DD' (string) e devolve a janela [00:00 → 23:59] desse dia em BRT.
+// Usado quando sócio pede "executivo do dia 05/05" (dia_alvo_brt).
+function janelaDiaBRT(diaAlvo) {
+  if (!diaAlvo || !/^\d{4}-\d{2}-\d{2}$/.test(diaAlvo)) {
+    throw new Error(`janelaDiaBRT: diaAlvo invalido (esperado 'YYYY-MM-DD'), recebi: ${diaAlvo}`);
+  }
+  const [y, m, d] = diaAlvo.split('-');
+  const inicioBRT = new Date(`${y}-${m}-${d}T00:00:00-03:00`);
+  const fimBRT    = new Date(`${y}-${m}-${d}T23:59:59-03:00`);
+  return {
+    inicio_iso: inicioBRT.toISOString(),
+    fim_iso: fimBRT.toISOString(),
+    data_br: `${d}/${m}/${y}`,
+    diaAlvo,
+  };
+}
+
+// Formata 'YYYY-MM-DD' BRT como 'DD de mês' em pt-BR (ex: '05 de maio')
+function dataLongaBRdoDiaAlvo(diaAlvo) {
+  const j = janelaDiaBRT(diaAlvo);
+  const fmt = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'long' });
+  return fmt.format(new Date(j.inicio_iso));
+}
+
+// Formata 'YYYY-MM-DD' BRT como dia da semana em pt-BR (ex: 'terça-feira')
+function diaSemanaBRdoDiaAlvo(diaAlvo) {
+  const j = janelaDiaBRT(diaAlvo);
+  return diaSemanaBR(j.inicio_iso);
+}
+
 module.exports = {
   listarCalendarios,
   listarEventos,
   lerEvento,
   janelaHojeBRT,
   janelaAmanhaBRT,
+  janelaDiaBRT,
+  dataLongaBRdoDiaAlvo,
+  diaSemanaBRdoDiaAlvo,
   formatarHoraBR,
   formatarDataBR,
   diaSemanaBR,
