@@ -52,8 +52,17 @@ if c.get('primeira_compra'): print(f'Primeira compra: {c[\"primeira_compra\"]}')
 
 vendas = d.get('vendas', [])
 print(f'\nTotal de transacoes: {d.get(\"total_vendas\", 0)}')
+from datetime import datetime, timezone, timedelta
+def fmt_data(dc):
+    if dc is None or dc == '': return '?'
+    if isinstance(dc, (int, float)):
+        # epoch ms (API direta Hotmart) ou epoch s
+        ts = dc / 1000 if dc > 1e11 else dc
+        try: return datetime.fromtimestamp(ts, tz=timezone(timedelta(hours=-3))).strftime('%Y-%m-%d')
+        except: return '?'
+    return str(dc)[:10]  # ISO string (Supabase)
 for v in vendas[:20]:
-    data = v.get('data_compra', '')[:10] if v.get('data_compra') else '?'
+    data = fmt_data(v.get('data_compra'))
     print(f'  - {data} | {v.get(\"produto\") or \"?\"} | status={v.get(\"status\")} | R\$ {v.get(\"valor\", 0)} | {v.get(\"transaction_code\")}')
 if len(vendas) > 20:
     print(f'  ... +{len(vendas) - 20} mais (cap em 20 pra display)')
