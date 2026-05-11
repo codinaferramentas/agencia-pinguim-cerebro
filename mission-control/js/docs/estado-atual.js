@@ -254,6 +254,44 @@ export async function gerar() {
       },
 
       {
+        id: 'pendencias-socios',
+        titulo: '📌 O que preciso de cada sócio pra avançar',
+        html: `
+          <p>Lista direta do que cada sócio precisa fazer pra desbloquear capacidades novas do agente. Pra usar como pauta em reuniões 1:1.</p>
+
+          <h3 style="margin-top:1.25rem;font-size:.95rem">🧠 Luiz</h3>
+          <ul style="margin:.5rem 0 .5rem 1.25rem;font-size:.875rem;line-height:1.7">
+            <li><strong>OAuth Google Workspace</strong> (Drive + Gmail + Calendar) — habilita agente ler email/agenda/Drive do Luiz. Melhor fazer só na V3 (quando subir no servidor do Pedro). Hoje funciona local, mas precisa Codina ligado.</li>
+            <li><strong>Instagram comercial no BM Grupo Pinguim</strong> — IG dele precisa estar na BM da Pinguim conectado a uma Page. Como hoje tem o do Pedro. Depois disso, 5 min de autorização via popup Meta libera análise de posts/comentários/insights.</li>
+            <li><strong>Instância Evolution WhatsApp dele</strong> — Codina cria instância separada conectada ao número do Luiz. Habilita: agente ler WhatsApp do Luiz no fim do dia + relatório "X pessoas perguntaram e você não respondeu" no final da tarde.</li>
+            <li><strong>Marcar @Pinguim IA no Discord 1x</strong> — auto-captura o discord_user_id dele pra promover de funcionário pra sócio (hoje já cadastrado como sócio via banco, mas confirma).</li>
+          </ul>
+
+          <h3 style="margin-top:1.25rem;font-size:.95rem">⚡ Pedro Aredes</h3>
+          <ul style="margin:.5rem 0 .5rem 1.25rem;font-size:.875rem;line-height:1.7">
+            <li><strong>OAuth Google Workspace</strong> — só na V3</li>
+            <li><strong>Instagram orgânico</strong> — popup Meta de 5 min (IG dele já está na BM Grupo Pinguim)</li>
+            <li><strong>Instância Evolution dele</strong> — quando fizer sentido</li>
+            <li><strong>Marcar @Pinguim IA no Discord 1x</strong> pra captura de ID</li>
+          </ul>
+
+          <h3 style="margin-top:1.25rem;font-size:.95rem">🎨 Micha</h3>
+          <ul style="margin:.5rem 0 .5rem 1.25rem;font-size:.875rem;line-height:1.7">
+            <li><strong>OAuth Google Workspace</strong> — só na V3</li>
+            <li><strong>Instagram orgânico</strong> — popup Meta de 5 min (IG dela "Micha Menezes - Espanol" já está na BM com IG ID <code>17841463887023598</code>)</li>
+            <li><strong>Instância Evolution dela</strong> — quando fizer sentido</li>
+          </ul>
+
+          <h3 style="margin-top:1.25rem;font-size:.95rem">🚀 Coletivo (todos juntos)</h3>
+          <ul style="margin:.5rem 0 .5rem 1.25rem;font-size:.875rem;line-height:1.7">
+            <li><strong>Reunião 30 min de alinhamento V3:</strong> decidir cronograma de subir servidor próprio do Pedro pra todo mundo ter acesso 24/7</li>
+            <li><strong>Definir squads prioritárias</strong> pra popular próximas (advisory-board já populada; storytelling, design, traffic-masters em fila)</li>
+            <li><strong>Decidir cronos compartilhados</strong> (ex: relatório diário do time, executivo semanal coletivo, etc)</li>
+          </ul>
+        `,
+      },
+
+      {
         id: 'limites',
         titulo: '⚠️ Limitações conhecidas (transparência)',
         html: `
