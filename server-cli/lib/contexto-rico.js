@@ -180,13 +180,11 @@ async function montarContexto({ thread_id, canal = 'chat-web', cliente_id = null
   // 1. Temporal (síncrono)
   blocos.push(contextoTemporal.blocoDataAtual());
 
-  // 2-6. Em paralelo (N queries no banco)
+  // 2-5. Em paralelo (N queries no banco)
   // V2.14.5 — passa cliente_id pra identidade + aprendizados resolverem multi-sócio
   // V2.14 D — contexto_extra (Discord) entrega papel (sócio/funcionário) + nome
-  // V2.15 Fase 1 (2026-05-11) — manifest dinâmico de capacidades
   const ehFuncionario = contexto_extra && contexto_extra.papel === 'funcionario';
-  const agentManifest = require('./agent-manifest');
-  const [identidade, entregaveis, historico, drive, aprendizados, manifest] = await Promise.all([
+  const [identidade, entregaveis, historico, drive, aprendizados] = await Promise.all([
     blocoIdentidadeSocio(cliente_id, contexto_extra).catch(() => '[IDENTIDADE DO SÓCIO]\n(erro)'),
     // Funcionário NÃO tem entregáveis pessoais — pula
     ehFuncionario ? Promise.resolve(null) : blocoEntregaveisRecentes(cliente_id).catch(() => '[ENTREGÁVEIS RECENTES]\n(erro consultando)'),
@@ -194,17 +192,15 @@ async function montarContexto({ thread_id, canal = 'chat-web', cliente_id = null
     blocoContextoDrive().catch(() => null),
     // Funcionário NÃO tem aprendizados pessoais — pula
     ehFuncionario ? Promise.resolve(null) : blocoAprendizados(cliente_id).catch(() => null),
-    agentManifest.montarManifest().catch(() => null),
   ]);
 
   blocos.push(identidade);
-  if (manifest) blocos.push(manifest); // V2.15 — manifest de capacidades (Naval + Munger)
   if (aprendizados) blocos.push(aprendizados); // só inclui se há aprendizados
   if (entregaveis) blocos.push(entregaveis);   // funcionário não tem
   blocos.push(historico);
   if (drive) blocos.push(drive); // só inclui se tem arquivos recentes
 
-  // 7. Canal (síncrono, baseado em parâmetro)
+  // 6. Canal (síncrono, baseado em parâmetro)
   blocos.push(blocoCanal(canal));
 
   return blocos.join('\n\n');
