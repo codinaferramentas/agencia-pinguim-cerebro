@@ -656,8 +656,21 @@ A Pinguim vende seus produtos pela Hotmart. Esta categoria cobre **TODA a opera�
 **Quando aluno NÃO tem acesso a nenhum Club cadastrado:**
 - Resposta honesta: *"Procurei nos N Clubs cadastrados (lista) e não achei o email X em nenhum. Pode ser que (a) o aluno realmente não tenha acesso a esses produtos, OU (b) tem acesso a um Club que ainda não cadastrei. Quer que eu confira algum produto específico? Me passa a URL do Club."*
 
+**REGRA DURA — quando produto comprado tem cadastro Hotmart mas NÃO consta no Members Area API:**
+
+⚠ Cenário crítico identificado por Andre 2026-05-11 noite: aluna **amais.andressasantos@gmail.com** comprou Elo (HP confirmado em G1), agente consultou `subdomain=turbox` em `pinguim.hotmart_clubs` e API retornou `total_results: 0`. Agente concluiu **"NÃO tem acesso ao Elo"** — mas ela TINHA acesso (confirmado no painel manual). Bug raiz: subdomain `turbox` estava ERRADO no cadastro.
+
+**Regra:** se sócio identifica COMPRA Hotmart aprovada de um produto X (via G1) mas Members Area API retorna `total_results: 0` pro Club cadastrado desse produto:
+
+- ❌ **NUNCA dizer "ela NÃO tem acesso ao produto X"** com base só nesse 0
+- ✅ **DIZER: "Não consegui CONFIRMAR acesso pela API. Compra existe (R$ Y em DD/MM, status COMPLETE), mas o Club cadastrado no nosso sistema (subdomain=Z) retornou 0 resultados — pode ser cadastro errado do nosso lado. Confirma manualmente no painel da Hotmart ou me passa o subdomain correto que eu atualizo."**
+- ✅ Sugerir Andre rodar `bash scripts/hotmart-cadastrar-club.sh <subdomain_correto> <produto_nome>` se o subdomain estiver errado
+
+**Razão pra ser conservador:** dizer "não tem acesso" pra um aluno que TEM é catastrófico — quebra confiança do sócio no agente inteiro. Sempre que houver discrepância entre G1 (compra) e G4b (acesso), **assumir que o nosso cadastro está incompleto/errado**, não que o aluno está sem acesso.
+
 **REGRA DURA — anti-padrão fatal:**
 - ❌ **NUNCA dizer "tem acesso a X áreas de membros"** baseado em transações Hotmart (G1 ou G2). Compra ≠ acesso atual. Andre 2026-05-10 pegou esse furo: agente respondeu confiante "tem acesso a 2 áreas" pro Marcos baseado em assinatura ativa Supabase, sem chegar perto da Members Area API. **A resposta correta vem do G4b agora.**
+- ❌ **NUNCA dizer "NÃO tem acesso a X" só porque API Members Area retornou 0** quando G1 mostra compra aprovada do produto — pode ser subdomain errado do nosso lado (Andre 2026-05-11)
 - ❌ Inventar timestamp de "último acesso" — esse dado SÓ vem da Members Area API. Sempre rodar G4b.
 - ✅ Resposta correta natural pro sócio: *"Olhei o Marcos no Club do ProAlt: status ACTIVE, último login 21/02/2026, acessou 6 vezes, engajamento LOW (5 de 101 aulas concluídas, 4%). Foi cadastrado como IMPORTED — provavelmente entrou manualmente."* — variar a forma, NUNCA template enlatado.
 
