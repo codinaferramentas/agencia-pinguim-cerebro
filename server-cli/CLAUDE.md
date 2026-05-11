@@ -743,15 +743,31 @@ A Pinguim vende seus produtos pela Hotmart. Esta categoria cobre **TODA a opera�
 **Quando aluno NÃO tem acesso a nenhum Club cadastrado:**
 - Resposta honesta: *"Procurei nos N Clubs cadastrados (lista) e não achei o email X em nenhum. Pode ser que (a) o aluno realmente não tenha acesso a esses produtos, OU (b) tem acesso a um Club que ainda não cadastrei. Quer que eu confira algum produto específico? Me passa a URL do Club."*
 
-**⚠ DESCOBERTA CRÍTICA 2026-05-11 noite — Club Hotmart Pinguim é GUARDA-CHUVA:**
+**⚠ DESCOBERTA DEFINITIVA 2026-05-11 noite — API Hotmart só expõe ProAlt:**
 
-Investigando bug do "sem acesso ao Elo" da Andressa, descobri: a conta Hotmart da Pinguim tem **UM Club único** chamado **`proalt`** que agrupa AULAS de múltiplos produtos (ProAlt, Elo, possivelmente Lyra/Lo-Fi/outros) em `class_id` diferentes. **NÃO existe um Club separado por produto** na nossa estrutura atual.
+Investigação completa via API confirma: **o nosso OAuth Hotmart Developers SÓ acessa o Club técnico `proalt`** (que tem 478 alunos, 22 módulos do ProAlt, 5 turmas com class_id distintos: `j14o0Xz5ep, qV73j2z2e3, mBOnNR2pOR, PBeZVyNpew, vROx1a9y4D`).
 
-Quando aluno compra qualquer produto Pinguim na Hotmart, ele entra no Club `proalt` em uma turma (`class_id`) específica do produto comprado. Pra saber QUAL produto ele tem acesso, olhar:
-- `class_id` da turma
-- `progress.total` (número de aulas — 101 = Elo, ~22 = ProAlt etc, varia por produto)
+**Outros Clubs (Elo `turbo-x` no painel web, etc) NÃO são acessíveis via nosso OAuth** — API retorna CloudFront redirect mascarado (status 200 + `location: /docs/` + body vazio = significa "Club não existe na API com seu OAuth", mesmo que exista no painel admin web).
 
-**Sempre consulte o subdomain `proalt`** ao verificar acesso. Se aluno tem registro lá com `status=ACTIVE`, ele tem acesso a algum produto Pinguim — identifique qual via `class_id` ou `progress.total`.
+**Limitação real (testada exaustivamente em 2026-05-11):**
+- API só aceita `subdomain` + `email` + paginação
+- API REJEITA filtros por `product_id`/`class_id`/`course` (400 invalid_parameter)
+- API REJEITA subdomains com hífen (`turbo-x` → redirect)
+- Não há endpoint pra listar Clubs do produtor
+
+**Regra dura pra G4b daqui pra frente:**
+
+1. **Sempre consultar `subdomain=proalt`** ao verificar acesso de aluno
+2. Se aluno aparece lá com `status=ACTIVE`, **NÃO afirme qual produto ele está estudando** baseado em `progress.total` (todas as turmas têm 101 aulas — TODAS são ProAlt). Verifique o **nome dos módulos** nas aulas concluídas (endpoint `/users/{user_id}/lessons?subdomain=proalt`):
+   - Módulos "Low Ticket", "Fundamento Low Ticket", "Construção de Produto Low Ticket", "Como Acessar o APP PRO ALT" → **ProAlt**
+   - Outros módulos diferentes → produto diferente (mas até agora só vimos ProAlt)
+3. **Se aluno COMPROU Elo (G1) mas só aparece no Club `proalt` estudando ProAlt**: reportar honesto:
+   > *"Comprou Elo em DD/MM (R$ X), mas via API só consigo confirmar acesso ao Club do ProAlt (onde está estudando módulos Y, Z, W). Pra confirmar acesso ao Elo, precisa olhar manualmente no painel admin Hotmart."*
+
+**NUNCA mais:**
+- ❌ Dizer "tem acesso ao Elo" baseado em `progress.total=101` (101 = ProAlt, não Elo)
+- ❌ Dizer "não tem acesso ao Elo" baseado em API retornar 0 pra outro subdomain (Elo simplesmente não é acessível via nossa API)
+- ❌ Inventar `class_id` → produto. Mapeamento class_id → produto **ainda não está confirmado** com aluno conhecido de cada produto.
 
 **REGRA DURA — quando produto comprado tem cadastro Hotmart mas NÃO consta no Members Area API:**
 
