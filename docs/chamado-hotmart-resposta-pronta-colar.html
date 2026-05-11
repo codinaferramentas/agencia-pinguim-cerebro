@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Chamado Hotmart — API Club retorna vazia</title>
+  <style>
+  @page { size: A4; margin: 18mm 16mm; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #1a1a1a; font-size: 11pt; line-height: 1.45; }
+  h1 { font-size: 18pt; border-bottom: 2px solid #1a1a1a; padding-bottom: 6px; margin-top: 0; }
+  h2 { font-size: 14pt; margin-top: 22px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+  h3 { font-size: 12pt; margin-top: 16px; }
+  p { margin: 6px 0; }
+  code { background: #f4f4f4; padding: 1px 5px; border-radius: 3px; font-family: "Cascadia Mono", Consolas, monospace; font-size: 10pt; }
+  pre { background: #f7f7f7; border: 1px solid #e0e0e0; padding: 10px; border-radius: 4px; overflow-x: auto; page-break-inside: avoid; }
+  pre code { background: transparent; padding: 0; font-size: 9.5pt; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 10pt; page-break-inside: avoid; }
+  th, td { border: 1px solid #ccc; padding: 6px 9px; text-align: left; vertical-align: top; }
+  th { background: #f0f0f0; font-weight: 600; }
+  hr { border: 0; border-top: 1px dashed #bbb; margin: 18px 0; }
+  strong { color: #000; }
+  a { color: #0a58ca; text-decoration: none; }
+  ul { margin: 6px 0; padding-left: 22px; }
+  li { margin: 3px 0; }
+</style>
+</head>
+<body>
+<h2>Texto pronto pra colar no chat do suporte Hotmart (2026-05-11)</h2>
+
+<p>Cola tudo de uma vez. Se o chat tiver limite de caracteres por mensagem, quebra nos pontos marcados com <code>--- [QUEBRA AQUI SE PRECISAR] ---</code>.</p>
+
+<hr/>
+
+<p>Olá! Segue descrição precisa do problema.</p>
+
+<p><strong>Resumo:</strong> Tenho credencial Hotmart Developers ativa (CLIENT_ID <code>1d9750b7-3cbe-4343-b8a3-8f38e87f1919</code>) na conta Agência Pinguim (ucode <code>c56dc856-cba8-436a-a8bb-9a1f26df8295</code>). Autenticação OAuth2 client_credentials funciona normalmente, endpoints Sales/Subscriptions respondem corretos. <strong>O problema é no endpoint <code>GET /club/api/v1/users</code>: ele retorna 200 com <code>total_results: 0</code> pra alguns Hotmart Clubs ativos da conta, enquanto funciona normal pra outros.</strong></p>
+
+<p><strong>Tipo de autenticação:</strong> OAuth2 client_credentials, scope retornado <code>"read write"</code>.</p>
+<p><strong>Endpoint problemático:</strong> <code>GET https://developers.hotmart.com/club/api/v1/users?subdomain=&lt;X&gt;</code></p>
+<p><strong>Status retornado:</strong> HTTP 200 (não é 401/403/404 — é 200 com body vazio, esse é o sintoma estranho).</p>
+
+<p><strong>Clubs que FUNCIONAM via API (confirmado em 2026-05-11):</strong></p>
+
+<table><thead><tr><th>subdomain</th><th>total_results</th></tr></thead><tbody><tr><td>proalt</td><td>478</td></tr><tr><td>siriuslab</td><td>838</td></tr><tr><td>protocolovendaviral</td><td>450</td></tr><tr><td>mastermindorion</td><td>32</td></tr><tr><td>proaltlowticketrecorrente</td><td>42</td></tr><tr><td>clube6em30</td><td>7759</td></tr><tr><td>taurusmentoring</td><td>1</td></tr><tr><td>escoladoperpetuo</td><td>1</td></tr></tbody></table>
+
+<p>Pra esses Clubs <code>/club/api/v1/modules?subdomain=X</code> também responde normalmente.</p>
+
+<p><strong>Clubs que NÃO funcionam (retornam vazio na mesma credencial):</strong></p>
+
+<table><thead><tr><th>subdomain testado</th><th>Nome no painel</th><th>Produtos no painel</th><th>total_results</th></tr></thead><tbody><tr><td>michamenezes</td><td>"Micha Menezes"</td><td>15</td><td>0</td></tr><tr><td>aceleradordeperpetuo</td><td>"Acelerador de Perpétuo"</td><td>1</td><td>0</td></tr><tr><td>turbox</td><td>"Produtos Micha Menezes" (URL personalizada <code>turbo-x</code>)</td><td>13</td><td>0</td></tr></tbody></table>
+
+<p>Obs: passando <code>subdomain=turbo-x</code> (com hífen, igual à URL personalizada) o CloudFront responde 200 com <code>location: /docs/</code> — slug com hífen não é reconhecido pela API.</p>
+
+<p>--- [QUEBRA AQUI SE PRECISAR] ---</p>
+
+<p><strong>Request exata:</strong></p>
+
+<pre><code class="lang-http">GET https://developers.hotmart.com/club/api/v1/users?subdomain=michamenezes&amp;max_results=10
+Authorization: Bearer &lt;access_token&gt;
+Accept: application/json</code></pre>
+
+<p><strong>Response:</strong></p>
+<pre><code class="lang-">HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 74
+
+{"items":{},"page_info":{"total_results":0,"results_per_page":0}}</code></pre>
+
+<p><strong>Prova de que o Club existe e tem alunos:</strong> no painel admin <code>https://app.hotmart.com/membership/micha-menezes/products</code> o Club "Micha Menezes" mostra 15 produtos ativos. Um deles é "ProAlt - Low Ticket" (ID <code>6811692</code>) com 478 alunos visíveis no painel. Quando consulto <code>subdomain=proalt</code> a API retorna esses 478 alunos. Quando consulto <code>subdomain=michamenezes</code> (que segundo o painel é o Club que contém esse mesmo produto), retorna 0.</p>
+
+<p><strong>Comportamento esperado vs observado:</strong></p>
+<ul>
+<li>Esperado: <code>subdomain=michamenezes</code> retornar a lista de alunos do Club "Micha Menezes" (15 produtos, centenas de alunos somando todos).</li>
+<li>Observado: <code>total_results: 0</code> com <code>items: {}</code>.</li>
+</ul>
+
+<p><strong>Perguntas:</strong></p>
+
+<p>1. Por que alguns Hotmart Clubs da minha conta retornam dados via API e outros retornam vazio com a mesma credencial?</p>
+<p>2. Existe alguma configuração no painel admin do Club ("Configurações → Ferramentas" ou outro local) que precise ser habilitada pra liberar acesso da minha credencial àquele Club específico?</p>
+<p>3. O subdomain correto que devo passar na query é a URL personalizada visível em "Informações gerais" do Club, ou existe um identificador técnico diferente?</p>
+<p>4. Existe limitação por idade do Club, versão da plataforma, ou tipo de Club (legacy vs nova versão) que afete o acesso via API?</p>
+<p>5. Se for limitação de versão, existe API v2 ou endpoint alternativo pra acessar Clubs criados na versão mais recente?</p>
+
+<p>--- [QUEBRA AQUI SE PRECISAR] ---</p>
+
+<p><strong>Pra reproduzir do meu lado (lado a lado, mesma credencial, mesmo access_token):</strong></p>
+
+<pre><code class="lang-bash"># 1) Pega access token (funciona — retorna token com scope "read write"):
+curl -X POST "https://api-sec-vlc.hotmart.com/security/oauth/token?grant_type=client_credentials&amp;client_id=1d9750b7-3cbe-4343-b8a3-8f38e87f1919&amp;client_secret=&lt;MEU_SECRET&gt;" \
+  -H "Authorization: Basic &lt;BASIC_TOKEN&gt;"
+
+# 2) Funciona — retorna 478 alunos:
+curl "https://developers.hotmart.com/club/api/v1/users?subdomain=proalt&amp;max_results=1" \
+  -H "Authorization: Bearer &lt;ACCESS_TOKEN&gt;"
+
+# 3) Vazio — mesmo Club no painel, 15 produtos:
+curl "https://developers.hotmart.com/club/api/v1/users?subdomain=michamenezes&amp;max_results=10" \
+  -H "Authorization: Bearer &lt;ACCESS_TOKEN&gt;"
+# → {"items":{},"page_info":{"total_results":0,"results_per_page":0}}</code></pre>
+
+<p>Obs: substituí o <code>client_secret</code> por <code>&lt;MEU_SECRET&gt;</code> pra não expor a credencial neste chat. Se precisarem do secret pra reproduzir do lado de vocês, me avisem o canal seguro pra enviar.</p>
+
+<p>Preciso disso resolvido pra confirmar acesso à área de membros de alunos via API — é bloqueante pra uma integração que estamos rodando.</p>
+
+<p>Obrigado!</p>
+
+<hr/>
+
+<h2>Anexos pra anexar no chamado (se pedirem)</h2>
+
+<p>1. Print: tela "Configurações → Informações gerais" do Club <code>turbo-x</code> (mostra URL personalizada <code>hotmart.com/club/turbo-x</code>)</p>
+<p>2. Print: tela "Configurações → Ferramentas" do mesmo Club (mostra Pixel/Tutor/Email/PWA mas NÃO mostra config de API/acesso programático)</p>
+<p>3. Print: lista de Hotmart Clubs da conta (mostra os 8+ Clubs, incluindo "Micha Menezes" com 15 produtos)</p>
+
+
+</body>
+</html>

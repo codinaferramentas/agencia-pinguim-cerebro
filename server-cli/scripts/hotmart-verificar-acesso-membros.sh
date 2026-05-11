@@ -2,7 +2,9 @@
 # V2.14 D — G4b Verificar ACESSO REAL à área de membros (Hotmart Club / Members Area API)
 # Itera nos Clubs cadastrados em pinguim.hotmart_clubs e devolve onde o aluno tem acesso.
 #
-# Uso: bash scripts/hotmart-verificar-acesso-membros.sh <email> [produto_id]
+# Uso: bash scripts/hotmart-verificar-acesso-membros.sh <email> [produto_id_ou_nome]
+# Aceita ID numérico (ex: 6811692) OU nome do produto (ex: "ProAlt", "Elo", "365 Dias")
+# Quando recebe nome, resolve automaticamente pelo banco antes de chamar API.
 
 set -e
 export PYTHONIOENCODING=utf-8
@@ -11,8 +13,33 @@ EMAIL="$1"; PRODUTO="${2:-}"
 PORT="${PINGUIM_PORT:-3737}"
 
 if [ -z "$EMAIL" ]; then
-  echo "ERRO: bash scripts/hotmart-verificar-acesso-membros.sh <email> [produto_id]" >&2
+  echo "ERRO: bash scripts/hotmart-verificar-acesso-membros.sh <email> [produto_id_ou_nome]" >&2
   exit 1
+fi
+
+# Se PRODUTO foi passado e NÃO é numérico, resolve via endpoint /api/hotmart/resolver-produto
+if [ -n "$PRODUTO" ] && ! [[ "$PRODUTO" =~ ^[0-9]+$ ]]; then
+  RESOLVE=$(curl -s -X POST "http://localhost:${PORT}/api/hotmart/resolver-produto" \
+    -H "Content-Type: application/json" \
+    -d "$(python -c "import json,sys; print(json.dumps({'nome': sys.argv[1]}))" "$PRODUTO")")
+  PRODUTO_RESOLVIDO=$(echo "$RESOLVE" | python -c "
+import sys, json
+try:
+    d = json.loads(sys.stdin.read())
+    if d.get('ok') and d.get('produto_id'):
+        print(d['produto_id'])
+    else:
+        print('', end='')
+except:
+    print('', end='')
+")
+  if [ -n "$PRODUTO_RESOLVIDO" ]; then
+    echo "[g4b] resolvido '$PRODUTO' → produto_id=$PRODUTO_RESOLVIDO" >&2
+    PRODUTO="$PRODUTO_RESOLVIDO"
+  else
+    echo "[g4b] AVISO: nao consegui resolver '$PRODUTO' — vou varrer todos os Clubs" >&2
+    PRODUTO=""
+  fi
 fi
 
 BODY=$(EMAIL="$EMAIL" PRODUTO="$PRODUTO" python -c "

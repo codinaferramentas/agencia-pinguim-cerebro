@@ -86,6 +86,11 @@ app.use('/mission-control', express.static(MISSION_CONTROL_DIR));
 // Threads em memoria — V2 vai pra banco.
 const threads = {};
 
+// V2.14 D Fix 2026-05-11 — Set global de canais Discord com turno em andamento.
+// Usado pra bloquear auto-postagem do agente no MESMO canal de onde veio @mention,
+// evitando duplicação (agente posta + bot posta resposta final = 2 mensagens).
+const turnoDiscordEmAndamento = new Set();
+
 // ============================================================
 // V2.5 Commit 3 — Cache de plano em memoria (TTL 5 min)
 // /api/pipeline-plan guarda plano completo (5 fontes consultadas + briefing
@@ -464,6 +469,14 @@ app.post('/api/chat', async (req, res) => {
 });
 
 async function processarChat({ req, res, t0, message, thread_id, plan_id, cliente_id, contexto_extra }) {
+  // V2.14 D Fix 2026-05-11 — marca canal Discord como "em andamento" pra bloquear
+  // auto-postagem do agente no mesmo canal (evita duplicação com discord-bot).
+  const discordCanalIdAtivo = contexto_extra?.canal === 'discord' ? contexto_extra?.discord_canal_id : null;
+  if (discordCanalIdAtivo) {
+    turnoDiscordEmAndamento.add(discordCanalIdAtivo);
+    console.log(`  [discord-lock] canal ${discordCanalIdAtivo} marcado como ATIVO (bloqueia auto-postagem do agente)`);
+  }
+
   try {
     // V2.14 D Fix 1 — SEMPRE recarrega histórico do banco (fonte da verdade).
     const historicoBanco = await carregarThreadDoBanco(thread_id, 20);
@@ -807,6 +820,12 @@ async function processarChat({ req, res, t0, message, thread_id, plan_id, client
         error: err.message || String(err),
         hint: 'Verifique se rodou `claude login` e se a CLI esta no PATH (`which claude`)',
       });
+    }
+  } finally {
+    // V2.14 D Fix 2026-05-11 — libera o lock de turno Discord
+    if (discordCanalIdAtivo) {
+      turnoDiscordEmAndamento.delete(discordCanalIdAtivo);
+      console.log(`  [discord-lock] canal ${discordCanalIdAtivo} LIBERADO`);
     }
   }
 }
@@ -1647,9 +1666,25 @@ app.post('/api/discord/buscar', async (req, res) => {
 // ============================================================
 app.post('/api/discord/postar', async (req, res) => {
   try {
-    const { canal_id, canal_nome, texto, reply_to_message_id, origem_canal = 'chat', forcar = false } = req.body || {};
+    const { canal_id, canal_nome, texto, reply_to_message_id, origem_canal = 'chat', forcar = false, thread_id_corrente = null } = req.body || {};
     if (!texto) return res.status(400).json({ ok: false, error: 'texto obrigatorio' });
     if (!canal_id && !canal_nome) return res.status(400).json({ ok: false, error: 'canal_id OU canal_nome obrigatorio' });
+
+    // V2.14 D Fix 2026-05-11 — bloqueio TOTAL de auto-postagem durante turno Discord ativo.
+    // Quando agente está dentro de um turno @mention Discord, ele NÃO precisa postar nada
+    // em NENHUM canal Discord — basta colocar <@user_id> no texto da resposta final.
+    // O discord-bot já vai postar essa resposta automaticamente no canal de origem.
+    // Postar em outros canais também é dispensável (origem já notifica todos).
+    if (typeof turnoDiscordEmAndamento !== 'undefined' && turnoDiscordEmAndamento.size > 0 && !forcar) {
+      console.log(`[discord-postar] BLOQUEADO auto-postagem (canal ${canal_id || canal_nome}) — ${turnoDiscordEmAndamento.size} turno(s) Discord em andamento. Texto descartado: "${texto.slice(0,80)}"`);
+      return res.json({
+        ok: true,
+        bloqueado_auto_postagem: true,
+        motivo: 'Voce esta dentro de uma conversa Discord agora. NAO chame /api/discord/postar nem use bash discord-postar — basta colocar <@user_id> no TEXTO da sua resposta principal que vai ser postada automaticamente no canal de origem. IDs: Rafa <@1083728715726463068>, Djairo <@1083731934238228590>, Luiz Guilherme <@1084804999151878206>. NAO mencione "nao consegui postar" nem "403" na resposta — a postagem nao falhou, eu apenas bloqueei pra evitar duplicacao. Coloca as mentions <@id> no texto final e a resposta sai certinha.',
+        canal_id,
+        texto_descartado: texto.slice(0, 200),
+      });
+    }
 
     const discordPostar = require('./lib/discord-postar');
 
@@ -2401,6 +2436,48 @@ app.get('/api/hotmart/clubs', async (req, res) => {
     res.json({ ok: true, total: lista.length, clubs: lista });
   } catch (e) {
     console.error('[hotmart-clubs] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// V2.14 D Fix — Resolve nome de produto pra produto_id (fuzzy match em pinguim.hotmart_clubs)
+// Usado pelo script G4b pra aceitar nome em vez de só ID. Resolve "ProAlt", "Elo", "365 Dias" etc.
+app.post('/api/hotmart/resolver-produto', async (req, res) => {
+  try {
+    const { nome } = req.body || {};
+    if (!nome) return res.status(400).json({ ok: false, error: 'nome obrigatório' });
+
+    // Normaliza: lowercase + remove acentos + tira "club ", "de ", "do ", etc
+    const norm = (s) => String(s).toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/\b(club|clube|do|da|de|dos|das|the|o|a)\b/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+
+    const alvo = norm(nome);
+
+    // Match na hotmart_clubs por produto_nome OU subdomain
+    const sql = `
+      SELECT subdomain, produto_id, produto_nome
+      FROM pinguim.hotmart_clubs
+      WHERE ativo = true
+      ORDER BY produto_nome
+    `;
+    const r = await db.rodarSQL(sql);
+    if (!Array.isArray(r) || r.length === 0) return res.json({ ok: false, error: 'nenhum Club cadastrado' });
+
+    // Procura match exato, depois "contém", depois fuzzy
+    let match = r.find(c => norm(c.produto_nome) === alvo || norm(c.subdomain) === alvo);
+    if (!match) match = r.find(c => norm(c.produto_nome).includes(alvo) || alvo.includes(norm(c.produto_nome)));
+    if (!match) match = r.find(c => {
+      const palavrasAlvo = alvo.split(' ').filter(p => p.length > 2);
+      const palavrasProd = norm(c.produto_nome).split(' ');
+      return palavrasAlvo.some(p => palavrasProd.includes(p));
+    });
+
+    if (!match) return res.json({ ok: false, error: `Nao achei produto "${nome}" nos Clubs cadastrados`, total_clubs: r.length });
+    res.json({ ok: true, nome_pesquisado: nome, produto_id: match.produto_id, produto_nome: match.produto_nome, subdomain: match.subdomain });
+  } catch (e) {
+    console.error('[hotmart-resolver-produto] erro:', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
