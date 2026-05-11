@@ -710,11 +710,18 @@ Existe DIFERENÇA entre:
 
 **REGRA DURA — quando produto comprado tem cadastro Hotmart mas NÃO consta no Members Area API:**
 
-**Regra:** se sócio identifica COMPRA Hotmart aprovada de um produto X (via G1) mas Members Area API retorna `total_results: 0` pro Club cadastrado desse produto:
+**Status atual (2026-05-11, aguardando resposta Hotmart Suporte):** alguns Hotmart Clubs da Pinguim **retornam vazio na API mesmo existindo no painel**. Causa raiz desconhecida, chamado aberto com Hotmart (ver `docs/chamado-hotmart-club-api-vazia-2026-05-11.md`). Produtos afetados incluem **Elo (6404411), 365 Roteiros (5984739), Desafio Low Ticket (6662699), Turbo X (3594811), Acelerador de Perpétuo, Imersões, Workshop, La Estratégia, Anúncio Express, e outros do Club "Produtos Micha Menezes" / "Micha Menezes" / "turbo-x"**.
+
+**Regra:** se sócio identifica COMPRA Hotmart aprovada de um produto X (via G1) mas Members Area API retorna `total_results: 0`:
 
 - ❌ **NUNCA dizer "ela NÃO tem acesso ao produto X"** com base só nesse 0
-- ✅ **DIZER: "Não consegui CONFIRMAR acesso pela API. Compra existe (R$ Y em DD/MM, status COMPLETE), mas o Club cadastrado no nosso sistema (subdomain=Z) retornou 0 resultados — pode ser cadastro errado do nosso lado. Confirma manualmente no painel da Hotmart ou me passa o subdomain correto que eu atualizo."**
-- ✅ Sugerir Andre rodar `bash scripts/hotmart-cadastrar-club.sh <subdomain_correto> <produto_nome>` se o subdomain estiver errado
+- ✅ **DIZER de forma natural** (variar, nunca template enlatado): *"Comprou X em DD/MM (R$ Y, status COMPLETE). **Não consigo confirmar acesso à área de membros desse produto via API** — esse Club específico tá retornando vazio pro nosso OAuth atualmente (problema conhecido, aguardando resposta da Hotmart). **Pra confirmar acesso real, abre o painel admin direto: https://app.hotmart.com/membership/[slug-club]/products/edit/[produto_id]/admin/beta/users?search=[email]"*
+- ✅ Quando souber o slug-club do produto (mesmo que API retorne vazio, slug é conhecido), montar URL clicável pro painel admin direto
+
+**Tabela de mapeamento slug-club por produto** (consultar `pinguim.hotmart_clubs` + URLs públicas conhecidas):
+- ELO (6404411) → slug `turbo-x` → URL: `https://app.hotmart.com/membership/turbo-x/products/edit/6404411/admin/beta/users`
+- ProAlt - Low Ticket (6811692) → slug `micha-menezes` → URL: `https://app.hotmart.com/membership/micha-menezes/products/edit/6811692/admin/beta/users`
+- 365 Roteiros (5984739) → slug `turbo-x` → URL: `https://app.hotmart.com/membership/turbo-x/products/edit/5984739/admin/beta/users`
 
 **Razão pra ser conservador:** dizer "não tem acesso" pra um aluno que TEM é catastrófico — quebra confiança do sócio no agente inteiro. Sempre que houver discrepância entre G1 (compra) e G4b (acesso), **assumir que o nosso cadastro está incompleto/errado**, não que o aluno está sem acesso.
 
