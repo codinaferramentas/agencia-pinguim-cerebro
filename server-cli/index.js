@@ -1688,6 +1688,61 @@ app.post('/api/discord/postar', async (req, res) => {
   }
 });
 
+// ============================================================
+// V2.14.6 — PROJETOS EXTERNOS (Supabase ProAlt + Elo + Sirius)
+// ============================================================
+// Read-only — qualquer escrita é bloqueada antes de chegar no banco.
+// ============================================================
+const dbExterno = require('./lib/db-externo');
+
+app.post('/api/projeto-externo/listar-tabelas', async (req, res) => {
+  try {
+    const { projeto } = req.body || {};
+    if (!projeto) return res.status(400).json({ ok: false, error: 'projeto obrigatorio (proalt|elo|sirius)' });
+    const tabelas = await dbExterno.listarTabelas(projeto);
+    res.json({ ok: true, projeto, total: tabelas.length, tabelas });
+  } catch (e) {
+    console.error('[projeto-externo-listar-tabelas] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/projeto-externo/descrever-tabela', async (req, res) => {
+  try {
+    const { projeto, tabela } = req.body || {};
+    if (!projeto || !tabela) return res.status(400).json({ ok: false, error: 'projeto e tabela obrigatorios' });
+    const info = await dbExterno.descreverTabela(projeto, tabela);
+    res.json({ ok: true, projeto, ...info });
+  } catch (e) {
+    console.error('[projeto-externo-descrever] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/projeto-externo/consultar', async (req, res) => {
+  try {
+    const { projeto, tabela, select, filtros, ordem, limite } = req.body || {};
+    if (!projeto || !tabela) return res.status(400).json({ ok: false, error: 'projeto e tabela obrigatorios' });
+    const dados = await dbExterno.consultarTabela(projeto, tabela, { select, filtros, ordem, limite });
+    res.json({ ok: true, projeto, tabela, total: Array.isArray(dados) ? dados.length : 0, dados });
+  } catch (e) {
+    console.error('[projeto-externo-consultar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/projeto-externo/contar', async (req, res) => {
+  try {
+    const { projeto, tabela, filtros = {} } = req.body || {};
+    if (!projeto || !tabela) return res.status(400).json({ ok: false, error: 'projeto e tabela obrigatorios' });
+    const total = await dbExterno.contarLinhas(projeto, tabela, filtros);
+    res.json({ ok: true, projeto, tabela, total });
+  } catch (e) {
+    console.error('[projeto-externo-contar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // V2.14 D — Apagar mensagem do bot no Discord (só apaga próprias mensagens)
 app.post('/api/discord/apagar', async (req, res) => {
   try {

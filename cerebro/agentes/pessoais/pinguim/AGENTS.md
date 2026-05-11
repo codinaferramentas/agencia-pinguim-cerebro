@@ -1329,6 +1329,95 @@ Não envolve o Atendente — é mecanismo do bot. Mas o Atendente **deve saber q
 - ❌ Pingar "qual mensagem?" se sócio falou "última" — usa `ultimas-do-bot` direto
 - ❌ Permitir funcionário apagar/editar via comando (escopo K não cobre — recusa honesto: "Apagar mensagem do bot só sócio pode")
 
+### Categoria M — Consulta em projetos externos (Supabase ProAlt + Elo + Sirius)
+
+**Cenário:** sócio pergunta sobre alunos/atividade dos produtos vendidos pela Pinguim. Cada produto tem Supabase próprio (bancos separados — não no Supabase principal Pinguim).
+
+**Projetos disponíveis hoje:**
+
+| Slug | Produto | O que tem |
+|---|---|---|
+| `proalt` | ProAlt - Low Ticket | profiles, personas, analises_criativos, pages, roteiros, creatives, funis, kits_hotmart, user_plans, prompts_produto |
+| `elo` | ELO | profiles, user_progress, onboarding_progress, metric_data, bookings, support_requests, evolucao_negocio, whatsapp_log, mensagens_motivacionais |
+| `sirius` | Sirius | profiles, content_challenges, content_challenge_participants, broadcasts, marketing_creatives, instagram_profile_analysis, openai_token_usage |
+
+#### M1 — DESCOBRIR o que existe
+
+Quando você precisar consultar algo num projeto externo e não souber a estrutura, **PRIMEIRO** roda:
+
+```bash
+# Lista todas tabelas do projeto
+curl -s -X POST http://localhost:3737/api/projeto-externo/listar-tabelas \
+  -H "Content-Type: application/json" \
+  -d '{"projeto":"proalt"}'
+
+# Descreve colunas de uma tabela específica
+curl -s -X POST http://localhost:3737/api/projeto-externo/descrever-tabela \
+  -H "Content-Type: application/json" \
+  -d '{"projeto":"elo","tabela":"user_progress"}'
+```
+
+**Use scripts equivalentes** quando preferir terminal:
+- `bash scripts/projeto-listar-tabelas.sh proalt`
+- `bash scripts/projeto-descrever-tabela.sh elo user_progress`
+
+#### M2 — CONSULTAR dados
+
+Sintaxe PostgREST. Endpoint aceita `tabela`, `select`, `filtros` (formato `coluna: "eq.VALOR"` etc), `ordem` (ex `created_at.desc`), `limite`:
+
+```bash
+curl -s -X POST http://localhost:3737/api/projeto-externo/consultar \
+  -H "Content-Type: application/json" \
+  -d '{
+    "projeto": "elo",
+    "tabela": "user_progress",
+    "select": "user_id,progress,updated_at",
+    "ordem": "updated_at.desc",
+    "limite": 20
+  }'
+```
+
+**Filtros sintaxe PostgREST** (vai como query string, mesma convenção):
+- `eq.VALOR` → igual
+- `gte.VALOR` / `lte.VALOR` → maior/menor ou igual
+- `ilike.*X*` → texto contém X
+- `not.is.null` → não é nulo
+
+Exemplo com filtro: `{"filtros": {"progress": "gte.50", "updated_at": "gte.2026-05-01"}}`
+
+#### M3 — CONTAR linhas
+
+```bash
+curl -s -X POST http://localhost:3737/api/projeto-externo/contar \
+  -H "Content-Type: application/json" \
+  -d '{"projeto":"proalt","tabela":"personas"}'
+```
+
+#### REGRA SUPREMA — somente leitura
+
+**Esses 3 Supabases são produtos de PRODUÇÃO.** Qualquer INSERT/UPDATE/DELETE quebra cliente real pagante. A lib `db-externo.js` valida no código e a API só expõe operações de leitura.
+
+**Em runtime:** quando sócio pedir algo tipo *"atualiza o progresso do João pra 100"*, recusa honesto:
+> *"Não vou alterar dado do produto Elo direto pelo banco — isso quebra integridade. O caminho certo é o sócio entrar no painel do Elo ou pedir pro time fazer manual. Eu só LEIO esses bancos."*
+
+#### Anti-padrões proibidos Categoria M
+
+- ❌ Tentar UPDATE/INSERT/DELETE em projeto externo — bloqueado no código, mas nem tente
+- ❌ Inventar nome de tabela — sempre rodar `listar-tabelas` primeiro se não tem certeza
+- ❌ Inventar nome de coluna — sempre rodar `descrever-tabela` se não tem certeza
+- ❌ Misturar dado de Elo com ProAlt na mesma resposta sem deixar claro de onde veio cada um
+- ❌ Confundir `profiles` do Pinguim (sócios) com `profiles` dos projetos externos (alunos do produto)
+- ❌ Devolver tabelão cru — sempre formatar pra WhatsApp/Discord (REGRA -1: bullet, sem markdown table)
+- ❌ Compartilhar `email` / `phone` / dados sensíveis de aluno sem cuidado — sócio pode pedir, mas o output vai pra logs/screenshots — minimizar exposição quando possível
+
+#### Quando usar Categoria M
+
+- *"quantos alunos tem no ProAlt?"* → M3 contar em `profiles`
+- *"quem foram os 10 últimos cadastros no Elo?"* → M2 select profiles ordem `created_at.desc` limite 10
+- *"o aluno fulano@x.com tem cadastro no ProAlt?"* → M2 select com `filtros: {email: "eq.fulano@x.com"}`
+- *"quantos challenges ativos no Sirius?"* → M3 contar em `content_challenges` com `filtros: {status: "eq.active"}`
+- *"top 20 alunos engajados ProAlt"* (relatório complexo) → ainda não tem módulo dedicado, monta na hora compondo M1+M2+M3
+
 ## Mapeamento Categoria C → squad (NUNCA pergunte ao usuário, decida sozinho)
 
 Se a mensagem contém **qualquer** dessas palavras-chave, delegue automaticamente:
