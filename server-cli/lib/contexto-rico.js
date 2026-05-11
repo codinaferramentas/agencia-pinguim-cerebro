@@ -132,11 +132,11 @@ async function blocoAprendizados(cliente_id) {
     const partes = [];
     if (geral?.conteudo_md && geral.conteudo_md.trim()) {
       partes.push(`[APRENDIZADOS GERAIS DO AGENTE] (válidos pra TODOS os sócios)
-${geral.conteudo_md.trim().slice(0, 16000)}`);
+${geral.conteudo_md.trim().slice(0, 32000)}`);
     }
     if (pessoal?.conteudo_md && pessoal.conteudo_md.trim()) {
       partes.push(`[APRENDIZADOS PESSOAIS DESTE SÓCIO]
-${pessoal.conteudo_md.trim().slice(0, 16000)}
+${pessoal.conteudo_md.trim().slice(0, 32000)}
 
 REGRA: estes são GOSTOS E PREFERÊNCIAS do sócio atual. Aplicar SEMPRE que relevante. Quando este sócio der feedback novo, classificar antes de gravar (ver Categoria J do AGENTS.md): pessoal (vai aqui) vs geral (vai pros APRENDIZADOS GERAIS).`);
     }
