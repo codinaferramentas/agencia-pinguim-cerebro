@@ -254,6 +254,102 @@ export async function gerar() {
       },
 
       {
+        id: 'bases-dados',
+        titulo: '🗄 Bases de dados — onde o agente vai buscar informação',
+        html: `
+          <p>Lista das fontes de dado que o agente tem (ou vai ter) acesso. Cada uma vira uma "tool" de consulta — sócio pergunta no WhatsApp, agente sabe onde buscar.</p>
+
+          <h3 style="margin-top:1.25rem;font-size:.95rem">✅ Conectadas hoje</h3>
+          <table style="width:100%;border-collapse:collapse;margin:.75rem 0">
+            <thead>
+              <tr style="border-bottom:1px solid var(--docs-line);text-align:left">
+                <th style="padding:.5rem;font-size:.875rem">Fonte</th>
+                <th style="padding:.5rem;font-size:.875rem">O que tem</th>
+                <th style="padding:.5rem;font-size:.875rem">Tipo de acesso</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--docs-line)">
+                <td style="padding:.5rem;font-size:.8125rem"><strong>Supabase Pinguim</strong> (principal)</td>
+                <td style="padding:.5rem;font-size:.8125rem">~30 tabelas no schema <code>pinguim</code>: sócios, agentes, Cérebros, Skills, entregáveis, cofre, conversas WhatsApp/Discord, Hotmart Clubs, etc</td>
+                <td style="padding:.5rem;font-size:.8125rem">Leitura + escrita (service role)</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--docs-line)">
+                <td style="padding:.5rem;font-size:.8125rem"><strong>Supabase Dashboard</strong> (2º Supabase)</td>
+                <td style="padding:.5rem;font-size:.8125rem">Dados consolidados Hotmart + Meta (vendas, transações, gasto Ads, ROAS) — populado por motor do Pedro via webhook</td>
+                <td style="padding:.5rem;font-size:.8125rem">Leitura only (fonte canônica financeira)</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--docs-line)">
+                <td style="padding:.5rem;font-size:.8125rem"><strong>Hotmart Developers API</strong></td>
+                <td style="padding:.5rem;font-size:.8125rem">Vendas, assinaturas, reembolsos, cupons, Members Area (último login, progresso, engajamento)</td>
+                <td style="padding:.5rem;font-size:.8125rem">Leitura + escrita (com confirmação)</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--docs-line)">
+                <td style="padding:.5rem;font-size:.8125rem"><strong>Meta Graph API</strong></td>
+                <td style="padding:.5rem;font-size:.8125rem">Ad accounts, campanhas, insights, Pages — análise de performance</td>
+                <td style="padding:.5rem;font-size:.8125rem">Leitura (Marketing API + Pages)</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--docs-line)">
+                <td style="padding:.5rem;font-size:.8125rem"><strong>Google Workspace</strong> (Codina)</td>
+                <td style="padding:.5rem;font-size:.8125rem">Drive (arquivos, planilhas, docs) + Gmail (inbox) + Calendar (agenda)</td>
+                <td style="padding:.5rem;font-size:.8125rem">Leitura + escrita OAuth</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--docs-line)">
+                <td style="padding:.5rem;font-size:.8125rem"><strong>Discord (Agência Pinguim)</strong></td>
+                <td style="padding:.5rem;font-size:.8125rem">Mensagens em tempo real de 48 canais do servidor</td>
+                <td style="padding:.5rem;font-size:.8125rem">Leitura + escrita (postar/responder)</td>
+              </tr>
+              <tr>
+                <td style="padding:.5rem;font-size:.8125rem"><strong>WhatsApp Evolution</strong></td>
+                <td style="padding:.5rem;font-size:.8125rem">Instância "Agente Pinguim" — recebe e envia mensagens</td>
+                <td style="padding:.5rem;font-size:.8125rem">Leitura + escrita</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3 style="margin-top:1.25rem;font-size:.95rem">⏳ A conectar (próximas frentes)</h3>
+          <table style="width:100%;border-collapse:collapse;margin:.75rem 0">
+            <thead>
+              <tr style="border-bottom:1px solid var(--docs-line);text-align:left">
+                <th style="padding:.5rem;font-size:.875rem">Fonte</th>
+                <th style="padding:.5rem;font-size:.875rem">O que terá</th>
+                <th style="padding:.5rem;font-size:.875rem">Pra que serve</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--docs-line)">
+                <td style="padding:.5rem;font-size:.8125rem"><strong>Supabase ProAlt</strong></td>
+                <td style="padding:.5rem;font-size:.8125rem">Cadastro de alunos, atividade (personas criadas, análises de criativo, páginas geradas, etc)</td>
+                <td style="padding:.5rem;font-size:.8125rem">Consultas: "quem está mais engajado", "quem caiu", outreach proativo</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--docs-line)">
+                <td style="padding:.5rem;font-size:.8125rem"><strong>Supabase Elo</strong></td>
+                <td style="padding:.5rem;font-size:.8125rem">Cadastro de alunos, aulas assistidas, entregáveis feitos, rotina seguida</td>
+                <td style="padding:.5rem;font-size:.8125rem">Idem ProAlt + tracking de jornada de aprendizagem</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--docs-line)">
+                <td style="padding:.5rem;font-size:.8125rem"><strong>Supabase Sirius</strong></td>
+                <td style="padding:.5rem;font-size:.8125rem">Cadastro de alunos / sistema do produto Sirius</td>
+                <td style="padding:.5rem;font-size:.8125rem">A definir conforme uso</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--docs-line)">
+                <td style="padding:.5rem;font-size:.8125rem"><strong>Clint (WhatsApp Business)</strong></td>
+                <td style="padding:.5rem;font-size:.8125rem">Disparos de massa, broadcast</td>
+                <td style="padding:.5rem;font-size:.8125rem">Tracking de campanhas WhatsApp + status de envio</td>
+              </tr>
+              <tr>
+                <td style="padding:.5rem;font-size:.8125rem"><strong>Google Workspace</strong> (Luiz, Pedro, Micha)</td>
+                <td style="padding:.5rem;font-size:.8125rem">Drive/Gmail/Calendar de cada sócio</td>
+                <td style="padding:.5rem;font-size:.8125rem">Triagem de email, agenda, relatórios pessoais (só na V3)</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p style="margin-top:1rem;color:var(--docs-muted);font-size:.875rem"><strong>Princípio canônico (Andre 2026-05-10):</strong> cada tipo de dado tem 1 fonte canônica única. <strong>Número financeiro</strong> sempre do Supabase Dashboard. <strong>Análise de campanha</strong> sempre da Meta API direto. <strong>Engajamento de aluno</strong> sempre do Supabase do produto correspondente. Não misturar fontes na mesma resposta sem dizer de onde veio cada número.</p>
+        `,
+      },
+
+      {
         id: 'pendencias-socios',
         titulo: '📌 O que preciso de cada sócio pra avançar',
         html: `
