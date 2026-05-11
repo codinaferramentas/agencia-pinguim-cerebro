@@ -1778,6 +1778,21 @@ app.post('/api/projeto-externo/contar', async (req, res) => {
   }
 });
 
+// V2.15 — Top N engajados em ProAlt/Elo/Sirius (1 chamada, agregação no Node, ~5-10s)
+// Substitui caminho onde o LLM faria 5-10 Bash sequenciais (>5min total).
+// Critérios canônicos definidos por Andre 2026-05-11.
+app.post('/api/relatorio/top-engajados', async (req, res) => {
+  try {
+    const { produtos = ['proalt', 'elo', 'sirius'], top_n = 15, formato = 'markdown' } = req.body || {};
+    const topEngajados = require('./lib/top-engajados');
+    const r = await topEngajados.gerarRelatorio({ produtos, topN: parseInt(top_n, 10), formato });
+    res.json(r);
+  } catch (e) {
+    console.error('[top-engajados] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // V2.14 D — Apagar mensagem do bot no Discord (só apaga próprias mensagens)
 app.post('/api/discord/apagar', async (req, res) => {
   try {
