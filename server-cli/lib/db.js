@@ -385,6 +385,23 @@ async function lerChavePorCliente(nome, cliente_id) {
   return Array.isArray(data) && data[0] ? data[0].valor : null;
 }
 
+// V2.14 D Categoria H — atualiza valor de chave de sistema (cliente_id IS NULL).
+// Usado quando wrapper renova token automaticamente (Meta refresh 60d, etc).
+async function atualizarChaveSistema(nome, novoValor, consumidor = 'server-cli') {
+  if (!nome || !novoValor) throw new Error('nome e novoValor obrigatorios');
+  const sql = `
+    UPDATE pinguim.cofre_chaves
+       SET valor_completo = ${esc(novoValor)},
+           ultima_rotacao = now(),
+           atualizado_em = now()
+     WHERE nome = ${esc(nome)} AND cliente_id IS NULL
+    RETURNING id, nome, ultimos_4;`;
+  const data = await rodarSQL(sql);
+  if (!Array.isArray(data) || !data[0]) throw new Error(`chave ${nome} nao encontrada no cofre`);
+  console.log(`[cofre] ${nome} rotacionada (${consumidor})`);
+  return data[0];
+}
+
 // Upsert de OAuth refresh_token (usa nome+cliente_id como chave logica)
 async function salvarRefreshTokenOAuth({
   nome = 'GOOGLE_OAUTH_REFRESH',
@@ -625,6 +642,7 @@ module.exports = {
   // cofre + OAuth (V2.12)
   lerChaveSistema,
   lerChavePorCliente,
+  atualizarChaveSistema,
   salvarRefreshTokenOAuth,
   revogarOAuthToken,
   // drive_contexto (V2.12 Fix 2)

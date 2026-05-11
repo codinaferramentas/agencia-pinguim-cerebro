@@ -344,8 +344,10 @@ class DiscordBot {
       case 'READY':
         this.sessionId = d.session_id;
         this.resumeUrl = d.resume_gateway_url;
+        this.botUserId = d.user?.id || null;
+        this.botUsername = d.user?.username || 'bot';
         this.estatisticas.conectado_desde = new Date().toISOString();
-        this.log(`[discord-bot] READY — bot=${d.user.username}#${d.user.discriminator || '0'} | guilds=${d.guilds.length}`);
+        this.log(`[discord-bot] READY — bot=${d.user.username}#${d.user.discriminator || '0'} (id=${this.botUserId}) | guilds=${d.guilds.length}`);
         break;
 
       case 'RESUMED':
@@ -376,6 +378,10 @@ class DiscordBot {
 
       case 'MESSAGE_CREATE':
         await this._handleMessageCreate(d);
+        break;
+
+      case 'MESSAGE_REACTION_ADD':
+        await this._handleReactionAdd(d).catch(e => this.err(`[discord-bot] erro REACTION_ADD: ${e.message}`));
         break;
 
       case 'MESSAGE_UPDATE':
@@ -455,6 +461,293 @@ class DiscordBot {
       this.err(`[discord-bot] erro inserindo mensagem ${m.id}: ${e.message}`);
       this.estatisticas.ultimo_erro = `INSERT: ${e.message}`;
     }
+
+    // V2.14 D — RESPOSTA A @ MENÇÃO DO BOT
+    // Bot só responde se: (1) foi mencionado explicitamente, (2) não é mensagem dele mesmo, (3) autor está na whitelist.
+    if (!ehBot && this.botUserId && row.mencoes_users.includes(this.botUserId)) {
+      try {
+        await this._processarMencao(m, row);
+      } catch (e) {
+        this.err(`[discord-bot] erro processando @menção ${m.id}: ${e.message}`);
+      }
+    }
+  }
+
+  // V2.14 D — Caminho 2: reação ❌ na mensagem do bot apaga ela
+  // Sócio reage com ❌ (ou similar) numa mensagem do bot → bot apaga sozinho.
+  // Funcionário NÃO pode apagar mensagem (Categoria K — operação destrutiva).
+  async _handleReactionAdd(d) {
+    // Filtros básicos
+    if (!d.guild_id) return; // ignora DM
+    const GUILD_PINGUIM = '1083429941300969574';
+    if (d.guild_id !== GUILD_PINGUIM) return; // só no server Pinguim
+
+    // Filtra reações que disparam apagar: ❌ ✖️ 🗑️
+    const emoji = d.emoji?.name || '';
+    const EMOJIS_APAGAR = ['❌', '✖️', '🗑️', '🗑'];
+    if (!EMOJIS_APAGAR.includes(emoji)) return;
+
+    // Quem reagiu — checa whitelist + papel
+    const userId = d.user_id;
+    if (!userId || userId === this.botUserId) return; // ignora reação do próprio bot
+
+    const whitelistDiscord = require('./whitelist-discord');
+    const check = await whitelistDiscord.checarUsuario(userId);
+    if (!check.autorizado) {
+      this.log(`[discord-bot] reação ${emoji} de usuário não-autorizado (${userId}) — ignorando`);
+      return;
+    }
+    if (check.papel !== 'socio') {
+      this.log(`[discord-bot] reação ${emoji} de ${check.nome} (papel=${check.papel}) — só sócio pode apagar mensagens do bot, ignorando`);
+      return;
+    }
+
+    // Confere se a mensagem é do bot ANTES de apagar
+    const sqlCheck = `
+      SELECT autor_id, conteudo, canal_nome FROM pinguim.discord_mensagens
+       WHERE message_id = '${String(d.message_id).replace(/'/g, "''")}'
+       LIMIT 1;
+    `;
+    const r = await db.rodarSQL(sqlCheck);
+    const msg = Array.isArray(r) && r[0] ? r[0] : null;
+    if (!msg) {
+      this.log(`[discord-bot] reação ❌ em mensagem ${d.message_id} não encontrada no banco — ignorando`);
+      return;
+    }
+    if (msg.autor_id !== this.botUserId) {
+      this.log(`[discord-bot] reação ❌ em mensagem que NÃO é do bot (autor=${msg.autor_id}) — ignorando`);
+      return;
+    }
+
+    this.log(`[discord-bot] APAGANDO mensagem do bot (id=${d.message_id}) — solicitado por ${check.nome} via reação ${emoji}`);
+    try {
+      await this.apagarMensagem(d.channel_id, d.message_id);
+      this.log(`[discord-bot] mensagem apagada com sucesso`);
+    } catch (e) {
+      this.err(`[discord-bot] falha apagando: ${e.message}`);
+    }
+  }
+
+  // V2.14 D — Processa @ menção do bot e responde no canal
+  async _processarMencao(m, row) {
+    const whitelistDiscord = require('./whitelist-discord');
+    let check = await whitelistDiscord.checarUsuario(row.autor_id);
+
+    // V2.14 D ajuste pos-feedback Andre 2026-05-11:
+    // Discord da Agência Pinguim é fechado por convite — quem está lá já passou
+    // por liberação. Fallback: se não está cadastrado MAS está no servidor
+    // Pinguim, auto-cadastra como funcionário + responde.
+    // Pessoas em OUTROS servers (ex: server de teste do Codina) ainda caem
+    // em silêncio + log.
+    const GUILD_PINGUIM = '1083429941300969574';
+    if (!check.autorizado && row.guild_id === GUILD_PINGUIM) {
+      this.log(`[discord-bot] auto-cadastrando ${row.autor_nome} (id=${row.autor_id}) como FUNCIONARIO (membro do server Pinguim)`);
+      try {
+        await whitelistDiscord.autorizar({
+          discord_user_id: row.autor_id,
+          papel: 'funcionario',
+          nome_discord: row.autor_nome,
+          observacao: 'auto-cadastrado via menção (membro do server Pinguim)',
+        });
+        check = await whitelistDiscord.checarUsuario(row.autor_id);
+      } catch (e) {
+        this.err(`[discord-bot] falha auto-cadastro: ${e.message}`);
+      }
+    }
+
+    if (!check.autorizado) {
+      // Pessoa fora do server Pinguim — silêncio + log
+      this.log(`[discord-bot] @MENÇÃO de usuário NÃO autorizado (fora do server Pinguim): ${row.autor_nome} (id=${row.autor_id}) guild=${row.guild_id} em #${row.canal_nome || row.canal_id} — "${row.conteudo.slice(0, 80)}"`);
+      await whitelistDiscord.logarBloqueio({
+        discord_user_id: row.autor_id,
+        nome_discord: row.autor_nome,
+        canal_id: row.canal_id,
+        canal_nome: row.canal_nome,
+        texto: row.conteudo,
+      });
+      return; // silêncio total — pessoa não recebe resposta
+    }
+
+    // Limpa @ menção do texto pra deixar só o pedido real
+    const textoLimpo = (row.conteudo || '')
+      .replace(new RegExp(`<@!?${this.botUserId}>`, 'g'), '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!textoLimpo) {
+      this.log(`[discord-bot] @MENÇÃO sem texto de ${check.nome} — ignorando`);
+      return;
+    }
+
+    this.log(`[discord-bot] @MENÇÃO de ${check.nome} (${check.papel}) em #${row.canal_nome || row.canal_id}: "${textoLimpo.slice(0, 80)}"`);
+
+    // Thread ID estável por canal+usuário (mantém contexto da conversa)
+    const thread_id = `discord-${row.canal_id}-${row.autor_id}`;
+
+    // Monta payload pra /api/chat com identidade Discord
+    try {
+      const PORT = process.env.PINGUIM_PORT || 3737;
+      const body = {
+        message: textoLimpo,
+        thread_id,
+        cliente_id: check.cliente_id || null, // só sócio tem cliente_id; funcionário fica null
+        // Campos extras pro contexto saber que veio Discord + papel
+        contexto_extra: {
+          canal: 'discord',
+          discord_user_id: row.autor_id,
+          discord_canal_id: row.canal_id,
+          discord_canal_nome: row.canal_nome,
+          papel: check.papel,
+          nome: check.nome,
+          socio_slug: check.socio_slug,
+        },
+      };
+      const resp = await fetch(`http://localhost:${PORT}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const j = await resp.json();
+      if (!resp.ok || j.error) {
+        this.err(`[discord-bot] /api/chat falhou: ${j.error || 'desconhecido'}`);
+        await this.enviarMensagem(row.canal_id, `<@${row.autor_id}> ⚠ Erro processando: ${j.error || 'desconhecido'}`);
+        return;
+      }
+      const respostaTexto = j.content || j.response || '(resposta vazia)';
+      // Adiciona menção no início pra ficar mais claro no canal
+      const respostaComMencao = `<@${row.autor_id}> ${respostaTexto}`;
+      await this.enviarMensagem(row.canal_id, respostaComMencao, { reply_to_message_id: m.id });
+    } catch (e) {
+      this.err(`[discord-bot] erro chamando /api/chat: ${e.message}`);
+      try {
+        await this.enviarMensagem(row.canal_id, `<@${row.autor_id}> ⚠ Falha técnica processando: ${e.message}`);
+      } catch (_) {}
+    }
+  }
+
+  // V2.14 D — Envia mensagem em um canal via Discord REST API
+  async enviarMensagem(canal_id, texto, { reply_to_message_id = null } = {}) {
+    if (!this.token) throw new Error('bot sem token');
+    if (!canal_id) throw new Error('canal_id obrigatorio');
+    if (!texto) throw new Error('texto obrigatorio');
+
+    // Discord limita 2000 chars por mensagem — corta se passar
+    const textoLimitado = texto.length > 1900 ? texto.slice(0, 1900) + '... (truncado)' : texto;
+
+    const body = { content: textoLimitado };
+    if (reply_to_message_id) {
+      body.message_reference = { message_id: reply_to_message_id };
+    }
+
+    const url = `https://discord.com/api/v10/channels/${canal_id}/messages`;
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bot ${this.token}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'PinguimBot/1.0',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`Discord REST ${resp.status}: ${errText.slice(0, 300)}`);
+    }
+    const j = await resp.json();
+    return j;
+  }
+
+  // V2.14 D — Apaga mensagem (apenas se for do próprio bot — segurança)
+  async apagarMensagem(canal_id, message_id) {
+    if (!this.token) throw new Error('bot sem token');
+    if (!canal_id || !message_id) throw new Error('canal_id e message_id obrigatorios');
+
+    // Confere se mensagem é do próprio bot ANTES de tentar apagar
+    const sqlCheck = `
+      SELECT autor_id FROM pinguim.discord_mensagens
+       WHERE message_id = '${String(message_id).replace(/'/g, "''")}'
+       LIMIT 1;
+    `;
+    const r = await db.rodarSQL(sqlCheck);
+    const autor = Array.isArray(r) && r[0] ? r[0].autor_id : null;
+    if (!autor) throw new Error('mensagem nao encontrada no banco (talvez seja antiga ou de outro canal)');
+    if (autor !== this.botUserId) {
+      throw new Error(`mensagem é de outro autor (${autor}), bot só pode apagar próprias mensagens`);
+    }
+
+    const url = `https://discord.com/api/v10/channels/${canal_id}/messages/${message_id}`;
+    const resp = await fetch(url, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bot ${this.token}`, 'User-Agent': 'PinguimBot/1.0' },
+    });
+    if (!resp.ok && resp.status !== 204) {
+      const errText = await resp.text();
+      throw new Error(`Discord REST ${resp.status}: ${errText.slice(0, 300)}`);
+    }
+    return { ok: true, message_id, canal_id };
+  }
+
+  // V2.14 D — Edita mensagem (só do próprio bot)
+  async editarMensagem(canal_id, message_id, novoTexto) {
+    if (!this.token) throw new Error('bot sem token');
+    if (!canal_id || !message_id) throw new Error('canal_id e message_id obrigatorios');
+    if (!novoTexto) throw new Error('novoTexto obrigatorio');
+
+    // Confere autor
+    const sqlCheck = `
+      SELECT autor_id FROM pinguim.discord_mensagens
+       WHERE message_id = '${String(message_id).replace(/'/g, "''")}'
+       LIMIT 1;
+    `;
+    const r = await db.rodarSQL(sqlCheck);
+    const autor = Array.isArray(r) && r[0] ? r[0].autor_id : null;
+    if (!autor) throw new Error('mensagem nao encontrada no banco');
+    if (autor !== this.botUserId) throw new Error('bot só pode editar próprias mensagens');
+
+    const textoLimitado = novoTexto.length > 1900 ? novoTexto.slice(0, 1900) + '... (truncado)' : novoTexto;
+    const url = `https://discord.com/api/v10/channels/${canal_id}/messages/${message_id}`;
+    const resp = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bot ${this.token}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'PinguimBot/1.0',
+      },
+      body: JSON.stringify({ content: textoLimitado }),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`Discord REST ${resp.status}: ${errText.slice(0, 300)}`);
+    }
+    return await resp.json();
+  }
+
+  // V2.14 D — Acha a última mensagem do bot num canal
+  async ultimaMensagemDoBotNoCanal(canal_id) {
+    if (!this.botUserId) throw new Error('botUserId ainda nao capturado (bot conectando)');
+    const sql = `
+      SELECT message_id, conteudo, postado_em
+        FROM pinguim.discord_mensagens
+       WHERE canal_id = '${String(canal_id).replace(/'/g, "''")}'
+         AND autor_id = '${this.botUserId}'
+       ORDER BY postado_em DESC
+       LIMIT 1;
+    `;
+    const r = await db.rodarSQL(sql);
+    return Array.isArray(r) && r[0] ? r[0] : null;
+  }
+
+  // V2.14 D — Acha as N últimas mensagens do bot em TODOS os canais
+  async ultimasMensagensDoBot(limite = 5) {
+    if (!this.botUserId) throw new Error('botUserId ainda nao capturado');
+    const sql = `
+      SELECT message_id, canal_id, canal_nome, conteudo, postado_em
+        FROM pinguim.discord_mensagens
+       WHERE autor_id = '${this.botUserId}'
+       ORDER BY postado_em DESC
+       LIMIT ${parseInt(limite, 10)};
+    `;
+    return await db.rodarSQL(sql);
   }
 
   async _insertMensagem(r) {

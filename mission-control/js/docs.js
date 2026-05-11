@@ -24,6 +24,13 @@ const el = (tag, attrs = {}, children = []) => {
 // Catalogo das docs disponiveis. Ordem aqui = ordem na sidebar e no indice.
 export const DOCS_CATALOGO = [
   {
+    slug: 'estado-atual',
+    titulo: '⭐ Estado Atual do Pinguim OS',
+    descricao: 'Foto viva do que o agente já faz hoje, em quais canais roda, quem usa, o que está em fila. Mostra pra sócios novos pra alinhar onde estamos. Atualizado 2026-05-11.',
+    meta: '5 min · status',
+    secao: 'Fundamentos',
+  },
+  {
     slug: 'arquitetura',
     titulo: 'Visão geral · Arquitetura',
     descricao: 'O que é o Pinguim OS, por que existe, e como tudo se conecta. Comece por aqui.',

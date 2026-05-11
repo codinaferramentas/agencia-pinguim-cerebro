@@ -447,7 +447,7 @@ async function carregarThreadDoBanco(thread_id, limite = 20) {
 // ============================================================
 app.post('/api/chat', async (req, res) => {
   const t0 = Date.now();
-  const { message, thread_id = 'default', plan_id } = req.body || {};
+  const { message, thread_id = 'default', plan_id, cliente_id, contexto_extra } = req.body || {};
 
   if (!message || !message.trim()) {
     return res.status(400).json({ error: 'message obrigatorio' });
@@ -456,14 +456,14 @@ app.post('/api/chat', async (req, res) => {
   // V2.14 D Fix 3 — Fila por thread. 2 turnos paralelos do mesmo sócio
   // (ex: WhatsApp "sim" + "enviou?" com 3s de gap) são serializados aqui.
   // Lock em banco → funciona local E V3 multi-server. Anatomia canônica.
-  return db.comLockThread(thread_id, async () => processarChat({ req, res, t0, message, thread_id, plan_id }))
+  return db.comLockThread(thread_id, async () => processarChat({ req, res, t0, message, thread_id, plan_id, cliente_id, contexto_extra }))
     .catch(err => {
       console.error('Erro /api/chat (lock wrapper):', err);
       if (!res.headersSent) res.status(500).json({ error: err.message || String(err) });
     });
 });
 
-async function processarChat({ req, res, t0, message, thread_id, plan_id }) {
+async function processarChat({ req, res, t0, message, thread_id, plan_id, cliente_id, contexto_extra }) {
   try {
     // V2.14 D Fix 1 — SEMPRE recarrega histórico do banco (fonte da verdade).
     const historicoBanco = await carregarThreadDoBanco(thread_id, 20);
@@ -492,11 +492,14 @@ async function processarChat({ req, res, t0, message, thread_id, plan_id }) {
                 : thread_id.startsWith('telegram-') ? 'telegram'
                 : 'chat-web';
 
-    const contextoBloco = await contextoRico.montarContexto({ thread_id, canal });
+    // V2.14.5 — cliente_id dinâmico (do webhook WhatsApp) entra no contexto pra
+    // [IDENTIDADE DO SÓCIO] resolver multi-sócio em vez do estático .env.local.
+    // V2.14 D Discord — contexto_extra traz papel (sócio/funcionário) + nome Discord
+    const contextoBloco = await contextoRico.montarContexto({ thread_id, canal, cliente_id, contexto_extra });
     const recent = threads[thread_id].slice(-20);
     const prompt = `${contextoBloco}\n\n[MENSAGEM ATUAL DO SÓCIO]\n${message}`;
 
-    console.log(`[${new Date().toISOString()}] thread=${thread_id} canal=${canal} pergunta: ${message.slice(0, 80)}${plan_id ? ` (plan_id=${plan_id})` : ''}`);
+    console.log(`[${new Date().toISOString()}] thread=${thread_id} canal=${canal} cliente=${cliente_id?.slice(0,8) || 'env'} pergunta: ${message.slice(0, 80)}${plan_id ? ` (plan_id=${plan_id})` : ''}`);
 
     // ============================================================
     // V2.11 — Pedido de EDICAO/V2 do entregavel anterior (DEPRECATED)
@@ -838,7 +841,7 @@ async function processarChat({ req, res, t0, message, thread_id, plan_id }) {
 // ============================================================
 app.post('/api/chat-stream', async (req, res) => {
   const t0 = Date.now();
-  const { message, thread_id = 'default' } = req.body || {};
+  const { message, thread_id = 'default', cliente_id } = req.body || {};
 
   if (!message || !message.trim()) {
     return res.status(400).json({ error: 'message obrigatorio' });
@@ -903,11 +906,12 @@ app.post('/api/chat-stream', async (req, res) => {
                 : thread_id.startsWith('discord-')  ? 'discord'
                 : thread_id.startsWith('telegram-') ? 'telegram'
                 : 'chat-web';
-    const contextoBloco = await contextoRico.montarContexto({ thread_id, canal });
+    // V2.14.5 — cliente_id dinâmico entra no contexto
+    const contextoBloco = await contextoRico.montarContexto({ thread_id, canal, cliente_id });
     const recent = threads[thread_id].slice(-20);
     const prompt = `${contextoBloco}\n\n[MENSAGEM ATUAL DO SÓCIO]\n${message}`;
 
-    console.log(`[${new Date().toISOString()}] thread=${thread_id} STREAM canal=${canal} pergunta: ${message.slice(0, 80)}`);
+    console.log(`[${new Date().toISOString()}] thread=${thread_id} STREAM canal=${canal} cliente=${cliente_id?.slice(0,8) || 'env'} pergunta: ${message.slice(0, 80)}`);
     sse('start', { thread_id });
 
     // Spawna CLI com onChunk emitindo SSE
@@ -1635,6 +1639,115 @@ app.post('/api/discord/buscar', async (req, res) => {
 });
 
 // ============================================================
+// V2.14 D Categoria L — DISCORD POSTAR (cross-canal)
+// ============================================================
+// Atendente posta mensagem em canal Discord. Usado quando sócio pede via
+// WhatsApp/chat: "marca o X no #suporte e pede tal coisa".
+// Camada B anti-duplicação (60s, mesma proteção do Gmail/WhatsApp).
+// ============================================================
+app.post('/api/discord/postar', async (req, res) => {
+  try {
+    const { canal_id, canal_nome, texto, reply_to_message_id, origem_canal = 'chat', forcar = false } = req.body || {};
+    if (!texto) return res.status(400).json({ ok: false, error: 'texto obrigatorio' });
+    if (!canal_id && !canal_nome) return res.status(400).json({ ok: false, error: 'canal_id OU canal_nome obrigatorio' });
+
+    const discordPostar = require('./lib/discord-postar');
+
+    // Resolve canal_id se veio só nome
+    let canal_id_final = canal_id;
+    let canal_nome_final = canal_nome;
+    if (!canal_id_final && canal_nome) {
+      const ch = discordPostar.resolverCanalPorNome(canal_nome);
+      if (!ch) return res.status(404).json({ ok: false, error: `canal "${canal_nome}" não encontrado no cache do bot. Bot precisa estar conectado ao server Discord.` });
+      canal_id_final = ch.id;
+      canal_nome_final = ch.nome;
+    }
+
+    // Camada B anti-duplicação
+    if (forcar !== true) {
+      const { executarComCheck } = require('./lib/anti-duplicacao');
+      const result = await executarComCheck({
+        tipo_acao: 'discord-postar',
+        destino: canal_id_final,
+        corpo: texto,
+        resumo: texto.slice(0, 80),
+        origem_canal,
+        janela_min: 1, // 60s
+        fn: async () => discordPostar.postarEmCanal({ canal_id: canal_id_final, texto, reply_to_message_id }),
+      });
+      if (result.bloqueada) return res.status(409).json({ ok: false, bloqueado_duplicata: true, ...result });
+      return res.json({ ok: true, canal_id: canal_id_final, canal_nome: canal_nome_final, resultado: result.resultado });
+    }
+
+    // Bypass com forcar=true
+    const r = await discordPostar.postarEmCanal({ canal_id: canal_id_final, texto, reply_to_message_id });
+    res.json({ ok: true, canal_id: canal_id_final, canal_nome: canal_nome_final, resultado: r, forcado: true });
+  } catch (e) {
+    console.error('[discord-postar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// V2.14 D — Apagar mensagem do bot no Discord (só apaga próprias mensagens)
+app.post('/api/discord/apagar', async (req, res) => {
+  try {
+    const { canal_id, message_id } = req.body || {};
+    if (!canal_id || !message_id) return res.status(400).json({ ok: false, error: 'canal_id e message_id obrigatorios' });
+    const discordPostar = require('./lib/discord-postar');
+    const r = await discordPostar.apagarMensagem({ canal_id, message_id });
+    res.json({ ok: true, ...r });
+  } catch (e) {
+    console.error('[discord-apagar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// V2.14 D — Editar mensagem do bot
+app.post('/api/discord/editar', async (req, res) => {
+  try {
+    const { canal_id, message_id, texto } = req.body || {};
+    if (!canal_id || !message_id || !texto) return res.status(400).json({ ok: false, error: 'canal_id, message_id e texto obrigatorios' });
+    const discordPostar = require('./lib/discord-postar');
+    const r = await discordPostar.editarMensagem({ canal_id, message_id, texto });
+    res.json({ ok: true, resultado: r });
+  } catch (e) {
+    console.error('[discord-editar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// V2.14 D — Lista últimas mensagens do bot (pra atendente identificar qual apagar/editar)
+app.post('/api/discord/ultimas-do-bot', async (req, res) => {
+  try {
+    const { canal_id = null, limite = 5 } = req.body || {};
+    const discordPostar = require('./lib/discord-postar');
+    if (canal_id) {
+      const r = await discordPostar.ultimaMensagemDoBot({ canal_id });
+      return res.json({ ok: true, ultima: r });
+    }
+    const lista = await discordPostar.ultimasMensagensDoBot({ limite });
+    res.json({ ok: true, total: lista.length, mensagens: lista });
+  } catch (e) {
+    console.error('[discord-ultimas-bot] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Resolver: nome de usuário → discord_user_id (pra @ mencionar funcionário/sócio)
+app.post('/api/discord/resolver-usuario', async (req, res) => {
+  try {
+    const { nome } = req.body || {};
+    if (!nome) return res.status(400).json({ ok: false, error: 'nome obrigatorio' });
+    const discordPostar = require('./lib/discord-postar');
+    const r = await discordPostar.resolverUsuarioPorNome(nome);
+    res.json({ ok: true, total: r.length, usuarios: r });
+  } catch (e) {
+    console.error('[discord-resolver-usuario] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
 // V2.14 Frente D — endpoints WHATSAPP EVOLUTION
 // ============================================================
 // 3 endpoints:
@@ -1997,7 +2110,27 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
     const parsed = evolution.parseMensagemRecebida(payload);
     if (!parsed) { console.log('[whatsapp-webhook] payload invalido'); return; }
 
-    console.log(`[whatsapp-webhook] msg ${parsed.from_me ? 'OUT' : 'IN'} | ${parsed.numero_remetente} | "${parsed.texto.slice(0,60)}"`);
+    // V2.14 D Categoria I — WHITELIST
+    // Mensagens do próprio bot (from_me) sempre passam.
+    // Mensagens IN (de outro número) passam só se número está em pinguim.whatsapp_autorizados ativo.
+    if (!parsed.from_me) {
+      const whitelist = require('./lib/whitelist');
+      const check = await whitelist.checarNumero(parsed.numero_remetente);
+      if (!check.autorizado) {
+        console.warn(`[whatsapp-webhook] BLOQUEADO ${parsed.numero_remetente} | "${parsed.texto.slice(0,60)}"`);
+        await whitelist.logarBloqueio({
+          numero: parsed.numero_remetente,
+          push_name: parsed.push_name || null,
+          texto: parsed.texto,
+          evento,
+          raw_payload: { event: evento, key: payload?.data?.key, message_type: payload?.data?.messageType },
+        });
+        return;
+      }
+      console.log(`[whatsapp-webhook] msg IN | ${parsed.numero_remetente} (${check.rotulo}) | "${parsed.texto.slice(0,60)}"`);
+    } else {
+      console.log(`[whatsapp-webhook] msg OUT | ${parsed.numero_remetente} | "${parsed.texto.slice(0,60)}"`);
+    }
 
     await ingerirMsgRecebida(parsed, payload);
   } catch (e) {
@@ -2429,6 +2562,221 @@ app.post('/api/hotmart/notificar-acesso-pendente', async (req, res) => {
 });
 
 // ============================================================
+// V2.14 D Categoria H — META MARKETING API + PAGES (read-only)
+// ============================================================
+// Wrapper Meta Graph API. Token longo 60d no cofre Pinguim.
+// 5 tools read-only iniciais:
+//   H1 listar-ad-accounts | H2 listar-campanhas | H3 insights-campanha
+//   H4 listar-pages       | H5 inspecionar-token
+// Instagram (orgânico, posts, comments) é frente separada — token IG
+// vai noutra entrada do cofre quando a configuração concluir.
+// ============================================================
+const meta = require('./lib/meta');
+
+// ---------- H1 — Listar todas as ad accounts visíveis ao token ----------
+app.post('/api/meta/listar-ad-accounts', async (req, res) => {
+  try {
+    const r = await meta.listarAdAccounts({ limit: 200 });
+    const contas = (r.data || []).map((c) => ({
+      id: c.id,
+      account_id: c.account_id,
+      name: c.name,
+      account_status: c.account_status,
+      currency: c.currency,
+      timezone_name: c.timezone_name,
+      business: c.business || null,
+      amount_spent: c.amount_spent,
+      balance: c.balance,
+    }));
+    res.json({ ok: true, total: contas.length, contas });
+  } catch (e) {
+    console.error('[meta-listar-ad-accounts] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ---------- H2 — Listar campanhas de um ad account ----------
+app.post('/api/meta/listar-campanhas', async (req, res) => {
+  try {
+    const { ad_account_id, status, limit = 100 } = req.body || {};
+    if (!ad_account_id) return res.status(400).json({ ok: false, error: 'ad_account_id obrigatório (formato act_XXX)' });
+    const r = await meta.listarCampanhas({ ad_account_id, status, limit });
+    res.json({ ok: true, ad_account_id, total: (r.data || []).length, campanhas: r.data || [] });
+  } catch (e) {
+    console.error('[meta-listar-campanhas] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ---------- H3 — Insights (métricas) de uma campanha ----------
+app.post('/api/meta/insights-campanha', async (req, res) => {
+  try {
+    const { campaign_id, date_preset = 'last_7d', time_range, level, breakdowns } = req.body || {};
+    if (!campaign_id) return res.status(400).json({ ok: false, error: 'campaign_id obrigatório' });
+    const r = await meta.insightsCampanha({ campaign_id, date_preset, time_range, level, breakdowns });
+    res.json({ ok: true, campaign_id, preset: date_preset, insights: r.data || [] });
+  } catch (e) {
+    console.error('[meta-insights-campanha] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ---------- H4 — Listar páginas Facebook conectadas ----------
+app.post('/api/meta/listar-pages', async (req, res) => {
+  try {
+    const r = await meta.listarPages({ limit: 200 });
+    res.json({ ok: true, total: (r.data || []).length, pages: r.data || [] });
+  } catch (e) {
+    console.error('[meta-listar-pages] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ---------- H5 — Inspecionar token (validade, scopes, app) ----------
+app.post('/api/meta/inspecionar-token', async (req, res) => {
+  try {
+    const info = await meta.inspecionarToken();
+    res.json({ ok: true, info });
+  } catch (e) {
+    console.error('[meta-inspecionar-token] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ---------- H6 — Renovar token longo (chama Graph API fb_exchange_token) ----------
+app.post('/api/meta/renovar-token', async (req, res) => {
+  try {
+    const r = await meta.renovarTokenLongo();
+    res.json({ ok: true, ...r });
+  } catch (e) {
+    console.error('[meta-renovar-token] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
+// V2.14 D Categoria I — WHATSAPP WHITELIST (admin endpoints)
+// ============================================================
+// Atendente Pinguim só responde números autorizados.
+// Webhook /api/whatsapp/webhook filtra usando lib/whitelist.js.
+// ============================================================
+const whitelistLib = require('./lib/whitelist');
+
+app.post('/api/whatsapp/whitelist/listar', async (req, res) => {
+  try {
+    const { apenas_ativos = true } = req.body || {};
+    const lista = await whitelistLib.listar({ apenas_ativos });
+    res.json({ ok: true, total: lista.length, autorizados: lista });
+  } catch (e) {
+    console.error('[whatsapp-whitelist-listar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/whatsapp/whitelist/autorizar', async (req, res) => {
+  try {
+    const { numero, socio_slug, rotulo, observacao } = req.body || {};
+    if (!numero) return res.status(400).json({ ok: false, error: 'numero obrigatorio' });
+    if (!rotulo) return res.status(400).json({ ok: false, error: 'rotulo obrigatorio' });
+    const r = await whitelistLib.autorizar({ numero, socio_slug, rotulo, observacao });
+    res.json({ ok: true, autorizado: r });
+  } catch (e) {
+    console.error('[whatsapp-whitelist-autorizar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/whatsapp/whitelist/revogar', async (req, res) => {
+  try {
+    const { numero } = req.body || {};
+    if (!numero) return res.status(400).json({ ok: false, error: 'numero obrigatorio' });
+    const r = await whitelistLib.revogar({ numero });
+    if (!r) return res.status(404).json({ ok: false, error: 'numero nao encontrado na whitelist' });
+    res.json({ ok: true, revogado: r });
+  } catch (e) {
+    console.error('[whatsapp-whitelist-revogar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/whatsapp/whitelist/bloqueios', async (req, res) => {
+  try {
+    const { horas = 168, limite = 50 } = req.body || {};
+    const r = await whitelistLib.listarBloqueios({ horas, limite });
+    res.json({ ok: true, total: r.length, bloqueios: r });
+  } catch (e) {
+    console.error('[whatsapp-whitelist-bloqueios] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
+// V2.14.5 — APRENDIZADOS DO AGENTE (Categoria J — feedback classificado)
+// ============================================================
+// Usa tabelas existentes (Princípio 11):
+//   pinguim.aprendizados_agente (geral, agente_id=PINGUIM)
+//   pinguim.aprendizados_cliente_agente (pessoal por sócio)
+// ============================================================
+const aprendizadosLib = require('./lib/aprendizados');
+
+app.post('/api/aprendizados/adicionar-geral', async (req, res) => {
+  try {
+    const { texto, origem = 'feedback-chat' } = req.body || {};
+    if (!texto) return res.status(400).json({ ok: false, error: 'texto obrigatorio' });
+    const r = await aprendizadosLib.adicionarAprendizadoGeral({ texto, origem });
+    res.json({ ok: true, ...r });
+  } catch (e) {
+    console.error('[aprendizados-geral] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/aprendizados/adicionar-pessoal', async (req, res) => {
+  try {
+    const { cliente_id, texto, origem = 'feedback-chat' } = req.body || {};
+    if (!cliente_id) return res.status(400).json({ ok: false, error: 'cliente_id obrigatorio' });
+    if (!texto) return res.status(400).json({ ok: false, error: 'texto obrigatorio' });
+    const r = await aprendizadosLib.adicionarAprendizadoPessoal({ cliente_id, texto, origem });
+    res.json({ ok: true, ...r });
+  } catch (e) {
+    console.error('[aprendizados-pessoal] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/aprendizados/ler-geral', async (req, res) => {
+  try {
+    const r = await aprendizadosLib.lerAprendizadosGerais();
+    res.json({ ok: true, aprendizados: r });
+  } catch (e) {
+    console.error('[aprendizados-ler-geral] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/aprendizados/ler-pessoal', async (req, res) => {
+  try {
+    const { cliente_id } = req.body || {};
+    if (!cliente_id) return res.status(400).json({ ok: false, error: 'cliente_id obrigatorio' });
+    const r = await aprendizadosLib.lerAprendizadosDoSocio(cliente_id);
+    res.json({ ok: true, aprendizados: r });
+  } catch (e) {
+    console.error('[aprendizados-ler-pessoal] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/aprendizados/listar-clientes', async (req, res) => {
+  try {
+    const r = await aprendizadosLib.listarTodosClientes();
+    res.json({ ok: true, total: r.length, clientes: r });
+  } catch (e) {
+    console.error('[aprendizados-listar-clientes] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
 // V2.14 Frente C1 — endpoint RELATORIO EXECUTIVO (sob demanda)
 // ============================================================
 // Mesma funcao chamada pelo cron das 8h (Frente C2 futura) e por on-demand
@@ -2572,8 +2920,14 @@ app.listen(PORT, () => {
   // Falha silenciosa (warn) se nao tem token — dev local sem Discord segue rodando normal.
   discordBot.iniciarBot()
     .then(bot => {
-      if (bot) console.log('  [discord-bot] iniciado, conectando ao Gateway...');
-      else     console.log('  [discord-bot] DESLIGADO (sem DISCORD_BOT_TOKEN no cofre)');
+      if (bot) {
+        console.log('  [discord-bot] iniciado, conectando ao Gateway...');
+        // V2.14 D Categoria L — registra instância pra lib discord-postar (cross-canal)
+        const discordPostar = require('./lib/discord-postar');
+        discordPostar.setBotInstancia(bot);
+      } else {
+        console.log('  [discord-bot] DESLIGADO (sem DISCORD_BOT_TOKEN no cofre)');
+      }
     })
     .catch(e => console.warn(`  [discord-bot] falha ao iniciar (nao bloqueia server): ${e.message}`));
 });

@@ -328,6 +328,48 @@ A Pinguim vende pela Hotmart. Esta categoria cobre TODA a operação Hotmart via
 - **Cadastrar aluno na área de membros via API** (Hotmart NÃO oferece — confirmado via investigação real 2026-05-10: `POST /club/api/v1/users` retorna 404 redirect `/docs/`). UI manual continua o caminho. Caso Princípia Pay passa por G8.
 - Webhook real-time direto Hotmart→Pinguim (hoje vem indireto via 2º Supabase do Pedro)
 
+## Tools de Meta Marketing API + Pages (V2.14 D — Categoria H)
+
+A Pinguim roda anúncios na Meta (Facebook + Instagram). Esta categoria habilita **análise** de campanha, leitura de criativos, métricas, e Pages. App **Pinguim OS** no BM **Grupo Pinguim**. Token longo 60d no Cofre Pinguim.
+
+**⚠ SEPARAÇÃO CANÔNICA DE FONTES (decisão Andre 2026-05-10):**
+- **Número financeiro de gasto** (relatório, ROAS, fechar conta) → **Projeto Supabase compartilhado** (`db-dashboard.js`, Categoria F3). Única fonte canônica.
+- **Análise de campanha** (criativo, copy, métrica de performance, breakdowns) → **Esta categoria H** (`/api/meta/*`).
+
+Misturar fontes na mesma resposta = divergência de número entre canais. NUNCA fazer.
+
+| Tool | O que faz | Como acessar |
+|---|---|---|
+| 📋 **H1 Listar ad accounts** | Todas ad accounts visíveis ao token (agrupadas por business + status) | `bash scripts/meta-listar-ad-accounts.sh` |
+| 🎯 **H2 Listar campanhas** | Campanhas de um ad account, opcional filtro de status | `bash scripts/meta-listar-campanhas.sh <act_XXX> [status]` |
+| 📊 **H3 Insights campanha** | Impressões, alcance, cliques, CTR, CPM, CPC, gasto, ações. Período preset (today/yesterday/last_7d/last_30d/etc) | `bash scripts/meta-insights-campanha.sh <campaign_id> [preset]` |
+| 📘 **H4 Listar Pages** | Pages Facebook conectadas (com fan_count, followers, Instagram conectado se houver) | `bash scripts/meta-listar-pages.sh` |
+| 🔍 **H5 Inspecionar token** | Validade, scopes, app, user_id. Útil pra saber quando renovar | `bash scripts/meta-inspecionar-token.sh` |
+
+**Endpoints HTTP** (chamáveis direto):
+- `POST /api/meta/listar-ad-accounts` (body vazio)
+- `POST /api/meta/listar-campanhas` (body: `{ad_account_id, status?, limit?}`)
+- `POST /api/meta/insights-campanha` (body: `{campaign_id, date_preset?, time_range?, level?, breakdowns?}`)
+- `POST /api/meta/listar-pages` (body vazio)
+- `POST /api/meta/inspecionar-token` (body vazio)
+- `POST /api/meta/renovar-token` (body vazio — força refresh do token longo, persiste no Cofre)
+
+**Cofre Pinguim (V2.14 D — credenciais Meta):**
+- `META_APP_ID` — App ID do Pinguim OS (978157227940082)
+- `META_APP_SECRET` — App Secret (rotacionável)
+- `META_ACCESS_TOKEN` — Token longo 60d (expira 2026-07-09, refresh proativo quando faltar <7d)
+
+**Permissões ativas:** `ads_read`, `ads_management`, `business_management`, `pages_show_list`, `pages_read_engagement`, `public_profile`.
+
+**Multi-sócio (futuro):** estrutura `cliente_id` no Cofre já preparada. Quando Pedro/Luiz/Micha gerarem token próprio, vira `META_ACCESS_TOKEN_<slug>` por sócio. Hoje token único pertence ao André (cobre BM Grupo Pinguim inteiro).
+
+**Não implementado nesta versão (frente V2.15 hybrid-ops-squad):**
+- Criar/pausar/editar campanha, adset ou ad
+- Ajustar budget em runtime
+- Upload de criativo novo
+- Postar/responder no Instagram orgânico (frente separada com token IG diferente — depende de cada sócio autorizar via popup Meta)
+- Webhook real-time (mensagens IG, comentários novos)
+
 ## Mapeamento produto → cerebro_slug
 
 | Sinal na pergunta | cerebro_slug |
@@ -371,6 +413,12 @@ A Pinguim vende pela Hotmart. Esta categoria cobre TODA a operação Hotmart via
 | `POST /api/discord/listar-24h` | V2.14 Frente B — mensagens das ultimas N horas. Body: `{horas?, incluir_bots?, canal_id?, limite?}`. Retorna `mensagens` + `resumo_canais`. |
 | `POST /api/discord/buscar` | V2.14 Frente B — busca por palavra-chave nas ultimas N horas (default 7d). Body: `{query, horas?, limite?}`. |
 | `POST /api/discord/backfill` | V2.14 Frente B — popula historico via REST API (uso pontual quando bot reinicia). Body: `{horas?, maxPorCanal?}`. |
+| `POST /api/meta/listar-ad-accounts` | V2.14 D Categoria H — lista ad accounts visíveis ao token Meta. Body vazio. |
+| `POST /api/meta/listar-campanhas` | V2.14 D Categoria H — campanhas de um ad account. Body: `{ad_account_id, status?, limit?}`. |
+| `POST /api/meta/insights-campanha` | V2.14 D Categoria H — métricas (impressões, gasto, CTR, etc) de uma campanha. Body: `{campaign_id, date_preset?, time_range?, breakdowns?}`. |
+| `POST /api/meta/listar-pages` | V2.14 D Categoria H — Pages Facebook conectadas (com info de IG conectado). Body vazio. |
+| `POST /api/meta/inspecionar-token` | V2.14 D Categoria H — validade + scopes do token Meta atual. Body vazio. |
+| `POST /api/meta/renovar-token` | V2.14 D Categoria H — força renovação do token longo (write-through no Cofre). Body vazio. |
 | `GET /conectar-google` | V2.12 — página de status + botão OAuth. |
 | `GET /api/health` | Checa CLI Claude |
 | `GET /api/info` | Lista skills + scripts disponíveis |
