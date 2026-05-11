@@ -743,9 +743,17 @@ A Pinguim vende seus produtos pela Hotmart. Esta categoria cobre **TODA a opera�
 **Quando aluno NÃO tem acesso a nenhum Club cadastrado:**
 - Resposta honesta: *"Procurei nos N Clubs cadastrados (lista) e não achei o email X em nenhum. Pode ser que (a) o aluno realmente não tenha acesso a esses produtos, OU (b) tem acesso a um Club que ainda não cadastrei. Quer que eu confira algum produto específico? Me passa a URL do Club."*
 
-**REGRA DURA — quando produto comprado tem cadastro Hotmart mas NÃO consta no Members Area API:**
+**⚠ DESCOBERTA CRÍTICA 2026-05-11 noite — Club Hotmart Pinguim é GUARDA-CHUVA:**
 
-⚠ Cenário crítico identificado por Andre 2026-05-11 noite: aluna **amais.andressasantos@gmail.com** comprou Elo (HP confirmado em G1), agente consultou `subdomain=turbox` em `pinguim.hotmart_clubs` e API retornou `total_results: 0`. Agente concluiu **"NÃO tem acesso ao Elo"** — mas ela TINHA acesso (confirmado no painel manual). Bug raiz: subdomain `turbox` estava ERRADO no cadastro.
+Investigando bug do "sem acesso ao Elo" da Andressa, descobri: a conta Hotmart da Pinguim tem **UM Club único** chamado **`proalt`** que agrupa AULAS de múltiplos produtos (ProAlt, Elo, possivelmente Lyra/Lo-Fi/outros) em `class_id` diferentes. **NÃO existe um Club separado por produto** na nossa estrutura atual.
+
+Quando aluno compra qualquer produto Pinguim na Hotmart, ele entra no Club `proalt` em uma turma (`class_id`) específica do produto comprado. Pra saber QUAL produto ele tem acesso, olhar:
+- `class_id` da turma
+- `progress.total` (número de aulas — 101 = Elo, ~22 = ProAlt etc, varia por produto)
+
+**Sempre consulte o subdomain `proalt`** ao verificar acesso. Se aluno tem registro lá com `status=ACTIVE`, ele tem acesso a algum produto Pinguim — identifique qual via `class_id` ou `progress.total`.
+
+**REGRA DURA — quando produto comprado tem cadastro Hotmart mas NÃO consta no Members Area API:**
 
 **Regra:** se sócio identifica COMPRA Hotmart aprovada de um produto X (via G1) mas Members Area API retorna `total_results: 0` pro Club cadastrado desse produto:
 
