@@ -1789,6 +1789,8 @@ app.post('/api/relatorio/top-engajados', async (req, res) => {
       formato = 'markdown',
       excluir_emails = [],
       excluir_user_ids = [],
+      cliente_id = null,
+      salvar = true, // default: salva como entregavel pra agente devolver link clicavel
     } = req.body || {};
     const topEngajados = require('./lib/top-engajados');
     const r = await topEngajados.gerarRelatorio({
@@ -1798,6 +1800,35 @@ app.post('/api/relatorio/top-engajados', async (req, res) => {
       excluir_emails: Array.isArray(excluir_emails) ? excluir_emails : [],
       excluir_user_ids: Array.isArray(excluir_user_ids) ? excluir_user_ids : [],
     });
+
+    // Salva como entregavel (pinguim.entregaveis) pra agente devolver URL clicavel.
+    // Cliente_id resolve via SOCIO_SLUG do .env.local se nao for passado.
+    if (salvar && r.ok && r.md) {
+      try {
+        const tituloProdutos = produtos.map(p => p[0].toUpperCase() + p.slice(1)).join('+');
+        const titulo = `Top ${parseInt(top_n, 10)} engajados ${tituloProdutos}${(excluir_emails?.length || excluir_user_ids?.length) ? ' (com exclusões)' : ''}`;
+        const entregavel = await db.salvarEntregavel({
+          cliente_id,
+          tipo: 'top-engajados',
+          titulo,
+          conteudo_md: r.md,
+          conteudo_estruturado: {
+            produtos,
+            top_n: parseInt(top_n, 10),
+            excluir_emails: r.excluidos?.emails || [],
+            excluir_user_ids: r.excluidos?.user_ids || [],
+            latencia_total_ms: r.latencia_total_ms,
+            resultados: r.resultados,
+            gerado_em: new Date().toISOString(),
+          },
+        });
+        r.entregavel_id = entregavel?.id || null;
+        r.entregavel_url = entregavel?.id ? `/entregavel/${entregavel.id}` : null;
+      } catch (e) {
+        console.warn(`[top-engajados] erro salvando entregavel: ${e.message}`);
+      }
+    }
+
     res.json(r);
   } catch (e) {
     console.error('[top-engajados] erro:', e.message);
