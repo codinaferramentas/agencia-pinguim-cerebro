@@ -1064,6 +1064,15 @@ app.get('/entregavel/:id', async (req, res) => {
           return;
         }
 
+        // V2.15 — Skill top-engajados tem renderer HTML proprio (dark, tabelas estruturadas).
+        // Regenera do conteudo_estruturado salvo (mais rico que markdown).
+        if (ent.tipo === 'top-engajados') {
+          const topEngajados = require('./lib/top-engajados');
+          const html = topEngajados.renderHtmlDoEntregavel(ent.conteudo_estruturado || {});
+          res.type('html').send(html);
+          return;
+        }
+
         // Default — entregavel criativo (copy/parecer/etc)
         const metricas = (ent.conteudo_estruturado && ent.conteudo_estruturado.metricas) || {};
         const pedidoOriginal = (ent.conteudo_estruturado && ent.conteudo_estruturado.pedido_original) || ent.titulo || 'Entregável';

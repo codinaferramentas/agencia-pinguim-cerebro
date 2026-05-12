@@ -301,22 +301,164 @@ async function gerarRelatorio({
   md += `\n_Fonte: Supabases dos produtos (ProAlt, Elo, Sirius) consultados via Categoria M (db-externo, somente leitura). Não usa dados Hotmart._\n`;
 
   if (formato === 'html') {
-    return { ok: true, latencia_total_ms, md, html: marsdownToSimpleHtml(md), resultados, excluidos: { emails: excluir_emails, user_ids: excluir_user_ids } };
+    const html = renderHtml({
+      resultados,
+      topN,
+      latenciaMs: latencia_total_ms,
+      excluidos: { emails: excluir_emails, user_ids: excluir_user_ids },
+    });
+    return { ok: true, latencia_total_ms, md, html, resultados, excluidos: { emails: excluir_emails, user_ids: excluir_user_ids } };
   }
   return { ok: true, latencia_total_ms, md, resultados, excluidos: { emails: excluir_emails, user_ids: excluir_user_ids } };
 }
 
-function marsdownToSimpleHtml(md) {
-  // Conversão básica markdown → HTML, sem dependências externas
-  let html = md;
-  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/_(.+?)_/g, '<em>$1</em>');
-  html = html.replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>');
-  html = html.replace(/(<li>.*?<\/li>(\n<li>.*?<\/li>)*)/g, '<ol>$1</ol>');
-  html = html.replace(/\n\n/g, '</p><p>');
-  return `<html><head><meta charset="utf-8"><style>body{font-family:system-ui,-apple-system,sans-serif;max-width:800px;margin:40px auto;padding:20px;line-height:1.6}h1{color:#1a1a1a}h2{color:#333;border-bottom:2px solid #ddd;padding-bottom:5px;margin-top:30px}li{margin:5px 0}strong{color:#000}em{color:#777;font-size:0.9em}</style></head><body><p>${html}</p></body></html>`;
+// ============================================================
+// renderHtml — gera HTML dark profissional a partir do payload estruturado
+// (V2.15 — substitui o marsdownToSimpleHtml antigo que era light/feio)
+// ============================================================
+const ESCAPE_HTML = (s) => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+const CORES_PRODUTO = {
+  ProAlt: { bg: 'rgba(232, 92, 0, 0.15)', border: '#E85C00', label: 'Uso do APP' },
+  Elo:    { bg: 'rgba(168, 85, 247, 0.15)', border: '#A855F7', label: 'Progresso + Bookings' },
+  Sirius: { bg: 'rgba(34, 197, 94, 0.15)',  border: '#22C55E', label: 'Conteúdo criado' },
+};
+
+function renderTabelaProduto(produto, ranking, total_amostra) {
+  const cor = CORES_PRODUTO[produto] || { bg: 'rgba(100,116,139,0.15)', border: '#64748B', label: '' };
+  if (!ranking.length) {
+    return `<section class="card-produto" style="border-color:${cor.border}33">
+      <div class="card-head" style="background:${cor.bg}">
+        <span class="badge" style="background:${cor.border}">${ESCAPE_HTML(produto)}</span>
+        <span class="head-sub">${ESCAPE_HTML(cor.label)}</span>
+        <span class="head-meta">${total_amostra || 0} usuários ativos</span>
+      </div>
+      <div style="padding:2rem;text-align:center;color:#64748b;">Sem dados disponíveis.</div>
+    </section>`;
+  }
+
+  // Descobre colunas dinamicamente — chaves de detalhe da primeira linha
+  const chavesDetalhe = Array.from(new Set(
+    ranking.flatMap(r => Object.keys(r.detalhe || {}))
+  ));
+
+  const linhas = ranking.map((r, i) => {
+    const cels = chavesDetalhe.map(k => `<td>${ESCAPE_HTML(r.detalhe?.[k] ?? '—')}</td>`).join('');
+    return `<tr>
+      <td class="rank">${i + 1}</td>
+      <td class="aluno"><div class="nome">${ESCAPE_HTML(r.nome || '(sem nome)')}</div><div class="email">${ESCAPE_HTML(r.email || '')}</div></td>
+      ${cels}
+      <td class="score" style="color:${cor.border}">${ESCAPE_HTML(r.score)}</td>
+    </tr>`;
+  }).join('');
+
+  const heads = chavesDetalhe.map(k => `<th>${ESCAPE_HTML(k.toUpperCase())}</th>`).join('');
+
+  return `<section class="card-produto" style="border-color:${cor.border}33">
+    <div class="card-head" style="background:${cor.bg}">
+      <span class="badge" style="background:${cor.border}">${ESCAPE_HTML(produto)}</span>
+      <span class="head-sub">${ESCAPE_HTML(cor.label)}</span>
+      <span class="head-meta">${total_amostra || 0} usuários ativos</span>
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>ALUNO</th>${heads}<th>SCORE</th></tr></thead>
+      <tbody>${linhas}</tbody>
+    </table>
+  </section>`;
 }
 
-module.exports = { gerarRelatorio, rankProAlt, rankElo, rankSirius };
+function renderHtml({ resultados = [], topN = 15, latenciaMs = 0, excluidos = { emails: [], user_ids: [] }, geradoEmISO = null }) {
+  const dataBR = geradoEmISO
+    ? new Date(geradoEmISO).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+    : new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+
+  const produtosLabel = resultados.map(r => r.produto).join(' · ');
+  const exclusoesTxt = (excluidos.emails?.length || excluidos.user_ids?.length)
+    ? `<div class="exclusoes">⊘ Exclusões: ${ESCAPE_HTML([...(excluidos.emails || []), ...(excluidos.user_ids || [])].join(', '))}</div>`
+    : '';
+
+  const blocosProdutos = resultados.map(r => renderTabelaProduto(r.produto, r.ranking || [], r.total_amostra)).join('\n');
+
+  const criterios = resultados.map(r => {
+    const c = CRITERIO_POR_PRODUTO[r.produto];
+    return c ? `<li><strong>${ESCAPE_HTML(r.produto)}</strong> — ${ESCAPE_HTML(c)}</li>` : '';
+  }).join('');
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top ${topN} Engajados · Pinguim OS</title>
+<style>
+  :root { --bg:#0a0a0f; --bg2:#111118; --card:#1a1a28; --border:#2a2a3e; --text:#f1f5f9; --text2:#94a3b8; --text3:#64748b; --laranja:#E85C00; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'IBM Plex Sans',-apple-system,system-ui,sans-serif; background:var(--bg); color:var(--text); line-height:1.5; padding:2.5rem 1.5rem; }
+  .wrap { max-width:1100px; margin:0 auto; }
+  .header { text-align:center; margin-bottom:2.5rem; }
+  .header h1 { font-size:1.75rem; font-weight:700; letter-spacing:-0.01em; }
+  .header .sub { color:var(--text2); font-size:.85rem; margin-top:.5rem; }
+  .exclusoes { display:inline-block; margin-top:1rem; padding:.4rem .85rem; background:rgba(232,92,0,0.08); border:1px solid rgba(232,92,0,0.3); border-radius:999px; font-size:.78rem; color:var(--laranja); }
+  .card-produto { background:var(--bg2); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:1.5rem; }
+  .card-head { display:flex; align-items:center; gap:1rem; padding:1rem 1.5rem; border-bottom:1px solid var(--border); }
+  .badge { display:inline-block; padding:.25rem .65rem; border-radius:6px; color:white; font-size:.7rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+  .head-sub { color:var(--text); font-weight:500; font-size:.9rem; }
+  .head-meta { margin-left:auto; color:var(--text3); font-size:.8rem; }
+  table { width:100%; border-collapse:collapse; }
+  thead { background:var(--card); }
+  th { text-align:left; padding:.75rem 1rem; font-size:.7rem; font-weight:600; color:var(--text2); text-transform:uppercase; letter-spacing:.05em; border-bottom:1px solid var(--border); }
+  th:first-child { width:48px; text-align:center; }
+  th:last-child { text-align:right; width:80px; }
+  td { padding:.85rem 1rem; border-bottom:1px solid var(--border); font-size:.88rem; vertical-align:middle; }
+  tbody tr:last-child td { border-bottom:none; }
+  tbody tr:hover { background:rgba(255,255,255,0.02); }
+  .rank { text-align:center; color:var(--text3); font-weight:700; font-size:.85rem; }
+  .aluno .nome { color:var(--text); font-weight:500; }
+  .aluno .email { color:var(--text3); font-size:.75rem; margin-top:.15rem; }
+  .score { text-align:right; font-weight:700; font-size:1rem; }
+  .rodape { margin-top:2.5rem; padding:1.25rem 1.5rem; background:var(--card); border:1px solid var(--border); border-radius:10px; font-size:.82rem; color:var(--text2); }
+  .rodape h3 { font-size:.85rem; color:var(--text); font-weight:600; margin-bottom:.6rem; text-transform:uppercase; letter-spacing:.06em; }
+  .rodape ul { list-style:none; padding:0; }
+  .rodape li { margin:.4rem 0; }
+  .rodape li strong { color:var(--text); }
+  .rodape .fonte { margin-top:1rem; font-size:.75rem; color:var(--text3); font-style:italic; }
+  @media (max-width:640px){ th:nth-child(n+3):not(:last-child), td:nth-child(n+3):not(:last-child){ display:none; } .card-head{flex-wrap:wrap;} .head-meta{margin-left:0;width:100%;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <h1>Top ${topN} Engajados</h1>
+    <div class="sub">${ESCAPE_HTML(produtosLabel)} · ${ESCAPE_HTML(dataBR)} · ${(latenciaMs / 1000).toFixed(1)}s</div>
+    ${exclusoesTxt}
+  </div>
+
+  ${blocosProdutos}
+
+  <div class="rodape">
+    <h3>Como o score é calculado</h3>
+    <ul>${criterios}</ul>
+    <div class="fonte">Fonte: Supabases dos produtos (ProAlt, Elo, Sirius) via Categoria M (db-externo, somente leitura). Não usa dados Hotmart.</div>
+  </div>
+</div>
+</body>
+</html>`;
+}
+
+// API publica: aceita um entregavel salvo (conteudo_estruturado) e devolve HTML
+function renderHtmlDoEntregavel(conteudoEstruturado = {}) {
+  return renderHtml({
+    resultados: conteudoEstruturado.resultados || [],
+    topN: conteudoEstruturado.top_n || 15,
+    latenciaMs: conteudoEstruturado.latencia_total_ms || 0,
+    excluidos: {
+      emails: conteudoEstruturado.excluir_emails || [],
+      user_ids: conteudoEstruturado.excluir_user_ids || [],
+    },
+    geradoEmISO: conteudoEstruturado.gerado_em || null,
+  });
+}
+
+module.exports = { gerarRelatorio, rankProAlt, rankElo, rankSirius, renderHtml, renderHtmlDoEntregavel };
