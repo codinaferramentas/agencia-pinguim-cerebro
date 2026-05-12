@@ -218,23 +218,63 @@ async function rankSirius(topN = 15) {
 }
 
 // ============================================================
+// CRITERIO POR PRODUTO — explicacao para rodape de relatorio
+// ============================================================
+const CRITERIO_POR_PRODUTO = {
+  ProAlt: 'Uso do APP: soma de personas + analises_criativos + creatives + pages (1 ponto cada). Mede uso real do sistema, NAO consumo de aula.',
+  Elo: 'Aulas completas (peso 1) + bookings (peso 2) + onboarding (peso 0.5). Elo APP e voltado pra acompanhamento de aula e agendamentos.',
+  Sirius: 'Uso do APP: soma de personas + marketing_creatives + viral_scripts + content_challenge_participants (1 ponto cada). Mede criacao de conteudo, NAO consumo de aula.',
+};
+
+// Filtro de exclusao — aplica em ranking ja montado
+function filtrarExclusoes(ranking, excluir_emails = [], excluir_user_ids = []) {
+  if (!excluir_emails.length && !excluir_user_ids.length) return ranking;
+  const emailSet = new Set(excluir_emails.map(e => String(e).toLowerCase().trim()));
+  const uidSet = new Set(excluir_user_ids.map(u => String(u).toLowerCase().trim()));
+  return ranking.filter(r => {
+    const e = String(r.email || '').toLowerCase();
+    const u = String(r.user_id || '').toLowerCase();
+    return !emailSet.has(e) && !uidSet.has(u);
+  });
+}
+
+// ============================================================
 // ORQUESTRADOR
 // ============================================================
-async function gerarRelatorio({ produtos = ['proalt', 'elo', 'sirius'], topN = 15, formato = 'markdown' } = {}) {
+async function gerarRelatorio({
+  produtos = ['proalt', 'elo', 'sirius'],
+  topN = 15,
+  formato = 'markdown',
+  excluir_emails = [],
+  excluir_user_ids = [],
+} = {}) {
   const t0 = Date.now();
+  // Pega 50% a mais pra cobrir os excluidos sem ficar com ranking curto
+  const buffer = (excluir_emails.length || excluir_user_ids.length) ? Math.ceil(topN * 1.5) + 5 : topN;
+
   const tarefas = produtos.map(p => {
-    if (p === 'proalt') return rankProAlt(topN).then(r => ({ produto: 'ProAlt', ...r }));
-    if (p === 'elo')    return rankElo(topN).then(r => ({ produto: 'Elo', ...r }));
-    if (p === 'sirius') return rankSirius(topN).then(r => ({ produto: 'Sirius', ...r }));
+    if (p === 'proalt') return rankProAlt(buffer).then(r => ({ produto: 'ProAlt', ...r }));
+    if (p === 'elo')    return rankElo(buffer).then(r => ({ produto: 'Elo', ...r }));
+    if (p === 'sirius') return rankSirius(buffer).then(r => ({ produto: 'Sirius', ...r }));
     return Promise.resolve({ produto: p, erros: [`produto desconhecido: ${p}`], ranking: [] });
   });
-  const resultados = await Promise.all(tarefas);
-  const latencia_total_ms = Date.now() - t0;
+  let resultados = await Promise.all(tarefas);
 
-  if (formato === 'json') return { ok: true, latencia_total_ms, resultados };
+  // Aplica filtro de exclusao + corta no topN
+  resultados = resultados.map(r => {
+    if (!r.ranking) return r;
+    const filtrado = filtrarExclusoes(r.ranking, excluir_emails, excluir_user_ids).slice(0, topN);
+    return { ...r, ranking: filtrado };
+  });
+
+  const latencia_total_ms = Date.now() - t0;
+  if (formato === 'json') return { ok: true, latencia_total_ms, resultados, excluidos: { emails: excluir_emails, user_ids: excluir_user_ids } };
 
   let md = `# Top ${topN} alunos engajados por produto\n\n`;
   md += `_Gerado em ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} — latência total ${(latencia_total_ms/1000).toFixed(1)}s_\n\n`;
+  if (excluir_emails.length || excluir_user_ids.length) {
+    md += `_Exclusões aplicadas: ${[...excluir_emails, ...excluir_user_ids].join(', ')}_\n\n`;
+  }
 
   for (const r of resultados) {
     md += `## ${r.produto} (top ${r.ranking.length} de ${r.total_amostra} usuários ativos)\n\n`;
@@ -252,10 +292,18 @@ async function gerarRelatorio({ produtos = ['proalt', 'elo', 'sirius'], topN = 1
     if (r.erros?.length) md += `_⚠ erros: ${r.erros.join(' · ')}_\n\n`;
   }
 
-  if (formato === 'html') {
-    return { ok: true, latencia_total_ms, md, html: marsdownToSimpleHtml(md), resultados };
+  // Rodape com criterio canonico de cada produto (transparencia — sócio sabe o que score significa)
+  md += `---\n\n## Como o score é calculado\n\n`;
+  for (const r of resultados) {
+    const criterio = CRITERIO_POR_PRODUTO[r.produto];
+    if (criterio) md += `- **${r.produto}** — ${criterio}\n`;
   }
-  return { ok: true, latencia_total_ms, md, resultados };
+  md += `\n_Fonte: Supabases dos produtos (ProAlt, Elo, Sirius) consultados via Categoria M (db-externo, somente leitura). Não usa dados Hotmart._\n`;
+
+  if (formato === 'html') {
+    return { ok: true, latencia_total_ms, md, html: marsdownToSimpleHtml(md), resultados, excluidos: { emails: excluir_emails, user_ids: excluir_user_ids } };
+  }
+  return { ok: true, latencia_total_ms, md, resultados, excluidos: { emails: excluir_emails, user_ids: excluir_user_ids } };
 }
 
 function marsdownToSimpleHtml(md) {

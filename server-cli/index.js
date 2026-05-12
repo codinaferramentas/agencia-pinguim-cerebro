@@ -1783,9 +1783,21 @@ app.post('/api/projeto-externo/contar', async (req, res) => {
 // Critérios canônicos definidos por Andre 2026-05-11.
 app.post('/api/relatorio/top-engajados', async (req, res) => {
   try {
-    const { produtos = ['proalt', 'elo', 'sirius'], top_n = 15, formato = 'markdown' } = req.body || {};
+    const {
+      produtos = ['proalt', 'elo', 'sirius'],
+      top_n = 15,
+      formato = 'markdown',
+      excluir_emails = [],
+      excluir_user_ids = [],
+    } = req.body || {};
     const topEngajados = require('./lib/top-engajados');
-    const r = await topEngajados.gerarRelatorio({ produtos, topN: parseInt(top_n, 10), formato });
+    const r = await topEngajados.gerarRelatorio({
+      produtos,
+      topN: parseInt(top_n, 10),
+      formato,
+      excluir_emails: Array.isArray(excluir_emails) ? excluir_emails : [],
+      excluir_user_ids: Array.isArray(excluir_user_ids) ? excluir_user_ids : [],
+    });
     res.json(r);
   } catch (e) {
     console.error('[top-engajados] erro:', e.message);
