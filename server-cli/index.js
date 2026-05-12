@@ -59,7 +59,7 @@ const templateRelatorioExec = require('./lib/template-relatorio-executivo'); // 
 const evolution = require('./lib/evolution'); // V2.14 Frente D — WhatsApp Evolution
 
 const app = express();
-const PORT = 3737;
+const PORT = parseInt(process.env.PORT, 10) || 3737;
 const PROJECT_DIR = __dirname;
 
 app.use(express.json({ limit: '10mb' }));
@@ -2919,6 +2919,139 @@ app.post('/api/aprendizados/listar-clientes', async (req, res) => {
     res.json({ ok: true, total: r.length, clientes: r });
   } catch (e) {
     console.error('[aprendizados-listar-clientes] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
+// V2.15 Fase 1 Parte 2 — JOBS (Plan-and-Execute queue)
+// ============================================================
+// Pinguim cria job quando detecta pedido complexo. Planner gera plano JSON.
+// Socio aprova "sim" no chat -> worker (Fase 2) executa assincrono.
+// ============================================================
+const jobsLib = require('./lib/jobs');
+const planner = require('./lib/planner');
+
+// Criar job em rascunho (Pinguim chama quando detecta pedido complexo)
+app.post('/api/jobs/criar', async (req, res) => {
+  try {
+    const {
+      cliente_id, agente_id, canal_origem, thread_id_origem,
+      discord_canal_id, discord_user_id, whatsapp_numero,
+      pedido_original, tipo_pedido, squad_executora,
+    } = req.body || {};
+    if (!cliente_id) return res.status(400).json({ ok: false, error: 'cliente_id obrigatorio' });
+    if (!canal_origem) return res.status(400).json({ ok: false, error: 'canal_origem obrigatorio' });
+    if (!pedido_original) return res.status(400).json({ ok: false, error: 'pedido_original obrigatorio' });
+    const r = await jobsLib.criarJob({
+      cliente_id, agente_id, canal_origem, thread_id_origem,
+      discord_canal_id, discord_user_id, whatsapp_numero,
+      pedido_original, tipo_pedido, squad_executora,
+    });
+    res.json({ ok: true, job: r });
+  } catch (e) {
+    console.error('[jobs-criar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Planejar: chama Claude CLI (Planner), grava plano + briefing_resumo,
+// muda status pra aguardando_aprovacao. Pinguim mostra briefing pro socio.
+app.post('/api/jobs/planejar', async (req, res) => {
+  try {
+    const { job_id, contexto } = req.body || {};
+    if (!job_id) return res.status(400).json({ ok: false, error: 'job_id obrigatorio' });
+    const job = await jobsLib.carregarJob({ job_id });
+    if (!job) return res.status(404).json({ ok: false, error: 'job nao encontrado' });
+    if (job.status !== 'rascunho') {
+      return res.status(409).json({ ok: false, error: `job status=${job.status}, esperava rascunho` });
+    }
+    console.log(`[jobs-planejar] job=${job_id} | pedido="${job.pedido_original.slice(0, 80)}..."`);
+    const t0 = Date.now();
+    const plano = await planner.gerarPlano({
+      pedido_original: job.pedido_original,
+      contexto: contexto || '',
+    });
+    const planejou_ms = Date.now() - t0;
+    const atualizado = await jobsLib.gravarPlano({
+      job_id,
+      plano_json: plano,
+      briefing_resumo: plano.briefing_resumo,
+      tipo_pedido: plano.tipo_pedido || null,
+      squad_executora: plano.squad_executora || null,
+    });
+    console.log(`[jobs-planejar] OK ${planejou_ms}ms | tipo=${plano.tipo_pedido} | squad=${plano.squad_executora}`);
+    res.json({ ok: true, job: atualizado, plano, planejou_ms });
+  } catch (e) {
+    console.error('[jobs-planejar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Aprovar: socio respondeu "sim" -> entra na fila do worker
+app.post('/api/jobs/aprovar', async (req, res) => {
+  try {
+    const { job_id } = req.body || {};
+    if (!job_id) return res.status(400).json({ ok: false, error: 'job_id obrigatorio' });
+    const r = await jobsLib.aprovarJob({ job_id });
+    if (!r) return res.status(409).json({ ok: false, error: 'job nao estava em aguardando_aprovacao' });
+    res.json({ ok: true, job: r });
+  } catch (e) {
+    console.error('[jobs-aprovar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Cancelar: socio respondeu "nao" / mudou de ideia
+app.post('/api/jobs/cancelar', async (req, res) => {
+  try {
+    const { job_id, motivo } = req.body || {};
+    if (!job_id) return res.status(400).json({ ok: false, error: 'job_id obrigatorio' });
+    const r = await jobsLib.cancelarJob({ job_id, motivo });
+    if (!r) return res.status(409).json({ ok: false, error: 'job nao estava em rascunho/aguardando_aprovacao' });
+    res.json({ ok: true, job: r });
+  } catch (e) {
+    console.error('[jobs-cancelar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Listar jobs do socio (Pinguim verifica antes de responder, mostra status)
+app.post('/api/jobs/listar', async (req, res) => {
+  try {
+    const { cliente_id, status_filtro, limite } = req.body || {};
+    if (!cliente_id) return res.status(400).json({ ok: false, error: 'cliente_id obrigatorio' });
+    const r = await jobsLib.listarJobsDoSocio({ cliente_id, status_filtro, limite: limite || 5 });
+    res.json({ ok: true, total: r.length, jobs: r });
+  } catch (e) {
+    console.error('[jobs-listar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Carregar um job especifico (debug + acompanhamento)
+app.post('/api/jobs/carregar', async (req, res) => {
+  try {
+    const { job_id } = req.body || {};
+    if (!job_id) return res.status(400).json({ ok: false, error: 'job_id obrigatorio' });
+    const r = await jobsLib.carregarJob({ job_id });
+    if (!r) return res.status(404).json({ ok: false, error: 'job nao encontrado' });
+    res.json({ ok: true, job: r });
+  } catch (e) {
+    console.error('[jobs-carregar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Jobs concluidos+nao-notificados do socio (Pinguim polla a cada turno)
+app.post('/api/jobs/pendentes-notificar', async (req, res) => {
+  try {
+    const { cliente_id } = req.body || {};
+    if (!cliente_id) return res.status(400).json({ ok: false, error: 'cliente_id obrigatorio' });
+    const r = await jobsLib.buscarConcluidosNaoNotificados({ cliente_id });
+    res.json({ ok: true, total: r.length, jobs: r });
+  } catch (e) {
+    console.error('[jobs-pendentes] erro:', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
