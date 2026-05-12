@@ -2976,6 +2976,263 @@ app.post('/api/aprendizados/listar-clientes', async (req, res) => {
 });
 
 // ============================================================
+// V2.15 — OFICINA DE RELATÓRIOS (Andre 2026-05-12)
+// ============================================================
+// Quando agente detecta relatório complexo (multi-fonte, agregação,
+// atribuição), abre TICKET aqui em vez de tentar executar em runtime.
+// Codina depois constrói Skill dedicada, vincula, marca entregue.
+// ============================================================
+const oficinaLib = require('./lib/oficina');
+
+app.post('/api/oficina/criar', async (req, res) => {
+  try {
+    const {
+      cliente_id, pedido_original, canal_origem, thread_id_origem,
+      discord_canal_id, whatsapp_numero, briefing_estruturado, anexos, prioridade,
+    } = req.body || {};
+    if (!cliente_id) return res.status(400).json({ ok: false, error: 'cliente_id obrigatorio' });
+    if (!pedido_original) return res.status(400).json({ ok: false, error: 'pedido_original obrigatorio' });
+    if (!canal_origem) return res.status(400).json({ ok: false, error: 'canal_origem obrigatorio' });
+    const r = await oficinaLib.criarPedido({
+      cliente_id, pedido_original, canal_origem, thread_id_origem,
+      discord_canal_id, whatsapp_numero, briefing_estruturado, anexos, prioridade,
+    });
+
+    // Notifica Codina via Discord — "voce fica sabendo que tem ticket pendente"
+    // Posta no canal #oficina-relatorios (se existir) ou #geral. Fire-and-forget.
+    setImmediate(async () => {
+      try {
+        const discordPostar = require('./lib/discord-postar');
+        const publicUrl = await getPublicBaseUrl().catch(() => '');
+        const pedidoCurto = pedido_original.length > 200 ? pedido_original.slice(0, 200) + '…' : pedido_original;
+        const prio = prioridade === 'urgente' ? '🔴 URGENTE' : prioridade === 'alta' ? '🟠 ALTA' : '';
+        const linkPainel = publicUrl ? `${publicUrl}/oficina` : '(painel local)';
+        const texto = `🛠 **Novo ticket na Oficina** ${prio}\n\n**Pedido:** ${pedidoCurto}\n**Canal:** ${canal_origem}\n**Ticket ID:** \`${r.id.slice(0, 8)}\`\n\nFila completa: ${linkPainel}`;
+        // Tenta postar em #oficina-relatorios; se nao existir, cai em #geral
+        const tentativas = ['oficina-relatorios', 'oficina', 'geral', 'dev'];
+        for (const canalNome of tentativas) {
+          try {
+            const result = await discordPostar.postarEmCanal({ canal_nome: canalNome, texto });
+            if (result?.ok) {
+              console.log(`[oficina-notify] postado em #${canalNome} (ticket ${r.id.slice(0, 8)})`);
+              return;
+            }
+          } catch (_) { /* tenta proximo */ }
+        }
+        console.warn(`[oficina-notify] nenhum canal Discord disponivel pra notificar ticket ${r.id.slice(0, 8)}`);
+      } catch (e) {
+        console.warn(`[oficina-notify] erro: ${e.message}`);
+      }
+    });
+
+    res.json({ ok: true, ticket: r });
+  } catch (e) {
+    console.error('[oficina-criar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/oficina/atualizar-briefing', async (req, res) => {
+  try {
+    const { ticket_id, novos_campos, status } = req.body || {};
+    if (!ticket_id) return res.status(400).json({ ok: false, error: 'ticket_id obrigatorio' });
+    const r = await oficinaLib.atualizarBriefing({ ticket_id, novos_campos: novos_campos || {}, status });
+    if (!r) return res.status(404).json({ ok: false, error: 'ticket nao encontrado' });
+    res.json({ ok: true, ticket: r });
+  } catch (e) {
+    console.error('[oficina-atualizar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/oficina/anexar', async (req, res) => {
+  try {
+    const { ticket_id, tipo, conteudo, descricao } = req.body || {};
+    if (!ticket_id) return res.status(400).json({ ok: false, error: 'ticket_id obrigatorio' });
+    if (!tipo) return res.status(400).json({ ok: false, error: 'tipo obrigatorio (html_exemplo|link_referencia|descricao_texto|screenshot_url|planilha_drive|campo_extra)' });
+    if (!conteudo) return res.status(400).json({ ok: false, error: 'conteudo obrigatorio' });
+    const r = await oficinaLib.anexarRecurso({ ticket_id, tipo, conteudo, descricao });
+    res.json({ ok: true, ticket: r });
+  } catch (e) {
+    console.error('[oficina-anexar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/oficina/listar-meus', async (req, res) => {
+  try {
+    const { cliente_id, status_filtro, limite } = req.body || {};
+    if (!cliente_id) return res.status(400).json({ ok: false, error: 'cliente_id obrigatorio' });
+    const r = await oficinaLib.listarPendentesDoSocio({ cliente_id, status_filtro, limite: limite || 5 });
+    res.json({ ok: true, total: r.length, tickets: r });
+  } catch (e) {
+    console.error('[oficina-listar-meus] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/oficina/listar-fila', async (req, res) => {
+  try {
+    const { status_filtro, limite } = req.body || {};
+    const r = await oficinaLib.listarFilaTotal({ status_filtro, limite: limite || 20 });
+    res.json({ ok: true, total: r.length, tickets: r });
+  } catch (e) {
+    console.error('[oficina-listar-fila] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/oficina/carregar', async (req, res) => {
+  try {
+    const { ticket_id } = req.body || {};
+    if (!ticket_id) return res.status(400).json({ ok: false, error: 'ticket_id obrigatorio' });
+    const r = await oficinaLib.carregarTicket({ ticket_id });
+    if (!r) return res.status(404).json({ ok: false, error: 'ticket nao encontrado' });
+    res.json({ ok: true, ticket: r });
+  } catch (e) {
+    console.error('[oficina-carregar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/oficina/marcar-entregue', async (req, res) => {
+  try {
+    const { ticket_id, skill_slug_alvo, notas_codina } = req.body || {};
+    if (!ticket_id) return res.status(400).json({ ok: false, error: 'ticket_id obrigatorio' });
+    if (!skill_slug_alvo) return res.status(400).json({ ok: false, error: 'skill_slug_alvo obrigatorio' });
+    const r = await oficinaLib.marcarEntregue({ ticket_id, skill_slug_alvo, notas_codina });
+    if (!r) return res.status(404).json({ ok: false, error: 'ticket nao encontrado' });
+    res.json({ ok: true, ticket: r });
+  } catch (e) {
+    console.error('[oficina-entregue] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/oficina/cancelar', async (req, res) => {
+  try {
+    const { ticket_id, motivo } = req.body || {};
+    if (!ticket_id) return res.status(400).json({ ok: false, error: 'ticket_id obrigatorio' });
+    const r = await oficinaLib.cancelarTicket({ ticket_id, motivo });
+    if (!r) return res.status(409).json({ ok: false, error: 'ticket nao estava em status cancelavel' });
+    res.json({ ok: true, ticket: r });
+  } catch (e) {
+    console.error('[oficina-cancelar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/oficina/catalogo', async (req, res) => {
+  try {
+    const status = req.query.status || 'ativo';
+    const r = await oficinaLib.listarCatalogo({ status });
+    res.json({ ok: true, total: r.length, catalogo: r });
+  } catch (e) {
+    console.error('[oficina-catalogo] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/oficina/catalogo/upsert', async (req, res) => {
+  try {
+    const { slug, nome, descricao, como_invocar, exemplos_pedido, status } = req.body || {};
+    if (!slug || !nome || !descricao) return res.status(400).json({ ok: false, error: 'slug, nome, descricao obrigatorios' });
+    const r = await oficinaLib.upsertCatalogo({ slug, nome, descricao, como_invocar, exemplos_pedido, status });
+    res.json({ ok: true, item: r });
+  } catch (e) {
+    console.error('[oficina-catalogo-upsert] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Pagina visual /oficina pra Codina ver fila
+app.get('/oficina', async (req, res) => {
+  try {
+    const [pendentes, entregues, catalogo] = await Promise.all([
+      oficinaLib.listarFilaTotal({ status_filtro: ['coletando_requisitos', 'aguardando_aprovacao', 'aprovado_pra_construir', 'em_construcao'], limite: 30 }),
+      oficinaLib.listarFilaTotal({ status_filtro: ['entregue'], limite: 10 }),
+      oficinaLib.listarCatalogo({ status: 'ativo' }),
+    ]);
+    const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const corPrioridade = (p) => p === 'urgente' ? '#EF4444' : p === 'alta' ? '#F59E0B' : '#64748B';
+    const linhaPend = (t) => `<tr>
+      <td><span class="prio" style="background:${corPrioridade(t.prioridade)}">${esc(t.prioridade)}</span></td>
+      <td><div class="ped">${esc((t.pedido_original || '').slice(0, 140))}${(t.pedido_original || '').length > 140 ? '…' : ''}</div>
+          <div class="meta">${esc(t.socio_nome || t.cliente_id?.slice(0, 8))} · ${esc(t.canal_origem)} · ${new Date(t.criado_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</div></td>
+      <td><span class="status status-${esc(t.status)}">${esc(t.status.replace(/_/g, ' '))}</span></td>
+      <td class="anexos">${(t.anexos || []).length}</td>
+      <td class="id"><code>${esc(t.id.slice(0, 8))}</code></td>
+    </tr>`;
+    const linhaEntr = (t) => `<tr>
+      <td><div class="ped">${esc((t.pedido_original || '').slice(0, 140))}</div>
+          <div class="meta">${esc(t.socio_nome || '')} · entregue ${new Date(t.entregue_em).toLocaleDateString('pt-BR')}</div></td>
+      <td><code>${esc(t.skill_slug_alvo || '—')}</code></td>
+      <td class="id"><code>${esc(t.id.slice(0, 8))}</code></td>
+    </tr>`;
+    const linhaCat = (c) => `<tr>
+      <td><code>${esc(c.slug)}</code></td>
+      <td><strong>${esc(c.nome)}</strong><div class="meta">${esc(c.descricao)}</div></td>
+      <td class="meta">${(c.exemplos_pedido || []).slice(0, 2).map(e => `"${esc(e)}"`).join('<br>')}</td>
+    </tr>`;
+    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Oficina de Relatórios · Pinguim OS</title>
+<style>
+:root{--bg:#0a0a0f;--bg2:#111118;--card:#1a1a28;--border:#2a2a3e;--text:#f1f5f9;--text2:#94a3b8;--text3:#64748b;--laranja:#E85C00;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'IBM Plex Sans',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);padding:2rem 1.5rem;line-height:1.5;}
+.wrap{max-width:1200px;margin:0 auto;}
+h1{font-size:1.6rem;margin-bottom:.4rem;}
+.sub{color:var(--text2);font-size:.85rem;margin-bottom:2rem;}
+section{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.25rem 1.5rem;margin-bottom:1.5rem;}
+section h2{font-size:.85rem;color:var(--text);text-transform:uppercase;letter-spacing:.08em;margin-bottom:1rem;font-weight:600;}
+.count{display:inline-block;background:var(--card);color:var(--text2);padding:.15rem .5rem;border-radius:6px;font-size:.7rem;margin-left:.5rem;}
+table{width:100%;border-collapse:collapse;font-size:.85rem;}
+th{text-align:left;color:var(--text3);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;padding:.5rem .75rem;border-bottom:1px solid var(--border);}
+td{padding:.85rem .75rem;border-bottom:1px solid var(--border);vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+tr:hover{background:rgba(255,255,255,0.02);}
+.ped{color:var(--text);font-weight:500;}
+.meta{color:var(--text3);font-size:.72rem;margin-top:.2rem;}
+.prio{color:white;padding:.15rem .5rem;border-radius:4px;font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
+.status{padding:.2rem .5rem;border-radius:4px;font-size:.7rem;background:var(--card);color:var(--text2);}
+.status-coletando_requisitos{background:rgba(232,92,0,0.15);color:#E85C00;}
+.status-aprovado_pra_construir{background:rgba(168,85,247,0.15);color:#A855F7;}
+.status-em_construcao{background:rgba(59,130,246,0.15);color:#3B82F6;}
+.anexos{text-align:center;color:var(--text2);}
+.id code{font-size:.7rem;color:var(--text3);}
+.vazio{padding:2rem;text-align:center;color:var(--text3);font-style:italic;}
+</style></head><body><div class="wrap">
+<h1>🛠 Oficina de Relatórios</h1>
+<div class="sub">Pedidos de relatórios complexos que viraram tickets. Quando ficar pronto, marca entregue + vincula slug da Skill.</div>
+
+<section>
+<h2>Pendentes <span class="count">${pendentes.length}</span></h2>
+${pendentes.length === 0 ? '<div class="vazio">Nenhum pedido pendente. 🎉</div>' :
+`<table><thead><tr><th>Prio</th><th>Pedido</th><th>Status</th><th>Anexos</th><th>ID</th></tr></thead>
+<tbody>${pendentes.map(linhaPend).join('')}</tbody></table>`}
+</section>
+
+<section>
+<h2>Entregues recentes <span class="count">${entregues.length}</span></h2>
+${entregues.length === 0 ? '<div class="vazio">Nenhum entregue ainda.</div>' :
+`<table><thead><tr><th>Pedido</th><th>Skill</th><th>ID</th></tr></thead>
+<tbody>${entregues.map(linhaEntr).join('')}</tbody></table>`}
+</section>
+
+<section>
+<h2>Catálogo de relatórios prontos <span class="count">${catalogo.length}</span></h2>
+<table><thead><tr><th>Slug</th><th>Nome</th><th>Exemplos de pedido</th></tr></thead>
+<tbody>${catalogo.map(linhaCat).join('')}</tbody></table>
+</section>
+
+</div></body></html>`;
+    res.type('html').send(html);
+  } catch (e) {
+    console.error('[oficina-pagina] erro:', e.message);
+    res.status(500).type('html').send(`<h1>Erro</h1><pre>${e.message}</pre>`);
+  }
+});
+
+// ============================================================
 // V2.15 Fase 1 Parte 2 — JOBS (Plan-and-Execute queue)
 // ============================================================
 // Pinguim cria job quando detecta pedido complexo. Planner gera plano JSON.

@@ -24,6 +24,7 @@
 const db = require('./db');
 const contextoTemporal = require('./contexto-temporal');
 const jobs = require('./jobs');
+const oficina = require('./oficina');
 
 // V2.14.5 + Discord — aceita cliente_id (sócio) OU contexto_extra (Discord funcionário).
 async function blocoIdentidadeSocio(cliente_id_dinamico = null, contexto_extra = null) {
@@ -221,6 +222,57 @@ REGRAS sobre estes jobs:
 }
 
 // ============================================================
+// V2.15 — bloco [OFICINA DE RELATÓRIOS]
+// Catálogo de relatórios prontos (Skills ativas) + tickets pendentes do sócio.
+// Agente OLHA antes de tentar executar relatório complexo. Se o pedido bate
+// com slug do catálogo, executa direto. Se não bate, abre ticket via
+// POST /api/oficina/criar e coleta requisitos com sócio.
+// ============================================================
+async function blocoOficina(cliente_id) {
+  try {
+    const [catalogo, pendentes] = await Promise.all([
+      oficina.listarCatalogo({ status: 'ativo' }).catch(() => []),
+      cliente_id ? oficina.listarPendentesDoSocio({ cliente_id, limite: 5 }).catch(() => []) : Promise.resolve([]),
+    ]);
+
+    if (!catalogo.length && !pendentes.length) return null;
+
+    let bloco = `[OFICINA DE RELATÓRIOS]\n`;
+
+    if (catalogo.length) {
+      bloco += `\n**Relatórios PRONTOS (executa direto, NÃO abre ticket):**\n`;
+      for (const c of catalogo) {
+        const ex = (c.exemplos_pedido || []).slice(0, 2).join(' / ');
+        bloco += `- \`${c.slug}\` — ${c.nome}. Ex: "${ex}". Como: ${c.como_invocar}\n`;
+      }
+    }
+
+    if (pendentes.length) {
+      bloco += `\n**Tickets EM ANDAMENTO deste sócio (na oficina):**\n`;
+      for (const p of pendentes) {
+        const idCurto = String(p.id).slice(0, 8);
+        const pedidoCurto = (p.pedido_original || '').slice(0, 100);
+        const briefingKeys = Object.keys(p.briefing_estruturado || {});
+        const briefingResumo = briefingKeys.length ? `briefing: {${briefingKeys.join(', ')}}` : 'briefing vazio (perguntar requisitos)';
+        bloco += `- **${p.status.replace(/_/g, ' ')}** | ticket=${idCurto} | "${pedidoCurto}" | ${briefingResumo}\n`;
+      }
+    }
+
+    bloco += `\n**REGRA DE USO da Oficina:**
+- Sócio pediu relatório que CASA com slug do catálogo acima → executa DIRETO (sem ticket).
+- Sócio pediu relatório COMPLEXO que NÃO casa (multi-fonte com cruzamento, KPI customizado, formato novo) → abre ticket via POST /api/oficina/criar e COLETA REQUISITOS conversando. NÃO tenta executar em runtime.
+- Se ha ticket EM ANDAMENTO desse sócio e ele tocar no assunto → atualiza briefing via POST /api/oficina/atualizar-briefing (merge de campos) ou anexa via POST /api/oficina/anexar.
+- Coleta canônica (perguntar UM por vez, natural): (1) métricas exatas, (2) fontes/dimensões, (3) frequência (1 vez vs recorrente), (4) formato/audiência. Aceita anexos: HTML exemplo, link de referência, descrição extra, screenshot URL.
+- Quando coletar TUDO, confirma com sócio e muda status pra 'aguardando_aprovacao' (via atualizar-briefing com status='aguardando_aprovacao').`;
+
+    return bloco;
+  } catch (e) {
+    console.warn(`[contexto-rico] erro carregando oficina: ${e.message}`);
+    return null;
+  }
+}
+
+// ============================================================
 // montarContexto — função principal
 // Monta TODOS os blocos que vão ANTES do prompt do usuário.
 // Retorna string única pronta pra concatenar.
@@ -235,7 +287,7 @@ async function montarContexto({ thread_id, canal = 'chat-web', cliente_id = null
   // V2.14.5 — passa cliente_id pra identidade + aprendizados resolverem multi-sócio
   // V2.14 D — contexto_extra (Discord) entrega papel (sócio/funcionário) + nome
   const ehFuncionario = contexto_extra && contexto_extra.papel === 'funcionario';
-  const [identidade, entregaveis, historico, drive, aprendizados, jobsPendentes] = await Promise.all([
+  const [identidade, entregaveis, historico, drive, aprendizados, jobsPendentes, oficinaBloco] = await Promise.all([
     blocoIdentidadeSocio(cliente_id, contexto_extra).catch(() => '[IDENTIDADE DO SÓCIO]\n(erro)'),
     // Funcionário NÃO tem entregáveis pessoais — pula
     ehFuncionario ? Promise.resolve(null) : blocoEntregaveisRecentes(cliente_id).catch(() => '[ENTREGÁVEIS RECENTES]\n(erro consultando)'),
@@ -245,12 +297,15 @@ async function montarContexto({ thread_id, canal = 'chat-web', cliente_id = null
     ehFuncionario ? Promise.resolve(null) : blocoAprendizados(cliente_id).catch(() => null),
     // V2.15 Fase 2 — jobs ativos do socio (executando/aguardando aprovacao/concluido nao notificado)
     ehFuncionario ? Promise.resolve(null) : blocoJobsPendentes(cliente_id).catch(() => null),
+    // V2.15 Oficina — catálogo de relatórios prontos + tickets pendentes
+    ehFuncionario ? Promise.resolve(null) : blocoOficina(cliente_id).catch(() => null),
   ]);
 
   blocos.push(identidade);
   if (aprendizados) blocos.push(aprendizados); // só inclui se há aprendizados
   if (entregaveis) blocos.push(entregaveis);   // funcionário não tem
   if (jobsPendentes) blocos.push(jobsPendentes); // V2.15 — só inclui se ha jobs ativos
+  if (oficinaBloco) blocos.push(oficinaBloco); // V2.15 — catálogo + tickets oficina
   blocos.push(historico);
   if (drive) blocos.push(drive); // só inclui se tem arquivos recentes
 
@@ -260,4 +315,4 @@ async function montarContexto({ thread_id, canal = 'chat-web', cliente_id = null
   return blocos.join('\n\n');
 }
 
-module.exports = { montarContexto, blocoIdentidadeSocio, blocoEntregaveisRecentes, blocoHistorico, blocoContextoDrive, blocoAprendizados, blocoCanal, blocoJobsPendentes };
+module.exports = { montarContexto, blocoIdentidadeSocio, blocoEntregaveisRecentes, blocoHistorico, blocoContextoDrive, blocoAprendizados, blocoCanal, blocoJobsPendentes, blocoOficina };
