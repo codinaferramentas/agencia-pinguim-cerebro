@@ -3056,6 +3056,43 @@ app.post('/api/jobs/pendentes-notificar', async (req, res) => {
   }
 });
 
+// Marca job como notificado (Pinguim chama logo apos entregar link pro socio)
+app.post('/api/jobs/notificar', async (req, res) => {
+  try {
+    const { job_id } = req.body || {};
+    if (!job_id) return res.status(400).json({ ok: false, error: 'job_id obrigatorio' });
+    const r = await jobsLib.marcarNotificado({ job_id });
+    if (!r) return res.status(404).json({ ok: false, error: 'job nao encontrado' });
+    res.json({ ok: true, job: r });
+  } catch (e) {
+    console.error('[jobs-notificar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Status do worker (debug) + controle manual (start/stop opt-in)
+const jobsWorker = require('./lib/jobs-worker');
+app.get('/api/jobs/worker-status', (req, res) => {
+  res.json({ ok: true, ...jobsWorker.status() });
+});
+app.post('/api/jobs/worker-start', (req, res) => {
+  jobsWorker.iniciar();
+  res.json({ ok: true, ...jobsWorker.status() });
+});
+app.post('/api/jobs/worker-stop', (req, res) => {
+  jobsWorker.parar();
+  res.json({ ok: true, ...jobsWorker.status() });
+});
+// Forca processar 1 job (uso em smoke test — bypass loop)
+app.post('/api/jobs/worker-tick', async (req, res) => {
+  try {
+    const r = await jobsWorker._processarUmJob();
+    res.json({ ok: true, achou_job: r });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ============================================================
 // V2.14 Frente C1 — endpoint RELATORIO EXECUTIVO (sob demanda)
 // ============================================================
@@ -3210,12 +3247,27 @@ app.listen(PORT, () => {
       }
     })
     .catch(e => console.warn(`  [discord-bot] falha ao iniciar (nao bloqueia server): ${e.message}`));
+
+  // V2.15 Fase 2 — inicia worker de jobs (opt-in via ENV).
+  // Default: NAO sobe (evita conflito com instancia dev rodando em paralelo).
+  // Pra ativar: WORKER_JOBS_ENABLED=1 npm start
+  if (process.env.WORKER_JOBS_ENABLED === '1') {
+    try {
+      jobsWorker.iniciar();
+      console.log('  [jobs-worker] ATIVO (WORKER_JOBS_ENABLED=1)');
+    } catch (e) {
+      console.warn(`  [jobs-worker] falha ao iniciar: ${e.message}`);
+    }
+  } else {
+    console.log('  [jobs-worker] DESLIGADO (WORKER_JOBS_ENABLED nao=1) — use POST /api/jobs/worker-start pra ligar manual');
+  }
 });
 
 // Shutdown gracioso — fecha bot Discord antes de sair (evita reconexao spam quando reiniciar)
 function shutdownGracioso(sinal) {
-  console.log(`\n[server] recebido ${sinal}, fechando bot Discord...`);
+  console.log(`\n[server] recebido ${sinal}, fechando bot Discord + worker jobs...`);
   try { discordBot.pararBot(); } catch (_) {}
+  try { jobsWorker.parar(); } catch (_) {}
   process.exit(0);
 }
 process.on('SIGINT', () => shutdownGracioso('SIGINT'));

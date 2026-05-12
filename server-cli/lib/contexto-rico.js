@@ -23,6 +23,7 @@
 
 const db = require('./db');
 const contextoTemporal = require('./contexto-temporal');
+const jobs = require('./jobs');
 
 // V2.14.5 + Discord — aceita cliente_id (sócio) OU contexto_extra (Discord funcionário).
 async function blocoIdentidadeSocio(cliente_id_dinamico = null, contexto_extra = null) {
@@ -170,6 +171,56 @@ Formato: ${desc[canal] || 'genérico — usar markdown padrão e ser conservador
 }
 
 // ============================================================
+// V2.15 Fase 2 — bloco [JOBS PENDENTES] (polling de cortesia)
+// Mostra ao Pinguim, a cada turno:
+//   - jobs do socio em execucao (worker rodando agora)
+//   - jobs concluidos NAO-notificados (Pinguim deve entregar link e chamar /api/jobs/notificar)
+//   - jobs aguardando aprovacao (socio talvez esqueceu de responder)
+// Se nenhum, retorna null (omite bloco do contexto).
+// ============================================================
+async function blocoJobsPendentes(cliente_id) {
+  if (!cliente_id) return null;
+  try {
+    const ativos = await jobs.listarJobsDoSocio({
+      cliente_id,
+      status_filtro: ['aguardando_aprovacao', 'executando', 'concluido'],
+      limite: 10,
+    });
+    if (!ativos.length) return null;
+    // So mostra concluidos que ainda nao foram notificados
+    const filtrados = ativos.filter((j) => {
+      if (j.status === 'concluido') return !j.notificado_em;
+      return true;
+    });
+    if (!filtrados.length) return null;
+    const linhas = filtrados.map((j) => {
+      const idCurto = String(j.id).slice(0, 8);
+      const pedidoCurto = (j.pedido_original || '').slice(0, 90);
+      const briefing = (j.briefing_resumo || '').slice(0, 110);
+      if (j.status === 'concluido') {
+        return `- **concluido** | job=${idCurto} | entregavel=/entregavel/${j.entregavel_id} | "${pedidoCurto}"`;
+      }
+      if (j.status === 'executando') {
+        return `- **executando** | job=${idCurto} | desde ${j.aprovado_em || '?'} | "${pedidoCurto}"`;
+      }
+      // aguardando_aprovacao
+      const brief = briefing ? ` | briefing: "${briefing}"` : '';
+      return `- **aguardando aprovacao** | job=${idCurto} | "${pedidoCurto}"${brief}`;
+    });
+    return `[JOBS PENDENTES DESTE SOCIO]
+${linhas.join('\n')}
+
+REGRAS sobre estes jobs:
+- Se ha "concluido" NAO-notificado E socio acabou de entrar OU pergunta status ("tá pronto?", "saiu?") → entrega o link /entregavel/<id> em UMA mensagem natural + chama POST /api/jobs/notificar com job_id pra marcar entregue. NUNCA repete entrega.
+- Se ha "executando" e socio pergunta status → diz honesto que ainda esta rodando, evita prometer prazo se nao tem.
+- Se ha "aguardando aprovacao" e socio nao tocou no assunto, NAO empurra (espera ele responder). Se ele perguntar "que jobs eu tenho?" → lista.`;
+  } catch (e) {
+    console.warn(`[contexto-rico] erro carregando jobs pendentes: ${e.message}`);
+    return null;
+  }
+}
+
+// ============================================================
 // montarContexto — função principal
 // Monta TODOS os blocos que vão ANTES do prompt do usuário.
 // Retorna string única pronta pra concatenar.
@@ -184,7 +235,7 @@ async function montarContexto({ thread_id, canal = 'chat-web', cliente_id = null
   // V2.14.5 — passa cliente_id pra identidade + aprendizados resolverem multi-sócio
   // V2.14 D — contexto_extra (Discord) entrega papel (sócio/funcionário) + nome
   const ehFuncionario = contexto_extra && contexto_extra.papel === 'funcionario';
-  const [identidade, entregaveis, historico, drive, aprendizados] = await Promise.all([
+  const [identidade, entregaveis, historico, drive, aprendizados, jobsPendentes] = await Promise.all([
     blocoIdentidadeSocio(cliente_id, contexto_extra).catch(() => '[IDENTIDADE DO SÓCIO]\n(erro)'),
     // Funcionário NÃO tem entregáveis pessoais — pula
     ehFuncionario ? Promise.resolve(null) : blocoEntregaveisRecentes(cliente_id).catch(() => '[ENTREGÁVEIS RECENTES]\n(erro consultando)'),
@@ -192,11 +243,14 @@ async function montarContexto({ thread_id, canal = 'chat-web', cliente_id = null
     blocoContextoDrive().catch(() => null),
     // Funcionário NÃO tem aprendizados pessoais — pula
     ehFuncionario ? Promise.resolve(null) : blocoAprendizados(cliente_id).catch(() => null),
+    // V2.15 Fase 2 — jobs ativos do socio (executando/aguardando aprovacao/concluido nao notificado)
+    ehFuncionario ? Promise.resolve(null) : blocoJobsPendentes(cliente_id).catch(() => null),
   ]);
 
   blocos.push(identidade);
   if (aprendizados) blocos.push(aprendizados); // só inclui se há aprendizados
   if (entregaveis) blocos.push(entregaveis);   // funcionário não tem
+  if (jobsPendentes) blocos.push(jobsPendentes); // V2.15 — só inclui se ha jobs ativos
   blocos.push(historico);
   if (drive) blocos.push(drive); // só inclui se tem arquivos recentes
 
@@ -206,4 +260,4 @@ async function montarContexto({ thread_id, canal = 'chat-web', cliente_id = null
   return blocos.join('\n\n');
 }
 
-module.exports = { montarContexto, blocoIdentidadeSocio, blocoEntregaveisRecentes, blocoHistorico, blocoContextoDrive, blocoAprendizados, blocoCanal };
+module.exports = { montarContexto, blocoIdentidadeSocio, blocoEntregaveisRecentes, blocoHistorico, blocoContextoDrive, blocoAprendizados, blocoCanal, blocoJobsPendentes };
