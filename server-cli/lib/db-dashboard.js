@@ -505,7 +505,12 @@ async function meta_kpis_range(from_iso, to_iso) {
         SELECT sum((a->>'value')::int)
         FROM jsonb_array_elements(actions) a
         WHERE a->>'action_type' = 'purchase'
-      )), 0) AS purchases_pixel
+      )), 0) AS purchases_pixel,
+      coalesce(sum((
+        SELECT sum((a->>'value')::numeric)
+        FROM jsonb_array_elements(coalesce(action_values, '[]'::jsonb)) a
+        WHERE a->>'action_type' = 'purchase'
+      )), 0) AS receita_pixel
     FROM metricas_diarias
     WHERE data >= '${from_iso}'
       AND data <= '${to_iso}'
@@ -515,6 +520,8 @@ async function meta_kpis_range(from_iso, to_iso) {
   const gasto = parseFloat(r.gasto || 0);
   const imp = parseInt(r.impressoes || 0, 10);
   const cliques = parseInt(r.cliques || 0, 10);
+  const receitaPixel = parseFloat(r.receita_pixel || 0);
+  const purchases = parseInt(r.purchases_pixel || 0, 10);
   return {
     gasto,
     impressoes: imp,
@@ -526,7 +533,13 @@ async function meta_kpis_range(from_iso, to_iso) {
     contas_ativas: parseInt(r.contas_ativas || 0, 10),
     lpv: parseInt(r.lpv || 0, 10),
     checkouts: parseInt(r.checkouts || 0, 10),
-    purchases_pixel: parseInt(r.purchases_pixel || 0, 10),
+    purchases_pixel: purchases,
+    // V3.1 Andre 2026-05-13: receita do PIXEL Meta (action_values purchase),
+    // NUNCA cruzar com Hotmart pra evitar atribuir venda não-trackeada.
+    receita_pixel: receitaPixel,
+    roas_pixel: gasto > 0 ? receitaPixel / gasto : null,
+    cpa_pixel: purchases > 0 ? gasto / purchases : null,
+    ticket_medio_pixel: purchases > 0 ? receitaPixel / purchases : null,
     cpm: imp > 0 ? (gasto * 1000) / imp : null,
     ctr_pct: imp > 0 ? (cliques * 100) / imp : null,
     cpc: cliques > 0 ? gasto / cliques : null,
@@ -573,6 +586,11 @@ async function meta_por_conta(from_iso, to_iso) {
         FROM jsonb_array_elements(m.actions) a
         WHERE a->>'action_type' = 'purchase'
       )), 0) AS purchases_pixel,
+      coalesce(sum((
+        SELECT sum((a->>'value')::numeric)
+        FROM jsonb_array_elements(coalesce(m.action_values, '[]'::jsonb)) a
+        WHERE a->>'action_type' = 'purchase'
+      )), 0) AS receita_pixel,
       count(DISTINCT m.entity_id) AS qtd_campanhas
     FROM metricas_diarias m
     JOIN contas c ON c.id = m.conta_id
@@ -588,6 +606,8 @@ async function meta_por_conta(from_iso, to_iso) {
     const gasto = parseFloat(r.gasto || 0);
     const imp = parseInt(r.impressoes || 0, 10);
     const cliques = parseInt(r.cliques || 0, 10);
+    const receitaPixel = parseFloat(r.receita_pixel || 0);
+    const purchases = parseInt(r.purchases_pixel || 0, 10);
     return {
       conta_id: r.conta_id,
       conta_nome: r.conta_nome,
@@ -597,13 +617,13 @@ async function meta_por_conta(from_iso, to_iso) {
       cliques,
       alcance: parseInt(r.alcance || 0, 10),
       frequencia_media: parseFloat(r.frequencia_media || 0),
-      purchases_pixel: parseInt(r.purchases_pixel || 0, 10),
+      purchases_pixel: purchases,
+      receita_pixel: receitaPixel,
+      roas_pixel: gasto > 0 ? receitaPixel / gasto : null,
       qtd_campanhas: parseInt(r.qtd_campanhas || 0, 10),
       cpm: imp > 0 ? (gasto * 1000) / imp : null,
       ctr_pct: imp > 0 ? (cliques * 100) / imp : null,
-      cpa_pixel: parseInt(r.purchases_pixel || 0, 10) > 0
-        ? gasto / parseInt(r.purchases_pixel || 0, 10)
-        : null,
+      cpa_pixel: purchases > 0 ? gasto / purchases : null,
     };
   });
 }
@@ -623,7 +643,12 @@ async function meta_top_campanhas(from_iso, to_iso, limite = 10) {
         SELECT sum((a->>'value')::int)
         FROM jsonb_array_elements(m.actions) a
         WHERE a->>'action_type' = 'purchase'
-      )), 0) AS purchases_pixel
+      )), 0) AS purchases_pixel,
+      coalesce(sum((
+        SELECT sum((a->>'value')::numeric)
+        FROM jsonb_array_elements(coalesce(m.action_values, '[]'::jsonb)) a
+        WHERE a->>'action_type' = 'purchase'
+      )), 0) AS receita_pixel
     FROM metricas_diarias m
     JOIN contas c ON c.id = m.conta_id
     WHERE m.data >= '${from_iso}'
@@ -639,6 +664,7 @@ async function meta_top_campanhas(from_iso, to_iso, limite = 10) {
     const gasto = parseFloat(r.gasto || 0);
     const imp = parseInt(r.impressoes || 0, 10);
     const cliques = parseInt(r.cliques || 0, 10);
+    const receitaPixel = parseFloat(r.receita_pixel || 0);
     return {
       entity_id: r.entity_id,
       entity_name: r.entity_name,
@@ -648,6 +674,8 @@ async function meta_top_campanhas(from_iso, to_iso, limite = 10) {
       cliques,
       frequencia_media: parseFloat(r.frequencia_media || 0),
       purchases_pixel: parseInt(r.purchases_pixel || 0, 10),
+      receita_pixel: receitaPixel,
+      roas_pixel: gasto > 0 ? receitaPixel / gasto : null,
       cpm: imp > 0 ? (gasto * 1000) / imp : null,
       ctr_pct: imp > 0 ? (cliques * 100) / imp : null,
     };
@@ -666,7 +694,12 @@ async function meta_serie_diaria(n_dias = 30) {
         SELECT sum((a->>'value')::int)
         FROM jsonb_array_elements(actions) a
         WHERE a->>'action_type' = 'purchase'
-      )), 0) AS purchases_pixel
+      )), 0) AS purchases_pixel,
+      coalesce(sum((
+        SELECT sum((a->>'value')::numeric)
+        FROM jsonb_array_elements(coalesce(action_values, '[]'::jsonb)) a
+        WHERE a->>'action_type' = 'purchase'
+      )), 0) AS receita_pixel
     FROM metricas_diarias
     WHERE data >= (now()::date - ${parseInt(n_dias, 10)})
       AND nivel = 'campaign'
@@ -680,6 +713,7 @@ async function meta_serie_diaria(n_dias = 30) {
     impressoes: parseInt(r.impressoes || 0, 10),
     cliques: parseInt(r.cliques || 0, 10),
     purchases_pixel: parseInt(r.purchases_pixel || 0, 10),
+    receita_pixel: parseFloat(r.receita_pixel || 0),
   }));
 }
 

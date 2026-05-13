@@ -104,7 +104,7 @@ function renderRelatorioMetaAds({
   const d30 = snapshot.d30 || {};
   const delta = snapshot.delta_24h || {};
   const serieMeta = meta.serie_meta_30d || [];
-  const serieHotmart = meta.serie_hotmart_30d || [];
+  const serieMeta30dFull = meta.serie_meta_30d || []; // tem receita_pixel
   const contas24h = meta.contas_24h || [];
   const matriz = meta.matriz || [];
   const pareceres = meta.pareceres || [];
@@ -180,7 +180,7 @@ function renderRelatorioMetaAds({
               ${matriz.map(linha => {
                 const contaDados = contas24h.find(c => c.conta_nome === linha.conta) || {};
                 const gastoStr = contaDados.gasto != null ? fmtBRLcompact(contaDados.gasto) : '';
-                const roasStr = contaDados.roas_estimado != null ? fmtRoas(contaDados.roas_estimado) : '';
+                const roasStr = contaDados.roas_pixel != null ? fmtRoas(contaDados.roas_pixel) : '';
                 return `
                   <tr>
                     <td class="matriz-conta">
@@ -262,13 +262,13 @@ function renderRelatorioMetaAds({
       <h2 class="bloco-titulo">🏦 Breakdown · Por conta · ontem</h2>
       <div class="contas-grid">
         ${contas24h.map(c => `
-          <div class="card-conta ${c.roas_estimado != null && c.roas_estimado < 1 ? 'alerta' : ''}">
+          <div class="card-conta ${c.roas_pixel != null && c.roas_pixel < 1 ? 'alerta' : ''}">
             <div class="conta-glow"></div>
             <div class="conta-nome">${esc(c.conta_nome)}</div>
             <div class="conta-share">${c.share_pct?.toFixed(0)}% do gasto</div>
             <div class="conta-gasto">${fmtBRL(c.gasto)}</div>
             <div class="conta-detalhes">
-              <span><strong>ROAS est.</strong> ${fmtRoas(c.roas_estimado)}</span>
+              <span><strong>ROAS Pixel</strong> ${fmtRoas(c.roas_pixel)}</span>
               <span><strong>Freq</strong> ${c.frequencia_media?.toFixed(2) || '—'}</span>
               <span><strong>CTR</strong> ${c.ctr_pct?.toFixed(2) || '—'}%</span>
               <span><strong>Camp.</strong> ${c.qtd_campanhas}</span>
@@ -286,9 +286,9 @@ function renderRelatorioMetaAds({
   });
   const datas30dIso = serieMeta.map(s => s.data);
   const gastoSerie = serieMeta.map(s => s.gasto);
-  const receitaSerie = serieHotmart.map(s => s.receita);
+  const receitaSerie = serieMeta30dFull.map(s => s.receita_pixel || 0);
   const roasSerie = serieMeta.map((s, i) => {
-    const rec = serieHotmart[i]?.receita || 0;
+    const rec = serieMeta30dFull[i]?.receita_pixel || 0;
     return s.gasto > 0 ? +(rec / s.gasto).toFixed(2) : 0;
   });
   const labelsContas = contas24h.map(c => c.conta_nome);
@@ -965,7 +965,7 @@ function renderRelatorioMetaAds({
 
     <div class="grafico-row">
       <div class="grafico-wrap">
-        <h3 class="grafico-titulo">Gasto Meta × Receita Hotmart · últimos 30 dias</h3>
+        <h3 class="grafico-titulo">Gasto Meta × Receita Pixel · últimos 30 dias</h3>
         <div id="grafico-gasto-receita"></div>
       </div>
       <div class="grafico-wrap">
@@ -992,12 +992,18 @@ function renderRelatorioMetaAds({
     <details class="diagnostico">
       <summary>📋 Diagnóstico técnico</summary>
       <div class="diagnostico-body">
-        <div>Coleta: ${meta.duracoes_ms?.coleta ? (meta.duracoes_ms.coleta / 1000).toFixed(1) + 's' : '—'}</div>
-        <div>Squad (5 mestres + Chief): ${meta.duracoes_ms?.squad ? (meta.duracoes_ms.squad / 1000).toFixed(1) + 's' : '—'}</div>
-        <div>Sintetizador: ${meta.duracoes_ms?.sintetizador ? (meta.duracoes_ms.sintetizador / 1000).toFixed(1) + 's' : '—'}</div>
-        <div>Total: ${meta.duracoes_ms?.total ? (meta.duracoes_ms.total / 1000).toFixed(1) + 's' : '—'}</div>
-        <div>Pareceres ativos: ${meta.squad?.qtd_pareceres || 0}</div>
-        <div>Sintetizador ${meta.sintetizador?.ok ? '✓ ok' : '✗ ' + (meta.sintetizador?.motivo || 'falha')}</div>
+        <div><strong style="color:var(--orange)">Fonte de dados</strong></div>
+        <div>· Tabela: <code>metricas_diarias</code> (Supabase compartilhado Pinguim)</div>
+        <div>· Origem: Meta Marketing API · Pixel + ads insights · nivel=campaign</div>
+        <div>· Receita / vendas / ROAS: <code>action_values[].purchase</code> (Pixel Meta)</div>
+        <div>· Hotmart NÃO é cruzado — relatório 100% Meta. Venda sem Pixel não aparece.</div>
+        <div style="margin-top:.5rem"><strong style="color:var(--orange)">Performance</strong></div>
+        <div>· Coleta SQL: ${meta.duracoes_ms?.coleta ? (meta.duracoes_ms.coleta / 1000).toFixed(1) + 's' : '—'}</div>
+        <div>· Squad (5 mestres + Chief): ${meta.duracoes_ms?.squad ? (meta.duracoes_ms.squad / 1000).toFixed(1) + 's' : '—'}</div>
+        <div>· Sintetizador: ${meta.duracoes_ms?.sintetizador ? (meta.duracoes_ms.sintetizador / 1000).toFixed(1) + 's' : '—'}</div>
+        <div>· Total: ${meta.duracoes_ms?.total ? (meta.duracoes_ms.total / 1000).toFixed(1) + 's' : '—'}</div>
+        <div>· Pareceres ativos: ${meta.squad?.qtd_pareceres || 0}</div>
+        <div>· Sintetizador ${meta.sintetizador?.ok ? '✓ ok' : '✗ ' + (meta.sintetizador?.motivo || 'falha')}</div>
       </div>
     </details>
 
@@ -1043,38 +1049,27 @@ function renderRelatorioMetaAds({
       },
     };
 
-    // Gráfico 1: Gasto × Receita (linha dupla com gradient + dropshadow glow)
+    // Gráfico 1: Gasto × Receita Pixel (linha dupla com gradient sutil — V2 restored)
     new ApexCharts(document.getElementById('grafico-gasto-receita'), {
       ...baseChartOpts,
-      chart: {
-        ...baseChartOpts.chart,
-        type: 'area',
-        height: 300,
-        dropShadow: {
-          enabled: true,
-          enabledOnSeries: [0, 1],
-          top: 4, left: 0, blur: 18, opacity: 0.55,
-          color: ['#FF6B1A', '#6CC287'],
-        },
-      },
+      chart: { ...baseChartOpts.chart, type: 'area', height: 280 },
       series: [
         { name: 'Gasto Meta', data: gastoSerie },
-        { name: 'Receita Hotmart', data: receitaSerie },
+        { name: 'Receita Pixel', data: receitaSerie },
       ],
       colors: ['#FF6B1A', '#6CC287'],
       stroke: {
         curve: 'smooth',
-        width: 3,
+        width: 2.5,
         lineCap: 'round',
       },
       fill: {
         type: 'gradient',
         gradient: {
           shadeIntensity: 1,
-          type: 'vertical',
-          opacityFrom: 0.65,
-          opacityTo: 0.02,
-          stops: [0, 95],
+          opacityFrom: 0.45,
+          opacityTo: 0.05,
+          stops: [0, 100],
         },
       },
       dataLabels: { enabled: false },
@@ -1104,41 +1099,18 @@ function renderRelatorioMetaAds({
       },
     }).render();
 
-    // Gráfico 2: Donut distribuição por conta com 3D-look (gradient + glow forte)
+    // Gráfico 2: Donut distribuição por conta (V2 restored — sem glow exagerado)
     new ApexCharts(document.getElementById('grafico-distribuicao'), {
       ...baseChartOpts,
-      chart: {
-        ...baseChartOpts.chart,
-        type: 'donut',
-        height: 320,
-        dropShadow: {
-          enabled: true,
-          top: 6, left: 0, blur: 22, opacity: 0.6,
-          color: '#FF6B1A',
-        },
-      },
+      chart: { ...baseChartOpts.chart, type: 'donut', height: 280 },
       series: dadosContas,
       labels: labelsContas,
       colors: ['#FF6B1A', '#A78BFA', '#67E8F9', '#6CC287', '#E6A85C', '#E58787', '#EC4899', '#84CC16'],
-      stroke: { width: 3, colors: ['#06070A'] },
-      fill: {
-        type: 'gradient',
-        gradient: {
-          shade: 'dark',
-          type: 'diagonal2',
-          shadeIntensity: 0.6,
-          gradientToColors: ['#FFA66B', '#C8B6FF', '#A5F3FC', '#9FE5B3', '#FBCA8F', '#F2A3A3', '#F472B6', '#BEF264'],
-          inverseColors: false,
-          opacityFrom: 1,
-          opacityTo: 1,
-          stops: [0, 100],
-        },
-      },
+      stroke: { width: 2, colors: ['#06070A'] },
       plotOptions: {
         pie: {
           donut: {
-            size: '64%',
-            background: 'transparent',
+            size: '68%',
             labels: {
               show: true,
               name: {
@@ -1146,16 +1118,16 @@ function renderRelatorioMetaAds({
                 fontSize: '11px',
                 fontFamily: "'IBM Plex Mono', monospace",
                 color: '#8E96A8',
-                offsetY: -10,
+                offsetY: -8,
               },
               value: {
                 show: true,
-                fontSize: '22px',
+                fontSize: '20px',
                 fontFamily: "'IBM Plex Sans', sans-serif",
                 color: '#F0F2F6',
                 fontWeight: 700,
                 formatter: v => 'R$ ' + Number(v).toLocaleString('pt-BR', {maximumFractionDigits: 0}),
-                offsetY: 6,
+                offsetY: 5,
               },
               total: {
                 show: true,
@@ -1168,12 +1140,7 @@ function renderRelatorioMetaAds({
               },
             },
           },
-          expandOnClick: true,
         },
-      },
-      states: {
-        hover: { filter: { type: 'lighten', value: 0.08 } },
-        active: { filter: { type: 'darken', value: 0.15 } },
       },
       dataLabels: { enabled: false },
       legend: {
@@ -1189,23 +1156,14 @@ function renderRelatorioMetaAds({
       },
     }).render();
 
-    // Gráfico 3: ROAS diário (barras coloridas com gradient + dropshadow)
+    // Gráfico 3: ROAS Pixel diário (barras coloridas por valor — V2 restored)
     new ApexCharts(document.getElementById('grafico-roas'), {
       ...baseChartOpts,
-      chart: {
-        ...baseChartOpts.chart,
-        type: 'bar',
-        height: 260,
-        dropShadow: {
-          enabled: true,
-          top: 3, left: 0, blur: 10, opacity: 0.45,
-          color: '#6CC287',
-        },
-      },
-      series: [{ name: 'ROAS', data: roasSerie }],
+      chart: { ...baseChartOpts.chart, type: 'bar', height: 240 },
+      series: [{ name: 'ROAS Pixel', data: roasSerie }],
       plotOptions: {
         bar: {
-          borderRadius: 6,
+          borderRadius: 4,
           columnWidth: '60%',
           distributed: true,
           colors: {
@@ -1215,17 +1173,6 @@ function renderRelatorioMetaAds({
               { from: 3, to: 999, color: '#6CC287' },
             ],
           },
-        },
-      },
-      fill: {
-        type: 'gradient',
-        gradient: {
-          shade: 'dark',
-          type: 'vertical',
-          shadeIntensity: 0.4,
-          opacityFrom: 1,
-          opacityTo: 0.75,
-          stops: [0, 100],
         },
       },
       colors: roasSerie.map(v => v < 1 ? '#E58787' : v < 3 ? '#E6A85C' : '#6CC287'),

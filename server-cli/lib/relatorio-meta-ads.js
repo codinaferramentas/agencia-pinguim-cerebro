@@ -61,75 +61,48 @@ function runClaudeCLI(prompt, timeoutMs = 120000) {
 // 1) COLETOR DE DADOS (paralelo, ~3-5s)
 // ============================================================
 async function coletarDadosMetaAds({ dia_alvo_brt }) {
-  // Janelas
+  // V3.1 Andre 2026-05-13: 100% Meta. Sem cruzar Hotmart.
+  // Receita/vendas/ROAS são do PIXEL — action_values purchase no jsonb.
+  // Razão: relatório precisa mostrar APENAS o que Meta rastreou. ROAS baixo
+  // = sinal de venda não-trackeada (e por sí só é informação valiosa).
+
   const j7 = dash.janelaUltimosNDias(7);
   const j30 = dash.janelaUltimosNDias(30);
-
-  // Dia alvo (default: ontem). Janelas 7d/30d sao rolling ATÉ ontem.
   const ontem = dia_alvo_brt;
 
-  // Dia anterior pra comparar 24h vs 24h
   const dataOntem = new Date(`${ontem}T03:00:00Z`);
   const antesOntem = new Date(dataOntem.getTime() - 24 * 60 * 60 * 1000);
   const antesOntemIso = antesOntem.toISOString().slice(0, 10);
 
   const [
-    kpis24h,
-    kpis24hAnterior,
-    kpis7d,
-    kpis30d,
-    fatHotmart24h,
-    fatHotmart24hAnterior,
-    fatHotmart7d,
-    fatHotmart30d,
-    porConta24h,
-    porConta7d,
-    topCampanhas24h,
-    topCampanhas7d,
+    kpis24h, kpis24hAnterior, kpis7d, kpis30d,
+    porConta24h, porConta7d,
+    topCampanhas24h, topCampanhas7d,
     serieMeta30d,
-    serieHotmart30d,
   ] = await Promise.all([
     dash.meta_kpis_range(ontem, ontem),
     dash.meta_kpis_range(antesOntemIso, antesOntemIso),
     dash.meta_kpis_range(j7.from, j7.to),
     dash.meta_kpis_range(j30.from, j30.to),
-    dash.hotmart_faturamento_range(ontem, ontem),
-    dash.hotmart_faturamento_range(antesOntemIso, antesOntemIso),
-    dash.hotmart_faturamento_range(j7.from, j7.to),
-    dash.hotmart_faturamento_range(j30.from, j30.to),
     dash.meta_por_conta(ontem, ontem),
     dash.meta_por_conta(j7.from, j7.to),
     dash.meta_top_campanhas(ontem, ontem, 10),
     dash.meta_top_campanhas(j7.from, j7.to, 10),
     dash.meta_serie_diaria(30),
-    dash.hotmart_serie_diaria(30),
   ]);
 
-  // ROAS = receita Hotmart / gasto Meta
-  const roas = (gastoMeta, receitaHotmart) =>
-    gastoMeta > 0 ? receitaHotmart / gastoMeta : null;
+  const delta = (atual, anterior) => anterior > 0 ? ((atual - anterior) / anterior) * 100 : null;
 
-  // Delta % comparativo
-  const delta = (atual, anterior) =>
-    anterior > 0 ? ((atual - anterior) / anterior) * 100 : null;
-
-  // Calcula ROAS por conta no range (usa rateio: fatHotmart total dividido pro share de gasto)
-  // Ressalva: ROAS por conta exato exige tagging UTM, que nao temos. Aproximacao
-  // = share-of-spend × receita total. Marcamos como ESTIMATIVA no relatorio.
+  // Share of spend por conta (visualização — não confunde com atribuição)
   const totalGasto24h = porConta24h.reduce((s, c) => s + c.gasto, 0);
-  const porConta24hRoas = porConta24h.map(c => ({
+  const porConta24hShare = porConta24h.map(c => ({
     ...c,
     share_pct: totalGasto24h > 0 ? (c.gasto * 100) / totalGasto24h : 0,
-    receita_estimada: totalGasto24h > 0 ? (c.gasto / totalGasto24h) * fatHotmart24h.receita : 0,
-    roas_estimado: c.gasto > 0 ? ((c.gasto / Math.max(totalGasto24h, 0.01)) * fatHotmart24h.receita) / c.gasto : null,
   }));
-
   const totalGasto7d = porConta7d.reduce((s, c) => s + c.gasto, 0);
-  const porConta7dRoas = porConta7d.map(c => ({
+  const porConta7dShare = porConta7d.map(c => ({
     ...c,
     share_pct: totalGasto7d > 0 ? (c.gasto * 100) / totalGasto7d : 0,
-    receita_estimada: totalGasto7d > 0 ? (c.gasto / totalGasto7d) * fatHotmart7d.receita : 0,
-    roas_estimado: c.gasto > 0 ? ((c.gasto / Math.max(totalGasto7d, 0.01)) * fatHotmart7d.receita) / c.gasto : null,
   }));
 
   return {
@@ -142,12 +115,11 @@ async function coletarDadosMetaAds({ dia_alvo_brt }) {
     snapshot: {
       h24: {
         gasto: kpis24h.gasto,
-        receita: fatHotmart24h.receita,
-        vendas: fatHotmart24h.vendas,
+        receita_pixel: kpis24h.receita_pixel,
         purchases_pixel: kpis24h.purchases_pixel,
-        roas: roas(kpis24h.gasto, fatHotmart24h.receita),
-        cpa_pixel: kpis24h.purchases_pixel > 0 ? kpis24h.gasto / kpis24h.purchases_pixel : null,
-        ticket_medio: fatHotmart24h.vendas > 0 ? fatHotmart24h.receita / fatHotmart24h.vendas : null,
+        roas_pixel: kpis24h.roas_pixel,
+        cpa_pixel: kpis24h.cpa_pixel,
+        ticket_medio_pixel: kpis24h.ticket_medio_pixel,
         impressoes: kpis24h.impressoes,
         alcance: kpis24h.alcance,
         cliques: kpis24h.cliques,
@@ -160,40 +132,36 @@ async function coletarDadosMetaAds({ dia_alvo_brt }) {
       },
       h24_anterior: {
         gasto: kpis24hAnterior.gasto,
-        receita: fatHotmart24hAnterior.receita,
-        roas: roas(kpis24hAnterior.gasto, fatHotmart24hAnterior.receita),
+        receita_pixel: kpis24hAnterior.receita_pixel,
+        roas_pixel: kpis24hAnterior.roas_pixel,
       },
       delta_24h: {
         gasto_pct: delta(kpis24h.gasto, kpis24hAnterior.gasto),
-        receita_pct: delta(fatHotmart24h.receita, fatHotmart24hAnterior.receita),
-        roas_pct: delta(
-          roas(kpis24h.gasto, fatHotmart24h.receita) || 0,
-          roas(kpis24hAnterior.gasto, fatHotmart24hAnterior.receita) || 0
-        ),
+        receita_pixel_pct: delta(kpis24h.receita_pixel, kpis24hAnterior.receita_pixel),
+        roas_pixel_pct: delta(kpis24h.roas_pixel || 0, kpis24hAnterior.roas_pixel || 0),
       },
       d7: {
         gasto: kpis7d.gasto,
-        receita: fatHotmart7d.receita,
-        vendas: fatHotmart7d.vendas,
-        roas: roas(kpis7d.gasto, fatHotmart7d.receita),
-        cpa_pixel: kpis7d.purchases_pixel > 0 ? kpis7d.gasto / kpis7d.purchases_pixel : null,
-        ticket_medio: fatHotmart7d.vendas > 0 ? fatHotmart7d.receita / fatHotmart7d.vendas : null,
+        receita_pixel: kpis7d.receita_pixel,
+        purchases_pixel: kpis7d.purchases_pixel,
+        roas_pixel: kpis7d.roas_pixel,
+        cpa_pixel: kpis7d.cpa_pixel,
+        ticket_medio_pixel: kpis7d.ticket_medio_pixel,
       },
       d30: {
         gasto: kpis30d.gasto,
-        receita: fatHotmart30d.receita,
-        vendas: fatHotmart30d.vendas,
-        roas: roas(kpis30d.gasto, fatHotmart30d.receita),
-        cpa_pixel: kpis30d.purchases_pixel > 0 ? kpis30d.gasto / kpis30d.purchases_pixel : null,
-        ticket_medio: fatHotmart30d.vendas > 0 ? fatHotmart30d.receita / fatHotmart30d.vendas : null,
+        receita_pixel: kpis30d.receita_pixel,
+        purchases_pixel: kpis30d.purchases_pixel,
+        roas_pixel: kpis30d.roas_pixel,
+        cpa_pixel: kpis30d.cpa_pixel,
+        ticket_medio_pixel: kpis30d.ticket_medio_pixel,
       },
     },
-    contas_24h: porConta24hRoas,
-    contas_7d: porConta7dRoas,
+    contas_24h: porConta24hShare,
+    contas_7d: porConta7dShare,
     top_campanhas_24h: topCampanhas24h,
     top_campanhas_7d: topCampanhas7d,
     serie_meta_30d: serieMeta30d,
-    serie_hotmart_30d: serieHotmart30d,
   };
 }
 
@@ -397,49 +365,46 @@ function montarBriefingFatos(dados, dataLongaBR) {
   const fmtRoas = v => v == null ? '—' : `${v.toFixed(2)}x`;
 
   const linhas = [];
-  linhas.push(`### KPIs principais (${dataLongaBR})`);
+  linhas.push(`### KPIs Meta Ads (${dataLongaBR}) — 100% Pixel`);
+  linhas.push(`> Fonte única: tabela \`metricas_diarias\` (Meta Marketing API). Receita e vendas vêm do Pixel — venda fora do rastreamento NÃO aparece aqui.`);
   linhas.push('');
   linhas.push(`**Ontem (24h):**`);
   linhas.push(`- Gasto: ${fmtBRL(s.h24.gasto)} (vs anteontem: ${fmtPct(s.delta_24h.gasto_pct)})`);
-  linhas.push(`- Receita Hotmart: ${fmtBRL(s.h24.receita)} (vs anteontem: ${fmtPct(s.delta_24h.receita_pct)})`);
-  linhas.push(`- ROAS real: ${fmtRoas(s.h24.roas)} (vs anteontem: ${fmtPct(s.delta_24h.roas_pct)})`);
-  linhas.push(`- Vendas Hotmart: ${s.h24.vendas} · CPA Pixel: ${fmtBRL(s.h24.cpa_pixel)}`);
-  linhas.push(`- Ticket médio: ${fmtBRL(s.h24.ticket_medio)}`);
+  linhas.push(`- Receita Pixel: ${fmtBRL(s.h24.receita_pixel)} (vs anteontem: ${fmtPct(s.delta_24h.receita_pixel_pct)})`);
+  linhas.push(`- ROAS Pixel: ${fmtRoas(s.h24.roas_pixel)} (vs anteontem: ${fmtPct(s.delta_24h.roas_pixel_pct)})`);
+  linhas.push(`- Purchases Pixel: ${s.h24.purchases_pixel} · CPA Pixel: ${fmtBRL(s.h24.cpa_pixel)} · Ticket médio Pixel: ${fmtBRL(s.h24.ticket_medio_pixel)}`);
   linhas.push(`- Impressões: ${s.h24.impressoes.toLocaleString('pt-BR')} · Alcance: ${s.h24.alcance.toLocaleString('pt-BR')} · CPM: ${fmtBRL(s.h24.cpm)} · CTR: ${s.h24.ctr_pct?.toFixed(2)}% · Freq: ${s.h24.frequencia?.toFixed(2)}`);
   linhas.push(`- Funil Pixel: LPV ${s.h24.funil_pixel.lpv} → Checkout ${s.h24.funil_pixel.checkouts} → Purchase ${s.h24.funil_pixel.purchases}`);
   linhas.push(`- Contas ativas: ${s.h24.contas_ativas}`);
   linhas.push('');
   linhas.push(`**Últimos 7 dias (rolling):**`);
-  linhas.push(`- Gasto: ${fmtBRL(s.d7.gasto)} · Receita: ${fmtBRL(s.d7.receita)} · ROAS: ${fmtRoas(s.d7.roas)} · Vendas: ${s.d7.vendas}`);
-  linhas.push(`- CPA Pixel médio: ${fmtBRL(s.d7.cpa_pixel)} · Ticket médio: ${fmtBRL(s.d7.ticket_medio)}`);
+  linhas.push(`- Gasto: ${fmtBRL(s.d7.gasto)} · Receita Pixel: ${fmtBRL(s.d7.receita_pixel)} · ROAS Pixel: ${fmtRoas(s.d7.roas_pixel)} · Purchases: ${s.d7.purchases_pixel}`);
+  linhas.push(`- CPA Pixel médio: ${fmtBRL(s.d7.cpa_pixel)} · Ticket médio Pixel: ${fmtBRL(s.d7.ticket_medio_pixel)}`);
   linhas.push('');
   linhas.push(`**Últimos 30 dias (rolling):**`);
-  linhas.push(`- Gasto: ${fmtBRL(s.d30.gasto)} · Receita: ${fmtBRL(s.d30.receita)} · ROAS: ${fmtRoas(s.d30.roas)} · Vendas: ${s.d30.vendas}`);
+  linhas.push(`- Gasto: ${fmtBRL(s.d30.gasto)} · Receita Pixel: ${fmtBRL(s.d30.receita_pixel)} · ROAS Pixel: ${fmtRoas(s.d30.roas_pixel)} · Purchases: ${s.d30.purchases_pixel}`);
   linhas.push('');
 
-  // Por conta (ontem)
   linhas.push(`### Breakdown por ad account (ontem 24h)`);
   if (dados.contas_24h.length === 0) {
     linhas.push('Nenhuma conta com gasto ontem.');
   } else {
     dados.contas_24h.forEach(c => {
-      linhas.push(`- **${c.conta_nome}** — Gasto ${fmtBRL(c.gasto)} (${c.share_pct.toFixed(0)}%) · ROAS estimado ${fmtRoas(c.roas_estimado)} · Freq ${c.frequencia_media?.toFixed(2)} · CTR ${c.ctr_pct?.toFixed(2)}% · ${c.qtd_campanhas} campanhas ativas · Pixel ${c.purchases_pixel} purchases`);
+      linhas.push(`- **${c.conta_nome}** — Gasto ${fmtBRL(c.gasto)} (${c.share_pct.toFixed(0)}%) · Receita Pixel ${fmtBRL(c.receita_pixel)} · ROAS Pixel ${fmtRoas(c.roas_pixel)} · Freq ${c.frequencia_media?.toFixed(2)} · CTR ${c.ctr_pct?.toFixed(2)}% · ${c.qtd_campanhas} camp. · ${c.purchases_pixel} purchases Pixel`);
     });
   }
   linhas.push('');
 
-  // Top campanhas (ontem)
   linhas.push(`### Top campanhas por gasto (ontem)`);
   if (dados.top_campanhas_24h.length === 0) {
     linhas.push('Sem campanhas com gasto ontem.');
   } else {
     dados.top_campanhas_24h.slice(0, 5).forEach(c => {
-      linhas.push(`- **${c.entity_name}** (${c.conta_nome}) — ${fmtBRL(c.gasto)} · Freq ${c.frequencia_media?.toFixed(2)} · CTR ${c.ctr_pct?.toFixed(2)}% · ${c.purchases_pixel} purchases Pixel`);
+      linhas.push(`- **${c.entity_name}** (${c.conta_nome}) — ${fmtBRL(c.gasto)} · Receita Pixel ${fmtBRL(c.receita_pixel)} · ROAS Pixel ${fmtRoas(c.roas_pixel)} · Freq ${c.frequencia_media?.toFixed(2)} · CTR ${c.ctr_pct?.toFixed(2)}% · ${c.purchases_pixel} purchases`);
     });
   }
   linhas.push('');
 
-  // Tendência (gasto 7d vs 7d anteriores via série 30d, opcional)
   return linhas.join('\n');
 }
 
@@ -483,12 +448,12 @@ Texto enxuto. Sócio lê em <30 segundos.
   - ROAS de ontem + tendência 7d (sobe/cai/estável) + qual conta puxou
   - 1 frase sobre o que importa HOJE (sem repetir o plano)
 
-### Bloco SNAPSHOT
-- Cabeçalho: \`## 📊 SNAPSHOT\`
+### Bloco SNAPSHOT (100% Pixel — fonte única Meta)
+- Cabeçalho: \`## 📊 SNAPSHOT · 100% Meta Pixel\`
 - 3 bullets:
-  - **Ontem (24h)** · Gasto R$ X · Receita R$ Y · ROAS Zx · ΔX% vs anteontem
-  - **7 dias rolling** · Gasto R$ X · Receita R$ Y · ROAS Zx
-  - **30 dias rolling** · Gasto R$ X · Receita R$ Y · ROAS Zx
+  - **Ontem (24h)** · Gasto R$ X · Receita Pixel R$ Y · ROAS Pixel Zx · ΔX% vs anteontem
+  - **7 dias rolling** · Gasto R$ X · Receita Pixel R$ Y · ROAS Pixel Zx
+  - **30 dias rolling** · Gasto R$ X · Receita Pixel R$ Y · ROAS Pixel Zx
 
 ### Bloco PLANO DE AÇÃO
 - Cabeçalho: \`## 🎯 PLANO DE AÇÃO HOJE\`
@@ -505,8 +470,8 @@ Texto enxuto. Sócio lê em <30 segundos.
 ### Bloco BREAKDOWN POR CONTA
 - Cabeçalho: \`## 🏦 POR CONTA — ONTEM\`
 - Pra cada item de \`contas_24h\` do briefing, 1 bullet:
-  - **[Nome conta]** — Gasto R$ X (Y%) · ROAS Zx · Freq W · CTR V% · N camp. · K purchases Pixel
-- Última linha: \`**Total** — Gasto R$ X · Receita R$ Y · ROAS Zx · N vendas\`
+  - **[Nome conta]** — Gasto R$ X (Y%) · ROAS Pixel Zx · Freq W · CTR V% · N camp. · K purchases Pixel
+- Última linha: \`**Total** — Gasto R$ X · Receita Pixel R$ Y · ROAS Pixel Zx · N purchases\`
 
 ### Bloco TOP CAMPANHAS
 - Cabeçalho: \`## 🎬 TOP CAMPANHAS — ONTEM\`
@@ -514,7 +479,7 @@ Texto enxuto. Sócio lê em <30 segundos.
 
 ### Rodapé
 \`---\`
-\`*ROAS por conta é ESTIMATIVA (share-of-spend × receita total) — sem UTM cross-source.*\`
+\`*Fonte única: Meta Marketing API · tabela \`metricas_diarias\`. Receita/ROAS/Vendas são do PIXEL — venda não-trackeada não aparece aqui (recurso, não bug).*\`
 
 **NÃO** inclua "Análise Detalhada" / "Pareceres dos Mestres" — template HTML cuida disso.
 
