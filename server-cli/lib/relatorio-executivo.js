@@ -140,12 +140,11 @@ async function modulo_financeiro({ janela_horas, dia_alvo_brt, moeda = 'BRL' }) 
 async function modulo_agenda({ cliente_id, dia_alvo_brt }) {
   const t0 = Date.now();
   try {
-    // V2.14 D Fix — janela = dia_alvo BRT (não sempre "hoje" real).
-    // Quando dia_alvo é hoje real → comportamento idêntico ao antigo.
-    // Quando dia_alvo é dia passado → mostra agenda daquele dia + dia seguinte.
-    const alvo = googleCalendar.janelaDiaBRT(dia_alvo_brt);
-    const [yA, mA, dA] = dia_alvo_brt.split('-');
-    // Calcula próximo dia BRT (dia seguinte ao alvo)
+    // Andre 2026-05-12: agenda do relatório SEMPRE mostra HOJE+amanhã,
+    // ignorando dia_alvo_brt (que é ontem pra relatório das 8h).
+    // Sócio lê o relatório agora — quer ver compromissos do dia que está
+    // começando, não do dia que terminou. Linha de amanhã = resumida.
+    const alvo = googleCalendar.janelaHojeBRT();
     const dataAlvoMs = new Date(alvo.inicio_iso).getTime();
     const proximoUTC = new Date(dataAlvoMs + 24 * 60 * 60 * 1000);
     const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -161,11 +160,8 @@ async function modulo_agenda({ cliente_id, dia_alvo_brt }) {
       googleCalendar.listarEventos({ cliente_id, calendarId: 'primary', timeMin: proximo.inicio_iso, timeMax: proximo.fim_iso }),
     ]);
 
-    // Decide se rotula como "Hoje" ou usa data exata
-    const hojeRealJanela = googleCalendar.janelaHojeBRT();
-    const ehHoje = alvo.data_br === hojeRealJanela.data_br;
-    const labelAlvo = ehHoje ? 'Hoje' : alvo.data_br;
-    const labelProximo = ehHoje ? 'Amanhã' : 'Dia seguinte';
+    const labelAlvo = 'Hoje';
+    const labelProximo = 'Amanhã';
 
     const linhas = ['## 📅 Agenda', ''];
 
@@ -525,7 +521,7 @@ function runClaudeCLISimple(prompt, timeoutMs = 90000) {
   });
 }
 
-async function sintetizarExecutivoDiario({ socioInfo, modulosOutputs, dataBrt, diaSemana, janela_horas, saudacao = 'Bom dia' }) {
+async function sintetizarExecutivoDiario({ socioInfo, modulosOutputs, dataBrt, diaSemana, janela_horas, saudacao = 'Bom dia', dataHojeBrt, diaSemanaHoje }) {
   // Carrega Skill compor-executivo-diario como contexto
   const fs = require('fs');
   const skillPath = path.join(__dirname, '..', '..', 'cerebro', 'squads', 'data', 'skills', 'compor-executivo-diario', 'SKILL.md');
@@ -545,7 +541,9 @@ async function sintetizarExecutivoDiario({ socioInfo, modulosOutputs, dataBrt, d
   const prompt = `Você é o sintetizador do Relatório Executivo Diário do Pinguim OS.
 
 ## Contexto temporal
-Dia alvo do relatório: ${dataBrt} (${diaSemana}). Os dados dos módulos abaixo são desse dia específico.
+Hoje é ${diaSemanaHoje || diaSemana} ${dataHojeBrt || dataBrt} (data em que o sócio LÊ o relatório).
+Dia alvo dos DADOS: ${dataBrt} (${diaSemana}) — fechamento financeiro/triagem/discord referem-se a esse dia.
+Agenda do módulo já vem ajustada pra HOJE (não dia alvo).
 Destinatário: ${socioInfo.nome} (${socioInfo.empresa}, slug ${socioInfo.slug}).
 
 ## Sua tarefa
@@ -561,10 +559,10 @@ Esta regra vale pros números, top produtos, breakdown de Ads, triagem de email,
 
 ## Anatomia obrigatória (ordem fixa)
 
-### 1. Saudação curta (1 linha)
-\`☀️ ${saudacao}, ${socioInfo.nome} · ${diaSemana} · ${dataBrt}\`
+### 1. Saudação curta (1 linha) — usa data de HOJE, não dia alvo
+\`☀️ ${saudacao}, ${socioInfo.nome} · ${diaSemanaHoje || diaSemana} · ${dataHojeBrt || dataBrt} · *dados de ${dataBrt}*\`
 
-(IMPORTANTE: usa exatamente "${saudacao}" — já calculei pelo horário BRT atual. NÃO trocar pra "Bom dia" se a calculo deu "Boa tarde".)
+(IMPORTANTE: a saudação SEMPRE reflete HOJE — ${diaSemanaHoje || diaSemana} ${dataHojeBrt || dataBrt}. O dia dos dados, ${dataBrt}, vai em itálico no final pra deixar claro que é o fechamento do dia anterior. Usa exatamente "${saudacao}" — já calculei pelo horário BRT atual.)
 
 ### 2. TL;DR — AÇÃO NECESSÁRIA HOJE
 - Cruza TODOS os módulos pra identificar o que é acionável HOJE
@@ -650,6 +648,7 @@ async function gerarRelatorioExecutivo({
   moeda = 'BRL',
   salvar = true,
   modulos_incluir = ['financeiro', 'agenda', 'triagem-email', 'discord'], // diagnostico_inbox so se janela >= 48h
+  parent_id = null, // V2.15: versionamento. Cron passa o ultimo_entregavel_id pra encadear v2, v3, etc.
 } = {}) {
   const t_total_0 = Date.now();
 
@@ -676,6 +675,14 @@ async function gerarRelatorioExecutivo({
   const dataLongaBR = googleCalendar.dataLongaBRdoDiaAlvo(dia_alvo_brt); // ex: "05 de maio"
   const diaSemana   = googleCalendar.diaSemanaBRdoDiaAlvo(dia_alvo_brt); // ex: "terça-feira"
 
+  // V2.15 — HOJE em BRT (data em que o sócio lê o relatório), separado de dia_alvo_brt (data dos DADOS).
+  // Saudação reflete HOJE; rodapé "dados de DD" reflete dia_alvo_brt.
+  const fmtHoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const partsHoje = fmtHoje.formatToParts(agora);
+  const hoje_brt = `${partsHoje.find(p => p.type === 'year').value}-${partsHoje.find(p => p.type === 'month').value}-${partsHoje.find(p => p.type === 'day').value}`;
+  const dataHojeBrt   = googleCalendar.dataLongaBRdoDiaAlvo(hoje_brt);
+  const diaSemanaHoje = googleCalendar.diaSemanaBRdoDiaAlvo(hoje_brt);
+
   // Saudacao dinamica BRT (manha < 12h / tarde 12-18h / noite >= 18h)
   const horaBRT = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false }).format(agora), 10);
   let saudacao = 'Bom dia';
@@ -697,6 +704,10 @@ async function gerarRelatorioExecutivo({
   let md_final;
   let sintetizador_ok = true;
   let sintetizador_motivo = null;
+  const fallbackBruto = () =>
+    `# Relatório Executivo Diário — ${diaSemana} ${dataLongaBR}\n\n` +
+    `> ⚠ Sintetizador (Claude CLI) ${sintetizador_motivo ? 'falhou: ' + sintetizador_motivo : 'devolveu vazio'}.\n> Mostrando módulos brutos.\n\n` +
+    modulosOutputs.filter(m => !m.skipped && m.conteudo_md).map(m => m.conteudo_md).join('\n\n---\n\n');
   try {
     md_final = await sintetizarExecutivoDiario({
       socioInfo,
@@ -705,14 +716,20 @@ async function gerarRelatorioExecutivo({
       diaSemana,
       janela_horas,
       saudacao,
+      dataHojeBrt,
+      diaSemanaHoje,
     });
+    // Andre 2026-05-12: V2 do teste veio vazio porque CLI retornou "" sem throw.
+    // Trata stdout vazio/curto como falha pra disparar fallback bruto.
+    if (!md_final || md_final.trim().length < 200) {
+      sintetizador_ok = false;
+      sintetizador_motivo = `stdout vazio/curto (${md_final ? md_final.trim().length : 0} chars)`;
+      md_final = fallbackBruto();
+    }
   } catch (e) {
     sintetizador_ok = false;
     sintetizador_motivo = e.message;
-    // Fallback: concatena os módulos sem síntese
-    md_final = `# Relatório Executivo Diário — ${diaSemana} ${dataLongaBR}\n\n` +
-               `> ⚠ Sintetizador (Claude CLI) falhou: ${e.message}\n> Mostrando módulos brutos.\n\n` +
-               modulosOutputs.filter(m => !m.skipped).map(m => m.conteudo_md).join('\n\n---\n\n');
+    md_final = fallbackBruto();
   }
 
   // 5) Salva entregável
@@ -724,6 +741,7 @@ async function gerarRelatorioExecutivo({
         cliente_id: cid,
         tipo: 'relatorio-executivo-diario',
         titulo,
+        parent_id, // V2.15 versionamento: cron passa ultimo_entregavel_id; null = v1
         conteudo_md: md_final,
         conteudo_estruturado: {
           janela_horas,
@@ -752,6 +770,7 @@ async function gerarRelatorioExecutivo({
     ok: true,
     entregavel_id: entregavel?.id || null,
     entregavel_url: entregavel?.id ? `/entregavel/${entregavel.id}` : null,
+    entregavel_versao: entregavel?.versao || null,
     titulo: entregavel ? `Executivo diário — ${diaSemana} ${dataLongaBR} (${janela_horas}h)` : null,
     janela_horas,
     dia_alvo_brt,
