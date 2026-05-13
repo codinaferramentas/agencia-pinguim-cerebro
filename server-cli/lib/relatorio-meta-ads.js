@@ -247,44 +247,128 @@ NÃO invente número que não está no briefing.`;
 
   const sucessos = pareceres.filter(p => p.ok);
   if (sucessos.length === 0) {
-    return { ok: false, motivo: 'todos mestres falharam', plano_md: '', pareceres };
+    return { ok: false, motivo: 'todos mestres falharam', plano_md: '', matriz: [], pareceres };
   }
 
-  // Chief consolida em plano de ação numerado
+  // Lista de contas reais (do briefing) pra matriz
+  const contasNomes = (dados.contas_24h || []).map(c => c.conta_nome);
+
+  // Chief faz UM call que devolve TRÊS coisas (plano + resumos + matriz)
+  // num bloco JSON. Mais barato que 3 calls separados (75s → 25s).
   let plano_md = '';
+  let resumos = {}; // slug → texto curto (3 linhas)
+  let matriz = []; // [{conta, celulas: [{slug_mestre, frase, sinal}]}]
+
   if (chief) {
-    const pareceresTexto = sucessos.map(p => `### ${p.avatar} ${p.nome}\n\n${p.texto}`).join('\n\n---\n\n');
+    const pareceresTexto = sucessos.map(p => `### ${p.avatar} ${p.nome} (${p.slug})\n\n${p.texto}`).join('\n\n---\n\n');
+    const slugsMestres = sucessos.map(p => `${p.slug} (${p.nome})`).join(', ');
+    const contasLista = contasNomes.length > 0 ? contasNomes.map(c => `- ${c}`).join('\n') : '- (sem contas com gasto)';
+
     const promptChief = `${chief.system_prompt}
 
 ## DADOS DO DIA (${dataLongaBR})
 
 ${briefingFatos}
 
-## PARECERES DOS 5 MESTRES
+## PARECERES DOS ${sucessos.length} MESTRES
 
 ${pareceresTexto}
 
-## SUA TAREFA
+## CONTAS ATIVAS ONTEM
 
-Consolide TUDO acima em um PLANO DE AÇÃO EXECUTIVO numerado (3 a 5 itens).
-Cada item da lista deve ter:
-- **Ação clara** (1 linha imperativa: "Pausar X", "Escalar Y para R$ Z/dia", "Trocar criativo Z")
-- **Conta afetada** entre parênteses
-- **Por quê** (1 frase, citando métrica específica do briefing)
-- **Mestre que fundamentou** (📈 Pedro Sobral, 🎨 Felipe Mello, etc) — pode ser mais de um
+${contasLista}
 
-Formato OBRIGATÓRIO (devolva APENAS o markdown da lista, sem introdução):
+## SUA TAREFA (devolva 3 BLOCOS na ordem)
 
+### BLOCO 1 — PLANO DE AÇÃO (markdown lista numerada 3 a 5 itens)
+
+Formato:
+\`\`\`
 1. **[Ação clara]** ([Conta])
    *Por quê:* [motivo + métrica]
    *Fundamentou:* [emoji nome]
 
 2. **...**
+\`\`\`
 
-NÃO invente número. NÃO recomende escalar conta com ROAS<1. NÃO recomende pausar sem fadiga confirmada.`;
+### BLOCO 2 — RESUMOS CURTOS (JSON)
+
+Pra cada mestre, um resumo de 2 a 3 linhas (máx 280 chars) que captura O ESSENCIAL do parecer dele. Esse resumo é o que aparece SEMPRE visível (parecer longo fica colapsado).
+
+\`\`\`json
+{
+  "pedro-sobral": "texto curto até 280 chars",
+  "felipe-mello": "...",
+  ...
+}
+\`\`\`
+
+Use EXATAMENTE estes slugs: ${slugsMestres}
+
+### BLOCO 3 — MATRIZ CONTA × MESTRE (JSON)
+
+Pra cada CONTA listada acima, cria uma linha. Pra cada par (conta × mestre), uma célula com:
+- \`frase\`: 4-10 palavras (telegráfico, ex: "Escalar 365 R$286→570", "Pausar 48h", "Pixel cego — 0 buys")
+- \`sinal\`: um de \`good\` (verde, ação positiva/oportunidade), \`bad\` (vermelho, ação destrutiva/risco), \`warn\` (amarelo, atenção), \`mute\` (cinza, neutro/sem ação)
+
+\`\`\`json
+[
+  {
+    "conta": "[DCL] Desafio Lofi + Quizz",
+    "celulas": {
+      "pedro-sobral": { "frase": "Escalar 365 R$286→570", "sinal": "good" },
+      "felipe-mello": { "frase": "Pausar PVV freq 1.47", "sinal": "bad" },
+      "andre-vaz": { "frase": "ROAS 8x real (8 buys)", "sinal": "good" },
+      "tatiana-pizzato": { "frase": "Rebalancear 65→55%", "sinal": "warn" },
+      "tiago-tessmann": { "frase": "Exclusão >75% view", "sinal": "warn" }
+    }
+  },
+  ...
+]
+\`\`\`
+
+Se uma conta NÃO foi mencionada por um mestre, ainda assim coloca uma célula com \`{ "frase": "sem observação", "sinal": "mute" }\`.
+
+## REGRAS DURAS
+
+- BLOCO 1: NÃO invente número. NÃO recomende escalar conta com ROAS<1. NÃO recomende pausar sem fadiga confirmada.
+- BLOCO 2: resumo é DIFERENTE do parecer completo. É 2-3 linhas DENSAS que captam a ideia central + ação.
+- BLOCO 3: célula deve ser TELEGRÁFICA (4-10 palavras). Sem floreio. Use abreviações ("R$" pode virar "$" se ajudar).
+- Devolva SEM \`\`\`json wrapper externo, mas mantenha os 3 blocos com os separadores \`### BLOCO N\` literais pra eu parsear.`;
 
     try {
-      plano_md = await runClaudeCLI(promptChief, 90000);
+      const respostaChief = await runClaudeCLI(promptChief, 120000);
+      // Parser: separa por "### BLOCO N"
+      const partes = respostaChief.split(/### BLOCO \d+[^\n]*\n/);
+      // partes[0] = lixo antes do bloco 1 (geralmente vazio)
+      // partes[1] = plano
+      // partes[2] = resumos json
+      // partes[3] = matriz json
+      plano_md = (partes[1] || '').trim();
+      const blocoResumos = (partes[2] || '').trim();
+      const blocoMatriz = (partes[3] || '').trim();
+      // Extrai JSON entre ```json ... ```
+      const extrairJson = (bloco) => {
+        const m = bloco.match(/```json\s*([\s\S]*?)\s*```/);
+        if (m) return m[1];
+        // Tenta sem wrapper
+        const inicioObj = bloco.indexOf('{');
+        const inicioArr = bloco.indexOf('[');
+        if (inicioObj === -1 && inicioArr === -1) return null;
+        const inicio = (inicioObj !== -1 && (inicioArr === -1 || inicioObj < inicioArr)) ? inicioObj : inicioArr;
+        const fimObj = bloco.lastIndexOf('}');
+        const fimArr = bloco.lastIndexOf(']');
+        const fim = Math.max(fimObj, fimArr);
+        return bloco.slice(inicio, fim + 1);
+      };
+      try {
+        const j = extrairJson(blocoResumos);
+        if (j) resumos = JSON.parse(j);
+      } catch (_) { /* segue sem resumos */ }
+      try {
+        const j = extrairJson(blocoMatriz);
+        if (j) matriz = JSON.parse(j);
+      } catch (_) { /* segue sem matriz */ }
     } catch (e) {
       plano_md = `> ⚠ Chief falhou: ${e.message}`;
     }
@@ -293,7 +377,14 @@ NÃO invente número. NÃO recomende escalar conta com ROAS<1. NÃO recomende pa
   return {
     ok: true,
     plano_md: plano_md.trim(),
-    pareceres: sucessos.map(p => ({ slug: p.slug, nome: p.nome, avatar: p.avatar, texto: p.texto })),
+    matriz,
+    pareceres: sucessos.map(p => ({
+      slug: p.slug,
+      nome: p.nome,
+      avatar: p.avatar,
+      texto: p.texto,
+      resumo: resumos[p.slug] || (p.texto.split(/\n\n/)[0] || '').slice(0, 280),
+    })),
   };
 }
 
@@ -356,95 +447,85 @@ function montarBriefingFatos(dados, dataLongaBR) {
 // ============================================================
 // 3) SINTETIZADOR — Skill compor-meta-ads-diario via Claude CLI
 // ============================================================
-async function sintetizarMetaAdsDiario({ socioInfo, dados, planoMd, pareceres, dataBrt, diaSemana, dataHojeBrt, diaSemanaHoje, saudacao }) {
-  // Carrega Skill
-  const skillPath = path.join(__dirname, '..', '..', 'cerebro', 'squads', 'data', 'skills', 'compor-meta-ads-diario', 'SKILL.md');
-  let skillMd = '';
-  try { skillMd = fs.readFileSync(skillPath, 'utf-8'); }
-  catch (_) { skillMd = '(Skill compor-meta-ads-diario não encontrada — composição ad-hoc)'; }
+async function sintetizarMetaAdsDiario({ socioInfo, dados, planoMd, matriz, pareceres, dataBrt, diaSemana, dataHojeBrt, diaSemanaHoje, saudacao }) {
+  // Andre 2026-05-13 redesign: matriz + pareceres ficam no TEMPLATE HTML
+  // (renderizado por lib/template-relatorio-meta-ads.js).
+  // Sintetizador só monta TL;DR + snapshot bullet + plano + alertas + breakdown + top.
+  // Pareceres NÃO entram no markdown — template HTML mostra resumos + colapsável.
 
   const briefingFatos = montarBriefingFatos(dados, dataBrt);
-  const pareceresMd = pareceres.map(p => `### ${p.avatar} **${p.nome}**\n\n${p.texto}`).join('\n\n');
 
   const prompt = `Você é o sintetizador do Relatório Meta Ads Diário do Pinguim OS.
 
 ## Contexto temporal
 Hoje é ${diaSemanaHoje} ${dataHojeBrt} (dia em que o sócio LÊ o relatório).
-Dia alvo dos DADOS: ${dataBrt} (${diaSemana}) — KPIs de ontem, comparativo 7d/30d rolling.
-Destinatário: ${socioInfo.nome} (${socioInfo.empresa}).
+Dia alvo dos DADOS: ${dataBrt} (${diaSemana}).
 
 ## Sua tarefa
-Compor o relatório em markdown puro seguindo a anatomia abaixo.
-NUNCA invente número. SEMPRE cite a métrica que motivou cada afirmação.
+Compor o relatório em markdown puro seguindo a anatomia EXATA abaixo.
+NUNCA invente número.
 Devolver APENAS o markdown final (sem comentário antes/depois, sem \`\`\`markdown wrapper).
+Texto enxuto. Sócio lê em <30 segundos.
 
 ## REGRA -1 — FORMATO
-- NUNCA tabela GFM (\`| col |\`) — renderer HTML não suporta. Use **lista bullet** com bold no rótulo.
-- Números monetários em BRL com R$ + separador BR (R$ 1.234,56).
-- Percentuais com 1 casa decimal (+12.3%).
-- ROAS com "x" no final (2.45x).
+- NUNCA tabela GFM — use **lista bullet** com bold no rótulo
+- BRL com separador BR (R$ 1.234,56)
+- Percentuais com 1 casa (+12.3%)
+- ROAS com "x" no final (2.45x)
 
-## Anatomia obrigatória
+## Anatomia obrigatória (NÃO INVENTE seções extras)
 
-### 1. Saudação (1 linha) — usa HOJE, não dia alvo
+### Linha 1 — Saudação
 \`☀️ ${saudacao}, ${socioInfo.nome} · Meta Ads · ${diaSemanaHoje} ${dataHojeBrt} · *dados de ${dataBrt}*\`
 
-### 2. TL;DR (1 parágrafo de 2-3 linhas, sem bullets)
-- Diga em 1 frase: ROAS de ontem foi X (positivo/negativo/neutro), tendência 7d sobe ou cai, qual conta puxou
-- Conclua com 1 frase sobre o que importa pra HOJE (sem repetir o plano de ação, que vem depois)
+### Bloco TL;DR
+- Cabeçalho: \`## TL;DR\`
+- 1 parágrafo de NO MÁXIMO 2 linhas, direto:
+  - ROAS de ontem + tendência 7d (sobe/cai/estável) + qual conta puxou
+  - 1 frase sobre o que importa HOJE (sem repetir o plano)
 
-### 3. SNAPSHOT (3 mini-cards lado a lado em bullet)
-\`### 📊 SNAPSHOT\`
+### Bloco SNAPSHOT
+- Cabeçalho: \`## 📊 SNAPSHOT\`
+- 3 bullets:
+  - **Ontem (24h)** · Gasto R$ X · Receita R$ Y · ROAS Zx · ΔX% vs anteontem
+  - **7 dias rolling** · Gasto R$ X · Receita R$ Y · ROAS Zx
+  - **30 dias rolling** · Gasto R$ X · Receita R$ Y · ROAS Zx
 
-**Ontem (24h)** · Gasto R$ X · Receita R$ Y · ROAS Zx · ΔX% vs anteontem
-**7 dias rolling** · Gasto R$ X · Receita R$ Y · ROAS Zx
-**30 dias rolling** · Gasto R$ X · Receita R$ Y · ROAS Zx
+### Bloco PLANO DE AÇÃO
+- Cabeçalho: \`## 🎯 PLANO DE AÇÃO HOJE\`
+- COPIAR INTEGRAL o markdown abaixo na seção "PLANO CHIEF"
 
-### 4. PLANO DE AÇÃO DO BOARD (já consolidado pelo Traffic Chief — copie INTEGRAL)
-\`### 🎯 PLANO DE AÇÃO HOJE\`
-[copiar o plano consolidado abaixo na seção "PLANO CHIEF"]
+### Bloco ALERTAS (omitir se vazio)
+- Cabeçalho: \`## 🚨 ALERTAS\`
+- Máximo 3 bullets curtos, só riscos reais:
+  - Conta com ROAS<1 (queimando)
+  - Frequência > 2.5 + CTR caindo (fadiga)
+  - Conta com 0 purchases mas alto gasto
+- Cada alerta em 1 linha bullet, em **bold** o nome da conta
 
-### 5. ALERTAS (se houver, máximo 3)
-\`### 🚨 ALERTAS\`
-- Conta com ROAS < 1.0
-- Frequência > 3 (fadiga)
-- CTR < 0.8% (criativo morrendo)
-- Queda > 30% vs ontem em alguma conta principal
-Se 0 alertas reais: omita a seção inteira.
+### Bloco BREAKDOWN POR CONTA
+- Cabeçalho: \`## 🏦 POR CONTA — ONTEM\`
+- Pra cada item de \`contas_24h\` do briefing, 1 bullet:
+  - **[Nome conta]** — Gasto R$ X (Y%) · ROAS Zx · Freq W · CTR V% · N camp. · K purchases Pixel
+- Última linha: \`**Total** — Gasto R$ X · Receita R$ Y · ROAS Zx · N vendas\`
 
-### 6. BREAKDOWN POR AD ACCOUNT (cards-lista)
-\`### 🏦 POR CONTA — ONTEM\`
+### Bloco TOP CAMPANHAS
+- Cabeçalho: \`## 🎬 TOP CAMPANHAS — ONTEM\`
+- Bullets das top 5 do briefing (entity_name + conta + R$ + freq + CTR + purchases)
 
-Pra cada conta de \`contas_24h\` (use dados brutos do briefing):
-- **[Nome conta]** — Gasto R$ X (Y% do total) · ROAS estimado Zx · Freq W · CTR V% · N campanhas · K purchases Pixel
-
-Ordene por gasto desc. Inclua um "**Total**" no final somando gastos.
-
-### 7. TOP CAMPANHAS (ontem)
-\`### 🎬 TOP CAMPANHAS — ONTEM\`
-- Lista bullet das top 5 do briefing (entity_name + conta + métricas)
-
-### 8. PARECERES INDIVIDUAIS DOS MESTRES
-\`### 🧠 ANÁLISE DETALHADA\`
-
-Cole INTEGRAL os pareceres dos mestres abaixo (use o markdown "## Pareceres" enviado).
-Mantenha o emoji + nome + texto.
-
-### 9. RODAPÉ
+### Rodapé
 \`---\`
-\`*Dados: dashboard Pinguim Ads (Supabase compartilhado) · Hotmart receita + Meta gasto. ROAS por conta é ESTIMATIVA (share-of-spend × receita total) pois não temos UTM cross-source.*\`
+\`*ROAS por conta é ESTIMATIVA (share-of-spend × receita total) — sem UTM cross-source.*\`
 
-## DADOS PARA USAR (FATOS, não invente)
+**NÃO** inclua "Análise Detalhada" / "Pareceres dos Mestres" — template HTML cuida disso.
+
+## DADOS PARA USAR (FATOS — não invente nada além disso)
 
 ${briefingFatos}
 
-## PLANO CHIEF (copiar INTEGRAL na seção 4)
+## PLANO CHIEF (copiar INTEGRAL na seção PLANO DE AÇÃO)
 
-${planoMd}
-
-## PARECERES INDIVIDUAIS (copiar INTEGRAL na seção 8)
-
-${pareceresMd}
+${planoMd || '_(plano não disponível)_'}
 
 ## Saída
 Comece direto pela linha 1 (\`☀️ ${saudacao}...\`). Nada antes. Só o markdown final.`;
@@ -538,6 +619,7 @@ async function gerarRelatorioMetaAds({
     md_final = await sintetizarMetaAdsDiario({
       socioInfo, dados,
       planoMd: squad.plano_md || '',
+      matriz: squad.matriz || [],
       pareceres: squad.pareceres,
       dataBrt: dataLongaBR, diaSemana,
       dataHojeBrt, diaSemanaHoje, saudacao,
@@ -575,6 +657,10 @@ async function gerarRelatorioMetaAds({
           top_campanhas_7d: dados.top_campanhas_7d,
           serie_meta_30d: dados.serie_meta_30d,
           serie_hotmart_30d: dados.serie_hotmart_30d,
+          // V2.15.2 redesign Andre 2026-05-13
+          matriz: squad.matriz || [],
+          pareceres: squad.pareceres, // já inclui {resumo, texto, slug, nome, avatar}
+          plano_md: squad.plano_md || '',
           squad: { ok: squad.ok, motivo: squad.motivo || null, qtd_pareceres: squad.pareceres.length },
           sintetizador: { ok: sintetizador_ok, motivo: sintetizador_motivo },
           socio: socioInfo,

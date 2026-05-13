@@ -1,6 +1,6 @@
 ---
 name: compor-meta-ads-diario
-description: Sintetizador do Relatório Meta Ads Diário (book diário com plano de ação). Recebe KPIs Meta + ROAS Hotmart cruzado + pareceres da Squad Traffic Masters (5 mestres + Chief) e compõe HTML rico com Snapshot 24h/7d/30d, Plano de Ação Chief, Breakdown por ad account, Alertas e Análise individual. Design fora-da-curva com gráficos Chart.js. Squad data — V2.15.2.
+description: Sintetizador do Relatório Meta Ads Diário (book diário com plano de ação). Recebe KPIs Meta + ROAS Hotmart cruzado + pareceres da Squad Traffic Masters (5 mestres + Chief) e compõe markdown enxuto (template HTML cuida da matriz visual + cards de pareceres colapsáveis + gráficos ApexCharts). Squad data — V2.15.2 redesign 2026-05-13.
 ---
 
 # Skill: compor-meta-ads-diario
@@ -18,9 +18,18 @@ NÃO use quando:
 - Sócio quer ver UMA campanha específica (use Categoria H3 do agente — `meta-insights-campanha`)
 - Pedido é FECHAR CONTA financeira (use Relatório Financeiro consolidado, não Meta Ads)
 
-## Anatomia do entregável
+## Anatomia do entregável (V2.15.2 redesign 2026-05-13)
 
-Layout fixo. Markdown puro. HTML renderer dedicado faz parsing pra Chart.js. Inspirado no executivo diário mas FOCO ABSOLUTO em Meta Ads + Plano de Ação.
+**SEPARAÇÃO DE RESPONSABILIDADES:**
+
+| O que o sintetizador (Skill) faz | O que o template HTML faz |
+|---|---|
+| Headline + TL;DR + SNAPSHOT bullet + PLANO + ALERTAS + BREAKDOWN bullet + TOP CAMPANHAS | Cards Snapshot (hero) · Gráficos ApexCharts · Matriz Conta×Mestre · Cards de pareceres colapsáveis · Cards por conta |
+| Markdown puro enxuto, leitura em <30s | Camada visual completa (cores, gradients, glow, animação) |
+
+**Sintetizador NÃO inclui** Análise Detalhada / Pareceres dos Mestres — template HTML renderiza isso a partir do conteudo_estruturado.pareceres (com resumo curto visível + parecer completo colapsado).
+
+Layout fixo. Markdown enxuto. HTML renderer dedicado (`lib/template-relatorio-meta-ads.js`) adiciona a camada rica.
 
 ### 1. Saudação (1 linha, topo)
 
@@ -80,22 +89,13 @@ Total no final somando gastos.
 
 Top 5 campanhas por gasto. Lista bullet.
 
-### 8. 🧠 ANÁLISE DETALHADA (pareceres dos 5 mestres)
+### 8. (NÃO incluir pareceres no markdown — template HTML cuida)
 
-Cole INTEGRAL os pareceres no formato:
-```
-### 📈 **Pedro Sobral**
+**REMOVIDO no redesign 2026-05-13.** Template renderiza:
+- Bloco "🗂 Matriz · Conta × Análise" — tabela visual com células coloridas (good/warn/bad/mute)
+- Bloco "🧠 Análise dos Mestres" — cards de pareceres com resumo SEMPRE visível + `<details>` colapsável com parecer completo
 
-[parecer em 2-3 parágrafos]
-
-### 🎨 **Felipe Mello**
-
-[parecer]
-
-...
-```
-
-Mestres da squad `traffic-masters`:
+Mestres da squad `traffic-masters` (referência pro Chief gerar resumos+matriz):
 - 📈 **Pedro Sobral** — ESCALA (escalar/pausar)
 - 🎨 **Felipe Mello** — CRIATIVO (fadiga, heróis)
 - 📊 **Andre Vaz** — DATA/ROAS (lucro real)
