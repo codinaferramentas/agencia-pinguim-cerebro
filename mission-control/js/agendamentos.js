@@ -566,7 +566,10 @@ function abrirModalCriar() {
       const cronDesc = descricaoCron(cronUtc);
 
       const numero = document.getElementById('criar-numero').value.trim();
-      const nomeDest = document.getElementById('criar-nome-dest').value.trim() || 'Sócio';
+      // Nome do destinatário fica vazio se não preenchido — UI mostra o número
+      // no lugar. Andre 2026-05-13: não chumbar "Sócio" porque pode ser pra
+      // pessoa externa (cliente, parceiro, funcionário).
+      const nomeDest = document.getElementById('criar-nome-dest').value.trim() || null;
       const destinatarios = numero ? [{ canal: 'whatsapp', valor: numero, nome: nomeDest }] : [];
 
       // Slug único: usa slug do catálogo + sufixo se já existe
