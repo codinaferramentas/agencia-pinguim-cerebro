@@ -50,11 +50,26 @@ function statusCor(s) {
 
 // ============================================================
 // API client (chama ngrok do server-cli local)
+// Andre 2026-05-13: usado SÓ pra ações destrutivas. Listagem lê Supabase direto.
+// Quando V3 (servidor Pedro) entrar, basta trocar PUBLIC_BASE_URL.
 // ============================================================
 async function api(method, path, body = null) {
-  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  const opts = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      // Ngrok mostra interstitial page sem esse header. Pra requisição programática:
+      'ngrok-skip-browser-warning': '1',
+    },
+  };
   if (body) opts.body = JSON.stringify(body);
-  const r = await fetch(PUBLIC_BASE_URL + path, opts);
+  let r;
+  try {
+    r = await fetch(PUBLIC_BASE_URL + path, opts);
+  } catch (e) {
+    // fetch failed = server-cli não respondeu (PC desligado, ngrok caiu, sem internet)
+    throw new Error('Server-cli local não respondeu. PC ligado? Ngrok rodando?');
+  }
   const j = await r.json();
   if (!j.ok) throw new Error(j.error || 'erro');
   return j;
@@ -116,12 +131,27 @@ let _state = {
 };
 
 async function carregarTudo() {
-  const [list, cat] = await Promise.all([
-    api('GET', '/api/agendamentos/listar'),
-    api('GET', '/api/agendamentos/catalogo-disponivel'),
-  ]);
-  _state.agendamentos = list.agendamentos || [];
-  _state.catalogo = cat.catalogo || [];
+  // Andre 2026-05-13: leitura via Supabase direto (mesmo padrão Oficina).
+  // Independe do server-cli local estar ligado. Em V3 segue funcionando igual.
+  const sb = getSupabase();
+  if (!sb) throw new Error('Supabase não inicializado');
+
+  // 1) Agendamentos (com destinatários agregados pela view)
+  const rAg = await sb.from('relatorios_config_com_destinatarios')
+    .select('*')
+    .order('ativo', { ascending: false })
+    .order('slug');
+  if (rAg.error) throw new Error(`agendamentos: ${rAg.error.message}`);
+  _state.agendamentos = rAg.data || [];
+
+  // 2) Catálogo (só itens ativos)
+  const rCat = await sb.from('oficina_catalogo')
+    .select('slug, nome, descricao, status')
+    .eq('status', 'ativo')
+    .order('slug');
+  if (rCat.error) throw new Error(`catálogo: ${rCat.error.message}`);
+  _state.catalogo = rCat.data || [];
+
   if (_state.agendamentos[0]) _state.socioCid = _state.agendamentos[0].cliente_id;
 }
 
@@ -391,8 +421,14 @@ function abrirModalEditar(a) {
 // Modal: Destinatários (lista + add + toggle + remove)
 // ============================================================
 async function abrirModalDestinatarios(a) {
-  const r = await api('GET', `/api/agendamentos/${a.id}/destinatarios`);
-  const destinatarios = r.destinatarios || [];
+  // Lê destinatários direto do Supabase (sem depender do server-cli ligado)
+  const sb = getSupabase();
+  const rSb = await sb.from('relatorios_destinatarios')
+    .select('id, canal, valor, nome, ativo, criado_em')
+    .eq('relatorio_id', a.id)
+    .order('criado_em');
+  if (rSb.error) { toast(`✗ ${rSb.error.message}`, true); return; }
+  const destinatarios = rSb.data || [];
 
   const lista = el('div', { style: 'display:flex;flex-direction:column;gap:.5rem;margin-bottom:1.5rem;max-height:300px;overflow-y:auto;' });
   if (destinatarios.length === 0) {

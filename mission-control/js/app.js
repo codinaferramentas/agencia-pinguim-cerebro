@@ -16,7 +16,7 @@ import { renderSeguranca } from './seguranca.js?v=20260502d';
 import { renderFinOps } from './finops.js?v=20260501e';
 import { renderFunis } from './funis.js?v=20260428p';
 import { renderOficina } from './oficina.js?v=20260512a';
-import { renderAgendamentos } from './agendamentos.js?v=20260513a';
+import { renderAgendamentos } from './agendamentos.js?v=20260513b';
 import { renderClintMapeamento } from './clint-mapeamento.js?v=20260504a';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
