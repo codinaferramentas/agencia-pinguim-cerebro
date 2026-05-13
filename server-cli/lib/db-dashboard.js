@@ -465,11 +465,266 @@ async function listar_produtos() {
   `);
 }
 
+// ============================================================
+// V2.15.2 — Meta Ads relatorio dedicado (Andre 2026-05-13)
+// ============================================================
+// Funcoes especificas pro relatorio Meta Ads (Book Diario com plano de acao).
+// Diferente do executivo que mistura financeiro+ads+agenda, este FOCA so em Ads.
+// ============================================================
+
+// Janela rolling N dias: [now-N*24h, agora] em UTC
+function janelaUltimosNDias(n_dias) {
+  const agora = new Date();
+  const inicio = new Date(agora.getTime() - n_dias * 24 * 60 * 60 * 1000);
+  return { from: inicio.toISOString().slice(0, 10), to: agora.toISOString().slice(0, 10) };
+}
+
+// KPIs Meta agregados num range de datas BRT [from, to] inclusivo
+async function meta_kpis_range(from_iso, to_iso) {
+  const sql = `
+    SELECT
+      sum(spend)         AS gasto,
+      sum(impressions)   AS impressoes,
+      sum(clicks)        AS cliques,
+      sum(unique_clicks) AS cliques_unicos,
+      sum(reach)         AS alcance,
+      sum(inline_link_clicks) AS cliques_link,
+      avg(NULLIF(frequency, 0)) AS frequencia_media,
+      count(DISTINCT conta_id) FILTER (WHERE spend > 0) AS contas_ativas,
+      coalesce(sum((
+        SELECT sum((a->>'value')::int)
+        FROM jsonb_array_elements(actions) a
+        WHERE a->>'action_type' = 'landing_page_view'
+      )), 0) AS lpv,
+      coalesce(sum((
+        SELECT sum((a->>'value')::int)
+        FROM jsonb_array_elements(actions) a
+        WHERE a->>'action_type' = 'initiate_checkout'
+      )), 0) AS checkouts,
+      coalesce(sum((
+        SELECT sum((a->>'value')::int)
+        FROM jsonb_array_elements(actions) a
+        WHERE a->>'action_type' = 'purchase'
+      )), 0) AS purchases_pixel
+    FROM metricas_diarias
+    WHERE data >= '${from_iso}'
+      AND data <= '${to_iso}'
+      AND nivel = 'campaign';
+  `;
+  const [r] = await rodarSQL(sql);
+  const gasto = parseFloat(r.gasto || 0);
+  const imp = parseInt(r.impressoes || 0, 10);
+  const cliques = parseInt(r.cliques || 0, 10);
+  return {
+    gasto,
+    impressoes: imp,
+    cliques,
+    cliques_unicos: parseInt(r.cliques_unicos || 0, 10),
+    cliques_link: parseInt(r.cliques_link || 0, 10),
+    alcance: parseInt(r.alcance || 0, 10),
+    frequencia_media: parseFloat(r.frequencia_media || 0),
+    contas_ativas: parseInt(r.contas_ativas || 0, 10),
+    lpv: parseInt(r.lpv || 0, 10),
+    checkouts: parseInt(r.checkouts || 0, 10),
+    purchases_pixel: parseInt(r.purchases_pixel || 0, 10),
+    cpm: imp > 0 ? (gasto * 1000) / imp : null,
+    ctr_pct: imp > 0 ? (cliques * 100) / imp : null,
+    cpc: cliques > 0 ? gasto / cliques : null,
+  };
+}
+
+// Faturamento Hotmart agregado num range BRT (sum my_commission approved/completed)
+async function hotmart_faturamento_range(from_iso, to_iso, moeda = 'BRL') {
+  const janela = janelaBRTRange(from_iso, to_iso);
+  const sql = `
+    SELECT
+      sum(my_commission) AS receita,
+      count(*) AS vendas,
+      count(DISTINCT buyer_id) AS compradores
+    FROM hotmart_transactions
+    WHERE status IN ('approved', 'completed')
+      AND price_currency = '${moeda}'
+      AND purchase_date >= '${janela.from_utc}'
+      AND purchase_date <  '${janela.to_utc}';
+  `;
+  const [r] = await rodarSQL(sql);
+  return {
+    receita: parseFloat(r.receita || 0),
+    vendas: parseInt(r.vendas || 0, 10),
+    compradores: parseInt(r.compradores || 0, 10),
+  };
+}
+
+// Breakdown por ad account (24h ou range). Une metricas_diarias + contas pra
+// dar nome legivel ("[MM] Crescimento de Base") em vez de uuid.
+async function meta_por_conta(from_iso, to_iso) {
+  const sql = `
+    SELECT
+      c.id AS conta_id,
+      c.nome AS conta_nome,
+      c.meta_account_id,
+      sum(m.spend)       AS gasto,
+      sum(m.impressions) AS impressoes,
+      sum(m.clicks)      AS cliques,
+      sum(m.reach)       AS alcance,
+      avg(NULLIF(m.frequency, 0)) AS frequencia_media,
+      coalesce(sum((
+        SELECT sum((a->>'value')::int)
+        FROM jsonb_array_elements(m.actions) a
+        WHERE a->>'action_type' = 'purchase'
+      )), 0) AS purchases_pixel,
+      count(DISTINCT m.entity_id) AS qtd_campanhas
+    FROM metricas_diarias m
+    JOIN contas c ON c.id = m.conta_id
+    WHERE m.data >= '${from_iso}'
+      AND m.data <= '${to_iso}'
+      AND m.nivel = 'campaign'
+      AND m.spend > 0
+    GROUP BY c.id, c.nome, c.meta_account_id
+    ORDER BY gasto DESC;
+  `;
+  const rows = await rodarSQL(sql);
+  return rows.map(r => {
+    const gasto = parseFloat(r.gasto || 0);
+    const imp = parseInt(r.impressoes || 0, 10);
+    const cliques = parseInt(r.cliques || 0, 10);
+    return {
+      conta_id: r.conta_id,
+      conta_nome: r.conta_nome,
+      meta_account_id: r.meta_account_id,
+      gasto,
+      impressoes: imp,
+      cliques,
+      alcance: parseInt(r.alcance || 0, 10),
+      frequencia_media: parseFloat(r.frequencia_media || 0),
+      purchases_pixel: parseInt(r.purchases_pixel || 0, 10),
+      qtd_campanhas: parseInt(r.qtd_campanhas || 0, 10),
+      cpm: imp > 0 ? (gasto * 1000) / imp : null,
+      ctr_pct: imp > 0 ? (cliques * 100) / imp : null,
+      cpa_pixel: parseInt(r.purchases_pixel || 0, 10) > 0
+        ? gasto / parseInt(r.purchases_pixel || 0, 10)
+        : null,
+    };
+  });
+}
+
+// Top N campanhas (nivel=campaign) por gasto no range, com nome real
+async function meta_top_campanhas(from_iso, to_iso, limite = 10) {
+  const sql = `
+    SELECT
+      m.entity_id,
+      m.entity_name,
+      c.nome AS conta_nome,
+      sum(m.spend)       AS gasto,
+      sum(m.impressions) AS impressoes,
+      sum(m.clicks)      AS cliques,
+      avg(NULLIF(m.frequency, 0)) AS frequencia_media,
+      coalesce(sum((
+        SELECT sum((a->>'value')::int)
+        FROM jsonb_array_elements(m.actions) a
+        WHERE a->>'action_type' = 'purchase'
+      )), 0) AS purchases_pixel
+    FROM metricas_diarias m
+    JOIN contas c ON c.id = m.conta_id
+    WHERE m.data >= '${from_iso}'
+      AND m.data <= '${to_iso}'
+      AND m.nivel = 'campaign'
+      AND m.spend > 0
+    GROUP BY m.entity_id, m.entity_name, c.nome
+    ORDER BY gasto DESC
+    LIMIT ${parseInt(limite, 10)};
+  `;
+  const rows = await rodarSQL(sql);
+  return rows.map(r => {
+    const gasto = parseFloat(r.gasto || 0);
+    const imp = parseInt(r.impressoes || 0, 10);
+    const cliques = parseInt(r.cliques || 0, 10);
+    return {
+      entity_id: r.entity_id,
+      entity_name: r.entity_name,
+      conta_nome: r.conta_nome,
+      gasto,
+      impressoes: imp,
+      cliques,
+      frequencia_media: parseFloat(r.frequencia_media || 0),
+      purchases_pixel: parseInt(r.purchases_pixel || 0, 10),
+      cpm: imp > 0 ? (gasto * 1000) / imp : null,
+      ctr_pct: imp > 0 ? (cliques * 100) / imp : null,
+    };
+  });
+}
+
+// Serie diaria N dias (pra grafico) — gasto + impressoes + cliques
+async function meta_serie_diaria(n_dias = 30) {
+  const sql = `
+    SELECT
+      data,
+      sum(spend) AS gasto,
+      sum(impressions) AS impressoes,
+      sum(clicks) AS cliques,
+      coalesce(sum((
+        SELECT sum((a->>'value')::int)
+        FROM jsonb_array_elements(actions) a
+        WHERE a->>'action_type' = 'purchase'
+      )), 0) AS purchases_pixel
+    FROM metricas_diarias
+    WHERE data >= (now()::date - ${parseInt(n_dias, 10)})
+      AND nivel = 'campaign'
+    GROUP BY data
+    ORDER BY data ASC;
+  `;
+  const rows = await rodarSQL(sql);
+  return rows.map(r => ({
+    data: r.data,
+    gasto: parseFloat(r.gasto || 0),
+    impressoes: parseInt(r.impressoes || 0, 10),
+    cliques: parseInt(r.cliques || 0, 10),
+    purchases_pixel: parseInt(r.purchases_pixel || 0, 10),
+  }));
+}
+
+// Faturamento Hotmart serie diaria N dias (pra cruzar com gasto Ads no grafico)
+async function hotmart_serie_diaria(n_dias = 30, moeda = 'BRL') {
+  // Gera datas BRT do range
+  const datas = [];
+  const hoje = new Date();
+  for (let i = n_dias - 1; i >= 0; i--) {
+    const d = new Date(hoje.getTime() - i * 24 * 60 * 60 * 1000);
+    datas.push(d.toISOString().slice(0, 10));
+  }
+  // Query batch: agrega por dia BRT
+  const sql = `
+    SELECT
+      date_trunc('day', (purchase_date AT TIME ZONE 'America/Sao_Paulo'))::date AS dia,
+      sum(my_commission) AS receita,
+      count(*) AS vendas
+    FROM hotmart_transactions
+    WHERE status IN ('approved', 'completed')
+      AND price_currency = '${moeda}'
+      AND purchase_date >= (now() - interval '${parseInt(n_dias, 10) + 1} days')
+    GROUP BY 1
+    ORDER BY 1 ASC;
+  `;
+  const rows = await rodarSQL(sql);
+  // Mapa pra preencher datas vazias com 0
+  const mapa = {};
+  rows.forEach(r => {
+    const dia = String(r.dia).slice(0, 10);
+    mapa[dia] = { receita: parseFloat(r.receita || 0), vendas: parseInt(r.vendas || 0, 10) };
+  });
+  return datas.map(d => ({
+    data: d,
+    receita: mapa[d]?.receita || 0,
+    vendas: mapa[d]?.vendas || 0,
+  }));
+}
+
 module.exports = {
   rodarSQL,
   obterCredenciais,
   janelaBRT,
   janelaBRTRange,
+  janelaUltimosNDias,
   ontemBRT,
   carregarConfigsAtivos,
   categorizarProductIds,
@@ -478,4 +733,11 @@ module.exports = {
   resumo_com_comparacao,
   faturamento_diario,
   listar_produtos,
+  // V2.15.2 Meta Ads detalhado
+  meta_kpis_range,
+  hotmart_faturamento_range,
+  meta_por_conta,
+  meta_top_campanhas,
+  meta_serie_diaria,
+  hotmart_serie_diaria,
 };

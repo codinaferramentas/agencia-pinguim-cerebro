@@ -56,6 +56,7 @@ const contextoRico = require('./lib/contexto-rico'); // V2.14 D Refator V3 — b
 const discordBot = require('./lib/discord-bot'); // V2.14 Frente B — bot Discord (Gateway WebSocket, ingest tempo real)
 const relatorioExecutivo = require('./lib/relatorio-executivo'); // V2.14 Frente C1 — orquestrador relatorio executivo diario
 const templateRelatorioExec = require('./lib/template-relatorio-executivo'); // V2.14 Frente C1 — template HTML dedicado
+const templateRelatorioMetaAds = require('./lib/template-relatorio-meta-ads'); // V2.15.2 — Meta Ads diário (book com Chart.js)
 const evolution = require('./lib/evolution'); // V2.14 Frente D — WhatsApp Evolution
 
 const app = express();
@@ -1056,6 +1057,19 @@ app.get('/entregavel/:id', async (req, res) => {
             markdown: ent.conteudo_md,
             titulo: ent.titulo,
             tipo: ent.tipo,
+            conteudo_estruturado: ent.conteudo_estruturado || {},
+            criadoEm: new Date(ent.criado_em).getTime(),
+            versionamento,
+          });
+          res.type('html').send(html);
+          return;
+        }
+
+        // V2.15.2 — Meta Ads diario (book com Chart.js inline)
+        if (ent.tipo === 'relatorio-meta-ads-diario') {
+          const html = templateRelatorioMetaAds.renderRelatorioMetaAds({
+            markdown: ent.conteudo_md,
+            titulo: ent.titulo,
             conteudo_estruturado: ent.conteudo_estruturado || {},
             criadoEm: new Date(ent.criado_em).getTime(),
             versionamento,
@@ -3727,6 +3741,29 @@ app.post('/api/relatorio/gerar', async (req, res) => {
     res.json({ ...r, latencia_ms: dur_ms });
   } catch (e) {
     console.error('[relatorio-gerar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
+// V2.15.2 — Meta Ads diário on-demand (Andre 2026-05-13)
+// Book completo com plano de ação Traffic Masters + Chart.js
+// ============================================================
+const relatorioMetaAds = require('./lib/relatorio-meta-ads');
+
+app.post('/api/relatorio/meta-ads', async (req, res) => {
+  try {
+    const { cliente_id, dia_alvo_brt, salvar = true, parent_id = null } = req.body || {};
+    console.log(`[relatorio-meta-ads] iniciando | dia_alvo=${dia_alvo_brt || 'auto'}`);
+    const t0 = Date.now();
+    const r = await relatorioMetaAds.gerarRelatorioMetaAds({
+      cliente_id, dia_alvo_brt, salvar, parent_id,
+    });
+    const dur_ms = Date.now() - t0;
+    console.log(`[relatorio-meta-ads] OK ${dur_ms}ms | entregavel=${r.entregavel_id || 'NAO_SALVO'} | sintetizador_ok=${r.sintetizador.ok} | squad_pareceres=${r.squad.qtd_pareceres}`);
+    res.json({ ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[relatorio-meta-ads] erro:', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });

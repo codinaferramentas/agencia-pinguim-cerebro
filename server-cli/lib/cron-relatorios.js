@@ -229,22 +229,31 @@ async function executarJobCronRelatorio(job) {
     throw new Error(`Config ${relatorio_id} nao encontrada ou inativa`);
   }
 
-  // Por enquanto só sabemos rodar 'executivo-diario' (e 'executivo-diario-teste').
-  // Outros slugs vão sair na fila como falha controlada — frente futura.
-  if (!cfg.slug.startsWith('executivo-diario')) {
+  // V2.15.2 Andre 2026-05-13: dispatch por slug
+  // - executivo-diario* → gerarRelatorioExecutivo
+  // - meta-ads* → gerarRelatorioMetaAds
+  // Outros slugs sair na fila como falha controlada
+  let resultado;
+  const t0 = Date.now();
+  if (cfg.slug.startsWith('executivo-diario')) {
+    resultado = await gerarRelatorioExecutivo({
+      cliente_id: cfg.cliente_id,
+      janela_horas: 24,
+      parent_id: cfg.ultimo_entregavel_id || null,
+    });
+  } else if (cfg.slug.startsWith('meta-ads')) {
+    const { gerarRelatorioMetaAds } = require('./relatorio-meta-ads');
+    resultado = await gerarRelatorioMetaAds({
+      cliente_id: cfg.cliente_id,
+      parent_id: cfg.ultimo_entregavel_id || null,
+    });
+  } else {
     await marcarExecucao({ relatorio_id, status: `pulado:slug_sem_handler` });
     return {
       ok: false,
-      motivo: `slug "${cfg.slug}" ainda nao tem handler de execucao no worker. So 'executivo-diario*' implementado.`,
+      motivo: `slug "${cfg.slug}" ainda nao tem handler. Suportados: executivo-diario*, meta-ads*`,
     };
   }
-
-  const t0 = Date.now();
-  const resultado = await gerarRelatorioExecutivo({
-    cliente_id: cfg.cliente_id,
-    janela_horas: 24,
-    parent_id: cfg.ultimo_entregavel_id || null, // versionamento automatico
-  });
   const dur = Date.now() - t0;
 
   if (!resultado.ok || !resultado.entregavel_id) {
