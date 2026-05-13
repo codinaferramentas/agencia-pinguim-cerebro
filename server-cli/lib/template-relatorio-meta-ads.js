@@ -133,17 +133,19 @@ function renderRelatorioMetaAds({
   const cardSnapshot = (titulo, dados, deltaPct = null) => {
     const seta = deltaPct == null ? '' : (deltaPct > 0 ? '↗' : deltaPct < 0 ? '↘' : '→');
     const corDelta = deltaPct == null ? '' : (deltaPct > 0 ? 'good' : deltaPct < 0 ? 'bad' : 'mute');
-    const corRoas = dados.roas == null ? '' : dados.roas >= 1.5 ? 'good' : dados.roas >= 1 ? 'warn' : 'bad';
+    const roasUse = dados.roas_pixel ?? dados.roas;
+    const corRoas = roasUse == null ? '' : roasUse >= 1.5 ? 'good' : roasUse >= 1 ? 'warn' : 'bad';
     return `
       <div class="card-snapshot ${corRoas}">
         <div class="snap-glow"></div>
         <div class="snap-titulo">${esc(titulo)}</div>
-        <div class="snap-roas">${fmtRoas(dados.roas)}</div>
+        <div class="snap-roas">${fmtRoas(roasUse)}</div>
         <div class="snap-label">ROAS</div>
         <div class="snap-detalhes">
           <div><span class="snap-key">Gasto</span> <strong>${fmtBRL(dados.gasto)}</strong></div>
-          <div><span class="snap-key">Receita</span> <strong>${fmtBRL(dados.receita)}</strong></div>
-          <div><span class="snap-key">Vendas</span> <strong>${fmtNum(dados.vendas)}</strong></div>
+          <div><span class="snap-key">Receita</span> <strong>${fmtBRL(dados.receita_pixel)}</strong></div>
+          <div><span class="snap-key">Compras</span> <strong>${fmtNum(dados.purchases_pixel)}</strong></div>
+          ${dados.cpa_pixel != null ? `<div><span class="snap-key">CPA</span> <strong>${fmtBRL(dados.cpa_pixel)}</strong></div>` : ''}
           ${deltaPct != null ? `<div class="snap-delta ${corDelta}">${seta} ${fmtPct(deltaPct)} vs anteontem</div>` : ''}
         </div>
       </div>
@@ -240,10 +242,12 @@ function renderRelatorioMetaAds({
               <div class="parecer-contas">
                 ${(p.por_conta || []).map(pc => {
                   const cor = corSinalCard[pc.sinal] || corSinalCard.mute;
+                  // acao_completa tem números + métricas. Fallback pra acao_curta.
+                  const acaoCompleta = pc.acao_completa || pc.acao_curta || pc.acao || 'Sem observação';
                   return `
                     <div class="parecer-conta-item" style="border-left-color: ${cor}">
                       <div class="pc-conta-nome">${esc(pc.conta)}</div>
-                      <div class="pc-acao" style="color: ${cor}">${esc(pc.acao || 'sem observação')}</div>
+                      <div class="pc-acao" style="color: ${cor}">${esc(acaoCompleta)}</div>
                       <div class="pc-diag">${esc(pc.diagnostico || '')}</div>
                     </div>
                   `;
@@ -598,11 +602,15 @@ function renderRelatorioMetaAds({
     .matriz-celula {
       border: 1px solid;
       border-radius: 10px;
-      padding: 0.75rem 0.7rem;
+      padding: 0.85rem 0.7rem;
       text-align: center;
       vertical-align: middle;
-      min-width: 130px;
+      width: 150px;
+      min-width: 150px;
+      max-width: 150px;
+      height: 90px;
       transition: transform 0.15s, filter 0.15s;
+      overflow: hidden;
     }
     .matriz-celula:hover {
       transform: scale(1.02);
@@ -610,13 +618,19 @@ function renderRelatorioMetaAds({
     }
     .matriz-icone {
       font-size: 1.1rem;
-      margin-bottom: 0.3rem;
+      margin-bottom: 0.4rem;
       font-weight: 600;
+      line-height: 1;
     }
     .matriz-frase {
-      font-size: 0.78rem;
-      line-height: 1.35;
-      font-weight: 500;
+      font-size: 0.82rem;
+      line-height: 1.3;
+      font-weight: 600;
+      letter-spacing: -0.005em;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
     .matriz-legenda {
       display: flex;
@@ -958,7 +972,7 @@ function renderRelatorioMetaAds({
     </header>
 
     <div class="snapshot-grid">
-      ${cardSnapshot('Ontem (24h)', h24, delta.receita_pct)}
+      ${cardSnapshot('Ontem (24h)', h24, delta.receita_pixel_pct)}
       ${cardSnapshot('Últimos 7 dias', d7)}
       ${cardSnapshot('Últimos 30 dias', d30)}
     </div>

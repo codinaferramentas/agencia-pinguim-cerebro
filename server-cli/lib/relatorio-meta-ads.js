@@ -218,9 +218,22 @@ ${contasNomes.map(c => `- ${c}`).join('\n')}
 ## SUA TAREFA — RETORNE JSON ESTRUTURADO POR CONTA
 
 Para cada conta acima, devolva um objeto com:
-- "diagnostico": 1-2 frases (max ~200 chars) com o que VOCÊ vê nessa conta sob seu olhar específico (${m.missao})
-- "acao": VERBO IMPERATIVO + métrica/quantidade. Ex: "Escalar [365] R$286→R$570/dia", "Pausar 48h", "Implementar UTM por adset", "Migrar evento otimização pra purchase". Sem "considerar", "talvez", "poderia" — só ordem direta.
-- "sinal": "good" (oportunidade clara, ação positiva) | "warn" (atenção/cuidado) | "bad" (risco real/ação destrutiva necessária) | "mute" (sem observação relevante na sua especialidade)
+
+- "acao_curta": **VERBO + NOME DA CONTA/CAMPANHA, MÁXIMO 3-5 PALAVRAS, SEM NÚMERO**. Exemplos válidos:
+  - "Escalar [365]"
+  - "Pausar [PVV]"
+  - "Cortar [DLT]"
+  - "Implementar UTM"
+  - "Trocar criativo"
+  - "Manter budget"
+  - "Sem observação"
+  Esse campo vai pra MATRIZ visual (precisa caber em célula pequena). NUNCA mais que 5 palavras. NÃO inclua números nem detalhes.
+
+- "acao_completa": A AÇÃO COMPLETA com números e justificativa (até ~150 chars). Ex: "Escalar [365] Público Quente R$286→R$570/dia, manter freq <1.5". Vai no drill-down.
+
+- "diagnostico": 1-2 frases (max ~200 chars) com o que VOCÊ vê nessa conta sob seu olhar específico (${m.missao}). Vai no drill-down também.
+
+- "sinal": "good" (oportunidade/escalar) | "warn" (atenção/manter) | "bad" (cortar/pausar/risco) | "mute" (sem observação)
 
 DEVOLVA APENAS o JSON abaixo (sem texto antes/depois, sem markdown wrapper extra):
 
@@ -229,8 +242,9 @@ DEVOLVA APENAS o JSON abaixo (sem texto antes/depois, sem markdown wrapper extra
   "por_conta": [
     {
       "conta": "<nome exato da conta>",
+      "acao_curta": "<3-5 palavras, sem número>",
+      "acao_completa": "<verbo + métrica completa>",
       "diagnostico": "<1-2 frases>",
-      "acao": "<verbo imperativo + métrica>",
       "sinal": "good|warn|bad|mute"
     }
   ],
@@ -240,8 +254,9 @@ DEVOLVA APENAS o JSON abaixo (sem texto antes/depois, sem markdown wrapper extra
 
 REGRAS DURAS:
 - NÃO invente número que não está no briefing
-- "acao" deve ser VERBO IMPERATIVO + número específico ("Escalar R$286→R$570", não "considerar escalar")
-- Se a conta não tem nada acionável pelo SEU olhar específico, sinal=mute e ação="sem observação"
+- "acao_curta" SEMPRE 3-5 palavras MÁXIMO — sem número, sem detalhe
+- "acao_completa" tem número + métrica específica
+- Se a conta não tem nada acionável pelo SEU olhar, sinal=mute / acao_curta="Sem observação" / acao_completa=""
 - Pedro Sobral NÃO recomenda escalar conta com ROAS<1 (regra dura)`;
 
     try {
@@ -271,15 +286,19 @@ REGRAS DURAS:
     return { ok: false, motivo: 'todos mestres falharam', plano_md: '', matriz: [], pareceres };
   }
 
-  // Monta matriz Conta×Mestre DIRETO dos JSONs dos mestres (não precisa pedir pro Chief)
-  // Cada mestre já entregou {conta, acao, sinal} — eu só pivoteio.
+  // Monta matriz Conta×Mestre DIRETO dos JSONs dos mestres.
+  // Célula: frase curta (3-5 palavras, vai pra matriz visual).
+  // acao_completa + diagnostico ficam no drill-down do mestre.
   const matriz = contasNomes.map(conta => {
     const celulas = {};
     sucessos.forEach(p => {
       const ana = (p.por_conta || []).find(x => x.conta === conta);
       celulas[p.slug] = ana
-        ? { frase: ana.acao || 'sem observação', sinal: ana.sinal || 'mute', diagnostico: ana.diagnostico || '' }
-        : { frase: 'sem observação', sinal: 'mute', diagnostico: '' };
+        ? {
+            frase: ana.acao_curta || ana.acao || 'Sem observação',
+            sinal: ana.sinal || 'mute',
+          }
+        : { frase: 'Sem observação', sinal: 'mute' };
     });
     return { conta, celulas };
   });
@@ -450,10 +469,10 @@ Texto enxuto. Sócio lê em <30 segundos.
 
 ### Bloco SNAPSHOT (100% Pixel — fonte única Meta)
 - Cabeçalho: \`## 📊 SNAPSHOT · 100% Meta Pixel\`
-- 3 bullets:
-  - **Ontem (24h)** · Gasto R$ X · Receita Pixel R$ Y · ROAS Pixel Zx · ΔX% vs anteontem
-  - **7 dias rolling** · Gasto R$ X · Receita Pixel R$ Y · ROAS Pixel Zx
-  - **30 dias rolling** · Gasto R$ X · Receita Pixel R$ Y · ROAS Pixel Zx
+- 3 bullets — SEMPRE inclui quantidade de Compras (purchases Pixel):
+  - **Ontem (24h)** · Gasto R$ X · Receita Pixel R$ Y · Compras Pixel N · CPA R$ W · ROAS Pixel Zx · ΔX% vs anteontem
+  - **7 dias rolling** · Gasto R$ X · Receita Pixel R$ Y · Compras N · ROAS Pixel Zx
+  - **30 dias rolling** · Gasto R$ X · Receita Pixel R$ Y · Compras N · ROAS Pixel Zx
 
 ### Bloco PLANO DE AÇÃO
 - Cabeçalho: \`## 🎯 PLANO DE AÇÃO HOJE\`
