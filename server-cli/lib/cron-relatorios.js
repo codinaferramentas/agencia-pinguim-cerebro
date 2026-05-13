@@ -21,12 +21,16 @@ const esc = (s) => s == null ? 'NULL' : "'" + String(s).replace(/'/g, "''") + "'
 // Carrega config completa do relatório pelo id
 // ============================================================
 async function carregarConfig(relatorio_id) {
+  // Andre 2026-05-13: lê da view com destinatarios agregados em jsonb.
+  // Schema legado (whatsapp_numero/email_destino) ainda existe e é populado
+  // pelo cofre — só ignoramos no envio (usamos só destinatarios[] da view).
   const sql = `
     SELECT id, cliente_id, slug, nome, modulos, sintetizador,
            cron_expr, cron_descricao,
            canais, whatsapp_numero, email_destino,
+           destinatarios,
            ativo, ultimo_entregavel_id
-      FROM pinguim.relatorios_config
+      FROM pinguim.relatorios_config_com_destinatarios
      WHERE id = ${esc(relatorio_id)}
      LIMIT 1
   `;
@@ -251,21 +255,35 @@ async function executarJobCronRelatorio(job) {
   // Extrai insights pro WhatsApp
   const insights = extrairInsights(resultado.md_final);
 
-  // Envia WhatsApp se canal whatsapp + numero
-  let whatsapp_resultado = { ok: false, motivo: 'whatsapp nao configurado' };
-  if (Array.isArray(cfg.canais) && cfg.canais.includes('whatsapp') && cfg.whatsapp_numero) {
-    whatsapp_resultado = await enviarRelatorioWhatsApp({
-      numero: cfg.whatsapp_numero,
-      entregavel_id: resultado.entregavel_id,
-      entregavel_versao: resultado.entregavel_versao,
-      titulo: resultado.titulo,
-      insights,
-      relatorio_nome: cfg.nome,
-    });
+  // Andre 2026-05-13: itera sobre TODOS destinatários ativos da tabela
+  // pinguim.relatorios_destinatarios. Antes mandava só pra whatsapp_numero único.
+  const destinatarios = Array.isArray(cfg.destinatarios) ? cfg.destinatarios : [];
+  const destinatariosAtivos = destinatarios.filter(d => d.ativo !== false);
+  const envios = [];
+
+  for (const d of destinatariosAtivos) {
+    if (d.canal === 'whatsapp') {
+      const r = await enviarRelatorioWhatsApp({
+        numero: d.valor,
+        entregavel_id: resultado.entregavel_id,
+        entregavel_versao: resultado.entregavel_versao,
+        titulo: resultado.titulo,
+        insights,
+        relatorio_nome: cfg.nome,
+      });
+      envios.push({ canal: 'whatsapp', valor: d.valor, nome: d.nome, ok: r.ok, motivo: r.motivo });
+    }
+    // canais email/discord/telegram entram em frentes futuras (Andre 2026-05-13)
   }
 
-  // Atualiza config: ultimo_entregavel_id (importante! próxima execução versiona)
-  const status = whatsapp_resultado.ok ? 'ok' : `ok_sem_whatsapp:${whatsapp_resultado.motivo}`;
+  const sucessos = envios.filter(e => e.ok).length;
+  const falhas = envios.filter(e => !e.ok);
+  let status;
+  if (envios.length === 0) status = 'ok_sem_envio';
+  else if (sucessos === envios.length) status = `ok:${sucessos}_envios`;
+  else if (sucessos === 0) status = `ok_sem_whatsapp:${falhas[0]?.motivo || 'erro'}`;
+  else status = `ok_parcial:${sucessos}de${envios.length}`;
+
   await marcarExecucao({
     relatorio_id,
     status,
@@ -277,10 +295,11 @@ async function executarJobCronRelatorio(job) {
     entregavel_id: resultado.entregavel_id,
     entregavel_versao: resultado.entregavel_versao,
     insights_extraidos: insights.length,
-    whatsapp_ok: whatsapp_resultado.ok,
-    whatsapp_motivo: whatsapp_resultado.motivo || null,
+    envios, // detalhamento por destinatário
+    whatsapp_ok: sucessos > 0, // mantido por compatibilidade
+    whatsapp_motivo: falhas[0]?.motivo || null,
     duracao_ms: dur,
-    markdown: resultado.md_final, // worker usa pra salvar conteudo_md no entregavel-job (não confundir com entregável já salvo pelo gerarRelatorioExecutivo)
+    markdown: resultado.md_final,
   };
 }
 

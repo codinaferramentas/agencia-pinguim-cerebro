@@ -2978,6 +2978,187 @@ app.post('/api/aprendizados/listar-clientes', async (req, res) => {
 // ============================================================
 // V2.15 — OFICINA DE RELATÓRIOS (Andre 2026-05-12)
 // ============================================================
+// V2.15 — AGENDAMENTOS (cron de relatórios)
+// ============================================================
+// Wrapper de pinguim.relatorios_config (registros) + cron.job (schedule).
+// CRUD pra o agente abrir/editar/pausar/excluir crons via WhatsApp ou painel.
+// ============================================================
+const agendamentosLib = require('./lib/agendamentos');
+
+app.get('/api/agendamentos/listar', async (req, res) => {
+  try {
+    const cliente_id = req.query.cliente_id || null;
+    const somente_ativos = req.query.ativos === '1';
+    const lista = await agendamentosLib.listar({ cliente_id, somente_ativos });
+    res.json({ ok: true, total: lista.length, agendamentos: lista });
+  } catch (e) {
+    console.error('[agendamentos-listar]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/agendamentos/carregar/:id', async (req, res) => {
+  try {
+    const r = await agendamentosLib.carregar(req.params.id);
+    if (!r) return res.status(404).json({ ok: false, error: 'nao encontrado' });
+    res.json({ ok: true, agendamento: r });
+  } catch (e) {
+    console.error('[agendamentos-carregar]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/agendamentos/atualizar', async (req, res) => {
+  try {
+    const { id, campos } = req.body || {};
+    if (!id) return res.status(400).json({ ok: false, error: 'id obrigatorio' });
+    if (!campos || typeof campos !== 'object') return res.status(400).json({ ok: false, error: 'campos obrigatorio (objeto)' });
+    const r = await agendamentosLib.atualizar({ id, campos });
+    res.json({ ok: true, agendamento: r });
+  } catch (e) {
+    console.error('[agendamentos-atualizar]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/agendamentos/pausar', async (req, res) => {
+  try {
+    const { id } = req.body || {};
+    if (!id) return res.status(400).json({ ok: false, error: 'id obrigatorio' });
+    const r = await agendamentosLib.pausar(id);
+    res.json({ ok: true, agendamento: r });
+  } catch (e) {
+    console.error('[agendamentos-pausar]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/agendamentos/reativar', async (req, res) => {
+  try {
+    const { id } = req.body || {};
+    if (!id) return res.status(400).json({ ok: false, error: 'id obrigatorio' });
+    const r = await agendamentosLib.reativar(id);
+    res.json({ ok: true, agendamento: r });
+  } catch (e) {
+    console.error('[agendamentos-reativar]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/agendamentos/excluir', async (req, res) => {
+  try {
+    const { id } = req.body || {};
+    if (!id) return res.status(400).json({ ok: false, error: 'id obrigatorio' });
+    const r = await agendamentosLib.excluir(id);
+    res.json({ ok: r });
+  } catch (e) {
+    console.error('[agendamentos-excluir]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/agendamentos/disparar', async (req, res) => {
+  try {
+    const { id } = req.body || {};
+    if (!id) return res.status(400).json({ ok: false, error: 'id obrigatorio' });
+    const job_id = await agendamentosLib.dispararAgora(id);
+    res.json({ ok: true, job_id });
+  } catch (e) {
+    console.error('[agendamentos-disparar]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/agendamentos/disparos/:id', async (req, res) => {
+  try {
+    const limite = parseInt(req.query.limite, 10) || 10;
+    const r = await agendamentosLib.ultimosDisparos(req.params.id, limite);
+    res.json({ ok: true, total: r.length, disparos: r });
+  } catch (e) {
+    console.error('[agendamentos-disparos]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
+// V2.15.1 — Criar agendamento via UI (Andre 2026-05-13)
+// ============================================================
+app.post('/api/agendamentos/criar', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const r = await agendamentosLib.criar(body);
+    res.json({ ok: true, agendamento: r });
+  } catch (e) {
+    console.error('[agendamentos-criar]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
+// V2.15.1 — Destinatários (multi-destinatário por agendamento)
+// ============================================================
+app.get('/api/agendamentos/:id/destinatarios', async (req, res) => {
+  try {
+    const r = await agendamentosLib.listarDestinatarios(req.params.id);
+    res.json({ ok: true, total: r.length, destinatarios: r });
+  } catch (e) {
+    console.error('[destinatarios-listar]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/agendamentos/:id/destinatarios', async (req, res) => {
+  try {
+    const { canal, valor, nome } = req.body || {};
+    if (!canal || !valor) return res.status(400).json({ ok: false, error: 'canal e valor obrigatorios' });
+    const r = await agendamentosLib.adicionarDestinatario(req.params.id, { canal, valor, nome });
+    res.json({ ok: true, destinatario: r });
+  } catch (e) {
+    console.error('[destinatarios-adicionar]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/destinatarios/:id/toggle', async (req, res) => {
+  try {
+    const r = await agendamentosLib.toggleDestinatario(req.params.id);
+    res.json({ ok: true, destinatario: r });
+  } catch (e) {
+    console.error('[destinatarios-toggle]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.delete('/api/destinatarios/:id', async (req, res) => {
+  try {
+    await agendamentosLib.removerDestinatario(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[destinatarios-remover]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
+// V2.15.1 — Catálogo de relatórios disponíveis pra agendar
+// (lê oficina_catalogo onde só entram relatórios completos prontos)
+// ============================================================
+app.get('/api/agendamentos/catalogo-disponivel', async (req, res) => {
+  try {
+    const r = await db.rodarSQL(`
+      SELECT slug, nome, descricao, status
+        FROM pinguim.oficina_catalogo
+       WHERE status = 'ativo'
+       ORDER BY slug
+    `);
+    res.json({ ok: true, total: r.length, catalogo: r });
+  } catch (e) {
+    console.error('[catalogo-disponivel]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
 // Quando agente detecta relatório complexo (multi-fonte, agregação,
 // atribuição), abre TICKET aqui em vez de tentar executar em runtime.
 // Codina depois constrói Skill dedicada, vincula, marca entregue.
@@ -3228,6 +3409,121 @@ ${entregues.length === 0 ? '<div class="vazio">Nenhum entregue ainda.</div>' :
     res.type('html').send(html);
   } catch (e) {
     console.error('[oficina-pagina] erro:', e.message);
+    res.status(500).type('html').send(`<h1>Erro</h1><pre>${e.message}</pre>`);
+  }
+});
+
+// Pagina visual /agendamentos pra Codina ver cronograma
+app.get('/agendamentos', async (req, res) => {
+  try {
+    const lista = await agendamentosLib.listar({});
+    const ativos = lista.filter(a => a.ativo);
+    const pausados = lista.filter(a => !a.ativo);
+
+    const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const formatDt = (ts) => ts ? new Date(ts).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—';
+    const corStatus = (s) => {
+      if (!s) return '#64748B';
+      if (s.startsWith('ok')) return '#10B981';
+      if (s.startsWith('falhou')) return '#EF4444';
+      if (s.startsWith('pulado')) return '#F59E0B';
+      return '#94A3B8';
+    };
+
+    const linhaAg = (a) => {
+      const ultimoLink = a.ultimo_entregavel_id ? `<a href="/entregavel/${esc(a.ultimo_entregavel_id)}" target="_blank">abrir</a>` : '—';
+      return `<tr>
+        <td><strong>${esc(a.nome)}</strong><div class="meta"><code>${esc(a.slug)}</code></div></td>
+        <td><div class="cron">${esc(a.cron_descricao || a.cron_expr)}</div><div class="meta">${esc(a.cron_expr)}</div></td>
+        <td>${esc((a.canais || []).join(', '))} ${a.whatsapp_numero ? `· ${esc(a.whatsapp_numero)}` : ''}</td>
+        <td>${formatDt(a.ultima_execucao)}<br><span class="meta" style="color:${corStatus(a.ultimo_status)}">${esc(a.ultimo_status || 'nunca rodou')}</span></td>
+        <td>${ultimoLink}</td>
+        <td class="acoes">
+          <button onclick="dispararAgora('${a.id}')" title="dispara AGORA">▶</button>
+          ${a.ativo
+            ? `<button onclick="pausar('${a.id}')" title="pausa cron">⏸</button>`
+            : `<button onclick="reativar('${a.id}')" title="reativa cron">▶</button>`}
+          <button onclick="excluir('${a.id}','${esc(a.slug)}')" title="excluir definitivo" class="danger">✕</button>
+        </td>
+      </tr>`;
+    };
+
+    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Agendamentos · Pinguim OS</title>
+<style>
+:root{--bg:#0a0a0f;--bg2:#111118;--card:#1a1a28;--border:#2a2a3e;--text:#f1f5f9;--text2:#94a3b8;--text3:#64748b;--laranja:#E85C00;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'IBM Plex Sans',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);padding:2rem 1.5rem;line-height:1.5;}
+.wrap{max-width:1200px;margin:0 auto;}
+h1{font-size:1.6rem;margin-bottom:.4rem;}
+.sub{color:var(--text2);font-size:.85rem;margin-bottom:2rem;}
+section{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.25rem 1.5rem;margin-bottom:1.5rem;}
+section h2{font-size:.85rem;color:var(--text);text-transform:uppercase;letter-spacing:.08em;margin-bottom:1rem;font-weight:600;}
+.count{display:inline-block;background:var(--card);color:var(--text2);padding:.15rem .5rem;border-radius:6px;font-size:.7rem;margin-left:.5rem;}
+table{width:100%;border-collapse:collapse;font-size:.85rem;}
+th{text-align:left;color:var(--text3);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;padding:.5rem .75rem;border-bottom:1px solid var(--border);}
+td{padding:.85rem .75rem;border-bottom:1px solid var(--border);vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+tr:hover{background:rgba(255,255,255,0.02);}
+.meta{color:var(--text3);font-size:.72rem;margin-top:.2rem;}
+.cron{color:var(--text);font-weight:500;}
+.acoes button{background:var(--card);border:1px solid var(--border);color:var(--text);width:32px;height:32px;border-radius:6px;cursor:pointer;margin-right:.25rem;font-size:.9rem;}
+.acoes button:hover{background:var(--border);}
+.acoes button.danger{color:#EF4444;border-color:rgba(239,68,68,.3);}
+.acoes button.danger:hover{background:rgba(239,68,68,.15);}
+.vazio{padding:2rem;text-align:center;color:var(--text3);font-style:italic;}
+a{color:var(--laranja);text-decoration:none;}
+a:hover{text-decoration:underline;}
+code{color:var(--text2);font-family:'IBM Plex Mono','SF Mono',monospace;font-size:.75rem;background:rgba(255,255,255,0.04);padding:.05rem .3rem;border-radius:3px;}
+</style></head><body><div class="wrap">
+<h1>⏰ Agendamentos</h1>
+<div class="sub">Relatórios automáticos rodando via pg_cron + worker. Pause, dispare agora ou exclua.</div>
+
+<section>
+<h2>Ativos <span class="count">${ativos.length}</span></h2>
+${ativos.length === 0 ? '<div class="vazio">Nenhum agendamento ativo.</div>' :
+`<table><thead><tr><th>Relatório</th><th>Frequência</th><th>Canal</th><th>Última execução</th><th>Último entregável</th><th>Ações</th></tr></thead>
+<tbody>${ativos.map(linhaAg).join('')}</tbody></table>`}
+</section>
+
+${pausados.length ? `<section>
+<h2>Pausados <span class="count">${pausados.length}</span></h2>
+<table><thead><tr><th>Relatório</th><th>Frequência</th><th>Canal</th><th>Última execução</th><th>Último entregável</th><th>Ações</th></tr></thead>
+<tbody>${pausados.map(linhaAg).join('')}</tbody></table>
+</section>` : ''}
+
+</div>
+<script>
+async function chamar(endpoint, body) {
+  const r = await fetch(endpoint, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  return r.json();
+}
+async function dispararAgora(id) {
+  if (!confirm('Disparar AGORA? Job vai entrar na fila, worker pega em até 15s.')) return;
+  const r = await chamar('/api/agendamentos/disparar', { id });
+  alert(r.ok ? 'Job criado: ' + r.job_id + '\\nVai rodar nos próximos 15s' : 'Erro: ' + (r.error || ''));
+}
+async function pausar(id) {
+  if (!confirm('Pausar este agendamento? (cron desliga, mas registro permanece)')) return;
+  const r = await chamar('/api/agendamentos/pausar', { id });
+  if (r.ok) location.reload();
+  else alert('Erro: ' + (r.error || ''));
+}
+async function reativar(id) {
+  const r = await chamar('/api/agendamentos/reativar', { id });
+  if (r.ok) location.reload();
+  else alert('Erro: ' + (r.error || ''));
+}
+async function excluir(id, slug) {
+  if (!confirm('EXCLUIR definitivamente "' + slug + '"? (cron some, registro some)')) return;
+  const r = await chamar('/api/agendamentos/excluir', { id });
+  if (r.ok) location.reload();
+  else alert('Erro: ' + (r.error || ''));
+}
+</script>
+</body></html>`;
+    res.type('html').send(html);
+  } catch (e) {
+    console.error('[agendamentos-pagina]', e.message);
     res.status(500).type('html').send(`<h1>Erro</h1><pre>${e.message}</pre>`);
   }
 });
@@ -3557,18 +3853,17 @@ app.listen(PORT, () => {
     })
     .catch(e => console.warn(`  [discord-bot] falha ao iniciar (nao bloqueia server): ${e.message}`));
 
-  // V2.15 Fase 2 — inicia worker de jobs (opt-in via ENV).
-  // Default: NAO sobe (evita conflito com instancia dev rodando em paralelo).
-  // Pra ativar: WORKER_JOBS_ENABLED=1 npm start
-  if (process.env.WORKER_JOBS_ENABLED === '1') {
+  // V2.15 — inicia worker de jobs por DEFAULT (necessario pro cron de relatorios).
+  // Pra desligar: WORKER_JOBS_ENABLED=0 npm start
+  if (process.env.WORKER_JOBS_ENABLED !== '0') {
     try {
       jobsWorker.iniciar();
-      console.log('  [jobs-worker] ATIVO (WORKER_JOBS_ENABLED=1)');
+      console.log('  [jobs-worker] ATIVO (default ON — necessario pro cron de relatorios)');
     } catch (e) {
       console.warn(`  [jobs-worker] falha ao iniciar: ${e.message}`);
     }
   } else {
-    console.log('  [jobs-worker] DESLIGADO (WORKER_JOBS_ENABLED nao=1) — use POST /api/jobs/worker-start pra ligar manual');
+    console.log('  [jobs-worker] DESLIGADO via WORKER_JOBS_ENABLED=0 — cron de relatorios NAO vai executar');
   }
 });
 
