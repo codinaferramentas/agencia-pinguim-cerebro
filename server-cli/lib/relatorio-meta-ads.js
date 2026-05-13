@@ -201,7 +201,7 @@ async function coletarDadosMetaAds({ dia_alvo_brt }) {
 // 2) MESTRES DE TRAFEGO — chama 5 em paralelo + Chief consolida
 // ============================================================
 async function analisarTrafficMasters({ dados, dataLongaBR, diaSemana }) {
-  // Lê system_prompt dos 5 mestres + Chief do banco
+  // Lê 5 mestres + Chief ativos
   const r = await db.rodarSQL(`
     SELECT slug, nome, avatar, missao, system_prompt
       FROM pinguim.agentes
@@ -213,13 +213,29 @@ async function analisarTrafficMasters({ dados, dataLongaBR, diaSemana }) {
   const chief = r.find(m => m.slug === 'traffic-chief');
 
   if (mestres.length === 0) {
-    return { ok: false, motivo: 'squad traffic-masters vazia', plano_md: '', pareceres: [] };
+    return { ok: false, motivo: 'squad traffic-masters vazia', plano_md: '', matriz: [], pareceres: [] };
   }
 
-  // Briefing factual comum (passado pra cada mestre)
+  const contasNomes = (dados.contas_24h || []).map(c => c.conta_nome);
   const briefingFatos = montarBriefingFatos(dados, dataLongaBR);
 
-  // Cada mestre recebe seu system_prompt + briefing + retorna parecer 2-3 parágrafos
+  // Helper: extrai JSON do output (tolerante a wrappers ```json e ruído)
+  const extrairJson = (bloco) => {
+    if (!bloco) return null;
+    const m = bloco.match(/```json\s*([\s\S]*?)\s*```/);
+    if (m) return m[1];
+    const inicioObj = bloco.indexOf('{');
+    const inicioArr = bloco.indexOf('[');
+    if (inicioObj === -1 && inicioArr === -1) return null;
+    const inicio = (inicioObj !== -1 && (inicioArr === -1 || inicioObj < inicioArr)) ? inicioObj : inicioArr;
+    const fimObj = bloco.lastIndexOf('}');
+    const fimArr = bloco.lastIndexOf(']');
+    const fim = Math.max(fimObj, fimArr);
+    return bloco.slice(inicio, fim + 1);
+  };
+
+  // V3 (Andre 2026-05-13): cada mestre devolve JSON estruturado POR CONTA.
+  // Drill-down vira navegável (mestre → contas → diagnóstico + ação imperativa).
   const pareceres = await Promise.all(mestres.map(async (m) => {
     const prompt = `${m.system_prompt}
 
@@ -227,19 +243,56 @@ async function analisarTrafficMasters({ dados, dataLongaBR, diaSemana }) {
 
 ${briefingFatos}
 
-## SUA TAREFA
+## CONTAS ATIVAS A ANALISAR
 
-Analise os dados acima sob seu olhar específico (${m.missao}).
-Devolva APENAS 2 a 3 parágrafos compactos, em português direto, com:
-- Diagnóstico específico (cite conta + número)
-- 1 ação concreta sugerida
+${contasNomes.map(c => `- ${c}`).join('\n')}
 
-Sem floreio, sem introdução tipo "como Pedro Sobral, eu...". Vai direto.
-NÃO invente número que não está no briefing.`;
+## SUA TAREFA — RETORNE JSON ESTRUTURADO POR CONTA
+
+Para cada conta acima, devolva um objeto com:
+- "diagnostico": 1-2 frases (max ~200 chars) com o que VOCÊ vê nessa conta sob seu olhar específico (${m.missao})
+- "acao": VERBO IMPERATIVO + métrica/quantidade. Ex: "Escalar [365] R$286→R$570/dia", "Pausar 48h", "Implementar UTM por adset", "Migrar evento otimização pra purchase". Sem "considerar", "talvez", "poderia" — só ordem direta.
+- "sinal": "good" (oportunidade clara, ação positiva) | "warn" (atenção/cuidado) | "bad" (risco real/ação destrutiva necessária) | "mute" (sem observação relevante na sua especialidade)
+
+DEVOLVA APENAS o JSON abaixo (sem texto antes/depois, sem markdown wrapper extra):
+
+\`\`\`json
+{
+  "por_conta": [
+    {
+      "conta": "<nome exato da conta>",
+      "diagnostico": "<1-2 frases>",
+      "acao": "<verbo imperativo + métrica>",
+      "sinal": "good|warn|bad|mute"
+    }
+  ],
+  "tese_geral": "<1 frase resumindo a TESE central que conecta as 3 análises, max 200 chars>"
+}
+\`\`\`
+
+REGRAS DURAS:
+- NÃO invente número que não está no briefing
+- "acao" deve ser VERBO IMPERATIVO + número específico ("Escalar R$286→R$570", não "considerar escalar")
+- Se a conta não tem nada acionável pelo SEU olhar específico, sinal=mute e ação="sem observação"
+- Pedro Sobral NÃO recomenda escalar conta com ROAS<1 (regra dura)`;
 
     try {
-      const texto = await runClaudeCLI(prompt, 90000);
-      return { slug: m.slug, nome: m.nome, avatar: m.avatar, ok: true, texto: texto.trim() };
+      const respostaRaw = await runClaudeCLI(prompt, 90000);
+      let analise = { por_conta: [], tese_geral: '' };
+      try {
+        const j = extrairJson(respostaRaw);
+        if (j) analise = JSON.parse(j);
+      } catch (e) {
+        analise = { por_conta: [], tese_geral: respostaRaw.slice(0, 400) };
+      }
+      return {
+        slug: m.slug,
+        nome: m.nome,
+        avatar: m.avatar,
+        ok: true,
+        por_conta: Array.isArray(analise.por_conta) ? analise.por_conta : [],
+        tese_geral: analise.tese_geral || '',
+      };
     } catch (e) {
       return { slug: m.slug, nome: m.nome, avatar: m.avatar, ok: false, motivo: e.message };
     }
@@ -250,19 +303,29 @@ NÃO invente número que não está no briefing.`;
     return { ok: false, motivo: 'todos mestres falharam', plano_md: '', matriz: [], pareceres };
   }
 
-  // Lista de contas reais (do briefing) pra matriz
-  const contasNomes = (dados.contas_24h || []).map(c => c.conta_nome);
+  // Monta matriz Conta×Mestre DIRETO dos JSONs dos mestres (não precisa pedir pro Chief)
+  // Cada mestre já entregou {conta, acao, sinal} — eu só pivoteio.
+  const matriz = contasNomes.map(conta => {
+    const celulas = {};
+    sucessos.forEach(p => {
+      const ana = (p.por_conta || []).find(x => x.conta === conta);
+      celulas[p.slug] = ana
+        ? { frase: ana.acao || 'sem observação', sinal: ana.sinal || 'mute', diagnostico: ana.diagnostico || '' }
+        : { frase: 'sem observação', sinal: 'mute', diagnostico: '' };
+    });
+    return { conta, celulas };
+  });
 
-  // Chief faz UM call que devolve TRÊS coisas (plano + resumos + matriz)
-  // num bloco JSON. Mais barato que 3 calls separados (75s → 25s).
+  // Chief só consolida em PLANO DE AÇÃO (a matriz e tese vêm dos mestres já)
   let plano_md = '';
-  let resumos = {}; // slug → texto curto (3 linhas)
-  let matriz = []; // [{conta, celulas: [{slug_mestre, frase, sinal}]}]
-
   if (chief) {
-    const pareceresTexto = sucessos.map(p => `### ${p.avatar} ${p.nome} (${p.slug})\n\n${p.texto}`).join('\n\n---\n\n');
-    const slugsMestres = sucessos.map(p => `${p.slug} (${p.nome})`).join(', ');
-    const contasLista = contasNomes.length > 0 ? contasNomes.map(c => `- ${c}`).join('\n') : '- (sem contas com gasto)';
+    const pareceresJson = sucessos.map(p => ({
+      mestre: p.nome,
+      slug: p.slug,
+      avatar: p.avatar,
+      tese: p.tese_geral,
+      por_conta: p.por_conta,
+    }));
 
     const promptChief = `${chief.system_prompt}
 
@@ -270,105 +333,41 @@ NÃO invente número que não está no briefing.`;
 
 ${briefingFatos}
 
-## PARECERES DOS ${sucessos.length} MESTRES
-
-${pareceresTexto}
-
-## CONTAS ATIVAS ONTEM
-
-${contasLista}
-
-## SUA TAREFA (devolva 3 BLOCOS na ordem)
-
-### BLOCO 1 — PLANO DE AÇÃO (markdown lista numerada 3 a 5 itens)
-
-Formato:
-\`\`\`
-1. **[Ação clara]** ([Conta])
-   *Por quê:* [motivo + métrica]
-   *Fundamentou:* [emoji nome]
-
-2. **...**
-\`\`\`
-
-### BLOCO 2 — RESUMOS CURTOS (JSON)
-
-Pra cada mestre, um resumo de 2 a 3 linhas (máx 280 chars) que captura O ESSENCIAL do parecer dele. Esse resumo é o que aparece SEMPRE visível (parecer longo fica colapsado).
+## ANÁLISES POR CONTA DOS ${sucessos.length} MESTRES (já estruturado)
 
 \`\`\`json
-{
-  "pedro-sobral": "texto curto até 280 chars",
-  "felipe-mello": "...",
-  ...
-}
+${JSON.stringify(pareceresJson, null, 2)}
 \`\`\`
 
-Use EXATAMENTE estes slugs: ${slugsMestres}
+## SUA TAREFA
 
-### BLOCO 3 — MATRIZ CONTA × MESTRE (JSON)
+Consolide as análises acima em um PLANO DE AÇÃO EXECUTIVO numerado de 3 a 5 itens.
 
-Pra cada CONTA listada acima, cria uma linha. Pra cada par (conta × mestre), uma célula com:
-- \`frase\`: 4-10 palavras (telegráfico, ex: "Escalar 365 R$286→570", "Pausar 48h", "Pixel cego — 0 buys")
-- \`sinal\`: um de \`good\` (verde, ação positiva/oportunidade), \`bad\` (vermelho, ação destrutiva/risco), \`warn\` (amarelo, atenção), \`mute\` (cinza, neutro/sem ação)
+Cada item deve ter EXATAMENTE este formato em markdown:
 
-\`\`\`json
-[
-  {
-    "conta": "[DCL] Desafio Lofi + Quizz",
-    "celulas": {
-      "pedro-sobral": { "frase": "Escalar 365 R$286→570", "sinal": "good" },
-      "felipe-mello": { "frase": "Pausar PVV freq 1.47", "sinal": "bad" },
-      "andre-vaz": { "frase": "ROAS 8x real (8 buys)", "sinal": "good" },
-      "tatiana-pizzato": { "frase": "Rebalancear 65→55%", "sinal": "warn" },
-      "tiago-tessmann": { "frase": "Exclusão >75% view", "sinal": "warn" }
-    }
-  },
-  ...
-]
+\`\`\`
+1. **[VERBO IMPERATIVO + ação específica]** ([Conta afetada])
+   *Por quê:* [1 frase com motivo + métrica específica]
+   *Fundamentou:* [emoji nome] [, emoji nome2 se mais de um]
+
+2. ...
 \`\`\`
 
-Se uma conta NÃO foi mencionada por um mestre, ainda assim coloca uma célula com \`{ "frase": "sem observação", "sinal": "mute" }\`.
-
-## REGRAS DURAS
-
-- BLOCO 1: NÃO invente número. NÃO recomende escalar conta com ROAS<1. NÃO recomende pausar sem fadiga confirmada.
-- BLOCO 2: resumo é DIFERENTE do parecer completo. É 2-3 linhas DENSAS que captam a ideia central + ação.
-- BLOCO 3: célula deve ser TELEGRÁFICA (4-10 palavras). Sem floreio. Use abreviações ("R$" pode virar "$" se ajudar).
-- Devolva SEM \`\`\`json wrapper externo, mas mantenha os 3 blocos com os separadores \`### BLOCO N\` literais pra eu parsear.`;
+REGRAS DURAS:
+- VERBO IMPERATIVO: "Escalar", "Pausar", "Implementar", "Migrar", "Cortar", "Trocar", "Auditar"
+- NÃO use: "considerar", "talvez", "poderia", "vale a pena"
+- Cite a CONTA específica entre parênteses
+- Cite o MESTRE (com emoji) que fundamentou a ação
+- "Por quê" deve ter NÚMERO REAL do briefing
+- NÃO invente número
+- NÃO recomende escalar conta com ROAS<1
+- Devolva APENAS o markdown da lista numerada, SEM texto antes/depois`;
 
     try {
-      const respostaChief = await runClaudeCLI(promptChief, 120000);
-      // Parser: separa por "### BLOCO N"
-      const partes = respostaChief.split(/### BLOCO \d+[^\n]*\n/);
-      // partes[0] = lixo antes do bloco 1 (geralmente vazio)
-      // partes[1] = plano
-      // partes[2] = resumos json
-      // partes[3] = matriz json
-      plano_md = (partes[1] || '').trim();
-      const blocoResumos = (partes[2] || '').trim();
-      const blocoMatriz = (partes[3] || '').trim();
-      // Extrai JSON entre ```json ... ```
-      const extrairJson = (bloco) => {
-        const m = bloco.match(/```json\s*([\s\S]*?)\s*```/);
-        if (m) return m[1];
-        // Tenta sem wrapper
-        const inicioObj = bloco.indexOf('{');
-        const inicioArr = bloco.indexOf('[');
-        if (inicioObj === -1 && inicioArr === -1) return null;
-        const inicio = (inicioObj !== -1 && (inicioArr === -1 || inicioObj < inicioArr)) ? inicioObj : inicioArr;
-        const fimObj = bloco.lastIndexOf('}');
-        const fimArr = bloco.lastIndexOf(']');
-        const fim = Math.max(fimObj, fimArr);
-        return bloco.slice(inicio, fim + 1);
-      };
-      try {
-        const j = extrairJson(blocoResumos);
-        if (j) resumos = JSON.parse(j);
-      } catch (_) { /* segue sem resumos */ }
-      try {
-        const j = extrairJson(blocoMatriz);
-        if (j) matriz = JSON.parse(j);
-      } catch (_) { /* segue sem matriz */ }
+      plano_md = await runClaudeCLI(promptChief, 90000);
+      plano_md = plano_md.trim();
+      // Remove eventual ```markdown wrapper externo
+      plano_md = plano_md.replace(/^```\w*\s*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
     } catch (e) {
       plano_md = `> ⚠ Chief falhou: ${e.message}`;
     }
@@ -376,14 +375,14 @@ Se uma conta NÃO foi mencionada por um mestre, ainda assim coloca uma célula c
 
   return {
     ok: true,
-    plano_md: plano_md.trim(),
+    plano_md,
     matriz,
     pareceres: sucessos.map(p => ({
       slug: p.slug,
       nome: p.nome,
       avatar: p.avatar,
-      texto: p.texto,
-      resumo: resumos[p.slug] || (p.texto.split(/\n\n/)[0] || '').slice(0, 280),
+      tese_geral: p.tese_geral,
+      por_conta: p.por_conta,
     })),
   };
 }

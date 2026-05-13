@@ -213,14 +213,18 @@ function renderRelatorioMetaAds({
     `;
   })();
 
-  // Cards de pareceres (resumo + colapsável)
+  // Cards de pareceres com drill-down POR CONTA (V3 Andre 2026-05-13)
+  // Hierarquia: Mestre → tese geral + lista de contas → cada conta com diagnóstico + ação
   const pareceresHtml = (() => {
     if (!pareceres || pareceres.length === 0) return '';
+    const corSinalCard = {
+      good: '#7FD296', warn: '#F0BC73', bad: '#E58787', mute: '#888',
+    };
     return `
       <section class="bloco-pareceres">
         <div class="bloco-cabecalho">
           <h2 class="bloco-titulo">🧠 Análise dos Mestres</h2>
-          <div class="bloco-sub">Resumo visível · clica pra ver análise completa</div>
+          <div class="bloco-sub">Clica no mestre → vê análise por conta</div>
         </div>
         <div class="pareceres-grid">
           ${pareceres.map(p => `
@@ -231,9 +235,20 @@ function renderRelatorioMetaAds({
                   <span class="parecer-nome">${esc(p.nome)}</span>
                   <span class="parecer-toggle">▾</span>
                 </div>
-                <div class="parecer-resumo">${esc(p.resumo || '')}</div>
+                <div class="parecer-tese">${esc(p.tese_geral || '')}</div>
               </summary>
-              <div class="parecer-completo">${md(p.texto || '')}</div>
+              <div class="parecer-contas">
+                ${(p.por_conta || []).map(pc => {
+                  const cor = corSinalCard[pc.sinal] || corSinalCard.mute;
+                  return `
+                    <div class="parecer-conta-item" style="border-left-color: ${cor}">
+                      <div class="pc-conta-nome">${esc(pc.conta)}</div>
+                      <div class="pc-acao" style="color: ${cor}">${esc(pc.acao || 'sem observação')}</div>
+                      <div class="pc-diag">${esc(pc.diagnostico || '')}</div>
+                    </div>
+                  `;
+                }).join('') || '<div class="parecer-vazio">Sem análise por conta disponível.</div>'}
+              </div>
             </details>
           `).join('')}
         </div>
@@ -682,6 +697,57 @@ function renderRelatorioMetaAds({
       line-height: 1.5;
       opacity: 0.92;
     }
+    .parecer-tese {
+      font-size: 0.86rem;
+      color: var(--txt);
+      line-height: 1.55;
+      opacity: 0.88;
+      font-style: italic;
+      padding-left: 0.5rem;
+      border-left: 2px solid var(--orange);
+    }
+    .parecer-contas {
+      padding: 0.6rem 1rem 1.1rem;
+      border-top: 1px solid var(--border);
+      margin-top: 0.6rem;
+      padding-top: 0.9rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    .parecer-conta-item {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-left: 3px solid;
+      border-radius: 8px;
+      padding: 0.75rem 0.9rem;
+    }
+    .pc-conta-nome {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--txt-mute);
+      margin-bottom: 0.35rem;
+    }
+    .pc-acao {
+      font-size: 0.92rem;
+      font-weight: 600;
+      line-height: 1.35;
+      margin-bottom: 0.35rem;
+    }
+    .pc-diag {
+      font-size: 0.82rem;
+      color: var(--txt-mute);
+      line-height: 1.55;
+    }
+    .parecer-vazio {
+      padding: 1rem;
+      text-align: center;
+      color: var(--txt-mute);
+      font-size: 0.85rem;
+      font-style: italic;
+    }
     .parecer-completo {
       padding: 0 1.25rem 1.4rem;
       border-top: 1px solid var(--border);
@@ -977,10 +1043,20 @@ function renderRelatorioMetaAds({
       },
     };
 
-    // Gráfico 1: Gasto × Receita (linha dupla com gradient fill)
+    // Gráfico 1: Gasto × Receita (linha dupla com gradient + dropshadow glow)
     new ApexCharts(document.getElementById('grafico-gasto-receita'), {
       ...baseChartOpts,
-      chart: { ...baseChartOpts.chart, type: 'area', height: 280 },
+      chart: {
+        ...baseChartOpts.chart,
+        type: 'area',
+        height: 300,
+        dropShadow: {
+          enabled: true,
+          enabledOnSeries: [0, 1],
+          top: 4, left: 0, blur: 18, opacity: 0.55,
+          color: ['#FF6B1A', '#6CC287'],
+        },
+      },
       series: [
         { name: 'Gasto Meta', data: gastoSerie },
         { name: 'Receita Hotmart', data: receitaSerie },
@@ -988,16 +1064,17 @@ function renderRelatorioMetaAds({
       colors: ['#FF6B1A', '#6CC287'],
       stroke: {
         curve: 'smooth',
-        width: 2.5,
+        width: 3,
         lineCap: 'round',
       },
       fill: {
         type: 'gradient',
         gradient: {
           shadeIntensity: 1,
-          opacityFrom: 0.45,
-          opacityTo: 0.05,
-          stops: [0, 100],
+          type: 'vertical',
+          opacityFrom: 0.65,
+          opacityTo: 0.02,
+          stops: [0, 95],
         },
       },
       dataLabels: { enabled: false },
@@ -1027,18 +1104,41 @@ function renderRelatorioMetaAds({
       },
     }).render();
 
-    // Gráfico 2: Donut distribuição por conta
+    // Gráfico 2: Donut distribuição por conta com 3D-look (gradient + glow forte)
     new ApexCharts(document.getElementById('grafico-distribuicao'), {
       ...baseChartOpts,
-      chart: { ...baseChartOpts.chart, type: 'donut', height: 280 },
+      chart: {
+        ...baseChartOpts.chart,
+        type: 'donut',
+        height: 320,
+        dropShadow: {
+          enabled: true,
+          top: 6, left: 0, blur: 22, opacity: 0.6,
+          color: '#FF6B1A',
+        },
+      },
       series: dadosContas,
       labels: labelsContas,
       colors: ['#FF6B1A', '#A78BFA', '#67E8F9', '#6CC287', '#E6A85C', '#E58787', '#EC4899', '#84CC16'],
-      stroke: { width: 2, colors: ['#06070A'] },
+      stroke: { width: 3, colors: ['#06070A'] },
+      fill: {
+        type: 'gradient',
+        gradient: {
+          shade: 'dark',
+          type: 'diagonal2',
+          shadeIntensity: 0.6,
+          gradientToColors: ['#FFA66B', '#C8B6FF', '#A5F3FC', '#9FE5B3', '#FBCA8F', '#F2A3A3', '#F472B6', '#BEF264'],
+          inverseColors: false,
+          opacityFrom: 1,
+          opacityTo: 1,
+          stops: [0, 100],
+        },
+      },
       plotOptions: {
         pie: {
           donut: {
-            size: '68%',
+            size: '64%',
+            background: 'transparent',
             labels: {
               show: true,
               name: {
@@ -1046,16 +1146,16 @@ function renderRelatorioMetaAds({
                 fontSize: '11px',
                 fontFamily: "'IBM Plex Mono', monospace",
                 color: '#8E96A8',
-                offsetY: -8,
+                offsetY: -10,
               },
               value: {
                 show: true,
-                fontSize: '20px',
+                fontSize: '22px',
                 fontFamily: "'IBM Plex Sans', sans-serif",
                 color: '#F0F2F6',
                 fontWeight: 700,
                 formatter: v => 'R$ ' + Number(v).toLocaleString('pt-BR', {maximumFractionDigits: 0}),
-                offsetY: 5,
+                offsetY: 6,
               },
               total: {
                 show: true,
@@ -1068,7 +1168,12 @@ function renderRelatorioMetaAds({
               },
             },
           },
+          expandOnClick: true,
         },
+      },
+      states: {
+        hover: { filter: { type: 'lighten', value: 0.08 } },
+        active: { filter: { type: 'darken', value: 0.15 } },
       },
       dataLabels: { enabled: false },
       legend: {
@@ -1084,14 +1189,23 @@ function renderRelatorioMetaAds({
       },
     }).render();
 
-    // Gráfico 3: ROAS diário (barras coloridas por valor)
+    // Gráfico 3: ROAS diário (barras coloridas com gradient + dropshadow)
     new ApexCharts(document.getElementById('grafico-roas'), {
       ...baseChartOpts,
-      chart: { ...baseChartOpts.chart, type: 'bar', height: 240 },
+      chart: {
+        ...baseChartOpts.chart,
+        type: 'bar',
+        height: 260,
+        dropShadow: {
+          enabled: true,
+          top: 3, left: 0, blur: 10, opacity: 0.45,
+          color: '#6CC287',
+        },
+      },
       series: [{ name: 'ROAS', data: roasSerie }],
       plotOptions: {
         bar: {
-          borderRadius: 4,
+          borderRadius: 6,
           columnWidth: '60%',
           distributed: true,
           colors: {
@@ -1101,6 +1215,17 @@ function renderRelatorioMetaAds({
               { from: 3, to: 999, color: '#6CC287' },
             ],
           },
+        },
+      },
+      fill: {
+        type: 'gradient',
+        gradient: {
+          shade: 'dark',
+          type: 'vertical',
+          shadeIntensity: 0.4,
+          opacityFrom: 1,
+          opacityTo: 0.75,
+          stops: [0, 100],
         },
       },
       colors: roasSerie.map(v => v < 1 ? '#E58787' : v < 3 ? '#E6A85C' : '#6CC287'),
