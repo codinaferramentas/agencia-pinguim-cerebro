@@ -140,15 +140,23 @@ function renderRelatorioExecutivo({
   const falhas   = modulos.filter(m => !m.ok && !m.skipped);
 
   // Versoes nav (parent_id, V1/V2/V3)
-  const versionamentoHtml = (versionamento && versionamento.cadeia && versionamento.cadeia.length > 1)
-    ? `<div class="versoes-nav">
-        <span class="versoes-label">Versões:</span>
-        ${versionamento.cadeia.map(v => v.id === versionamento.entregavel_id
-          ? `<span class="versao-atual">V${v.versao}</span>`
-          : `<a class="versao-link" href="/entregavel/${esc(v.id)}">V${v.versao}</a>`
-        ).join('')}
-      </div>`
-    : '';
+  // Andre 2026-05-13: mostra só versao atual em destaque + <details> colapsavel
+  // pra anteriores. Antes ficava V1 V2 V3 ... Vn empilhado e poluia a headline.
+  const versionamentoHtml = (() => {
+    if (!versionamento || !versionamento.cadeia || versionamento.cadeia.length <= 1) return '';
+    const cadeia = versionamento.cadeia.slice().sort((a, b) => (a.versao || 0) - (b.versao || 0));
+    const atual = cadeia.find(v => v.id === versionamento.entregavel_id) || cadeia[cadeia.length - 1];
+    const anteriores = cadeia.filter(v => v.id !== atual.id);
+    const linksAnteriores = anteriores.map(v =>
+      `<a class="versao-link" href="/entregavel/${esc(v.id)}">V${v.versao}</a>`
+    ).join('');
+    return `<div class="versoes-nav">
+        <span class="versao-atual">V${atual.versao}</span>
+        ${anteriores.length > 0
+          ? `<details class="versoes-anteriores"><summary>ver ${anteriores.length} versão${anteriores.length > 1 ? 'ões' : ''} anterior${anteriores.length > 1 ? 'es' : ''}</summary><div class="versoes-lista">${linksAnteriores}</div></details>`
+          : ''}
+      </div>`;
+  })();
 
   // Modulos table (footer tecnico)
   const modulosHtml = modulos.length === 0 ? '' : modulos.map(m => {
@@ -437,6 +445,20 @@ function renderRelatorioExecutivo({
       transition: color 0.15s;
     }
     .versao-link:hover { color: var(--txt); }
+    .versoes-anteriores summary {
+      cursor: pointer;
+      color: var(--txt-mute);
+      list-style: none;
+      transition: color 0.15s;
+    }
+    .versoes-anteriores summary:hover { color: var(--txt); }
+    .versoes-anteriores summary::-webkit-details-marker { display: none; }
+    .versoes-anteriores[open] summary { color: var(--txt); }
+    .versoes-lista {
+      display: inline-flex;
+      gap: 0.4rem;
+      margin-left: 0.5rem;
+    }
     /* Footer */
     footer.page-footer {
       margin-top: 4rem;
@@ -469,7 +491,6 @@ function renderRelatorioExecutivo({
       <div class="meta-linha">
         <span>${esc(socio.nome || 'Sócio')}</span>
         <span>janela ${janela}h</span>
-        <span>dia alvo ${esc(diaAlvo)}</span>
         <span>gerado ${dataFmt}</span>
       </div>
       ${versionamentoHtml}

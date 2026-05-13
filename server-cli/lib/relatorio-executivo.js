@@ -736,7 +736,11 @@ async function gerarRelatorioExecutivo({
   let entregavel = null;
   if (salvar) {
     try {
-      const titulo = `Executivo diário — ${diaSemana} ${dataLongaBR} (${janela_horas}h)`;
+      // Andre 2026-05-13: título reflete HOJE (data em que o sócio lê) + indica
+      // dados de DD pra evitar confusão. Antes: "terça-feira 12 de maio" (dia alvo
+      // ontem) lido na quarta confundia. Agora: "quarta-feira 13 de maio · dados
+      // de 12 de maio".
+      const titulo = `Executivo diário — ${diaSemanaHoje} ${dataHojeBrt} · dados de ${dataLongaBR}`;
       entregavel = await db.salvarEntregavel({
         cliente_id: cid,
         tipo: 'relatorio-executivo-diario',
@@ -771,7 +775,7 @@ async function gerarRelatorioExecutivo({
     entregavel_id: entregavel?.id || null,
     entregavel_url: entregavel?.id ? `/entregavel/${entregavel.id}` : null,
     entregavel_versao: entregavel?.versao || null,
-    titulo: entregavel ? `Executivo diário — ${diaSemana} ${dataLongaBR} (${janela_horas}h)` : null,
+    titulo: entregavel ? `Executivo diário — ${diaSemanaHoje} ${dataHojeBrt} · dados de ${dataLongaBR}` : null,
     janela_horas,
     dia_alvo_brt,
     md_final,
