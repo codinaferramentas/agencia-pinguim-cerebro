@@ -210,6 +210,7 @@ export async function renderFinOps() {
       tab('visao', 'Visão geral'),
       tab('tokens', 'Tokens IA'),
       tab('por-agente', 'Por agente'),
+      tab('jobs-pve', 'Jobs P-V-E'),
       tab('banco', 'Banco'),
       tab('alertas', 'Alertas'),
       tab('historico', 'Histórico'),
@@ -236,6 +237,7 @@ async function renderAba(qual, container) {
     if (qual === 'visao') await renderVisao(container);
     else if (qual === 'tokens') await renderTokens(container);
     else if (qual === 'por-agente') await renderPorAgente(container);
+    else if (qual === 'jobs-pve') await renderJobsPVE(container);
     else if (qual === 'banco') await renderBanco(container);
     else if (qual === 'alertas') await renderAlertas(container);
     else if (qual === 'historico') await renderHistorico(container);
@@ -365,6 +367,130 @@ async function renderTokens(container) {
     el('div', { class: 'finops-nota' },
       '⚠ Custos por operação são estimados (heurística por consumidor). Total agregado é exato a partir de ingest_lotes.custo_usd.'),
   );
+}
+
+// ============================================================
+// JOBS P-V-E — custo por job Plan-Validate-Execute (V2.15 Fase 3)
+// Consome /api/jobs/custo do server-cli (Pinguim CLI Max). Sem seletor de
+// periodo padrao, expõe filtro 7d/30d/90d/all.
+// ============================================================
+async function renderJobsPVE(container) {
+  container.innerHTML = '';
+  const SERVER_CLI = 'http://localhost:3737';
+
+  // Header com filtro janela
+  const janelaKey = 'pinguim:finops:jobs-pve:janela';
+  let janelaAtual = localStorage.getItem(janelaKey) || '30d';
+
+  const header = el('div', { style: 'display:flex;gap:.5rem;align-items:center;margin-bottom:1rem' }, [
+    el('span', { style: 'font-size:.8125rem;color:var(--fg-muted)' }, 'Janela:'),
+    ...['7d', '30d', '90d', 'all'].map(j => el('button', {
+      class: 'btn',
+      type: 'button',
+      style: janelaAtual === j ? 'background:var(--fg-title);color:var(--bg-elevated);font-weight:600' : '',
+      onclick: () => { localStorage.setItem(janelaKey, j); janelaAtual = j; renderJobsPVE(container); },
+    }, j === 'all' ? 'tudo' : j)),
+  ]);
+  container.append(header);
+
+  // Fetch
+  let data;
+  try {
+    const r = await fetch(`${SERVER_CLI}/api/jobs/custo?janela=${encodeURIComponent(janelaAtual)}&limite=100`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    data = await r.json();
+    if (!data.ok) throw new Error(data.error || 'resposta sem ok');
+  } catch (e) {
+    container.append(el('div', { class: 'seguranca-erro' },
+      `Não consegui falar com server-cli em ${SERVER_CLI}. ${e.message}`));
+    return;
+  }
+
+  const resumo = data.resumo || {};
+  const jobs = data.jobs || [];
+
+  // Card principal (custo total + métricas)
+  const cardPrincipal = el('div', { class: 'finops-card-principal' }, [
+    el('div', { class: 'finops-eyebrow' },
+      `Janela ${janelaAtual} · ${resumo.total_jobs || 0} job${(resumo.total_jobs || 0) === 1 ? '' : 's'}`),
+    el('div', { class: 'finops-total-num' }, fmtUSD(Number(resumo.custo_total_usd || 0))),
+    el('div', { class: 'finops-total-brl', title: rotuloCotacao() }, fmtBRL(Number(resumo.custo_total_usd || 0))),
+    el('div', { class: 'finops-projecao' }, [
+      el('span', {}, `📊 Concluídos: ${resumo.concluidos || 0} · Falhou: ${resumo.falhou || 0} · `),
+      el('span', {}, `Médio concluído: `),
+      el('strong', {}, fmtUSD(Number(resumo.custo_medio_concluido_usd || 0))),
+    ]),
+  ]);
+  container.append(cardPrincipal);
+
+  // Mini-cards de tokens
+  const totalTokensIn = Number(resumo.tokens_in_total || 0);
+  const totalTokensOut = Number(resumo.tokens_out_total || 0);
+  const duracaoSeg = Math.round(Number(resumo.duracao_total_ms || 0) / 1000);
+  const cardsResumo = el('div', { class: 'finops-grid', style: 'margin-top:1rem' }, [
+    el('div', { class: 'finops-card' }, [
+      el('div', { class: 'finops-card-titulo' }, [el('span', {}, 'Tokens IN'), el('span', { class: 'finops-card-pct' }, 'soma')]),
+      el('div', { class: 'finops-card-valor' }, totalTokensIn.toLocaleString('pt-BR')),
+      el('div', { class: 'finops-card-brl' }, 'inclui cache_read+create'),
+    ]),
+    el('div', { class: 'finops-card' }, [
+      el('div', { class: 'finops-card-titulo' }, [el('span', {}, 'Tokens OUT'), el('span', { class: 'finops-card-pct' }, 'soma')]),
+      el('div', { class: 'finops-card-valor' }, totalTokensOut.toLocaleString('pt-BR')),
+      el('div', { class: 'finops-card-brl' }, 'gerados'),
+    ]),
+    el('div', { class: 'finops-card' }, [
+      el('div', { class: 'finops-card-titulo' }, [el('span', {}, 'Duração total'), el('span', { class: 'finops-card-pct' }, 'soma')]),
+      el('div', { class: 'finops-card-valor' }, `${duracaoSeg}s`),
+      el('div', { class: 'finops-card-brl' }, 'planner + executor'),
+    ]),
+  ]);
+  container.append(cardsResumo);
+
+  if (!jobs.length) {
+    container.append(el('div', { class: 'seguranca-empty', style: 'margin-top:1rem' },
+      `Nenhum job P-V-E na janela ${janelaAtual}. Custo de token só aparece pra jobs criados depois da V2.15 Fase 3 (FinOps por job).`));
+    return;
+  }
+
+  // Tabela detalhada
+  const thStyle = 'padding:.5rem .75rem;border-bottom:1px solid var(--docs-line);text-align:left;font-size:.75rem;color:var(--fg-muted);text-transform:uppercase;letter-spacing:.05em';
+  const thStyleRight = thStyle + ';text-align:right';
+  const tabela = el('table', { style: 'margin-top:1.5rem;width:100%;border-collapse:collapse' }, [
+    el('thead', {}, el('tr', {}, [
+      el('th', { style: thStyle }, 'Criado'),
+      el('th', { style: thStyle }, 'Tipo'),
+      el('th', { style: thStyle }, 'Status'),
+      el('th', { style: thStyle }, 'Pedido'),
+      el('th', { style: thStyleRight }, 'Planner'),
+      el('th', { style: thStyleRight }, 'Executor'),
+      el('th', { style: thStyleRight }, 'Total'),
+      el('th', { style: thStyleRight }, 'Dur.'),
+    ])),
+    el('tbody', {}, jobs.map(j => {
+      const dt = j.criado_em ? new Date(j.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+      const total = Number(j.custo_total_usd || 0);
+      const plan = Number(j.planner_custo_usd || 0);
+      const exec = Number(j.executor_custo_usd || 0);
+      const durSeg = Math.round(Number(j.duracao_total_ms || 0) / 1000);
+      const statusCor = j.status === 'concluido' ? '#2db955' : j.status === 'falhou' ? '#d24c4c' : '#999';
+      const tdBase = 'padding:.5rem .75rem;border-bottom:1px solid var(--docs-line)';
+      return el('tr', {}, [
+        el('td', { style: `${tdBase};font-family:var(--docs-mono);font-size:.75rem` }, dt),
+        el('td', { style: `${tdBase};font-size:.8125rem` }, j.tipo_pedido || '—'),
+        el('td', { style: `${tdBase};font-size:.75rem;color:${statusCor}` }, j.status),
+        el('td', { style: `${tdBase};font-size:.8125rem;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`, title: j.briefing_resumo || '' },
+          j.briefing_resumo || j.id.slice(0, 8)),
+        el('td', { style: `${tdBase};text-align:right;font-family:var(--docs-mono);font-size:.75rem` }, plan ? fmtUSD(plan) : '—'),
+        el('td', { style: `${tdBase};text-align:right;font-family:var(--docs-mono);font-size:.75rem` }, exec ? fmtUSD(exec) : '—'),
+        el('td', { style: `${tdBase};text-align:right;font-family:var(--docs-mono);font-size:.8125rem;font-weight:600` }, fmtUSD(total)),
+        el('td', { style: `${tdBase};text-align:right;font-size:.75rem;color:var(--fg-muted)` }, `${durSeg}s`),
+      ]);
+    })),
+  ]);
+  container.append(tabela);
+
+  container.append(el('div', { class: 'finops-hint', style: 'margin-top:1rem;color:var(--fg-muted);font-size:.75rem' },
+    'Custo capturado direto do Claude CLI via --output-format json/stream-json (number real cobrado pela Anthropic, não estimativa). Jobs anteriores à V2.15 Fase 3 não têm dado de custo (campos ficam vazios).'));
 }
 
 // ============================================================

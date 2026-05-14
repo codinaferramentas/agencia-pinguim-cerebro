@@ -46,11 +46,20 @@ async function criarJob({
 // ============================================================
 // Atualizar plano + colocar status=aguardando_aprovacao
 // ============================================================
-async function gravarPlano({ job_id, plano_json, briefing_resumo, tipo_pedido = null, squad_executora = null }) {
+async function gravarPlano({
+  job_id, plano_json, briefing_resumo,
+  tipo_pedido = null, squad_executora = null,
+  // V2.15 Fase 3 — FinOps por job
+  planner_custo_usd = null, planner_tokens_in = null, planner_tokens_out = null, planner_duracao_ms = null,
+}) {
   const planoStr = JSON.stringify(plano_json).replace(/'/g, "''");
   const camposExtras = [];
   if (tipo_pedido) camposExtras.push(`tipo_pedido = ${esc(tipo_pedido)}`);
   if (squad_executora) camposExtras.push(`squad_executora = ${esc(squad_executora)}`);
+  if (planner_custo_usd != null) camposExtras.push(`planner_custo_usd = ${Number(planner_custo_usd)}`);
+  if (planner_tokens_in != null) camposExtras.push(`planner_tokens_in = ${parseInt(planner_tokens_in, 10)}`);
+  if (planner_tokens_out != null) camposExtras.push(`planner_tokens_out = ${parseInt(planner_tokens_out, 10)}`);
+  if (planner_duracao_ms != null) camposExtras.push(`planner_duracao_ms = ${parseInt(planner_duracao_ms, 10)}`);
   const extras = camposExtras.length ? ', ' + camposExtras.join(', ') : '';
   const sql = `
     UPDATE pinguim.jobs
@@ -58,7 +67,7 @@ async function gravarPlano({ job_id, plano_json, briefing_resumo, tipo_pedido = 
            briefing_resumo = ${esc(briefing_resumo)},
            status = 'aguardando_aprovacao'${extras}
      WHERE id = '${job_id}'
-    RETURNING id, status, briefing_resumo
+    RETURNING id, status, briefing_resumo, planner_custo_usd, planner_tokens_in, planner_tokens_out, planner_duracao_ms
   `;
   const r = await db.rodarSQL(sql);
   return Array.isArray(r) && r[0] ? r[0] : null;
@@ -117,17 +126,27 @@ async function pegarProximoJob({ worker_id }) {
 
 // ============================================================
 // Marcar job concluído com sucesso (worker terminou)
+// V2.15 Fase 3 (FinOps): grava custo/tokens do executor
 // ============================================================
-async function concluirJob({ job_id, entregavel_id = null, resultado_json = null }) {
+async function concluirJob({
+  job_id, entregavel_id = null, resultado_json = null,
+  executor_custo_usd = null, executor_tokens_in = null, executor_tokens_out = null, executor_duracao_ms = null,
+}) {
   const resStr = resultado_json ? `'${JSON.stringify(resultado_json).replace(/'/g, "''")}'::jsonb` : 'NULL';
+  const camposExtras = [];
+  if (executor_custo_usd != null) camposExtras.push(`executor_custo_usd = ${Number(executor_custo_usd)}`);
+  if (executor_tokens_in != null) camposExtras.push(`executor_tokens_in = ${parseInt(executor_tokens_in, 10)}`);
+  if (executor_tokens_out != null) camposExtras.push(`executor_tokens_out = ${parseInt(executor_tokens_out, 10)}`);
+  if (executor_duracao_ms != null) camposExtras.push(`executor_duracao_ms = ${parseInt(executor_duracao_ms, 10)}`);
+  const extras = camposExtras.length ? ', ' + camposExtras.join(', ') : '';
   const sql = `
     UPDATE pinguim.jobs
        SET status = 'concluido',
            entregavel_id = ${entregavel_id ? `'${entregavel_id}'` : 'NULL'},
            resultado_json = ${resStr},
-           concluido_em = now()
+           concluido_em = now()${extras}
      WHERE id = '${job_id}'
-    RETURNING id, status, entregavel_id
+    RETURNING id, status, entregavel_id, executor_custo_usd, executor_tokens_in, executor_tokens_out
   `;
   const r = await db.rodarSQL(sql);
   return Array.isArray(r) && r[0] ? r[0] : null;

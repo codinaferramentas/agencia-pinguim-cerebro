@@ -43,7 +43,8 @@ PROIBIDO:
 Devolva APENAS o markdown final. Sem preambulo "Executando...", sem rodape "Foi util?".`;
 
 // ============================================================
-// Executa um job aprovado. Retorna { ok, markdown, duracao_ms, stderr_tail }
+// Executa um job aprovado. Retorna { ok, markdown, duracao_ms, custo_usd, tokens_in, tokens_out, stderr_tail }
+// V2.15 Fase 3 (FinOps): captura custo real do Claude CLI via stream-json.
 // Worker e quem decide se salva entregavel + atualiza status do job.
 // ============================================================
 function executarJob({ pedido_original, plano_json, timeout_ms = 600_000 }) {
@@ -55,9 +56,11 @@ function executarJob({ pedido_original, plano_json, timeout_ms = 600_000 }) {
     // cwd = server-cli/ pra que scripts/*.sh resolvam relativos
     const serverCliDir = path.resolve(__dirname, '..');
 
+    // stream-json emite NDJSON: 1 linha por evento. Ultima linha {type:'result',...} traz usage+cost.
     const args = [
       '-p',
-      '--output-format', 'text',
+      '--output-format', 'stream-json',
+      '--verbose', // requerido pra stream-json
       '--allowedTools', 'Bash,Read,Glob,Grep',
     ];
     const proc = spawn('claude', args, {
@@ -111,15 +114,45 @@ Execute o plano agora. Devolva apenas o markdown final.`;
         reject(new Error(`executor exit ${code} | dur=${dur}ms | stderr_tail=${stderr.slice(-300)}`));
         return;
       }
-      const md = stdout.trim();
-      if (!md || md.length < 50) {
-        reject(new Error(`executor output curto demais (${md.length} chars) | stderr_tail=${stderr.slice(-200)}`));
+      // Parse NDJSON: cada linha eh um evento. Pega o ultimo {type:'result',...} pra usage+cost,
+      // e concatena {type:'assistant'} pra reconstituir o markdown final.
+      let markdown = '';
+      let metricas = { custo_usd: null, tokens_in: 0, tokens_out: 0, duracao_ms: dur, session_id: null };
+      const linhas = stdout.split(/\r?\n/).filter(l => l.trim().startsWith('{'));
+      for (const linha of linhas) {
+        try {
+          const evt = JSON.parse(linha);
+          if (evt.type === 'result' && typeof evt.result === 'string') {
+            markdown = evt.result.trim();
+            const u = evt.usage || {};
+            metricas = {
+              custo_usd: typeof evt.total_cost_usd === 'number' ? evt.total_cost_usd : null,
+              tokens_in: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0),
+              tokens_out: u.output_tokens || 0,
+              tokens_cache_read: u.cache_read_input_tokens || 0,
+              tokens_cache_create: u.cache_creation_input_tokens || 0,
+              duracao_ms: evt.duration_ms || dur,
+              session_id: evt.session_id || null,
+            };
+          }
+          // Fallback: se nao houver evt 'result' com .result, tenta extrair texto de eventos 'assistant'
+          else if (!markdown && evt.type === 'assistant' && evt.message?.content) {
+            const txt = evt.message.content.filter(c => c.type === 'text').map(c => c.text).join('');
+            if (txt && txt.length > markdown.length) markdown = txt.trim();
+          }
+        } catch (_) {
+          // ignora linha malformada
+        }
+      }
+      if (!markdown || markdown.length < 50) {
+        reject(new Error(`executor output curto demais (${markdown.length} chars) | linhas=${linhas.length} | stderr_tail=${stderr.slice(-200)}`));
         return;
       }
       resolve({
         ok: true,
-        markdown: md,
+        markdown,
         duracao_ms: dur,
+        metricas,
         stderr_tail: stderr.slice(-500),
       });
     });

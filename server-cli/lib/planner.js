@@ -52,7 +52,8 @@ NAO retorne nada alem do JSON. NAO use markdown. NAO comente.`;
 
 // ============================================================
 // Chama Claude CLI com pedido bruto + contexto.
-// Retorna o JSON parseado do plano.
+// Retorna { plano, metricas } onde metricas = { custo_usd, tokens_in, tokens_out, duracao_ms }.
+// V2.15 Fase 3 (FinOps): usa --output-format json pra capturar custo real cobrado.
 // ============================================================
 function gerarPlano({ pedido_original, contexto = '', timeout_ms = 60_000 }) {
   return new Promise((resolve, reject) => {
@@ -60,7 +61,7 @@ function gerarPlano({ pedido_original, contexto = '', timeout_ms = 60_000 }) {
     delete env.CLAUDECODE;
     delete env.CLAUDE_CODE_ENTRYPOINT;
 
-    const args = ['-p', '--output-format', 'text'];
+    const args = ['-p', '--output-format', 'json'];
     const proc = spawn('claude', args, {
       cwd: process.cwd(),
       env,
@@ -103,8 +104,22 @@ Devolva APENAS o JSON do plano. Sem cercas, sem texto extra.`;
         return;
       }
       try {
-        const plano = parsearPlano(stdout);
-        resolve(plano);
+        // Envelope JSON do CLI: { result, total_cost_usd, usage, duration_ms, ... }
+        const envelope = JSON.parse(stdout.trim());
+        const plano = parsearPlano(envelope.result || '');
+        const usage = envelope.usage || {};
+        const metricas = {
+          custo_usd: typeof envelope.total_cost_usd === 'number' ? envelope.total_cost_usd : null,
+          tokens_in: (usage.input_tokens || 0)
+            + (usage.cache_creation_input_tokens || 0)
+            + (usage.cache_read_input_tokens || 0),
+          tokens_out: usage.output_tokens || 0,
+          tokens_cache_read: usage.cache_read_input_tokens || 0,
+          tokens_cache_create: usage.cache_creation_input_tokens || 0,
+          duracao_ms: envelope.duration_ms || null,
+          session_id: envelope.session_id || null,
+        };
+        resolve({ plano, metricas });
       } catch (e) {
         reject(new Error(`planner parse falhou: ${e.message} | raw: ${stdout.slice(0, 400)}`));
       }

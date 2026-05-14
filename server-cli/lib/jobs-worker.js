@@ -18,6 +18,7 @@
 
 const jobs = require('./jobs');
 const executor = require('./executor');
+const cronRelatorios = require('./cron-relatorios');
 const db = require('./db');
 const os = require('os');
 
@@ -84,11 +85,45 @@ async function _processarUmJob() {
   const job = await jobs.pegarProximoJob({ worker_id: WORKER_ID });
   if (!job) return false;
 
-  console.log(`[jobs-worker] pegou job=${job.id} | pedido="${job.pedido_original.slice(0, 80)}..."`);
+  console.log(`[jobs-worker] pegou job=${job.id} tipo=${job.tipo_pedido || 'generico'} | pedido="${(job.pedido_original || '').slice(0, 80)}..."`);
   const t0 = Date.now();
 
   try {
-    // Executa o plano via Claude CLI background
+    // ========================================================
+    // Desvio por tipo_pedido (V2.15 — cron-relatorio é fluxo dedicado)
+    // ========================================================
+    if (job.tipo_pedido === 'cron-relatorio') {
+      const r = await cronRelatorios.executarJobCronRelatorio(job);
+      const dur_total = Date.now() - t0;
+      if (!r.ok) {
+        // Caso "pulado:slug_sem_handler" — marca como falha controlada, libera fila
+        await jobs.falharJob({ job_id: job.id, motivo: r.motivo || 'cron-relatorio retornou ok=false' });
+        console.log(`[jobs-worker] cron-relatorio NAO executou job=${job.id} motivo="${r.motivo}"`);
+        return true;
+      }
+      await jobs.concluirJob({
+        job_id: job.id,
+        entregavel_id: r.entregavel_id,
+        resultado_json: {
+          entregavel_id: r.entregavel_id,
+          entregavel_versao: r.entregavel_versao,
+          insights_extraidos: r.insights_extraidos,
+          whatsapp_ok: r.whatsapp_ok,
+          whatsapp_motivo: r.whatsapp_motivo,
+          duracao_gerar_ms: r.duracao_ms,
+        },
+      });
+      // marca notificado se WhatsApp foi (cron não precisa do Pinguim avisar de novo)
+      if (r.whatsapp_ok) {
+        try { await jobs.marcarNotificado({ job_id: job.id }); } catch (_) {}
+      }
+      console.log(`[jobs-worker] cron-relatorio OK job=${job.id} | entregavel=${r.entregavel_id} v${r.entregavel_versao} | whatsapp=${r.whatsapp_ok ? 'OK' : 'NAO:'+r.whatsapp_motivo} | total=${dur_total}ms`);
+      return true;
+    }
+
+    // ========================================================
+    // Fluxo padrão (V2.15 Plan-and-Execute) — Claude CLI background
+    // ========================================================
     const resultado = await executor.executarJob({
       pedido_original: job.pedido_original,
       plano_json: job.plano_json,
@@ -118,7 +153,8 @@ async function _processarUmJob() {
       },
     });
 
-    // Atualiza job pra concluido
+    // Atualiza job pra concluido (V2.15 Fase 3: grava custo/tokens do executor)
+    const m = resultado.metricas || {};
     await jobs.concluirJob({
       job_id: job.id,
       entregavel_id: entregavel?.id || null,
@@ -126,10 +162,18 @@ async function _processarUmJob() {
         markdown_chars: resultado.markdown.length,
         duracao_ms: resultado.duracao_ms,
         entregavel_id: entregavel?.id || null,
+        custo_usd: m.custo_usd,
+        tokens_in: m.tokens_in,
+        tokens_out: m.tokens_out,
+        session_id: m.session_id,
       },
+      executor_custo_usd: m.custo_usd,
+      executor_tokens_in: m.tokens_in,
+      executor_tokens_out: m.tokens_out,
+      executor_duracao_ms: m.duracao_ms || resultado.duracao_ms,
     });
 
-    console.log(`[jobs-worker] OK job=${job.id} | entregavel=${entregavel?.id || 'NAO_SALVO'} | total=${Date.now() - t0}ms`);
+    console.log(`[jobs-worker] OK job=${job.id} | entregavel=${entregavel?.id || 'NAO_SALVO'} | custo=$${(m.custo_usd || 0).toFixed(4)} | in/out=${m.tokens_in || 0}/${m.tokens_out || 0} | total=${Date.now() - t0}ms`);
     return true;
   } catch (e) {
     const dur_fail = Date.now() - t0;

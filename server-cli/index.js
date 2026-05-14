@@ -3615,7 +3615,7 @@ app.post('/api/jobs/planejar', async (req, res) => {
     }
     console.log(`[jobs-planejar] job=${job_id} | pedido="${job.pedido_original.slice(0, 80)}..."`);
     const t0 = Date.now();
-    const plano = await planner.gerarPlano({
+    const { plano, metricas } = await planner.gerarPlano({
       pedido_original: job.pedido_original,
       contexto: contexto || '',
     });
@@ -3626,9 +3626,13 @@ app.post('/api/jobs/planejar', async (req, res) => {
       briefing_resumo: plano.briefing_resumo,
       tipo_pedido: plano.tipo_pedido || null,
       squad_executora: plano.squad_executora || null,
+      planner_custo_usd: metricas.custo_usd,
+      planner_tokens_in: metricas.tokens_in,
+      planner_tokens_out: metricas.tokens_out,
+      planner_duracao_ms: metricas.duracao_ms || planejou_ms,
     });
-    console.log(`[jobs-planejar] OK ${planejou_ms}ms | tipo=${plano.tipo_pedido} | squad=${plano.squad_executora}`);
-    res.json({ ok: true, job: atualizado, plano, planejou_ms });
+    console.log(`[jobs-planejar] OK ${planejou_ms}ms | tipo=${plano.tipo_pedido} | squad=${plano.squad_executora} | custo=$${(metricas.custo_usd || 0).toFixed(4)} | in/out=${metricas.tokens_in}/${metricas.tokens_out}`);
+    res.json({ ok: true, job: atualizado, plano, metricas, planejou_ms });
   } catch (e) {
     console.error('[jobs-planejar] erro:', e.message);
     res.status(500).json({ ok: false, error: e.message });
@@ -3652,20 +3656,25 @@ app.post('/api/jobs/replanejar', async (req, res) => {
     const contextoEnriquecido = `${contexto || ''}\n\n## RESPOSTAS DO SOCIO AS PERGUNTAS PENDENTES ANTERIORES\n${respostas_socio}\n\n## PLANO ANTERIOR (com perguntas que ja foram respondidas acima)\n${JSON.stringify(job.plano_json, null, 2)}`;
     console.log(`[jobs-replanejar] job=${job_id} | respostas="${respostas_socio.slice(0, 80)}..."`);
     const t0 = Date.now();
-    const plano = await planner.gerarPlano({
+    const { plano, metricas } = await planner.gerarPlano({
       pedido_original: job.pedido_original,
       contexto: contextoEnriquecido,
     });
     const planejou_ms = Date.now() - t0;
+    // Replanner re-grava planner_*; soma com o custo anterior fica como historico no log (nao acumula no cache da view — eh o ultimo plano que vale)
     const atualizado = await jobsLib.gravarPlano({
       job_id,
       plano_json: plano,
       briefing_resumo: plano.briefing_resumo,
       tipo_pedido: plano.tipo_pedido || null,
       squad_executora: plano.squad_executora || null,
+      planner_custo_usd: (Number(job.planner_custo_usd) || 0) + (metricas.custo_usd || 0),
+      planner_tokens_in: (Number(job.planner_tokens_in) || 0) + (metricas.tokens_in || 0),
+      planner_tokens_out: (Number(job.planner_tokens_out) || 0) + (metricas.tokens_out || 0),
+      planner_duracao_ms: (Number(job.planner_duracao_ms) || 0) + (metricas.duracao_ms || planejou_ms),
     });
-    console.log(`[jobs-replanejar] OK ${planejou_ms}ms | perguntas_restantes=${(plano.perguntas_pendentes || []).length}`);
-    res.json({ ok: true, job: atualizado, plano, planejou_ms });
+    console.log(`[jobs-replanejar] OK ${planejou_ms}ms | perguntas_restantes=${(plano.perguntas_pendentes || []).length} | custo+=$${(metricas.custo_usd || 0).toFixed(4)}`);
+    res.json({ ok: true, job: atualizado, plano, metricas, planejou_ms });
   } catch (e) {
     console.error('[jobs-replanejar] erro:', e.message);
     res.status(500).json({ ok: false, error: e.message });
@@ -3751,6 +3760,56 @@ app.post('/api/jobs/pendentes-notificar', async (req, res) => {
     res.json({ ok: true, total: r.length, jobs: r });
   } catch (e) {
     console.error('[jobs-pendentes] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// V2.15 Fase 3 (FinOps): custo agregado de jobs P-V-E
+// GET /api/jobs/custo?janela=30d  -> resumo + lista detalhada
+app.get('/api/jobs/custo', async (req, res) => {
+  try {
+    const janela = (req.query.janela || '30d').toString();
+    const limite = parseInt(req.query.limite || '50', 10);
+    // Janela aceita "7d", "30d", "90d", "all"
+    const intervalo = janela === 'all'
+      ? '1970-01-01'
+      : `now() - interval '${parseInt(janela.replace('d',''), 10) || 30} days'`;
+    const where = janela === 'all' ? '' : `WHERE criado_em >= ${intervalo}`;
+    const resumoSQL = `
+      SELECT
+        COUNT(*)                                       AS total_jobs,
+        COUNT(*) FILTER (WHERE status='concluido')     AS concluidos,
+        COUNT(*) FILTER (WHERE status='falhou')        AS falhou,
+        COALESCE(SUM(custo_total_usd), 0)::numeric(10,4) AS custo_total_usd,
+        COALESCE(SUM(tokens_in_total), 0)              AS tokens_in_total,
+        COALESCE(SUM(tokens_out_total), 0)             AS tokens_out_total,
+        COALESCE(SUM(duracao_total_ms), 0)             AS duracao_total_ms,
+        COALESCE(AVG(custo_total_usd) FILTER (WHERE status='concluido'), 0)::numeric(10,4) AS custo_medio_concluido_usd
+      FROM pinguim.jobs_custo ${where};
+    `;
+    const listaSQL = `
+      SELECT
+        id, canal_origem, tipo_pedido, status, criado_em, concluido_em,
+        custo_total_usd, tokens_in_total, tokens_out_total, duracao_total_ms,
+        planner_custo_usd, executor_custo_usd,
+        briefing_resumo
+      FROM pinguim.jobs_custo
+      ${where}
+      ORDER BY criado_em DESC
+      LIMIT ${limite};
+    `;
+    const [resumoArr, listaArr] = await Promise.all([
+      db.rodarSQL(resumoSQL),
+      db.rodarSQL(listaSQL),
+    ]);
+    res.json({
+      ok: true,
+      janela,
+      resumo: Array.isArray(resumoArr) && resumoArr[0] ? resumoArr[0] : {},
+      jobs: Array.isArray(listaArr) ? listaArr : [],
+    });
+  } catch (e) {
+    console.error('[jobs-custo] erro:', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
