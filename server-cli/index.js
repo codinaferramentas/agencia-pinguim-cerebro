@@ -1079,6 +1079,20 @@ app.get('/entregavel/:id', async (req, res) => {
           return;
         }
 
+        // V2.15.3 — Hotmart Diário (book com squad advisory-board + ApexCharts)
+        if (ent.tipo === 'relatorio-hotmart-diario') {
+          const templateRelatorioHotmart = require('./lib/template-relatorio-hotmart');
+          const html = templateRelatorioHotmart.renderRelatorioHotmart({
+            markdown: ent.conteudo_md,
+            titulo: ent.titulo,
+            conteudo_estruturado: ent.conteudo_estruturado || {},
+            criadoEm: new Date(ent.criado_em).getTime(),
+            versionamento,
+          });
+          res.type('html').send(html);
+          return;
+        }
+
         // V2.15.3 — Triagem de Emails diária (book com squad data + ApexCharts)
         if (ent.tipo === 'relatorio-triagem-emails-diario') {
           const html = templateRelatorioTriagemEmails.renderRelatorioTriagemEmails({
@@ -3621,11 +3635,63 @@ app.post('/api/jobs/planejar', async (req, res) => {
   }
 });
 
-// Aprovar: socio respondeu "sim" -> entra na fila do worker
+// Replanejar: socio respondeu perguntas_pendentes -> re-gera plano com criterios definidos.
+// Fluxo: Planner mostra perguntas, socio responde, Pinguim chama este endpoint com respostas,
+// novo plano e gerado com criterios resolvidos, vai pra aguardando_aprovacao de novo.
+app.post('/api/jobs/replanejar', async (req, res) => {
+  try {
+    const { job_id, respostas_socio, contexto } = req.body || {};
+    if (!job_id) return res.status(400).json({ ok: false, error: 'job_id obrigatorio' });
+    if (!respostas_socio) return res.status(400).json({ ok: false, error: 'respostas_socio obrigatorio' });
+    const job = await jobsLib.carregarJob({ job_id });
+    if (!job) return res.status(404).json({ ok: false, error: 'job nao encontrado' });
+    if (job.status !== 'aguardando_aprovacao') {
+      return res.status(409).json({ ok: false, error: `job status=${job.status}, esperava aguardando_aprovacao` });
+    }
+    // Re-roda Planner com pedido original + respostas anexadas ao contexto
+    const contextoEnriquecido = `${contexto || ''}\n\n## RESPOSTAS DO SOCIO AS PERGUNTAS PENDENTES ANTERIORES\n${respostas_socio}\n\n## PLANO ANTERIOR (com perguntas que ja foram respondidas acima)\n${JSON.stringify(job.plano_json, null, 2)}`;
+    console.log(`[jobs-replanejar] job=${job_id} | respostas="${respostas_socio.slice(0, 80)}..."`);
+    const t0 = Date.now();
+    const plano = await planner.gerarPlano({
+      pedido_original: job.pedido_original,
+      contexto: contextoEnriquecido,
+    });
+    const planejou_ms = Date.now() - t0;
+    const atualizado = await jobsLib.gravarPlano({
+      job_id,
+      plano_json: plano,
+      briefing_resumo: plano.briefing_resumo,
+      tipo_pedido: plano.tipo_pedido || null,
+      squad_executora: plano.squad_executora || null,
+    });
+    console.log(`[jobs-replanejar] OK ${planejou_ms}ms | perguntas_restantes=${(plano.perguntas_pendentes || []).length}`);
+    res.json({ ok: true, job: atualizado, plano, planejou_ms });
+  } catch (e) {
+    console.error('[jobs-replanejar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Aprovar: socio respondeu "sim" -> entra na fila do worker.
+// Bloqueia se ainda ha perguntas_pendentes (anti-padrao Alan: socio "aprova" sem ler).
 app.post('/api/jobs/aprovar', async (req, res) => {
   try {
-    const { job_id } = req.body || {};
+    const { job_id, forcar } = req.body || {};
     if (!job_id) return res.status(400).json({ ok: false, error: 'job_id obrigatorio' });
+    // Checa perguntas pendentes antes de aprovar
+    const job = await jobsLib.carregarJob({ job_id });
+    if (!job) return res.status(404).json({ ok: false, error: 'job nao encontrado' });
+    const perguntas = (job.plano_json && Array.isArray(job.plano_json.perguntas_pendentes))
+      ? job.plano_json.perguntas_pendentes.filter(Boolean)
+      : [];
+    if (perguntas.length && !forcar) {
+      return res.status(409).json({
+        ok: false,
+        error: 'job tem perguntas_pendentes nao respondidas',
+        perguntas_pendentes: perguntas,
+        dica: 'chame /api/jobs/replanejar com respostas_socio, OU passe forcar=true se quiser executar com criterio conservador mesmo assim',
+      });
+    }
     const r = await jobsLib.aprovarJob({ job_id });
     if (!r) return res.status(409).json({ ok: false, error: 'job nao estava em aguardando_aprovacao' });
     res.json({ ok: true, job: r });
@@ -3778,6 +3844,30 @@ app.post('/api/relatorio/meta-ads', async (req, res) => {
     res.json({ ...r, latencia_ms: dur_ms });
   } catch (e) {
     console.error('[relatorio-meta-ads] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
+// V2.15.3 — Hotmart Diário on-demand (Andre 2026-05-14)
+// Book completo com plano de ação Board Advisory + ApexCharts
+// Universal (mesmo relatório pra todos os sócios)
+// ============================================================
+const relatorioHotmart = require('./lib/relatorio-hotmart');
+
+app.post('/api/relatorio/hotmart', async (req, res) => {
+  try {
+    const { cliente_id, dia_alvo_brt, moeda = 'BRL', salvar = true, parent_id = null } = req.body || {};
+    console.log(`[relatorio-hotmart] iniciando | dia_alvo=${dia_alvo_brt || 'auto'} | moeda=${moeda}`);
+    const t0 = Date.now();
+    const r = await relatorioHotmart.gerarRelatorioHotmart({
+      cliente_id, dia_alvo_brt, moeda, salvar, parent_id,
+    });
+    const dur_ms = Date.now() - t0;
+    console.log(`[relatorio-hotmart] OK ${dur_ms}ms | entregavel=${r.entregavel_id || 'NAO_SALVO'} | sintetizador_ok=${r.sintetizador.ok} | squad_pareceres=${r.squad.qtd_pareceres}`);
+    res.json({ ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[relatorio-hotmart] erro:', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });

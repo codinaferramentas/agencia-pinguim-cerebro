@@ -173,7 +173,7 @@ async function listarJobsDoSocio({ cliente_id, status_filtro = null, limite = 5 
     where += ` AND status = '${status_filtro}'`;
   }
   const sql = `
-    SELECT id, pedido_original, tipo_pedido, status, briefing_resumo,
+    SELECT id, pedido_original, tipo_pedido, status, briefing_resumo, plano_json,
            canal_origem, criado_em, aprovado_em, concluido_em, entregavel_id, notificado_em
       FROM pinguim.jobs
      WHERE ${where}

@@ -204,8 +204,15 @@ async function blocoJobsPendentes(cliente_id) {
       if (j.status === 'executando') {
         return `- **executando** | job=${idCurto} | desde ${j.aprovado_em || '?'} | "${pedidoCurto}"`;
       }
-      // aguardando_aprovacao
+      // aguardando_aprovacao — extrai perguntas_pendentes do plano_json
       const brief = briefing ? ` | briefing: "${briefing}"` : '';
+      const perguntas = (j.plano_json && Array.isArray(j.plano_json.perguntas_pendentes))
+        ? j.plano_json.perguntas_pendentes.filter(Boolean)
+        : [];
+      if (perguntas.length) {
+        const lista = perguntas.map((p, i) => `  ${i + 1}. ${p}`).join('\n');
+        return `- **aguardando aprovacao** | job=${idCurto} | "${pedidoCurto}"${brief}\n  PERGUNTAS PENDENTES (socio precisa responder ANTES de aprovar):\n${lista}`;
+      }
       return `- **aguardando aprovacao** | job=${idCurto} | "${pedidoCurto}"${brief}`;
     });
     return `[JOBS PENDENTES DESTE SOCIO]
@@ -214,7 +221,8 @@ ${linhas.join('\n')}
 REGRAS sobre estes jobs:
 - Se ha "concluido" NAO-notificado E socio acabou de entrar OU pergunta status ("tá pronto?", "saiu?") → entrega o link /entregavel/<id> em UMA mensagem natural + chama POST /api/jobs/notificar com job_id pra marcar entregue. NUNCA repete entrega.
 - Se ha "executando" e socio pergunta status → diz honesto que ainda esta rodando, evita prometer prazo se nao tem.
-- Se ha "aguardando aprovacao" e socio nao tocou no assunto, NAO empurra (espera ele responder). Se ele perguntar "que jobs eu tenho?" → lista.`;
+- Se ha "aguardando aprovacao" COM perguntas pendentes → faz as perguntas pro socio AGORA (numa mensagem natural, sem template) ANTES de pedir aprovacao. Quando socio responder, chama POST /api/jobs/replanejar com job_id + respostas_socio pra regerar plano com criterios definidos. NUNCA aprova job com pergunta sem resposta.
+- Se ha "aguardando aprovacao" SEM perguntas pendentes e socio nao tocou no assunto, NAO empurra (espera ele responder). Se ele perguntar "que jobs eu tenho?" → lista.`;
   } catch (e) {
     console.warn(`[contexto-rico] erro carregando jobs pendentes: ${e.message}`);
     return null;

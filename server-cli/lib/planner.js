@@ -40,8 +40,9 @@ Schema:
 }
 
 Regras duras:
-- Se faltar algum criterio chave (ex: "top X" sem definir X, "engajamento" sem definir metrica), coloca em "perguntas_pendentes" como string. NAO inventa criterio.
+- Se faltar algum criterio chave (ex: "top X" sem definir X, "engajamento" sem definir metrica), coloca em "perguntas_pendentes" como string. NAO inventa criterio. NAO chuta default.
 - "briefing_resumo" e o que socio le pra decidir "sim/nao". Tem que ser conciso e factual. Sem promessa do tipo "vamos fazer X impressionante". Sem emoji.
+- Se "perguntas_pendentes" NAO esta vazio, o briefing_resumo NAO deve prometer execucao — deve declarar honesto que precisa esclarecer X antes (ex: "Antes de montar o relatorio, preciso confirmar: <pergunta1> e <pergunta2>"). Socio responde, dai re-planejamos com criterio definido.
 - "etapas" e lista ordenada do que o worker executa. Cada etapa cita a fonte/tool (G1/G4b/M2/F3/etc) quando aplicavel.
 - "squad_executora" e quem executa: "data" pra relatorio/analise, "hybrid-ops" pra acao operacional, "copy" pra entregavel criativo, ou null se Pinguim executa direto sem squad.
 - "estimativa_min" e palpite honesto em minutos (1, 3, 5, 10). Nao exagera.
