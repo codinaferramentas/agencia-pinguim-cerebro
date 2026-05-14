@@ -68,11 +68,50 @@ async function api(method, path, body = null) {
     r = await fetch(PUBLIC_BASE_URL + path, opts);
   } catch (e) {
     // fetch failed = server-cli não respondeu (PC desligado, ngrok caiu, sem internet)
-    throw new Error('Server-cli local não respondeu. PC ligado? Ngrok rodando?');
+    const err = new Error('Server-cli local não respondeu. PC ligado? Ngrok rodando?');
+    err.kind = 'offline';
+    throw err;
   }
-  const j = await r.json();
-  if (!j.ok) throw new Error(j.error || 'erro');
+  let j;
+  try { j = await r.json(); }
+  catch (_) {
+    const err = new Error(`Server-cli devolveu resposta inválida (HTTP ${r.status})`);
+    err.kind = 'invalid_response';
+    err.http = r.status;
+    throw err;
+  }
+  if (!j.ok) {
+    const err = new Error(j.error || 'erro');
+    err.kind = classificarErroServerCli(j.error || '');
+    err.raw = j;
+    throw err;
+  }
   return j;
+}
+
+// V2.15.2 Painel agendamentos — Andre 2026-05-13: distinguir tipos de erro
+// pra UI mostrar mensagem útil em vez de "fetch failed" genérico.
+function classificarErroServerCli(msg) {
+  const m = String(msg).toLowerCase();
+  if (m.includes('evolution') || m.includes('whatsapp') && m.includes('fetch')) return 'evolution_offline';
+  if (m.includes('número') || m.includes('numero') || m.includes('invalid_phone') || m.includes('inválido')) return 'numero_invalido';
+  if (m.includes('duplicat') || m.includes('já existe') || m.includes('unique')) return 'duplicata';
+  if (m.includes('not found') || m.includes('não encontrado')) return 'nao_encontrado';
+  return 'outro';
+}
+
+// V2.15.2 — converte error.kind em texto humano pra mostrar no toast
+function explicarErro(e) {
+  if (!e) return 'erro desconhecido';
+  switch (e.kind) {
+    case 'offline':           return '✗ Server-cli local offline. PC ligado? Ngrok rodando?';
+    case 'evolution_offline': return '✗ Evolution API (WhatsApp) não respondeu. Tenta de novo em 1min.';
+    case 'numero_invalido':   return '✗ Número de WhatsApp inválido (formato esperado: 55 11 99999 9999).';
+    case 'duplicata':         return '✗ Já existe destinatário com esses dados neste agendamento.';
+    case 'nao_encontrado':    return '✗ Agendamento ou destinatário não encontrado (talvez excluído por outra aba).';
+    case 'invalid_response':  return `✗ Server-cli devolveu HTTP ${e.http} inválido. Olha o log do server-cli.`;
+    default:                  return `✗ ${e.message || 'erro'}`;
+  }
 }
 
 // Conversão BRT ↔ UTC pra cron expression (BRT = UTC-3)
@@ -119,6 +158,60 @@ function descricaoCron(cronUtc) {
   const nomes = { '1': 'seg', '2': 'ter', '3': 'qua', '4': 'qui', '5': 'sex', '6': 'sáb', '0': 'dom' };
   const dias = dow.split(',').map(d => nomes[d] || d).join('/');
   return `${dias} ${horaStr} BRT`;
+}
+
+// ============================================================
+// V2.15.2 — Parser mínimo de cron pra antecipar próximas execuções.
+// Suporta padrão simples M H * * D (com D = '*' ou dia(s) da semana).
+// Retorna array de Date em fuso LOCAL convertendo a hora UTC do cron.
+// ============================================================
+function parseCron(cronUtc) {
+  const parts = String(cronUtc || '').trim().split(/\s+/);
+  if (parts.length !== 5) return null;
+  const mins = parsearCampo(parts[0], 0, 59);
+  const horas = parsearCampo(parts[1], 0, 23);
+  // dia do mês e mês: ignoramos (só M H * * D no nosso painel)
+  const dows = parts[4] === '*' ? [0,1,2,3,4,5,6] : parsearCampo(parts[4], 0, 6);
+  if (!mins || !horas || !dows) return null;
+  return { mins, horas, dows };
+}
+
+function parsearCampo(token, min, max) {
+  if (token === '*') {
+    const out = [];
+    for (let i = min; i <= max; i++) out.push(i);
+    return out;
+  }
+  if (token.includes(',')) {
+    return token.split(',').map(t => parseInt(t, 10)).filter(n => n >= min && n <= max);
+  }
+  if (/^\d+$/.test(token)) {
+    const n = parseInt(token, 10);
+    return (n >= min && n <= max) ? [n] : null;
+  }
+  return null;
+}
+
+// Próximas N execuções dado um cron UTC. Devolve [{ at: Date(local-equiv-UTC), agendamento }]
+function proximasExecucoes(cronUtc, n = 10, dentroDeNDias = 7) {
+  const c = parseCron(cronUtc);
+  if (!c) return [];
+  const agora = new Date();
+  const fim = new Date(agora.getTime() + dentroDeNDias * 86400000);
+  const resultados = [];
+  // Itera dia a dia (UTC)
+  for (let d = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate())); d <= fim && resultados.length < n; d = new Date(d.getTime() + 86400000)) {
+    if (!c.dows.includes(d.getUTCDay())) continue;
+    for (const h of c.horas) {
+      for (const m of c.mins) {
+        const dt = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), h, m));
+        if (dt > agora && dt <= fim) resultados.push(dt);
+        if (resultados.length >= n) break;
+      }
+      if (resultados.length >= n) break;
+    }
+  }
+  return resultados.sort((a, b) => a - b).slice(0, n);
 }
 
 // ============================================================
@@ -199,11 +292,17 @@ export async function renderAgendamentos() {
   ]));
   wrap.appendChild(topBar);
 
-  if (ativos.length) wrap.appendChild(renderSecao('Ativos', ativos));
-  if (pausados.length) wrap.appendChild(renderSecao('Pausados', pausados));
+  // V2.15.2 — Grade cronológica: "próximos crons" do horizonte 7d
+  if (ativos.length > 0) wrap.appendChild(renderGradeCronologica(ativos));
+
+  // V2.15.2 — Toolbar busca/filtros + container que re-renderiza cards
+  const cardsContainer = el('div', { id: 'agendamentos-cards' });
+  wrap.appendChild(renderToolbarBusca(cardsContainer));
+  wrap.appendChild(cardsContainer);
+  rerenderCards(cardsContainer);
 
   if (_state.agendamentos.length === 0) {
-    wrap.appendChild(el('div', {
+    cardsContainer.appendChild(el('div', {
       style: 'padding:3rem;text-align:center;color:var(--fg-muted);background:var(--bg2);border:1px dashed var(--border);border-radius:12px;'
     }, [
       el('div', { style: 'font-size:2rem;margin-bottom:1rem;' }, '⏰'),
@@ -211,6 +310,319 @@ export async function renderAgendamentos() {
       el('div', { style: 'margin-top:.5rem;font-size:.85rem;' }, 'Clica em "+ Novo agendamento" pra criar o primeiro.'),
     ]));
   }
+}
+
+// ============================================================
+// V2.15.2 — Estado dos filtros (memória de sessão da página)
+// ============================================================
+const _filtros = {
+  q: '',                    // texto de busca
+  status: 'todos',          // todos | ativo | pausado
+  canal: 'todos',           // todos | whatsapp | discord | email
+  destinatario: 'todos',    // todos | <nome ou valor exato>
+};
+
+// Aplica filtros + reordena por proximidade de execução
+function filtrarAgendamentos() {
+  const q = _filtros.q.trim().toLowerCase();
+  return _state.agendamentos.filter(a => {
+    if (_filtros.status === 'ativo' && !a.ativo) return false;
+    if (_filtros.status === 'pausado' && a.ativo) return false;
+
+    const destinatarios = Array.isArray(a.destinatarios) ? a.destinatarios.filter(d => d.ativo !== false) : [];
+    if (_filtros.canal !== 'todos' && !destinatarios.some(d => d.canal === _filtros.canal)) return false;
+    if (_filtros.destinatario !== 'todos' && !destinatarios.some(d => (d.nome || d.valor) === _filtros.destinatario)) return false;
+
+    if (!q) return true;
+    const haystack = [
+      a.nome || '', a.slug || '', a.cron_descricao || '', a.cron_expr || '',
+      ...destinatarios.map(d => `${d.nome || ''} ${d.valor || ''} ${d.canal || ''}`),
+    ].join(' ').toLowerCase();
+    return haystack.includes(q);
+  });
+}
+
+function rerenderCards(container) {
+  container.innerHTML = '';
+  const filtrados = filtrarAgendamentos();
+  const ativos = filtrados.filter(a => a.ativo);
+  const pausados = filtrados.filter(a => !a.ativo);
+  if (ativos.length) container.appendChild(renderSecao('Ativos', ativos));
+  if (pausados.length) container.appendChild(renderSecao('Pausados', pausados));
+  if (filtrados.length === 0 && _state.agendamentos.length > 0) {
+    container.appendChild(el('div', {
+      style: 'padding:2rem;text-align:center;color:var(--fg-muted);background:var(--bg2);border:1px dashed var(--border);border-radius:12px;margin-top:1rem;'
+    }, [
+      el('div', { style: 'font-size:1.5rem;margin-bottom:.5rem;' }, '🔍'),
+      el('div', {}, 'Nenhum agendamento bate com o filtro atual.'),
+      el('button', {
+        style: 'margin-top:1rem;background:transparent;border:1px solid var(--fg-muted);color:var(--fg-muted);padding:.3rem .8rem;border-radius:6px;cursor:pointer;font-size:.8rem;',
+        onclick: () => {
+          _filtros.q = ''; _filtros.status = 'todos'; _filtros.canal = 'todos'; _filtros.destinatario = 'todos';
+          renderAgendamentos();
+        }
+      }, 'limpar filtros'),
+    ]));
+  }
+}
+
+// ============================================================
+// V2.15.2 — Estado do modo de visualização da grade
+// ============================================================
+let _gradeView = 'lista'; // 'lista' | 'semana'
+
+function renderGradeCronologica(ativos) {
+  const wrap = el('div');
+  // Header com toggle Lista/Semana
+  const header = el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;' }, [
+    el('h2', { style: 'font-size:.85rem;color:var(--fg);text-transform:uppercase;letter-spacing:.08em;margin:0;' },
+      `📅 Próximos disparos`),
+    el('div', { style: 'display:flex;gap:.3rem;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:.2rem;' }, [
+      toggleBtn('lista', '📋 Lista'),
+      toggleBtn('semana', '🗓 Semana'),
+    ]),
+  ]);
+  wrap.appendChild(header);
+
+  if (_gradeView === 'semana') {
+    wrap.appendChild(renderCalendarioSemana(ativos));
+  } else {
+    wrap.appendChild(renderGradeLista(ativos));
+  }
+  return wrap;
+}
+
+function toggleBtn(view, label) {
+  const ativo = _gradeView === view;
+  return el('button', {
+    style: `background:${ativo ? 'var(--accent)' : 'transparent'};color:${ativo ? 'white' : 'var(--fg-muted)'};border:none;padding:.35rem .75rem;border-radius:6px;font-size:.75rem;font-weight:600;cursor:pointer;`,
+    onclick: () => {
+      _gradeView = view;
+      renderAgendamentos();
+    },
+  }, label);
+}
+
+// ============================================================
+// V2.15.2 — Grade cronológica LISTA HOJE/AMANHÃ/+N dias (modo original)
+// ============================================================
+function renderGradeLista(ativos) {
+  const HORIZONTE_DIAS = 7;
+  const LIMITE_POR_AGENDAMENTO = 8;
+
+  // Coleta próximas execuções de cada agendamento
+  const eventos = [];
+  ativos.forEach(a => {
+    if (!a.cron_expr) return;
+    const proximas = proximasExecucoes(a.cron_expr, LIMITE_POR_AGENDAMENTO, HORIZONTE_DIAS);
+    proximas.forEach(dt => eventos.push({ dt, agendamento: a }));
+  });
+  eventos.sort((a, b) => a.dt - b.dt);
+
+  // Agrupa por dia BRT (toLocaleDateString respeita o fuso da máquina; em produção Vercel usa UTC, mas o browser do sócio é BRT)
+  const porDia = new Map();
+  eventos.forEach(ev => {
+    const chave = ev.dt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    if (!porDia.has(chave)) porDia.set(chave, []);
+    porDia.get(chave).push(ev);
+  });
+
+  const sec = el('section', { style: 'background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.25rem 1.5rem 1.5rem;margin-bottom:1.5rem;' });
+  sec.appendChild(el('div', { style: 'font-size:.7rem;color:var(--fg-muted);margin-bottom:1rem;' },
+    `${HORIZONTE_DIAS}d · ${eventos.length} disparos · ${porDia.size} dia${porDia.size === 1 ? '' : 's'}`));
+
+  if (eventos.length === 0) {
+    sec.appendChild(el('div', { style: 'color:var(--fg-muted);font-size:.85rem;padding:.5rem 0;' },
+      'Nenhum cron ativo no horizonte de 7 dias. (Cron expression talvez seja de domingo, e domingo já passou esta semana.)'));
+    return sec;
+  }
+
+  const grid = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.75rem;' });
+
+  const hoje = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const amanha = new Date(Date.now() + 86400000).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+
+  porDia.forEach((evs, dia) => {
+    const rotulo = dia === hoje ? `HOJE · ${dia}`
+      : dia === amanha ? `AMANHÃ · ${dia}`
+      : dia;
+    const cor = dia === hoje ? '#E85C00' : dia === amanha ? '#F59E0B' : '#94A3B8';
+
+    const card = el('div', { style: `background:var(--bg);border:1px solid var(--border);border-left:3px solid ${cor};border-radius:8px;padding:.85rem 1rem;` });
+    card.appendChild(el('div', { style: `font-size:.65rem;color:${cor};font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem;` }, rotulo));
+
+    evs.forEach(ev => {
+      const hora = ev.dt.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+      const destinatarios = Array.isArray(ev.agendamento.destinatarios) ? ev.agendamento.destinatarios.filter(d => d.ativo !== false) : [];
+      const destStr = destinatarios.length === 0 ? 'sem destinatários'
+        : destinatarios.length === 1 ? (destinatarios[0].nome || destinatarios[0].valor)
+        : `${destinatarios.length} destinatários`;
+
+      card.appendChild(el('div', { style: 'display:flex;gap:.6rem;align-items:baseline;padding:.3rem 0;border-top:1px solid var(--border);' }, [
+        el('code', { style: 'font-size:.75rem;color:var(--fg);font-weight:600;min-width:42px;font-family:ui-monospace,monospace;' }, hora),
+        el('div', { style: 'flex:1;min-width:0;' }, [
+          el('div', { style: 'font-size:.8rem;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, ev.agendamento.nome || ev.agendamento.slug),
+          el('div', { style: 'font-size:.65rem;color:var(--fg-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, destStr),
+        ]),
+      ]));
+    });
+
+    grid.appendChild(card);
+  });
+  sec.appendChild(grid);
+  return sec;
+}
+
+// ============================================================
+// V2.15.2 — Calendário semanal (grid 7 dias × hora)
+// Mostra os próximos 7 dias começando HOJE. Cada coluna = 1 dia.
+// Cada linha = 1 hora (BRT). Blocos coloridos = disparos.
+// Mais visual pra ver conflitos (ex: 3 relatórios às 8h).
+// ============================================================
+function renderCalendarioSemana(ativos) {
+  const HORIZONTE_DIAS = 7;
+  const HORA_INICIO = 5;   // 5h BRT
+  const HORA_FIM = 23;     // até 23h BRT
+
+  // Coleta eventos
+  const eventos = [];
+  ativos.forEach(a => {
+    if (!a.cron_expr) return;
+    proximasExecucoes(a.cron_expr, 30, HORIZONTE_DIAS).forEach(dt => eventos.push({ dt, agendamento: a }));
+  });
+
+  const sec = el('section', { style: 'background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.25rem 1.5rem;margin-bottom:1.5rem;overflow-x:auto;' });
+  sec.appendChild(el('div', { style: 'font-size:.7rem;color:var(--fg-muted);margin-bottom:1rem;' },
+    `${HORIZONTE_DIAS}d · ${eventos.length} disparos · ${HORA_INICIO}h–${HORA_FIM}h BRT`));
+
+  // Monta lista dos 7 dias (hoje + 6 seguintes)
+  const dias = [];
+  const hoje = new Date();
+  for (let i = 0; i < HORIZONTE_DIAS; i++) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + i);
+    dias.push(d);
+  }
+
+  const dowLabel = ['DOM','SEG','TER','QUA','QUI','SEX','SÁB'];
+
+  // Grid: 1 coluna de hora + 7 colunas de dia
+  const grid = el('div', { style: `display:grid;grid-template-columns:50px repeat(${HORIZONTE_DIAS},minmax(100px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden;min-width:830px;` });
+
+  // Header: célula vazia + 7 dias
+  grid.appendChild(el('div', { style: 'background:var(--bg2);padding:.5rem .25rem;' }, ''));
+  dias.forEach((d, i) => {
+    const isHoje = i === 0;
+    const dia = d.getDate().toString().padStart(2, '0');
+    const mes = (d.getMonth() + 1).toString().padStart(2, '0');
+    grid.appendChild(el('div', {
+      style: `background:var(--bg2);padding:.5rem;text-align:center;${isHoje ? 'border-bottom:2px solid #E85C00;' : ''}`,
+    }, [
+      el('div', { style: `font-size:.65rem;color:${isHoje ? '#E85C00' : 'var(--fg-muted)'};font-weight:700;letter-spacing:.05em;` }, dowLabel[d.getDay()]),
+      el('div', { style: `font-size:.8rem;color:${isHoje ? '#E85C00' : 'var(--fg)'};font-weight:${isHoje ? '700' : '500'};` }, `${dia}/${mes}`),
+    ]));
+  });
+
+  // Linhas de hora
+  for (let h = HORA_INICIO; h <= HORA_FIM; h++) {
+    // Célula hora
+    grid.appendChild(el('div', {
+      style: 'background:var(--bg2);padding:.5rem .25rem;text-align:right;color:var(--fg-muted);font-size:.65rem;font-family:ui-monospace,monospace;',
+    }, `${String(h).padStart(2, '0')}h`));
+
+    // Células dos 7 dias nesse horário
+    dias.forEach((d, idxDia) => {
+      const isHoje = idxDia === 0;
+      const cell = el('div', { style: `background:var(--bg);min-height:38px;padding:2px;position:relative;${isHoje ? 'box-shadow:inset 2px 0 0 rgba(232,92,0,.15);' : ''}` });
+      // Filtra eventos dessa célula (mesmo dia BRT + mesma hora BRT)
+      const eventosCell = eventos.filter(ev => {
+        const dtBrt = new Date(ev.dt.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+        return dtBrt.getDate() === d.getDate()
+          && dtBrt.getMonth() === d.getMonth()
+          && dtBrt.getFullYear() === d.getFullYear()
+          && dtBrt.getHours() === h;
+      });
+      eventosCell.forEach(ev => {
+        const dtBrt = new Date(ev.dt.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+        const min = dtBrt.getMinutes();
+        const cor = '#E85C00';
+        cell.appendChild(el('div', {
+          style: `background:${cor};color:white;font-size:.62rem;padding:2px 4px;border-radius:3px;margin-bottom:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:default;font-weight:500;`,
+          title: `${ev.agendamento.nome || ev.agendamento.slug} · ${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}`,
+        }, `:${String(min).padStart(2,'0')} ${ev.agendamento.nome || ev.agendamento.slug}`));
+      });
+      grid.appendChild(cell);
+    });
+  }
+
+  sec.appendChild(grid);
+  return sec;
+}
+
+// ============================================================
+// V2.15.2 — Toolbar busca/filtros (input + 3 selects)
+// ============================================================
+function renderToolbarBusca(cardsContainer) {
+  // Coleta destinatários únicos pra alimentar o select
+  const destinatariosUnicos = new Set();
+  _state.agendamentos.forEach(a => {
+    (a.destinatarios || []).forEach(d => {
+      if (d.ativo === false) return;
+      const label = d.nome || d.valor;
+      if (label) destinatariosUnicos.add(label);
+    });
+  });
+  const destinatariosOrdenados = [...destinatariosUnicos].sort();
+
+  const onChange = () => rerenderCards(cardsContainer);
+
+  const toolbar = el('div', { style: 'display:flex;gap:.6rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:.6rem .8rem;' });
+
+  // Input busca
+  const input = el('input', {
+    type: 'text',
+    placeholder: '🔍 buscar por nome, slug, destinatário…',
+    value: _filtros.q,
+    style: 'flex:1;min-width:200px;background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:.45rem .7rem;border-radius:6px;font-size:.85rem;',
+  });
+  input.addEventListener('input', (e) => { _filtros.q = e.target.value; onChange(); });
+  toolbar.appendChild(input);
+
+  // Select status
+  toolbar.appendChild(selectFiltro('status', [
+    { v: 'todos', l: 'Status: todos' },
+    { v: 'ativo', l: 'Status: ativos' },
+    { v: 'pausado', l: 'Status: pausados' },
+  ], onChange));
+
+  // Select canal
+  toolbar.appendChild(selectFiltro('canal', [
+    { v: 'todos', l: 'Canal: todos' },
+    { v: 'whatsapp', l: 'Canal: WhatsApp' },
+    { v: 'discord', l: 'Canal: Discord' },
+    { v: 'email', l: 'Canal: Email' },
+  ], onChange));
+
+  // Select destinatário (só aparece se tiver 2+ destinatários únicos)
+  if (destinatariosOrdenados.length >= 2) {
+    toolbar.appendChild(selectFiltro('destinatario',
+      [{ v: 'todos', l: 'Destinatário: todos' }, ...destinatariosOrdenados.map(d => ({ v: d, l: d }))],
+      onChange));
+  }
+
+  return toolbar;
+}
+
+function selectFiltro(chave, opcoes, onChange) {
+  const sel = el('select', {
+    style: 'background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:.45rem .6rem;border-radius:6px;font-size:.8rem;cursor:pointer;',
+  });
+  opcoes.forEach(o => {
+    const opt = el('option', { value: o.v }, o.l);
+    if (_filtros[chave] === o.v) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change', (e) => { _filtros[chave] = e.target.value; onChange(); });
+  return sel;
 }
 
 // ============================================================
@@ -309,7 +721,7 @@ async function acaoDisparar(a) {
     const r = await api('POST', '/api/agendamentos/disparar', { id: a.id });
     toast(`✓ Disparado · job ${r.job_id?.slice(0, 8)}... (worker pega em até 15s)`);
     setTimeout(() => renderAgendamentos(), 1500);
-  } catch (e) { toast(`✗ ${e.message}`, true); }
+  } catch (e) { toast(explicarErro(e), true); }
 }
 
 async function acaoPausar(a) {
@@ -318,7 +730,7 @@ async function acaoPausar(a) {
     await api('POST', '/api/agendamentos/pausar', { id: a.id });
     toast('⏸ Pausado');
     renderAgendamentos();
-  } catch (e) { toast(`✗ ${e.message}`, true); }
+  } catch (e) { toast(explicarErro(e), true); }
 }
 
 async function acaoReativar(a) {
@@ -326,7 +738,7 @@ async function acaoReativar(a) {
     await api('POST', '/api/agendamentos/reativar', { id: a.id });
     toast('▶ Reativado');
     renderAgendamentos();
-  } catch (e) { toast(`✗ ${e.message}`, true); }
+  } catch (e) { toast(explicarErro(e), true); }
 }
 
 async function acaoExcluir(a) {
@@ -335,7 +747,7 @@ async function acaoExcluir(a) {
     await api('POST', '/api/agendamentos/excluir', { id: a.id });
     toast('🗑 Excluído');
     renderAgendamentos();
-  } catch (e) { toast(`✗ ${e.message}`, true); }
+  } catch (e) { toast(explicarErro(e), true); }
 }
 
 // ============================================================
@@ -394,7 +806,7 @@ function abrirModalEditar(a) {
           toast('✓ Horário atualizado');
           fecharModal();
           renderAgendamentos();
-        } catch (e) { toast(`✗ ${e.message}`, true); }
+        } catch (e) { toast(explicarErro(e), true); }
       }
     ),
   ]);
@@ -486,7 +898,7 @@ async function abrirModalDestinatarios(a) {
             fecharModal();
             abrirModalDestinatarios(a);
             renderAgendamentos();
-          } catch (e) { toast(`✗ ${e.message}`, true); }
+          } catch (e) { toast(explicarErro(e), true); }
         },
       }, '+ Adicionar destinatário'),
     ]),
@@ -596,7 +1008,7 @@ function abrirModalCriar() {
         toast('✓ Agendamento criado');
         fecharModal();
         renderAgendamentos();
-      } catch (e) { toast(`✗ ${e.message}`, true); }
+      } catch (e) { toast(explicarErro(e), true); }
     }),
   ]);
 
