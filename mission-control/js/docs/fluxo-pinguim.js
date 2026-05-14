@@ -87,9 +87,9 @@ export async function gerar() {
         html: `
           <p>O fluxograma abaixo mostra o que acontece desde a mensagem chegar até o entregável ser entregue. Quadros pretos sólidos são <strong>decisões</strong> (o agente classifica). Quadros pontilhados são <strong>processos</strong> (algo é executado). A coluna da direita mostra o ciclo P-V-E em detalhe — usado só pela categoria F.</p>
 
-          <div style="margin:2rem 0;padding:1.5rem;border:1px solid var(--docs-line);border-radius:4px;background:var(--docs-paper);overflow-x:auto">
+          <div style="margin:2rem 0;padding:1.5rem;border:1px solid var(--docs-line);border-radius:4px;background:var(--docs-paper)">
 
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;min-width:640px">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:2rem">
 
               <!-- COLUNA ESQUERDA: fluxo principal -->
               <div>
