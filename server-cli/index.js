@@ -57,6 +57,7 @@ const discordBot = require('./lib/discord-bot'); // V2.14 Frente B — bot Disco
 const relatorioExecutivo = require('./lib/relatorio-executivo'); // V2.14 Frente C1 — orquestrador relatorio executivo diario
 const templateRelatorioExec = require('./lib/template-relatorio-executivo'); // V2.14 Frente C1 — template HTML dedicado
 const templateRelatorioMetaAds = require('./lib/template-relatorio-meta-ads'); // V2.15.2 — Meta Ads diário (book com Chart.js)
+const templateRelatorioTriagemEmails = require('./lib/template-relatorio-triagem-emails'); // V2.15.3 — Triagem de Emails diária (book com squad data)
 const evolution = require('./lib/evolution'); // V2.14 Frente D — WhatsApp Evolution
 
 const app = express();
@@ -1068,6 +1069,19 @@ app.get('/entregavel/:id', async (req, res) => {
         // V2.15.2 — Meta Ads diario (book com Chart.js inline)
         if (ent.tipo === 'relatorio-meta-ads-diario') {
           const html = templateRelatorioMetaAds.renderRelatorioMetaAds({
+            markdown: ent.conteudo_md,
+            titulo: ent.titulo,
+            conteudo_estruturado: ent.conteudo_estruturado || {},
+            criadoEm: new Date(ent.criado_em).getTime(),
+            versionamento,
+          });
+          res.type('html').send(html);
+          return;
+        }
+
+        // V2.15.3 — Triagem de Emails diária (book com squad data + ApexCharts)
+        if (ent.tipo === 'relatorio-triagem-emails-diario') {
+          const html = templateRelatorioTriagemEmails.renderRelatorioTriagemEmails({
             markdown: ent.conteudo_md,
             titulo: ent.titulo,
             conteudo_estruturado: ent.conteudo_estruturado || {},
@@ -3764,6 +3778,170 @@ app.post('/api/relatorio/meta-ads', async (req, res) => {
     res.json({ ...r, latencia_ms: dur_ms });
   } catch (e) {
     console.error('[relatorio-meta-ads] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
+// V2.15.4 — Triagem de Emails (V2 chief of staff + V3 interativo)
+// V2 (2026-05-13): book chief of staff, 6 baldes acionáveis, sem squad
+// V3 (2026-05-13 noite): endpoint /api/relatorio/triagem-acao pra ações Gmail
+// ============================================================
+const relatorioTriagemEmails = require('./lib/relatorio-triagem-emails');
+const googleGmailLib = require('./lib/google-gmail');
+
+app.post('/api/relatorio/triagem-emails', async (req, res) => {
+  try {
+    const { cliente_id, dia_alvo_brt, salvar = true, parent_id = null } = req.body || {};
+    console.log(`[relatorio-triagem-emails] iniciando | dia_alvo=${dia_alvo_brt || 'auto'} | cliente_id=${cliente_id || 'auto'}`);
+    const t0 = Date.now();
+    const r = await relatorioTriagemEmails.gerarRelatorioTriagemEmails({
+      cliente_id, dia_alvo_brt, salvar, parent_id,
+    });
+    const dur_ms = Date.now() - t0;
+    console.log(`[relatorio-triagem-emails] OK ${dur_ms}ms | entregavel=${r.entregavel_id || 'NAO_SALVO'} | total_emails=${r.total_emails} | top3=${(r.top3 || []).length}`);
+    res.json({ ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[relatorio-triagem-emails] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// V4 — Endpoint pra LER corpo completo de um email (lazy load do "ver mais")
+// Body: { cliente_id?, messageId }
+// Retorna: { ok, id, assunto, de, data, snippet, texto, texto_truncado }
+app.post('/api/relatorio/triagem-corpo-completo', async (req, res) => {
+  try {
+    const { cliente_id, messageId } = req.body || {};
+    if (!messageId) {
+      return res.status(400).json({ ok: false, error: 'messageId é obrigatório' });
+    }
+    const t0 = Date.now();
+    const email = await googleGmailLib.lerEmail({ cliente_id, messageId });
+    const dur_ms = Date.now() - t0;
+    console.log(`[triagem-corpo-completo] OK ${dur_ms}ms | messageId=${messageId} | chars=${email.tamanho_chars}`);
+    res.json({
+      ok: true,
+      id: email.id,
+      assunto: email.assunto,
+      de: email.de,
+      data: email.data,
+      snippet: email.snippet,
+      texto: email.texto,
+      texto_truncado: email.texto_truncado,
+      latencia_ms: dur_ms,
+    });
+  } catch (e) {
+    console.error('[triagem-corpo-completo] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// V3 — Endpoint pra ações Gmail diretamente do relatório
+// Body: { cliente_id?, messageIds: [...], op: 'arquivar'|'lido_arquivar'|'starred'|'unstarred'|'lixo'|'unarchive'|'unread_unarchive'|'untrash' }
+// Retorna: { ok, sucessos, falhas, detalhes: [{messageId, ok, erro?}] }
+app.post('/api/relatorio/triagem-acao', async (req, res) => {
+  try {
+    const { cliente_id, messageIds, op } = req.body || {};
+    if (!Array.isArray(messageIds) || messageIds.length === 0) {
+      return res.status(400).json({ ok: false, error: 'messageIds (array) é obrigatório' });
+    }
+    if (!op) {
+      return res.status(400).json({ ok: false, error: 'op é obrigatório' });
+    }
+    const opsValidas = ['arquivar', 'lido_arquivar', 'starred', 'unstarred', 'lixo', 'unarchive', 'unread_unarchive', 'untrash', 'lido', 'nao-lido'];
+    if (!opsValidas.includes(op)) {
+      return res.status(400).json({ ok: false, error: `op inválida: ${op}. Válidas: ${opsValidas.join(', ')}` });
+    }
+
+    const t0 = Date.now();
+    console.log(`[triagem-acao] op=${op} | qtd=${messageIds.length} | cliente_id=${cliente_id || 'auto'}`);
+
+    const detalhes = [];
+    let sucessos = 0;
+    let falhas = 0;
+
+    // Sequencial pra não estourar quota Gmail (10 ops/seg é seguro). Lote pequeno (<30), latência aceitável.
+    for (const messageId of messageIds) {
+      try {
+        await googleGmailLib.modificarEmail({ cliente_id, messageId, op });
+        detalhes.push({ messageId, ok: true });
+        sucessos++;
+      } catch (e) {
+        detalhes.push({ messageId, ok: false, erro: e.message });
+        falhas++;
+      }
+    }
+
+    const dur_ms = Date.now() - t0;
+    console.log(`[triagem-acao] OK ${dur_ms}ms | sucessos=${sucessos} | falhas=${falhas}`);
+    res.json({ ok: falhas === 0, sucessos, falhas, detalhes, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[triagem-acao] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// V5 — Reclassificar email (grava aprendizado pessoal pro próximo relatório aprender)
+// Body: { cliente_id?, messageId, balde_antigo, balde_novo, assunto?, snippet?, remetente_email?, remetente_nome?, motivo_humano? }
+app.post('/api/relatorio/triagem-reclassificar', async (req, res) => {
+  try {
+    const {
+      cliente_id, messageId, balde_antigo, balde_novo,
+      assunto = '', snippet = '', remetente_email = '', remetente_nome = '', motivo_humano = '',
+    } = req.body || {};
+    if (!messageId || !balde_antigo || !balde_novo) {
+      return res.status(400).json({ ok: false, error: 'messageId, balde_antigo e balde_novo são obrigatórios' });
+    }
+    const cid = await db.resolverClienteId(cliente_id);
+    const esc = (s) => "'" + String(s == null ? '' : s).replace(/'/g, "''") + "'";
+    const sql = `INSERT INTO pinguim.triagem_aprendizados (cliente_id, message_id, assunto, remetente_email, remetente_nome, snippet, balde_antigo, balde_novo, motivo_humano)
+                 VALUES (${esc(cid)}, ${esc(messageId)}, ${esc(assunto)}, ${esc(remetente_email)}, ${esc(remetente_nome)}, ${esc(snippet)}, ${esc(balde_antigo)}, ${esc(balde_novo)}, ${esc(motivo_humano)})
+                 RETURNING id, criado_em;`;
+    const r = await db.rodarSQL(sql);
+    console.log(`[triagem-reclassificar] OK | ${balde_antigo} → ${balde_novo} | msg=${messageId}`);
+    res.json({ ok: true, aprendizado: r?.[0] || null });
+  } catch (e) {
+    console.error('[triagem-reclassificar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// V5 — Criar balde custom pessoal (aparece em todas próximas triagens do sócio)
+// Body: { cliente_id?, slug, nome, icone?, descricao? }
+app.post('/api/relatorio/triagem-balde-novo', async (req, res) => {
+  try {
+    const { cliente_id, slug, nome, icone = '🏷', descricao = '', cor = 'mute' } = req.body || {};
+    if (!slug || !nome) {
+      return res.status(400).json({ ok: false, error: 'slug e nome são obrigatórios' });
+    }
+    // Sanitiza slug (somente lowercase + hífen + alfanumérico)
+    const slugLimpo = String(slug).toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
+    if (!slugLimpo) return res.status(400).json({ ok: false, error: 'slug inválido após sanitização' });
+
+    const cid = await db.resolverClienteId(cliente_id);
+    const esc = (s) => "'" + String(s == null ? '' : s).replace(/'/g, "''") + "'";
+    const sql = `INSERT INTO pinguim.triagem_baldes_custom (cliente_id, slug, nome, icone, descricao, cor)
+                 VALUES (${esc(cid)}, ${esc(slugLimpo)}, ${esc(nome)}, ${esc(icone)}, ${esc(descricao)}, ${esc(cor)})
+                 ON CONFLICT (cliente_id, slug) DO UPDATE SET nome = EXCLUDED.nome, icone = EXCLUDED.icone, descricao = EXCLUDED.descricao, cor = EXCLUDED.cor, desativado = false
+                 RETURNING id, slug, nome, icone, descricao, cor, criado_em;`;
+    const r = await db.rodarSQL(sql);
+    console.log(`[triagem-balde-novo] OK | slug=${slugLimpo} | nome=${nome}`);
+    res.json({ ok: true, balde: r?.[0] || null });
+  } catch (e) {
+    console.error('[triagem-balde-novo] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// V5 — Listar baldes custom do sócio (debug/uso futuro)
+app.get('/api/relatorio/triagem-baldes-custom', async (req, res) => {
+  try {
+    const cid = await db.resolverClienteId(req.query.cliente_id || null);
+    const esc = (s) => "'" + String(s == null ? '' : s).replace(/'/g, "''") + "'";
+    const r = await db.rodarSQL(`SELECT id, slug, nome, icone, descricao, cor, criado_em FROM pinguim.triagem_baldes_custom WHERE cliente_id = ${esc(cid)} AND desativado = false ORDER BY criado_em ASC;`);
+    res.json({ ok: true, baldes: r || [] });
+  } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
 });

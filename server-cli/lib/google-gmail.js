@@ -292,18 +292,26 @@ async function enviarEmail({
 // ============================================================
 // MARCAR como lido / não-lido / starred / arquivar
 // ============================================================
-// op: 'lido' | 'nao-lido' | 'starred' | 'unstarred' | 'arquivar' | 'spam' | 'lixo'
+// op: 'lido' | 'nao-lido' | 'starred' | 'unstarred' | 'arquivar' | 'unarchive'
+//   | 'spam' | 'lixo' | 'lido_arquivar' (composta V3 triagem)
+//   | 'unread_unarchive' (desfazer composto V3 triagem)
+//   | 'untrash' (desfazer lixo)
 async function modificarEmail({ cliente_id, messageId, op } = {}) {
   if (!messageId || !op) throw new Error('messageId e op obrigatórios');
 
   const operacoes = {
-    'lido':       { removeLabelIds: ['UNREAD'] },
-    'nao-lido':   { addLabelIds: ['UNREAD'] },
-    'starred':    { addLabelIds: ['STARRED'] },
-    'unstarred':  { removeLabelIds: ['STARRED'] },
-    'arquivar':   { removeLabelIds: ['INBOX'] },
-    'spam':       { addLabelIds: ['SPAM'], removeLabelIds: ['INBOX'] },
-    'lixo':       { addLabelIds: ['TRASH'], removeLabelIds: ['INBOX'] },
+    'lido':              { removeLabelIds: ['UNREAD'] },
+    'nao-lido':          { addLabelIds: ['UNREAD'] },
+    'starred':           { addLabelIds: ['STARRED'] },
+    'unstarred':         { removeLabelIds: ['STARRED'] },
+    'arquivar':          { removeLabelIds: ['INBOX'] },
+    'unarchive':         { addLabelIds: ['INBOX'] },
+    'spam':              { addLabelIds: ['SPAM'], removeLabelIds: ['INBOX'] },
+    'lixo':              { addLabelIds: ['TRASH'], removeLabelIds: ['INBOX'] },
+    'untrash':           { removeLabelIds: ['TRASH'], addLabelIds: ['INBOX'] },
+    // V3 triagem — compostas pro relatório interativo
+    'lido_arquivar':     { removeLabelIds: ['UNREAD', 'INBOX'] },
+    'unread_unarchive':  { addLabelIds: ['UNREAD', 'INBOX'] },
   };
 
   const body = operacoes[op];
