@@ -45,6 +45,13 @@ export const DOCS_CATALOGO = [
     secao: 'Fundamentos',
   },
   {
+    slug: 'fluxo-pinguim',
+    titulo: 'Fluxo do Pinguim',
+    descricao: 'O caminho que toda mensagem percorre — da entrada no chat até o entregável. REGRA ZERO (6 categorias) + ciclo Plan-Validate-Execute pra pedidos complexos. Material de onboarding e debug.',
+    meta: '6 min · fundamental',
+    secao: 'Fundamentos',
+  },
+  {
     slug: 'cerebros',
     titulo: 'Cérebros',
     descricao: 'A memória viva da agência. Cada produto tem um Cérebro alimentado com aulas, depoimentos, objeções, sacadas. Tudo que vira persona, copy, campanha nasce daqui.',
