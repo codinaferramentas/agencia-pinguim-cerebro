@@ -21,6 +21,8 @@ const executor = require('./executor');
 const cronRelatorios = require('./cron-relatorios');
 const db = require('./db');
 const os = require('os');
+// V2.15 Fase 4 — Reflexao Camada 2 EPP sobre output do executor de jobs
+const { verificarOutput } = require('./verificador');
 
 const POLL_INTERVALO_VAZIO_MS = parseInt(process.env.WORKER_POLL_MS, 10) || 15_000;
 const POLL_INTERVALO_OCUPADO_MS = 1_000;
@@ -132,6 +134,41 @@ async function _processarUmJob() {
     const dur_exec = Date.now() - t0;
     console.log(`[jobs-worker] executor OK job=${job.id} dur=${dur_exec}ms | md=${resultado.markdown.length} chars`);
 
+    // ========================================================
+    // V2.15 Fase 4 — Reflexao Camada 2 EPP sobre output do executor
+    // Roda antes de salvar entregavel. Nao refaz: anexa bloco
+    // critico no markdown se reprovar. Skip se output curto (< 500 chars).
+    // ========================================================
+    let markdownFinal = resultado.markdown;
+    let reflexao = null;
+    if (markdownFinal.length >= 500) {
+      try {
+        const tRef0 = Date.now();
+        reflexao = await verificarOutput({
+          briefing: `${job.pedido_original}\n\n[BRIEFING APROVADO]\n${job.briefing_resumo || ''}`,
+          output_md: markdownFinal,
+          agente_slug: `executor-${job.tipo_pedido || 'job'}`,
+          agente_role: 'orquestrador-de-squad',
+          expectativa: `Output factual de executor P-V-E. Sem invencao de numero/preco/data. Cita fontes consultadas. Honesto sobre falhas. Formato markdown limpo.`,
+        });
+        const durRef = Date.now() - tRef0;
+        console.log(`[jobs-worker] reflexao ${reflexao.aprovado ? 'APROVOU' : 'REPROVOU'} em ${(durRef / 1000).toFixed(1)}s job=${job.id}${reflexao.problemas.length ? ` | ${reflexao.problemas.length} problema(s)` : ''}`);
+
+        if (!reflexao.aprovado && reflexao.problemas.length > 0) {
+          markdownFinal += `\n\n---\n\n## ⚠ Revisão crítica (Camada 2 EPP)\n\n`;
+          markdownFinal += `_Verifier automatizado identificou pontos pra reavaliar. Não é bloqueio — é segunda opinião automática antes de você aprovar o entregável._\n\n`;
+          reflexao.problemas.forEach((p) => { markdownFinal += `- ${p}\n`; });
+          if (reflexao.recomendacao_refazer) {
+            markdownFinal += `\n_**Recomendação:** ${reflexao.recomendacao_refazer}_\n`;
+          }
+        }
+      } catch (e) {
+        console.warn(`[jobs-worker] reflexao falhou (nao bloqueante): ${e.message}`);
+      }
+    } else {
+      console.log(`[jobs-worker] reflexao pulada: output curto (${markdownFinal.length} chars)`);
+    }
+
     // Salva entregavel
     const titulo = job.briefing_resumo
       ? `Job ${job.id.slice(0, 8)} — ${job.briefing_resumo.slice(0, 100)}`
@@ -141,7 +178,7 @@ async function _processarUmJob() {
       cliente_id: job.cliente_id,
       tipo: 'job-resultado',
       titulo,
-      conteudo_md: resultado.markdown,
+      conteudo_md: markdownFinal,
       conteudo_estruturado: {
         job_id: job.id,
         pedido_original: job.pedido_original,
@@ -150,6 +187,12 @@ async function _processarUmJob() {
         executor_duracao_ms: resultado.duracao_ms,
         worker_id: WORKER_ID,
         gerado_em: new Date().toISOString(),
+        // V2.15 Fase 4 — Reflexao Camada 2
+        reflexao: reflexao ? {
+          aprovado: reflexao.aprovado,
+          problemas_n: reflexao.problemas.length,
+          latencia_ms: reflexao.latencia_ms,
+        } : null,
       },
     });
 
@@ -159,13 +202,17 @@ async function _processarUmJob() {
       job_id: job.id,
       entregavel_id: entregavel?.id || null,
       resultado_json: {
-        markdown_chars: resultado.markdown.length,
+        markdown_chars: markdownFinal.length,
+        markdown_chars_original: resultado.markdown.length,
         duracao_ms: resultado.duracao_ms,
         entregavel_id: entregavel?.id || null,
         custo_usd: m.custo_usd,
         tokens_in: m.tokens_in,
         tokens_out: m.tokens_out,
         session_id: m.session_id,
+        // V2.15 Fase 4
+        reflexao_aprovou: reflexao ? reflexao.aprovado : null,
+        reflexao_problemas_n: reflexao ? reflexao.problemas.length : 0,
       },
       executor_custo_usd: m.custo_usd,
       executor_tokens_in: m.tokens_in,

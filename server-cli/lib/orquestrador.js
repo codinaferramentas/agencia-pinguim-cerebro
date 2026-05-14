@@ -13,6 +13,12 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+// V2.15 Fase 4 (Workflow Alan) — Reflexao Camada 2 sobre output do Chief.
+// Verifier roda DEPOIS do consolidado pronto. Nao refaz: anexa bloco
+// "Revisao critica" se reprovar. Custo: ~$0.025 + 5s (Haiku), aceitavel
+// num entregavel que ja leva 30-90s e custa US$ 1+.
+const { verificarOutput } = require('./verificador');
+
 // ============================================================
 // Detector: a mensagem do usuario eh pedido criativo grande?
 // Se SIM, pula caminho normal do Atendente e vai direto pro pipeline
@@ -1211,6 +1217,41 @@ NAO repita o que os conselheiros disseram nas seções deles. Sua função é am
     consolidado += `**Gaps declarados:**\n${gaps.map(g => `- ${g.tipo}: ${g.erro}`).join('\n')}\n`;
   }
 
+  // ============================================================
+  // V2.15 Fase 4 — Reflexao Camada 2 EPP (Verifier sobre Chief consolidado)
+  // Roda DEPOIS do consolidado pronto. Nao refaz: anexa bloco critico
+  // se reprovar. Skip se conteudo curto demais (< 500 chars) — provavelmente
+  // falha em cascata, Verifier nao acrescenta.
+  // ============================================================
+  let reflexao = null;
+  if (sucessos.length > 0 && consolidado.length >= 500) {
+    try {
+      const t0Ref = Date.now();
+      reflexao = await verificarOutput({
+        briefing: (plano.briefing_rico || plano.message || '').slice(0, 1500),
+        output_md: consolidado,
+        agente_slug: `chief-${squad}`,
+        agente_role: 'orquestrador-de-squad',
+        expectativa: `Entregavel da squad ${squad} consolidado pelo Chief. Cita mestres invocados, tem blocos preenchidos, sem invencao de numero/preco/data, formato pedido pela Skill.`,
+      });
+      const durRef = Date.now() - t0Ref;
+      console.log(`  [orq-verifier] ${reflexao.aprovado ? 'APROVOU' : 'REPROVOU'} em ${(durRef / 1000).toFixed(1)}s${reflexao.problemas.length ? ` — ${reflexao.problemas.length} problema(s)` : ''}`);
+
+      if (!reflexao.aprovado && reflexao.problemas.length > 0) {
+        consolidado += `\n\n---\n\n## ⚠ Revisão crítica (Camada 2 EPP)\n\n`;
+        consolidado += `_O Verifier identificou pontos pra reavaliar antes de aprovar este entregável. Não é bloqueio — é segunda opinião automatizada._\n\n`;
+        reflexao.problemas.forEach((p) => { consolidado += `- ${p}\n`; });
+        if (reflexao.recomendacao_refazer) {
+          consolidado += `\n_**Recomendação:** ${reflexao.recomendacao_refazer}_\n`;
+        }
+      }
+    } catch (e) {
+      console.warn(`  [orq-verifier] falhou (nao bloqueante): ${e.message}`);
+    }
+  } else if (consolidado.length < 500) {
+    console.log(`  [orq-verifier] pulado: conteudo curto demais (${consolidado.length} chars)`);
+  }
+
   return {
     ok: sucessos.length > 0,
     conteudo: consolidado,
@@ -1242,6 +1283,12 @@ NAO repita o que os conselheiros disseram nas seções deles. Sua função é am
         sintetizador: mestreSintetizador.mestre,
         ok: !!(resultadoSintese && resultadoSintese.ok),
         duracao_s: durSintese,
+      } : null,
+      // V2.15 Fase 4 — Reflexao Camada 2 EPP
+      reflexao: reflexao ? {
+        aprovado: reflexao.aprovado,
+        problemas_n: reflexao.problemas.length,
+        latencia_ms: reflexao.latencia_ms,
       } : null,
     },
   };
