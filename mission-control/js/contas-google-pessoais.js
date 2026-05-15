@@ -94,9 +94,9 @@ export function renderContasGooglePessoais(container) {
     style: 'margin:.25rem 0 1.25rem;font-size:.85rem;color:var(--fg-muted,#94a3b8);line-height:1.5',
   }, 'Cada sócio pode conectar mais de uma conta Google (ex.: Pinguim + Pessoal). A primeira conta vira padrão automaticamente. Os relatórios usam a conta padrão quando o sócio fala "meu email" sem qualificar.'));
 
-  // Form
+  // Form — linha 1: 3 inputs
   const form = el('div', {
-    style: 'display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.75rem;align-items:end;margin-bottom:1.25rem',
+    style: 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem;align-items:end;margin-bottom:.75rem',
   });
 
   const inpNome = el('input', {
@@ -119,13 +119,41 @@ export function renderContasGooglePessoais(container) {
   form.appendChild(el('div', {}, [labelTopo('Nome'), inpNome]));
   form.appendChild(el('div', {}, [labelTopo('Telefone'), inpTel]));
   form.appendChild(el('div', {}, [labelTopo('Label da conta'), inpLabel]));
+  wrap.appendChild(form);
+
+  // Form — linha 2: 2 toggles + botão à direita
+  const chkPadrao = el('input', { type: 'checkbox', id: 'cgp-padrao', style: 'accent-color:#E85C00;cursor:pointer;width:1rem;height:1rem' });
+  const chkRelatorio = el('input', { type: 'checkbox', id: 'cgp-relatorio', style: 'accent-color:#10b981;cursor:pointer;width:1rem;height:1rem' });
+  chkRelatorio.checked = true;  // default: liga relatório
+
+  const labelChk = (chk, texto, hint) => {
+    const lbl = el('label', {
+      for: chk.id,
+      style: 'display:flex;align-items:center;gap:.45rem;cursor:pointer;color:#f1f5f9;font-size:.8rem;user-select:none',
+    });
+    lbl.appendChild(chk);
+    const span = el('span', {}, texto);
+    if (hint) {
+      span.title = hint;
+      span.style.borderBottom = '1px dotted #64748b';
+    }
+    lbl.appendChild(span);
+    return lbl;
+  };
 
   const btnConectar = el('button', {
-    style: 'background:#E85C00;color:white;border:none;padding:.7rem 1.25rem;border-radius:8px;font-weight:600;cursor:pointer;font-size:.875rem;white-space:nowrap;height:fit-content',
+    style: 'background:#E85C00;color:white;border:none;padding:.7rem 1.25rem;border-radius:8px;font-weight:600;cursor:pointer;font-size:.875rem;white-space:nowrap',
   }, 'Conectar Google →');
 
-  form.appendChild(btnConectar);
-  wrap.appendChild(form);
+  const linha2 = el('div', {
+    style: 'display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;margin-bottom:1.25rem',
+  }, [
+    labelChk(chkPadrao, '⭐ Marcar como conta padrão', 'Conta usada quando o sócio fala "meu email"/"minha agenda" sem qualificar. Se a 1ª conta do sócio, vira padrão automaticamente.'),
+    labelChk(chkRelatorio, '📊 Incluir nos relatórios diários', 'Quando ligado, essa conta entra no cron de triagem/agenda. Desligue se for conta secundária que não deve sair nos relatórios automáticos.'),
+    el('div', { style: 'flex:1' }),  // spacer
+    btnConectar,
+  ]);
+  wrap.appendChild(linha2);
 
   // Status / mensagem
   const status = el('div', {
@@ -163,6 +191,13 @@ export function renderContasGooglePessoais(container) {
       }, `Contas conectadas (${r.conexoes.length})`));
 
       r.conexoes.forEach(c => listaWrap.appendChild(renderCard(c, telefone)));
+
+      // Ajusta default do checkbox "marcar padrao":
+      // - 0 contas: marca (1a vai ser padrao automatico mesmo)
+      // - 1+ contas: desmarca (sócio decide se quer trocar)
+      if (typeof chkPadrao !== 'undefined' && chkPadrao) {
+        chkPadrao.checked = (r.conexoes.length === 0);
+      }
     } catch (e) {
       listaWrap.appendChild(el('div', {
         style: 'padding:.85rem 1rem;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:8px;color:#fca5a5;font-size:.85rem',
@@ -190,8 +225,39 @@ export function renderContasGooglePessoais(container) {
       }, '⭐ padrão') : null,
     ]));
     info.appendChild(el('div', {
-      style: 'font-size:.72rem;color:#64748b;margin-top:.25rem',
-    }, `${c.escopo ? 'Escopo: ' + (c.escopo.length > 80 ? c.escopo.slice(0, 80) + '...' : c.escopo) : ''}`));
+      style: 'display:flex;align-items:center;gap:.75rem;font-size:.72rem;color:#64748b;margin-top:.35rem;flex-wrap:wrap',
+    }, [
+      // Toggle inline "Em relatórios"
+      (() => {
+        const tog = el('input', {
+          type: 'checkbox',
+          id: `chk-rel-${c.id}`,
+          style: 'accent-color:#10b981;cursor:pointer;width:.95rem;height:.95rem;margin:0',
+        });
+        tog.checked = !!c.incluir_em_relatorio;
+        tog.addEventListener('change', async (ev) => {
+          ev.target.disabled = true;
+          try {
+            await api('POST', '/api/conexoes/toggle-relatorio', { conexao_id: c.id, valor: ev.target.checked });
+            await carregarLista(telefone);
+          } catch (e) {
+            ev.target.checked = !ev.target.checked;
+            alert('Erro: ' + e.message);
+          } finally {
+            ev.target.disabled = false;
+          }
+        });
+        const wrap = el('label', {
+          for: `chk-rel-${c.id}`,
+          style: 'display:inline-flex;align-items:center;gap:.35rem;cursor:pointer;color:' + (c.incluir_em_relatorio ? '#10b981' : '#64748b'),
+        });
+        wrap.appendChild(tog);
+        wrap.appendChild(document.createTextNode('📊 Em relatórios'));
+        return wrap;
+      })(),
+      el('span', { style: 'color:#2a2a3e' }, '·'),
+      el('span', {}, c.escopo ? (c.escopo.length > 60 ? c.escopo.slice(0, 60) + '...' : c.escopo) : ''),
+    ]));
 
     card.appendChild(info);
 
@@ -253,7 +319,13 @@ export function renderContasGooglePessoais(container) {
     status.textContent = '⏳ Falando com o server-cli local...';
 
     try {
-      const r = await api('POST', '/api/conexoes/iniciar', { nome, telefone, label });
+      const r = await api('POST', '/api/conexoes/iniciar', {
+        nome,
+        telefone,
+        label,
+        marcar_padrao: chkPadrao.checked,
+        incluir_em_relatorio: chkRelatorio.checked,
+      });
       status.style.color = '#10b981';
       status.textContent = `✓ Sócio identificado: ${r.socio.apelido}. Abrindo Google...`;
 
