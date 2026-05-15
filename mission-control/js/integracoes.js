@@ -4,7 +4,7 @@
 */
 
 import { getSupabase } from './sb-client.js?v=20260421p';
-import { renderContasGooglePessoais } from './contas-google-pessoais.js?v=20260515a';
+import { renderContasGooglePessoais } from './contas-google-pessoais.js?v=20260515b';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);

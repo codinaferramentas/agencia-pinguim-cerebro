@@ -34,26 +34,27 @@ const el = (tag, attrs = {}, children = []) => {
 };
 
 async function api(method, path, body = null) {
-  const opts = {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      'ngrok-skip-browser-warning': '1',
-    },
-  };
+  const headers = { 'ngrok-skip-browser-warning': '1' };
+  if (body) headers['Content-Type'] = 'application/json';
+  const opts = { method, headers };
   if (body) opts.body = JSON.stringify(body);
   let r;
   try {
     r = await fetch(PUBLIC_BASE_URL + path, opts);
   } catch (e) {
-    const err = new Error('Server-cli local não respondeu. PC ligado? Ngrok rodando?');
+    const err = new Error('Server-cli local não respondeu. PC ligado? Ngrok rodando? (' + (e.message || 'fetch failed') + ')');
     err.kind = 'offline';
     throw err;
   }
-  let j;
-  try { j = await r.json(); }
+  let texto;
+  try { texto = await r.text(); }
   catch (_) {
-    throw new Error(`Resposta inválida (HTTP ${r.status})`);
+    throw new Error(`Sem resposta legível (HTTP ${r.status})`);
+  }
+  let j;
+  try { j = JSON.parse(texto); }
+  catch (_) {
+    throw new Error(`Resposta não-JSON (HTTP ${r.status}): ${texto.slice(0, 120)}`);
   }
   if (!j.ok) throw new Error(j.error || 'erro');
   return j;
