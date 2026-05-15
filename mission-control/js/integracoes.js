@@ -4,6 +4,7 @@
 */
 
 import { getSupabase } from './sb-client.js?v=20260421p';
+import { renderContasGooglePessoais } from './contas-google-pessoais.js?v=20260515a';
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -65,6 +66,11 @@ export async function renderIntegracoes() {
   ]));
 
   page.appendChild(wrap);
+
+  // V2.14.7 — Contas Google pessoais (multi-conta por socio)
+  const contasGoogleWrap = el('div', {});
+  wrap.appendChild(contasGoogleWrap);
+  renderContasGooglePessoais(contasGoogleWrap);
 
   // Card fixo: Clint (CRM) — leva pra tela de mapeamento de produtos
   wrap.appendChild(el('div', { class: 'cofre-header', style: 'margin-bottom:1rem;cursor:pointer' }, [
