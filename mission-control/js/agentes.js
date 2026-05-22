@@ -30,7 +30,7 @@ const el = (tag, attrs = {}, children = []) => {
 // =====================================================
 // Estado da página (persistido entre re-renders na sessão)
 // =====================================================
-let aba = 'catalogo';
+let aba = 'inventario';
 
 // Conversa ativa (caso_id) e histórico em memória
 let casoAtivo = null;
@@ -67,8 +67,8 @@ export async function renderAgentes() {
       ]),
     ]),
     el('div', { class: 'seguranca-tabs' }, [
+      tab('inventario', '📋 Inventário'),
       tab('catalogo', 'Catálogo'),
-      tab('conversar', '💬 Conversar com Pinguim'),
       tab('board', '🗂 Project Board'),
       tab('execucoes', '📊 Execuções'),
     ]),
@@ -91,13 +91,100 @@ async function renderAba(qual) {
   container.innerHTML = '';
   container.appendChild(el('div', { class: 'seguranca-loading' }, 'Carregando...'));
   try {
-    if (qual === 'catalogo') await renderCatalogo(container);
-    else if (qual === 'conversar') await renderConversar(container);
+    if (qual === 'inventario') await renderInventario(container);
+    else if (qual === 'catalogo') await renderCatalogo(container);
     else if (qual === 'board') await renderBoard(container);
     else if (qual === 'execucoes') await renderExecucoes(container);
   } catch (e) {
     container.innerHTML = '';
     container.append(el('div', { class: 'seguranca-erro' }, `Erro: ${e.message}`));
+  }
+}
+
+// =====================================================
+// INVENTÁRIO — clones catalogados vs agentes implementados
+// =====================================================
+async function renderInventario(container) {
+  container.innerHTML = '';
+  const sb = getSupabase();
+  if (!sb) {
+    container.appendChild(el('div', { class: 'seguranca-erro' }, 'Supabase não conectado'));
+    return;
+  }
+
+  // Carrega clones (produtos categoria=clone) + agentes
+  const [clonesRes, agentesRes] = await Promise.all([
+    sb.from('produtos').select('slug, nome, subcategoria, emoji, icone_url').eq('categoria', 'clone').order('subcategoria').order('nome'),
+    sb.from('agentes').select('slug, nome, status, modelo'),
+  ]);
+  const clones = clonesRes.data || [];
+  const agentes = agentesRes.data || [];
+
+  // Map slug => agente
+  const mapAgentes = new Map();
+  agentes.forEach(a => mapAgentes.set(a.slug, a));
+
+  // Agrupa por subcategoria
+  const porSquad = new Map();
+  for (const c of clones) {
+    const sq = c.subcategoria || '(sem subcategoria)';
+    if (!porSquad.has(sq)) porSquad.set(sq, []);
+    porSquad.get(sq).push(c);
+  }
+
+  // Ordena squads por total (maior primeiro)
+  const squads = [...porSquad.entries()].sort((a, b) => b[1].length - a[1].length);
+
+  // Header com total geral
+  const totalClones = clones.length;
+  const totalImplementados = clones.filter(c => mapAgentes.has(c.slug.replace(/^clone-/, ''))).length;
+  const pctGeral = Math.round((totalImplementados / totalClones) * 100);
+
+  container.appendChild(el('div', { class: 'inv-header' }, [
+    el('div', { class: 'inv-header-titulo' }, 'Inventário de Agentes'),
+    el('div', { class: 'inv-header-sub' }, `${totalImplementados} de ${totalClones} clones implementados como agente executável (${pctGeral}%)`),
+    el('div', { class: 'inv-header-progresso' }, [
+      el('div', { class: 'inv-barra', style: 'width:100%' }, [
+        el('div', { class: 'inv-barra-preencher', style: `width:${pctGeral}%` }),
+      ]),
+    ]),
+    el('div', { class: 'inv-header-legenda' }, [
+      el('span', { class: 'inv-tag inv-tag-prod' }, '● em_producao'),
+      el('span', { class: 'inv-tag inv-tag-teste' }, '● em_teste'),
+      el('span', { class: 'inv-tag inv-tag-construcao' }, '● em_construcao'),
+      el('span', { class: 'inv-tag inv-tag-pausado' }, '● pausado'),
+      el('span', { class: 'inv-tag inv-tag-falta' }, '○ só catálogo (sem agente)'),
+    ]),
+  ]));
+
+  // Renderiza cada squad
+  for (const [squad, items] of squads) {
+    const implementados = items.filter(c => mapAgentes.has(c.slug.replace(/^clone-/, ''))).length;
+    const pct = Math.round((implementados / items.length) * 100);
+    const corBarra = pct === 100 ? 'verde' : pct >= 50 ? 'amarelo' : 'vermelho';
+
+    const card = el('div', { class: 'inv-squad-card' });
+    card.appendChild(el('div', { class: 'inv-squad-header' }, [
+      el('div', { class: 'inv-squad-nome' }, squad),
+      el('div', { class: 'inv-squad-stats' }, `${implementados} / ${items.length}`),
+    ]));
+    card.appendChild(el('div', { class: 'inv-squad-barra' }, [
+      el('div', { class: `inv-squad-barra-preencher inv-squad-barra-${corBarra}`, style: `width:${pct}%` }),
+    ]));
+
+    const grid = el('div', { class: 'inv-grid' });
+    for (const c of items) {
+      const slugLimpo = c.slug.replace(/^clone-/, '');
+      const ag = mapAgentes.get(slugLimpo);
+      const status = ag?.status || 'falta';
+      grid.appendChild(el('div', { class: `inv-clone inv-clone-${status}` }, [
+        el('div', { class: 'inv-clone-bullet' }, ag ? '●' : '○'),
+        el('div', { class: 'inv-clone-nome' }, c.nome),
+        el('div', { class: 'inv-clone-status' }, ag ? status : 'só catálogo'),
+      ]));
+    }
+    card.appendChild(grid);
+    container.appendChild(card);
   }
 }
 

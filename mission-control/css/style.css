@@ -8645,3 +8645,141 @@ body.mapa-apresentacao .mapa-prova-card-texto { font-size: 0.9375rem; }
   .conversa-bolha { max-width: 95%; }
   .card-plano-estim { grid-template-columns: 1fr; }
 }
+
+/* =========================================================
+   INVENTÁRIO DE AGENTES (aba "Inventário" da página Agentes)
+   ========================================================= */
+.inv-header {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.2rem 1.4rem;
+  margin-bottom: 1.4rem;
+}
+.inv-header-titulo {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--fg);
+  margin-bottom: 0.3rem;
+}
+.inv-header-sub {
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+  margin-bottom: 0.8rem;
+}
+.inv-header-progresso {
+  margin: 0.6rem 0 0.9rem;
+}
+.inv-barra {
+  height: 6px;
+  background: var(--surface-2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.inv-barra-preencher {
+  height: 100%;
+  background: linear-gradient(90deg, #ff6b35 0%, #ff9559 100%);
+  transition: width 0.4s ease;
+}
+.inv-header-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  font-size: 0.7rem;
+  margin-top: 0.4rem;
+}
+.inv-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--fg-muted);
+}
+.inv-tag-prod { color: #22c55e; }
+.inv-tag-teste { color: #3b82f6; }
+.inv-tag-construcao { color: #eab308; }
+.inv-tag-pausado { color: #94a3b8; }
+.inv-tag-falta { color: #ef4444; }
+
+.inv-squad-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  margin-bottom: 1rem;
+}
+.inv-squad-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+.inv-squad-nome {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--fg);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.inv-squad-stats {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+}
+.inv-squad-barra {
+  height: 4px;
+  background: var(--surface-2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 0.8rem;
+}
+.inv-squad-barra-preencher {
+  height: 100%;
+  transition: width 0.4s ease;
+}
+.inv-squad-barra-verde { background: #22c55e; }
+.inv-squad-barra-amarelo { background: #eab308; }
+.inv-squad-barra-vermelho { background: #ef4444; }
+
+.inv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+.inv-clone {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--surface-2);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  border-left: 3px solid transparent;
+}
+.inv-clone-bullet {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.inv-clone-nome {
+  flex: 1;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inv-clone-status {
+  font-size: 0.65rem;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+.inv-clone-em_producao { border-left-color: #22c55e; }
+.inv-clone-em_producao .inv-clone-bullet { color: #22c55e; }
+.inv-clone-em_teste { border-left-color: #3b82f6; }
+.inv-clone-em_teste .inv-clone-bullet { color: #3b82f6; }
+.inv-clone-em_construcao { border-left-color: #eab308; }
+.inv-clone-em_construcao .inv-clone-bullet { color: #eab308; }
+.inv-clone-pausado { border-left-color: #94a3b8; opacity: 0.7; }
+.inv-clone-pausado .inv-clone-bullet { color: #94a3b8; }
+.inv-clone-falta { border-left-color: #ef4444; opacity: 0.6; }
+.inv-clone-falta .inv-clone-bullet { color: #ef4444; }
