@@ -191,6 +191,14 @@ async function renderInventario(container) {
 // =====================================================
 // CATÁLOGO — lista todos os agentes do banco
 // =====================================================
+// Estado do filtro do catálogo (persiste entre re-renders na sessão)
+let catFiltro = {
+  squad: 'todas',      // 'todas' | slug da squad
+  status: 'todas',     // 'todas' | 'em_producao' | 'pausado' | 'em_criacao' | 'em_teste'
+  busca: '',           // texto livre
+  agrupar: true,       // agrupar por squad
+};
+
 async function renderCatalogo(container) {
   container.innerHTML = '';
   const sb = getSupabase();
@@ -199,35 +207,193 @@ async function renderCatalogo(container) {
     return;
   }
 
-  const { data, error } = await sb
-    .from('agentes')
-    .select('id, slug, nome, avatar, status, modelo, missao, proposito, capabilities')
-    .order('slug');
+  // Carrega agentes + squads em paralelo
+  const [agRes, sqRes] = await Promise.all([
+    sb.from('agentes').select('id, slug, nome, avatar, status, modelo, missao, proposito, capabilities, squad_id, system_prompt').order('slug'),
+    sb.from('squads').select('id, slug, nome, emoji').order('slug'),
+  ]);
 
-  if (error) {
-    container.append(el('div', { class: 'seguranca-erro' }, error.message));
+  if (agRes.error) {
+    container.append(el('div', { class: 'seguranca-erro' }, agRes.error.message));
+    return;
+  }
+  const data = agRes.data || [];
+  const squads = sqRes.data || [];
+  const squadMap = new Map(squads.map(s => [s.id, s]));
+
+  if (data.length === 0) {
+    container.append(el('div', { class: 'seguranca-empty' }, 'Nenhum agente cadastrado ainda.'));
     return;
   }
 
-  if (!data || data.length === 0) {
-    container.append(el('div', { class: 'seguranca-empty' },
-      'Nenhum agente cadastrado ainda. Próximo: criar Verifier (2º agente da squad agencia-pinguim).'));
-    return;
-  }
-
-  // Stats no topo
+  // Stats no topo (refletem dados TOTAIS, não filtrados)
   const stats = el('div', { class: 'agentes-stats' }, [
     statCard(data.length, 'Total'),
     statCard(data.filter(a => a.status === 'em_producao').length, 'Em produção'),
-    statCard(data.filter(a => a.status === 'em_teste').length, 'Em teste'),
+    statCard(data.filter(a => a.status === 'pausado').length, 'Pausados'),
     statCard(data.filter(a => a.status === 'em_criacao').length, 'Em criação'),
   ]);
+  container.append(stats);
 
-  const grid = el('div', { class: 'agentes-grid' },
-    data.map(a => agenteCard(a))
-  );
+  // Barra de filtros
+  const squadsComAgente = [...new Set(data.map(a => a.squad_id).filter(Boolean))]
+    .map(id => squadMap.get(id))
+    .filter(Boolean)
+    .sort((a, b) => a.slug.localeCompare(b.slug));
 
-  container.append(stats, grid);
+  const opcoesSquad = [
+    el('option', { value: 'todas' }, 'Todas as squads'),
+    ...squadsComAgente.map(s => el('option', { value: s.slug }, `${s.emoji || '○'} ${s.nome}`)),
+    el('option', { value: 'sem_squad' }, '(Sem squad)'),
+  ];
+
+  const filtros = el('div', { class: 'cat-filtros' }, [
+    el('div', { class: 'cat-filtro-busca' }, [
+      el('input', {
+        type: 'text',
+        class: 'cat-busca-input',
+        placeholder: 'Buscar por nome, missão ou tag... ex: "copy", "email", "vsl", "lançamento"',
+        value: catFiltro.busca,
+        oninput: (ev) => {
+          catFiltro.busca = ev.target.value;
+          rerenderListagem();
+        },
+      }),
+    ]),
+    el('div', { class: 'cat-filtro-selects' }, [
+      el('label', { class: 'cat-filtro-label' }, [
+        el('span', {}, 'Squad'),
+        (() => {
+          const sel = el('select', {
+            class: 'cat-filtro-select',
+            onchange: (ev) => { catFiltro.squad = ev.target.value; rerenderListagem(); },
+          }, opcoesSquad);
+          sel.value = catFiltro.squad;
+          return sel;
+        })(),
+      ]),
+      el('label', { class: 'cat-filtro-label' }, [
+        el('span', {}, 'Status'),
+        (() => {
+          const sel = el('select', {
+            class: 'cat-filtro-select',
+            onchange: (ev) => { catFiltro.status = ev.target.value; rerenderListagem(); },
+          }, [
+            el('option', { value: 'todas' }, 'Todos os status'),
+            el('option', { value: 'em_producao' }, '● Em produção'),
+            el('option', { value: 'pausado' }, '● Pausado'),
+            el('option', { value: 'em_criacao' }, '● Em criação'),
+            el('option', { value: 'em_teste' }, '● Em teste'),
+          ]);
+          sel.value = catFiltro.status;
+          return sel;
+        })(),
+      ]),
+      el('label', { class: 'cat-filtro-toggle' }, [
+        (() => {
+          const cb = el('input', {
+            type: 'checkbox',
+            onchange: (ev) => { catFiltro.agrupar = ev.target.checked; rerenderListagem(); },
+          });
+          cb.checked = catFiltro.agrupar;
+          return cb;
+        })(),
+        el('span', {}, 'Agrupar por squad'),
+      ]),
+      el('button', {
+        type: 'button',
+        class: 'cat-filtro-limpar',
+        onclick: () => {
+          catFiltro = { squad: 'todas', status: 'todas', busca: '', agrupar: true };
+          renderCatalogo(container);
+        },
+      }, 'Limpar filtros'),
+    ]),
+  ]);
+  container.append(filtros);
+
+  const listagemBox = el('div', { id: 'cat-listagem' });
+  container.append(listagemBox);
+
+  function aplicarFiltros() {
+    return data.filter(a => {
+      // Squad
+      if (catFiltro.squad === 'sem_squad') {
+        if (a.squad_id) return false;
+      } else if (catFiltro.squad !== 'todas') {
+        const sq = squadMap.get(a.squad_id);
+        if (!sq || sq.slug !== catFiltro.squad) return false;
+      }
+      // Status
+      if (catFiltro.status !== 'todas' && a.status !== catFiltro.status) return false;
+      // Busca textual — case insensitive, busca em nome+missao+proposito+capabilities+system_prompt
+      if (catFiltro.busca.trim()) {
+        const q = catFiltro.busca.trim().toLowerCase();
+        const haystack = [
+          a.nome, a.slug, a.missao, a.proposito,
+          ...(Array.isArray(a.capabilities) ? a.capabilities : Object.keys(a.capabilities || {})),
+          a.system_prompt,
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  function rerenderListagem() {
+    const filtrados = aplicarFiltros();
+    listagemBox.innerHTML = '';
+
+    // Aviso de quantidade
+    const total = data.length;
+    const aparecendo = filtrados.length;
+    listagemBox.append(el('div', { class: 'cat-contador' },
+      aparecendo === total
+        ? `Mostrando ${total} agentes`
+        : `Mostrando ${aparecendo} de ${total} agentes`));
+
+    if (aparecendo === 0) {
+      listagemBox.append(el('div', { class: 'seguranca-empty' },
+        'Nenhum agente encontrado com esses filtros. Tente limpar filtros ou mudar a busca.'));
+      return;
+    }
+
+    if (catFiltro.agrupar) {
+      // Agrupa por squad
+      const porSquad = new Map();
+      for (const a of filtrados) {
+        const sq = squadMap.get(a.squad_id);
+        const key = sq ? sq.slug : '__sem_squad__';
+        if (!porSquad.has(key)) porSquad.set(key, { squad: sq, agentes: [] });
+        porSquad.get(key).agentes.push(a);
+      }
+
+      // Ordena: squads em ordem alfabética, sem_squad por último
+      const entradas = [...porSquad.entries()].sort((a, b) => {
+        if (a[0] === '__sem_squad__') return 1;
+        if (b[0] === '__sem_squad__') return -1;
+        return a[0].localeCompare(b[0]);
+      });
+
+      for (const [key, info] of entradas) {
+        const titulo = info.squad
+          ? `${info.squad.emoji || '○'} ${info.squad.nome}`
+          : '(Sem squad)';
+        const subt = `${info.agentes.length} ${info.agentes.length === 1 ? 'agente' : 'agentes'}`;
+        listagemBox.append(el('div', { class: 'cat-squad-grupo' }, [
+          el('div', { class: 'cat-squad-titulo' }, [
+            el('span', { class: 'cat-squad-titulo-nome' }, titulo),
+            el('span', { class: 'cat-squad-titulo-contagem' }, subt),
+          ]),
+          el('div', { class: 'agentes-grid' }, info.agentes.map(a => agenteCard(a))),
+        ]));
+      }
+    } else {
+      listagemBox.append(el('div', { class: 'agentes-grid' }, filtrados.map(a => agenteCard(a))));
+    }
+  }
+
+  rerenderListagem();
 }
 
 function statCard(valor, label) {
@@ -238,7 +404,13 @@ function statCard(valor, label) {
 }
 
 function agenteCard(a) {
-  const capList = Array.isArray(a.capabilities) ? a.capabilities : [];
+  // capabilities pode ser array ou objeto. Normaliza pra array de strings.
+  const capList = Array.isArray(a.capabilities)
+    ? a.capabilities.map(String)
+    : (a.capabilities && typeof a.capabilities === 'object')
+      ? Object.keys(a.capabilities).filter(k => a.capabilities[k])
+      : [];
+
   const card = el('div', { class: 'agente-card agente-card-clicavel' }, [
     el('div', { class: 'agente-card-head' }, [
       el('div', { class: 'agente-avatar' }, a.avatar || a.nome?.[0] || '?'),
@@ -258,7 +430,18 @@ function agenteCard(a) {
     ].filter(Boolean)),
     capList.length > 0
       ? el('div', { class: 'agente-card-caps-list' },
-          capList.slice(0, 6).map(c => el('span', { class: 'agente-cap-chip' }, c)))
+          capList.slice(0, 6).map(c => {
+            const chip = el('span', { class: 'agente-cap-chip agente-cap-chip-clicavel', title: 'Clique pra filtrar' }, c);
+            chip.addEventListener('click', (ev) => {
+              ev.stopPropagation();
+              catFiltro.busca = c;
+              const input = document.querySelector('.cat-busca-input');
+              if (input) input.value = c;
+              // dispara rerender procurando id 'cat-listagem' no DOM
+              renderAba('catalogo');
+            });
+            return chip;
+          }))
       : null,
   ].filter(Boolean));
   card.addEventListener('click', () => abrirAgenteModal(a.slug));

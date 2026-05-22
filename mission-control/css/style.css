@@ -8950,3 +8950,135 @@ body.mapa-apresentacao .mapa-prova-card-texto { font-size: 0.9375rem; }
   max-height: 50vh;
   overflow-y: auto;
 }
+
+/* =========================================================
+   CATÁLOGO — Filtros, agrupamento por squad, chip clicável
+   ========================================================= */
+.cat-filtros {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin: 1rem 0 1.2rem;
+}
+.cat-filtro-busca {
+  width: 100%;
+}
+.cat-busca-input {
+  width: 100%;
+  padding: 0.7rem 1rem;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--fg);
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.cat-busca-input:focus {
+  border-color: #ff6b35;
+}
+.cat-busca-input::placeholder { color: var(--fg-muted); }
+
+.cat-filtro-selects {
+  display: flex;
+  gap: 0.7rem;
+  align-items: end;
+  flex-wrap: wrap;
+}
+.cat-filtro-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.cat-filtro-select {
+  padding: 0.55rem 0.8rem;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-size: 0.85rem;
+  min-width: 200px;
+  cursor: pointer;
+  outline: none;
+}
+.cat-filtro-select:focus { border-color: #ff6b35; }
+
+.cat-filtro-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  color: var(--fg);
+  cursor: pointer;
+  user-select: none;
+  padding: 0.55rem 0.8rem;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.cat-filtro-toggle input[type=checkbox] {
+  accent-color: #ff6b35;
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+}
+.cat-filtro-limpar {
+  margin-left: auto;
+  padding: 0.55rem 0.9rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg-muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.cat-filtro-limpar:hover {
+  border-color: #ff6b35;
+  color: #ff6b35;
+}
+
+.cat-contador {
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  margin-bottom: 0.8rem;
+  font-family: var(--font-mono);
+}
+
+.cat-squad-grupo {
+  margin-bottom: 1.6rem;
+}
+.cat-squad-titulo {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+.cat-squad-titulo-nome {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--fg);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.cat-squad-titulo-contagem {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+}
+
+.agente-cap-chip-clicavel {
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.agente-cap-chip-clicavel:hover {
+  background: #ff6b35;
+  color: white;
+  border-color: #ff6b35;
+}
