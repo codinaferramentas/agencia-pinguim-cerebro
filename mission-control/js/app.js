@@ -647,14 +647,12 @@ async function loadSkillsTree() {
 async function loadPersonasTree() {
   if (!NAV_CACHE.cerebros) NAV_CACHE.cerebros = await fetchCerebrosCatalogo();
   const cerebros = NAV_CACHE.cerebros;
-  // Personas SO existem para Cerebros Internos e Externos.
-  // Metodologias (SPIN, MEDDIC, etc) e Clones nao tem Persona.
+  // Persona = dossie do CLIENTE de um PRODUTO NOSSO.
+  // Logo: so existe pra Cerebro categoria='interno'.
+  // Clones (Halbert, Hormozi, ...) e Metodologias (SPIN, MEDDIC, ...) NAO tem persona.
   const lista = cerebros
     .filter(c => (c.total_fontes || 0) > 0)
-    .filter(c => {
-      const cat = c.categoria || 'interno';
-      return cat === 'interno' || cat === 'externo';
-    })
+    .filter(c => (c.categoria || 'interno') === 'interno')
     .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
   return lista.map(c => {
@@ -771,8 +769,11 @@ async function renderPersonas(slugPreSelecionado) {
   page.innerHTML = '';
 
   const cerebros = await fetchCerebrosCatalogo();
-  // Cérebro é o pai de tudo: Persona só existe se o Cérebro tem fontes
-  const comConteudo = cerebros.filter(c => (c.total_fontes || 0) > 0);
+  // Persona = dossie do CLIENTE de um produto NOSSO. So Cerebros categoria='interno'.
+  // Clones (Halbert, Hormozi...) e Metodologias (SPIN, MEDDIC...) NAO tem persona.
+  const comConteudo = cerebros
+    .filter(c => (c.total_fontes || 0) > 0)
+    .filter(c => (c.categoria || 'interno') === 'interno');
 
   page.append(
     el('div', { class: 'page-header' }, [
