@@ -261,11 +261,11 @@ serve(async (req) => {
     }, 400);
   }
 
-  // Verifica quais clones tem agente executavel (em_teste/em_producao)
+  // Verifica quais clones tem agente em producao (status protege contra agente quebrado/em construcao)
   const { data: agentesExecutaveis } = await sb.from('agentes')
     .select('slug, status')
     .in('slug', cloneSlugsNormalizados)
-    .in('status', ['em_teste', 'em_producao']);
+    .eq('status', 'em_producao');
   const slugsExecutaveis = (agentesExecutaveis || []).map((a: any) => a.slug);
   const slugsSemAgente = cloneSlugsNormalizados.filter((s: string) => !slugsExecutaveis.includes(s));
 

@@ -239,7 +239,7 @@ function statCard(valor, label) {
 
 function agenteCard(a) {
   const capList = Array.isArray(a.capabilities) ? a.capabilities : [];
-  return el('div', { class: 'agente-card' }, [
+  const card = el('div', { class: 'agente-card agente-card-clicavel' }, [
     el('div', { class: 'agente-card-head' }, [
       el('div', { class: 'agente-avatar' }, a.avatar || a.nome?.[0] || '?'),
       el('div', { class: 'agente-card-title' }, [
@@ -261,6 +261,122 @@ function agenteCard(a) {
           capList.slice(0, 6).map(c => el('span', { class: 'agente-cap-chip' }, c)))
       : null,
   ].filter(Boolean));
+  card.addEventListener('click', () => abrirAgenteModal(a.slug));
+  return card;
+}
+
+async function abrirAgenteModal(slug) {
+  const sb = getSupabase();
+  if (!sb) return;
+
+  // Fecha modal antigo se houver
+  document.querySelectorAll('.agente-modal-overlay').forEach(n => n.remove());
+
+  const overlay = el('div', { class: 'agente-modal-overlay' });
+  const modal = el('div', { class: 'agente-modal' }, [
+    el('div', { class: 'agente-modal-loading' }, 'Carregando...'),
+  ]);
+  overlay.appendChild(modal);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+
+  // Busca tudo do agente + squad + ultimas execucoes
+  const { data: ag, error } = await sb.from('agentes')
+    .select('id, slug, nome, avatar, cor, status, modelo, modelo_fallback, temperatura, retrieval_k, missao, entrada, saida_esperada, limites, handoff, criterio_qualidade, metrica_sucesso, proposito, system_prompt, ferramentas, canais, capabilities, criado_em, squad_id')
+    .eq('slug', slug)
+    .maybeSingle();
+
+  if (error || !ag) {
+    modal.innerHTML = '';
+    modal.appendChild(el('div', { class: 'agente-modal-erro' }, 'Erro: ' + (error?.message || 'agente nao encontrado')));
+    return;
+  }
+
+  let squadNome = '—';
+  if (ag.squad_id) {
+    const { data: sq } = await sb.from('squads').select('nome, slug').eq('id', ag.squad_id).maybeSingle();
+    if (sq) squadNome = sq.nome + ' (' + sq.slug + ')';
+  }
+
+  // Últimas execuções desse agente
+  const { data: execs } = await sb.from('agente_execucoes')
+    .select('id, custo_usd, latencia_ms, tokens_entrada, tokens_saida, executado_em')
+    .eq('agente_id', ag.id)
+    .order('executado_em', { ascending: false })
+    .limit(10);
+
+  const totalExecs = execs?.length || 0;
+  const custoMedio = totalExecs > 0 ? execs.reduce((s, e) => s + Number(e.custo_usd || 0), 0) / totalExecs : 0;
+  const latMedia = totalExecs > 0 ? execs.reduce((s, e) => s + Number(e.latencia_ms || 0), 0) / totalExecs : 0;
+
+  modal.innerHTML = '';
+  modal.append(
+    el('div', { class: 'agente-modal-header' }, [
+      el('div', { class: 'agente-modal-avatar' }, ag.avatar || '🧠'),
+      el('div', { class: 'agente-modal-titulos' }, [
+        el('div', { class: 'agente-modal-nome' }, ag.nome),
+        el('div', { class: 'agente-modal-meta' }, [
+          el('span', {}, ag.slug),
+          el('span', { class: `agente-badge agente-badge-${ag.status}` }, statusLabel(ag.status)),
+          el('span', {}, squadNome),
+        ]),
+      ]),
+      el('button', { class: 'agente-modal-close', type: 'button', onclick: () => overlay.remove() }, '×'),
+    ]),
+
+    el('div', { class: 'agente-modal-stats' }, [
+      el('div', { class: 'agente-modal-stat' }, [
+        el('div', { class: 'agente-modal-stat-num' }, ag.modelo || '—'),
+        el('div', { class: 'agente-modal-stat-label' }, 'Modelo'),
+      ]),
+      el('div', { class: 'agente-modal-stat' }, [
+        el('div', { class: 'agente-modal-stat-num' }, String(ag.temperatura ?? '—')),
+        el('div', { class: 'agente-modal-stat-label' }, 'Temperatura'),
+      ]),
+      el('div', { class: 'agente-modal-stat' }, [
+        el('div', { class: 'agente-modal-stat-num' }, String(totalExecs)),
+        el('div', { class: 'agente-modal-stat-label' }, 'Execuções recentes'),
+      ]),
+      el('div', { class: 'agente-modal-stat' }, [
+        el('div', { class: 'agente-modal-stat-num' }, totalExecs > 0 ? '$' + custoMedio.toFixed(4) : '—'),
+        el('div', { class: 'agente-modal-stat-label' }, 'Custo médio'),
+      ]),
+      el('div', { class: 'agente-modal-stat' }, [
+        el('div', { class: 'agente-modal-stat-num' }, totalExecs > 0 ? Math.round(latMedia) + 'ms' : '—'),
+        el('div', { class: 'agente-modal-stat-label' }, 'Latência média'),
+      ]),
+    ]),
+
+    el('div', { class: 'agente-modal-secao' }, [
+      el('div', { class: 'agente-modal-secao-titulo' }, 'Missão'),
+      el('div', { class: 'agente-modal-secao-texto' }, ag.missao || ag.proposito || '—'),
+    ]),
+
+    ag.entrada ? el('div', { class: 'agente-modal-secao' }, [
+      el('div', { class: 'agente-modal-secao-titulo' }, 'Entrada esperada'),
+      el('div', { class: 'agente-modal-secao-texto' }, ag.entrada),
+    ]) : null,
+
+    ag.saida_esperada ? el('div', { class: 'agente-modal-secao' }, [
+      el('div', { class: 'agente-modal-secao-titulo' }, 'Saída esperada'),
+      el('div', { class: 'agente-modal-secao-texto' }, ag.saida_esperada),
+    ]) : null,
+
+    ag.criterio_qualidade ? el('div', { class: 'agente-modal-secao' }, [
+      el('div', { class: 'agente-modal-secao-titulo' }, 'Critério de qualidade'),
+      el('div', { class: 'agente-modal-secao-texto' }, ag.criterio_qualidade),
+    ]) : null,
+
+    (Array.isArray(ag.ferramentas) && ag.ferramentas.length > 0) ? el('div', { class: 'agente-modal-secao' }, [
+      el('div', { class: 'agente-modal-secao-titulo' }, 'Ferramentas'),
+      el('div', { class: 'agente-modal-chips' }, ag.ferramentas.map(f => el('span', { class: 'agente-cap-chip' }, f))),
+    ]) : null,
+
+    ag.system_prompt ? el('div', { class: 'agente-modal-secao' }, [
+      el('div', { class: 'agente-modal-secao-titulo' }, `System Prompt (${ag.system_prompt.length} chars)`),
+      el('pre', { class: 'agente-modal-prompt' }, ag.system_prompt),
+    ]) : null,
+  );
 }
 
 function statusLabel(s) {
@@ -772,8 +888,8 @@ async function renderExecucoes(container) {
   // Pega as últimas 50 execuções com nome do agente via join manual
   const { data: execs, error } = await sb
     .from('agente_execucoes')
-    .select('id, agente_id, custo_usd, latencia_ms, tokens_entrada, tokens_saida, tokens_cached, created_at, output')
-    .order('created_at', { ascending: false })
+    .select('id, agente_id, custo_usd, latencia_ms, tokens_entrada, tokens_saida, tokens_cached, executado_em, output')
+    .order('executado_em', { ascending: false })
     .limit(50);
 
   if (error) {
@@ -821,7 +937,7 @@ async function renderExecucoes(container) {
         const ag = mapAg.get(e.agente_id);
         const cachePct = e.tokens_entrada > 0 ? (Number(e.tokens_cached || 0) / Number(e.tokens_entrada) * 100) : 0;
         return el('tr', {}, [
-          el('td', { class: 'nowrap' }, formatarData(e.created_at)),
+          el('td', { class: 'nowrap' }, formatarData(e.executado_em)),
           el('td', {}, [
             el('span', { class: 'mini-avatar' }, ag?.avatar || '?'),
             ' ',
