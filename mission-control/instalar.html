@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instalar Pinguim Agentes</title>
+<link rel="stylesheet" href="/css/style.css">
+<link rel="icon" type="image/svg+xml" href="/img/pinguim-icon.svg">
+<style>
+  body {
+    background: var(--bg, #060608);
+    color: var(--fg, #e6e9ef);
+    font-family: 'Geist', system-ui, sans-serif;
+    min-height: 100vh;
+    margin: 0;
+  }
+  .instalar-wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+  .instalar-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 8px;
+  }
+  .instalar-logo {
+    width: 56px; height: 56px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #E85C00, #FB923C);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 32px;
+  }
+  .instalar-h1 {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0;
+  }
+  .instalar-sub {
+    color: #8b95a7;
+    font-size: 14px;
+    margin: 4px 0 32px;
+  }
+  .versao-box {
+    background: #0e1019;
+    border: 1px solid #1f2937;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .versao-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .versao-tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: #E85C00;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .versao-num {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+  }
+  .versao-data {
+    font-size: 12px;
+    color: #8b95a7;
+  }
+  .btn-baixar {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #E85C00;
+    color: #fff;
+    text-decoration: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-baixar:hover { background: #FB923C; }
+  .btn-baixar-icon { font-size: 16px; }
+
+  .passos {
+    counter-reset: passo;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .passo {
+    counter-increment: passo;
+    background: #0e1019;
+    border: 1px solid #1f2937;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+    position: relative;
+    padding-left: 64px;
+  }
+  .passo::before {
+    content: counter(passo);
+    position: absolute;
+    left: 20px;
+    top: 20px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #E85C00;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .passo h3 {
+    margin: 0 0 8px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .passo p {
+    margin: 0 0 8px;
+    color: #c2c8d4;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .passo code, .passo .kbd {
+    font-family: 'IBM Plex Mono', monospace;
+    background: #1a1d28;
+    border: 1px solid #2a2f3d;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #FB923C;
+  }
+  .passo .kbd { color: #c2c8d4; }
+  .passo strong { color: #fff; }
+  .passo .dica {
+    background: rgba(232, 92, 0, 0.08);
+    border-left: 2px solid #E85C00;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #c2c8d4;
+    margin-top: 10px;
+  }
+  .passo img {
+    max-width: 100%;
+    border-radius: 6px;
+    border: 1px solid #2a2f3d;
+    margin-top: 10px;
+  }
+
+  .secao-atualizar {
+    margin-top: 48px;
+    padding: 24px;
+    background: rgba(232, 92, 0, 0.05);
+    border: 1px solid rgba(232, 92, 0, 0.2);
+    border-radius: 12px;
+  }
+  .secao-atualizar h2 {
+    margin: 0 0 12px;
+    font-size: 18px;
+    color: #FB923C;
+  }
+  .secao-atualizar ol {
+    margin: 0;
+    padding-left: 20px;
+    color: #c2c8d4;
+    line-height: 1.7;
+    font-size: 14px;
+  }
+
+  .nota-suporte {
+    margin-top: 32px;
+    padding: 16px 20px;
+    background: #0e1019;
+    border: 1px solid #1f2937;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #8b95a7;
+  }
+  .nota-suporte strong { color: #fff; }
+</style>
+</head>
+<body>
+  <div class="instalar-wrap">
+
+    <div class="instalar-header">
+      <div class="instalar-logo">🐧</div>
+      <div>
+        <h1 class="instalar-h1">Pinguim Agentes — Instalação</h1>
+        <p class="instalar-sub">Extensão Chrome com seus agentes especialistas em qualquer página.</p>
+      </div>
+    </div>
+
+    <div class="versao-box">
+      <div class="versao-meta">
+        <span class="versao-tag">Versão atual</span>
+        <p class="versao-num">v0.6.1</p>
+        <span class="versao-data">Memória conversacional + Feedback 👍/👎 + Modais próprios</span>
+      </div>
+      <a class="btn-baixar" href="/downloads/pinguim-agentes-v0.6.1.zip" download>
+        <span class="btn-baixar-icon">⬇</span>
+        Baixar pacote
+      </a>
+    </div>
+
+    <h2 style="font-size:20px;margin:0 0 16px;">Instalação em 4 passos</h2>
+
+    <ol class="passos">
+
+      <li class="passo">
+        <h3>Baixe o pacote</h3>
+        <p>Clique no botão <strong>Baixar pacote</strong> acima. Vai vir um arquivo <code>pinguim-agentes-v0.6.1.zip</code>.</p>
+      </li>
+
+      <li class="passo">
+        <h3>Descompacte o arquivo</h3>
+        <p>Clique com o botão direito no zip e escolha <span class="kbd">Extrair tudo…</span> (Windows) ou clique 2x (Mac). Salve numa pasta fácil de achar, tipo <code>C:\Pinguim-extensao\v0.6.1</code> ou <code>~/Pinguim-extensao/v0.6.1</code>.</p>
+        <div class="dica">⚠ Não apague essa pasta depois — o Chrome aponta direto pra ela toda vez que abre a extensão.</div>
+      </li>
+
+      <li class="passo">
+        <h3>Abra a página de extensões do Chrome</h3>
+        <p>Copia e cola na barra de endereços: <code>chrome://extensions</code></p>
+        <p>No canto superior direito, <strong>ative o "Modo do desenvolvedor"</strong> (toggle).</p>
+      </li>
+
+      <li class="passo">
+        <h3>Carregue a extensão</h3>
+        <p>Clica em <span class="kbd">Carregar sem compactação</span> (canto superior esquerdo da página).</p>
+        <p>Aponta para a pasta que você descompactou no passo 2 (a que tem o arquivo <code>manifest.json</code> dentro).</p>
+        <div class="dica">✓ Pronto. Agora o ícone do Pinguim 🐧 aparece na barra do Chrome. Clica nele pra abrir a sidebar.</div>
+      </li>
+
+    </ol>
+
+    <div class="secao-atualizar">
+      <h2>Quando sair uma versão nova</h2>
+      <ol>
+        <li>Volte aqui e baixe o pacote novo</li>
+        <li>Descompacte <strong>por cima da pasta antiga</strong> (sobrescreve os arquivos)</li>
+        <li>No Chrome, vá em <code>chrome://extensions</code> e clique no ícone <strong>↻</strong> do Pinguim Agentes</li>
+        <li>Pronto, está com a versão nova</li>
+      </ol>
+    </div>
+
+    <div class="nota-suporte">
+      <strong>Deu errado?</strong> Manda print do problema no Discord interno. A gente resolve.
+    </div>
+
+  </div>
+</body>
+</html>
