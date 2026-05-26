@@ -109,7 +109,7 @@ export async function carregarAgente(slug: string): Promise<AgenteRow> {
 export async function carregarMemoriaIndividual(
   agenteId: string,
   solicitanteId: string | null,
-): Promise<{ aprendizados: string; perfilSolicitante: string | null }> {
+): Promise<{ aprendizados: string; perfilSolicitante: string | null; feedbackNegativo: string }> {
   // 1. Aprendizados gerais (Tier 1)
   const { data: ap } = await sb()
     .from('aprendizados_agente')
@@ -130,7 +130,25 @@ export async function carregarMemoriaIndividual(
     perfilSolicitante = perfil?.conteudo_md || null;
   }
 
-  return { aprendizados, perfilSolicitante };
+  // 3. Ultimos 10 feedbacks negativos ATIVOS desse agente (EPP Camada 3 — feedback humano)
+  // Decisao Andre 2026-05-23: se >10 negativos, e sinal pra parar e ver o agente.
+  const { data: negativos } = await sb()
+    .from('feedback_agente')
+    .select('correcao, criado_em, user_email')
+    .eq('agente_id', agenteId)
+    .eq('tipo', 'negativo')
+    .eq('ativo', true)
+    .order('criado_em', { ascending: false })
+    .limit(10);
+  let feedbackNegativo = '';
+  if (negativos && negativos.length > 0) {
+    feedbackNegativo = negativos.map((n: any, i: number) => {
+      const dt = n.criado_em ? new Date(n.criado_em).toISOString().slice(0, 10) : '';
+      return `${i + 1}. [${dt}] ${n.correcao}`;
+    }).join('\n');
+  }
+
+  return { aprendizados, perfilSolicitante, feedbackNegativo };
 }
 
 // =====================================================
@@ -164,13 +182,14 @@ export interface MontarPromptInput {
   agente: AgenteRow;
   aprendizados: string;
   perfilSolicitante: string | null;
+  feedbackNegativo?: string; // EPP Camada 3 — ultimos 10 👎 ativos
   solicitanteSlug: string | null; // luiz | micha | pedro | andre-codina | ...
   historico: Array<{ papel: string; conteudo: string; artefatos?: any }>;
   topAgentesRelevantes?: Array<{ slug: string; nome: string; capabilities: string[]; proposito: string }>;
 }
 
 export function montarSystemPrompt(input: MontarPromptInput): string {
-  const { agente, aprendizados, perfilSolicitante, solicitanteSlug, topAgentesRelevantes } = input;
+  const { agente, aprendizados, perfilSolicitante, feedbackNegativo, solicitanteSlug, topAgentesRelevantes } = input;
 
   const partes: string[] = [];
 
@@ -183,6 +202,16 @@ export function montarSystemPrompt(input: MontarPromptInput): string {
       `## Missão\n${agente.missao}\n\n` +
       `## Propósito\n${agente.proposito || ''}\n\n` +
       `## Critério de qualidade\n${agente.criterio_qualidade || ''}`
+    );
+  }
+
+  // 1.5. Feedback humano recente (EPP Camada 3) — INJETADO ALTO porque eh prioritario
+  if (feedbackNegativo && feedbackNegativo.trim()) {
+    partes.push(
+      `\n## ⚠️ Correcoes recentes que voce DEVE seguir (feedback humano)\n` +
+      `Os usuarios sinalizaram que voce errou nas situacoes abaixo. NAO REPITA esses erros.\n\n` +
+      feedbackNegativo +
+      `\n\n**Regra dura:** antes de responder, releia essa lista. Se a pergunta atual cai num dos cenarios corrigidos, aplica a correcao.`
     );
   }
 
@@ -640,14 +669,14 @@ export async function executarAgenteInline(input: ExecutarInlineInput): Promise<
   const tInicioFn = Date.now();
 
   const agente = await carregarAgente(agente_slug);
-  const { aprendizados, perfilSolicitante } = await carregarMemoriaIndividual(
+  const { aprendizados, perfilSolicitante, feedbackNegativo } = await carregarMemoriaIndividual(
     agente.id, solicitante_id || cliente_id,
   );
 
   const orquestrador = ehOrquestrador(agente);
 
   let systemPrompt = montarSystemPrompt({
-    agente, aprendizados, perfilSolicitante,
+    agente, aprendizados, perfilSolicitante, feedbackNegativo,
     solicitanteSlug: null, historico: [],
   });
   if (!orquestrador) systemPrompt += '\n\n' + SCHEMA_RESPOSTA_WORKER;
@@ -1024,16 +1053,43 @@ async function chamarOpenAI(input: LLMCallInput, modelo: string, consumidor: str
     body.tool_choice = 'auto';
   }
 
-  const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  // Retry automatico em 5xx (servidor OpenAI overloaded) e 429 (rate limit)
+  // OpenAI as vezes retorna HTTP 500 / 503 esporadicamente — backoff exponencial 1s/3s/9s
+  let resp: Response | null = null;
+  let lastErr: string = '';
+  for (let tentativa = 0; tentativa < 4; tentativa++) {
+    resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (resp.ok) break;
+    // Erros que VALE retry: 408 timeout, 429 rate limit, 500/502/503/504 server
+    const status = resp.status;
+    const podeRetentar = status === 408 || status === 429 || (status >= 500 && status < 600);
+    if (!podeRetentar) break; // 400, 401, 403, etc — nao adianta retentar
+    lastErr = await resp.text();
+    if (tentativa === 3) break; // ultima tentativa, sai do loop e cai no throw abaixo
+    const espera = Math.pow(3, tentativa) * 1000; // 1s, 3s, 9s
+    console.warn(`[chamarLLM] OpenAI ${modelo} retornou ${status}, tentativa ${tentativa + 1}/4, esperando ${espera}ms`);
+    await new Promise(r => setTimeout(r, espera));
+  }
 
   const latenciaMs = Date.now() - inicio;
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`OpenAI ${modelo} ${resp.status}: ${err.slice(0, 300)}`);
+  if (!resp || !resp.ok) {
+    const err = lastErr || (resp ? await resp.text().catch(() => '') : 'sem resposta');
+    // Mensagem amigavel pro usuario (sem JSON cru) — usado pelo frontend pra mostrar erro UX
+    const status = resp?.status || 'desconhecido';
+    const friendly = status === 429
+      ? 'Estamos com muita demanda agora. Tenta de novo em alguns segundos.'
+      : status >= 500
+        ? 'A OpenAI deu erro temporario (' + status + '). Tenta de novo em alguns segundos.'
+        : 'Erro na chamada do modelo (' + status + ').';
+    const erro: any = new Error(friendly);
+    erro.codigo = status;
+    erro.tipo = status >= 500 || status === 429 ? 'transitorio' : 'permanente';
+    erro.detalhes = err.slice(0, 300);
+    throw erro;
   }
   const data = await resp.json();
   const choice = data.choices?.[0];
