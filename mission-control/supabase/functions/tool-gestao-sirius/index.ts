@@ -156,7 +156,8 @@ async function actObterUsuario(body: any) {
   return jsonRespTool({ ok: true, usuario: { ...u, plan_nome } });
 }
 
-// Cria usuario via Edge da Sirius (create-user usa service_role e cuida do auth + profile)
+// Cria usuario via Supabase Auth Admin API + UPDATE profile.
+// NAO usa a Edge create-user da Sirius (ela exige JWT admin, nao aceita service_role).
 async function actCriarUsuario(body: any) {
   const required = ['email', 'password', 'nome'];
   for (const k of required) {
@@ -168,49 +169,76 @@ async function actCriarUsuario(body: any) {
   if (password.length < 8) return jsonRespTool({ ok: false, erro: 'senha minima 8 chars' }, 400);
 
   const key = await siriusKey();
-  // Chama Sirius create-user
-  const r = await fetch(`${SIRIUS_FUNCS}/create-user`, {
+
+  // 1) Cria em auth.users via Admin API (com email confirmado)
+  const rAuth = await fetch(`${SIRIUS_AUTH_ADMIN}/users`, {
     method: 'POST',
     headers: siriusHeaders(key),
     body: JSON.stringify({
       email,
       password,
-      nome: String(body.nome).trim(),
-      papel: body.papel || 'user',
-      funcao: body.funcao || null,
-      avatar_url: body.avatar_url || null,
-      plan_id: body.plan_id || null,
-      telefone: body.telefone || null,
-      hotmart_user_id: body.hotmart_user_id || null,
-      token_limit_override: body.token_limit_override || null,
+      email_confirm: true,
     }),
   });
-  const txt = await r.text();
-  let data: any = null;
-  try { data = JSON.parse(txt); } catch { data = txt; }
-  if (!r.ok) return jsonRespTool({ ok: false, erro: 'create-user Sirius: ' + (data?.error || data?.message || txt.slice(0, 200)) }, r.status);
+  const txtAuth = await rAuth.text();
+  let dataAuth: any = null;
+  try { dataAuth = JSON.parse(txtAuth); } catch { dataAuth = txtAuth; }
+  if (!rAuth.ok) {
+    const msg = dataAuth?.msg || dataAuth?.error_description || dataAuth?.error || txtAuth.slice(0, 200);
+    return jsonRespTool({ ok: false, erro: 'criar auth: ' + msg }, rAuth.status);
+  }
+  const user_id = dataAuth?.id || dataAuth?.user?.id;
+  if (!user_id) return jsonRespTool({ ok: false, erro: 'auth nao retornou user_id', resposta_bruta: dataAuth }, 500);
 
-  const user_id = data?.user?.id || data?.user_id || data?.id;
-  if (!user_id) return jsonRespTool({ ok: false, erro: 'create-user Sirius nao retornou user_id', resposta_bruta: data }, 500);
+  // 2) Espera 500ms pro trigger handle_new_user criar o profile basico
+  await new Promise((r) => setTimeout(r, 500));
 
-  // Aplica overrides/features adicionais via PATCH em profiles
-  const patch: Record<string, any> = {};
-  if (body.preferred_language) patch.preferred_language = body.preferred_language;
-  if (body.script_limit_override != null) patch.script_limit_override = body.script_limit_override;
+  // 3) PATCH em profiles com TUDO de uma vez (nome, papel, plano, features, overrides, vigencia)
+  const patch: Record<string, any> = {
+    nome: String(body.nome).trim(),
+    email,
+    papel: body.papel || 'user',
+    funcao: body.funcao || null,
+    avatar_url: body.avatar_url || null,
+    telefone: body.telefone || null,
+    preferred_language: body.preferred_language || 'pt',
+  };
+  if (body.plan_id) {
+    patch.plan_id = body.plan_id;
+    patch.plan_status = 'active';
+    patch.cycle_start = new Date().toISOString().slice(0, 10);
+  }
   if (body.vigencia_brt) patch.last_payment_at = body.vigencia_brt;
-  // features: aplica TODAS as 10 que vieram explicitas
+  if (body.token_limit_override != null && body.token_limit_override !== '') patch.token_limit_override = body.token_limit_override;
+  if (body.script_limit_override != null && body.script_limit_override !== '') patch.script_limit_override = body.script_limit_override;
+  if (body.hotmart_user_id) patch.hotmart_user_id = body.hotmart_user_id;
+  // features
   if (body.features && typeof body.features === 'object') {
     for (const k of FEATURE_KEYS) {
       if (typeof body.features[k] === 'boolean') patch[k] = body.features[k];
     }
   }
 
-  if (Object.keys(patch).length > 0) {
-    const ru = await siriusREST('PATCH', `/profiles?user_id=eq.${user_id}`, patch, 'return=representation');
-    if (!ru.ok) return jsonRespTool({ ok: true, aviso: 'usuario criado mas overrides falharam: ' + ru.erro, user_id });
+  // PATCH profile (UPSERT pra cobrir caso onde trigger nao criou ainda)
+  const ru = await siriusREST('PATCH', `/profiles?user_id=eq.${user_id}`, patch, 'return=representation');
+  if (!ru.ok) {
+    // Tenta INSERT direto se PATCH falhou (provavel: trigger nao rodou)
+    const insertBody = { user_id, ...patch, cycle_start: patch.cycle_start || new Date().toISOString().slice(0, 10), plan_status: patch.plan_status || 'active' };
+    const rInsert = await siriusREST('POST', `/profiles`, insertBody, 'return=representation');
+    if (!rInsert.ok) return jsonRespTool({ ok: false, erro: 'criar profile: ' + rInsert.erro, user_id_auth: user_id }, 500);
+  } else if (Array.isArray(ru.data) && ru.data.length === 0) {
+    // PATCH retornou 0 rows = profile não existia. Tenta INSERT.
+    const insertBody = { user_id, ...patch, cycle_start: patch.cycle_start || new Date().toISOString().slice(0, 10), plan_status: patch.plan_status || 'active' };
+    const rInsert = await siriusREST('POST', `/profiles`, insertBody, 'return=representation');
+    if (!rInsert.ok) return jsonRespTool({ ok: false, erro: 'profile vazio + insert falhou: ' + rInsert.erro, user_id_auth: user_id }, 500);
   }
 
-  return jsonRespTool({ ok: true, user_id, usuario: data?.user || null });
+  // Sincroniza user_roles se papel != user default
+  if (patch.papel && patch.papel !== 'user') {
+    await siriusREST('POST', `/user_roles`, { user_id, role: patch.papel }, 'resolution=ignore-duplicates');
+  }
+
+  return jsonRespTool({ ok: true, user_id });
 }
 
 async function actAtualizarUsuario(body: any) {
