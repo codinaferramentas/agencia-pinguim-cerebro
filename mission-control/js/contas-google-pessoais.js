@@ -1,21 +1,23 @@
-/* Contas Google Pessoais — V2.14.7 (Andre 2026-05-15)
+/* Contas Google Pessoais — V2.14.7 + v2.16.0 (Andre 2026-05-29: portado pra Edge Function)
    Multi-conta Google por sócio. Cada sócio conecta N contas (ex: Luiz com
    "Pinguim" + "Pessoal"), uma marcada como padrão pra desambiguar "meu email".
 
-   Fluxo:
+   Fluxo (atualizado 2026-05-29 — sem dependência de ngrok/server-cli):
    1. Sócio preenche nome + telefone WhatsApp + label
-   2. Clica "Conectar Google" → POST /api/conexoes/iniciar (ngrok)
-   3. server-cli responde com authorize_url do Google
+   2. Clica "Conectar Google" → POST Edge `conexoes-socio` action=iniciar
+   3. Edge resolve socio por telefone, gera state, retorna authorize_url
    4. Sócio é redirecionado pro Google, autoriza
-   5. Google volta em https://<ngrok>/api/conexoes/callback
-   6. server-cli grava em pinguim.conexoes_google
+   5. Google volta em https://<supabase>/functions/v1/conexoes-socio?action=callback&code&state
+   6. Edge troca code por refresh_token, grava em pinguim.conexoes_google
    7. Sócio fecha aba, volta aqui, vê a conta listada
 
-   Como o callback acontece no server-cli (ngrok), essa tela só dispara o
-   início e periodicamente recarrega a lista pra mostrar conta nova.
+   Polling: a tela recarrega lista a cada 4s (até 2min) pra capturar conexao nova.
 */
 
-const PUBLIC_BASE_URL = 'https://almost-pawing-urban.ngrok-free.dev';
+// SUPABASE_URL e SUPABASE_ANON_KEY vêm de window.__ENV__ (injetado pelo MC)
+const SB_URL = (typeof window !== 'undefined' && window.__ENV__?.SUPABASE_URL) || 'https://wmelierxzpjamiofeemh.supabase.co';
+const SB_ANON = (typeof window !== 'undefined' && window.__ENV__?.SUPABASE_ANON_KEY) || '';
+const EDGE_BASE = `${SB_URL}/functions/v1/conexoes-socio`;
 
 const el = (tag, attrs = {}, children = []) => {
   const n = document.createElement(tag);
@@ -33,18 +35,22 @@ const el = (tag, attrs = {}, children = []) => {
   return n;
 };
 
-async function api(method, path, body = null) {
-  const headers = { 'ngrok-skip-browser-warning': '1' };
-  if (body) headers['Content-Type'] = 'application/json';
-  const opts = { method, headers };
-  if (body) opts.body = JSON.stringify(body);
+// Chama Edge function (sempre POST com { action, ...body }, mesmo pra listar)
+async function api(action, body = {}) {
+  const headers = {
+    'Content-Type': 'application/json',
+    apikey: SB_ANON,
+    Authorization: `Bearer ${SB_ANON}`,
+  };
   let r;
   try {
-    r = await fetch(PUBLIC_BASE_URL + path, opts);
+    r = await fetch(EDGE_BASE, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ action, ...body }),
+    });
   } catch (e) {
-    const err = new Error('Server-cli local não respondeu. PC ligado? Ngrok rodando? (' + (e.message || 'fetch failed') + ')');
-    err.kind = 'offline';
-    throw err;
+    throw new Error('Edge Supabase não respondeu: ' + (e.message || 'fetch failed'));
   }
   let texto;
   try { texto = await r.text(); }
@@ -54,9 +60,9 @@ async function api(method, path, body = null) {
   let j;
   try { j = JSON.parse(texto); }
   catch (_) {
-    throw new Error(`Resposta não-JSON (HTTP ${r.status}): ${texto.slice(0, 120)}`);
+    throw new Error(`Resposta não-JSON (HTTP ${r.status}): ${texto.slice(0, 160)}`);
   }
-  if (!j.ok) throw new Error(j.error || 'erro');
+  if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
   return j;
 }
 
@@ -172,7 +178,7 @@ export function renderContasGooglePessoais(container) {
     listaWrap.innerHTML = '';
     if (!telefone) return;
     try {
-      const r = await api('GET', `/api/conexoes/listar?telefone=${encodeURIComponent(telefone)}`);
+      const r = await api('listar', { telefone });
       if (!r.cliente_id) {
         listaWrap.appendChild(el('div', {
           style: 'padding:.85rem 1rem;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:8px;color:#fca5a5;font-size:.85rem',
@@ -238,7 +244,7 @@ export function renderContasGooglePessoais(container) {
         tog.addEventListener('change', async (ev) => {
           ev.target.disabled = true;
           try {
-            await api('POST', '/api/conexoes/toggle-relatorio', { conexao_id: c.id, valor: ev.target.checked });
+            await api('toggle-relatorio', { conexao_id: c.id, valor: ev.target.checked });
             await carregarLista(telefone);
           } catch (e) {
             ev.target.checked = !ev.target.checked;
@@ -268,7 +274,7 @@ export function renderContasGooglePessoais(container) {
         style: 'background:transparent;color:#94a3b8;border:1px solid #2a2a3e;padding:.4rem .7rem;border-radius:6px;cursor:pointer;font-size:.75rem',
         onclick: async () => {
           try {
-            await api('POST', '/api/conexoes/padrao', { conexao_id: c.id });
+            await api('padrao', { conexao_id: c.id });
             await carregarLista(telefone);
           } catch (e) { alert('Erro: ' + e.message); }
         },
@@ -280,7 +286,7 @@ export function renderContasGooglePessoais(container) {
       onclick: async () => {
         if (!confirm(`Revogar a conta ${c.email_google} (${c.label})?\n\nO refresh_token vai ser apagado do banco. O sócio precisará reconectar pra usar essa conta de novo.`)) return;
         try {
-          await api('POST', '/api/conexoes/revogar', { conexao_id: c.id });
+          await api('revogar', { conexao_id: c.id });
           await carregarLista(telefone);
         } catch (e) { alert('Erro: ' + e.message); }
       },
@@ -316,10 +322,10 @@ export function renderContasGooglePessoais(container) {
 
     btnConectar.disabled = true;
     btnConectar.textContent = 'Iniciando...';
-    status.textContent = '⏳ Falando com o server-cli local...';
+    status.textContent = '⏳ Falando com Pinguim OS…';
 
     try {
-      const r = await api('POST', '/api/conexoes/iniciar', {
+      const r = await api('iniciar', {
         nome,
         telefone,
         label,
