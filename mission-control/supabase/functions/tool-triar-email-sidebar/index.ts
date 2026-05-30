@@ -108,31 +108,44 @@ const BALDES = [
 
 const PROMPT_CLASSIFICADOR = `Você é o classificador de TRIAGEM EXECUTIVA de email. Sua tarefa é colocar cada email em UM dos baldes de AÇÃO abaixo, como uma SECRETÁRIA EXECUTIVA classificaria pro CEO ler.
 
-## BALDES (escolha SEMPRE um)
+## BALDES NATIVOS (6)
 
-${BALDES.map((b) => `- \`${b.slug}\`: ${b.emoji} ${b.nome} — ${b.desc}`).join('\n')}
+| slug | quando usar |
+|---|---|
+| \`responder_hoje\` | 🔴 SÓ o sócio resolve. Cliente urgente, reclamação séria, proposta/orçamento com prazo, lead comercial NOVO, jurídico/fiscal (.gov.br, .jus.br, procon, intimação), email pessoal de pessoa real esperando resposta |
+| \`decidir\` | ✋ Pedem aprovação/OK do sócio. "Pode autorizar?", "Aprovar?", contrato pra revisar, sócio/funcionário interno pedindo validação |
+| \`pagar\` | 💸 Boleto, fatura, 2ª via, NF, reembolso a aprovar, cobrança financeira ATIVA |
+| \`delegar\` | 🤝 Pode ser feito por funcionário (Rafa/Djairo/suporte). Cadastro Princípia Pay, dúvida operacional de cliente, agendamento de reunião |
+| \`acompanhar\` | ⏳ O sócio está ESPERANDO a outra parte responder. Follow-up que ele iniciou, "Aguardando sua resposta" |
+| \`arquivar\` | 📦 Sem ação necessária NENHUMA. Newsletter genérica, confirmação automática, notificação Slack/GitHub/Drive, CC informativo, recibo de pagamento JÁ FEITO |
 
 ## REGRAS DURAS
 
-- Email é coisa de DECISÃO PESSOAL. Pergunta-chave: "o que essa pessoa precisa que o CEO FAÇA hoje?"
-- Se o remetente é SISTEMA (noreply, notification, no-reply) e não pede ação → \`arquivar\`
-- Se domínio é \`.gov.br\`, \`.jus.br\`, procon, OAB, Receita Federal → SEMPRE \`responder_hoje\`
+- Email é DECISÃO PESSOAL do CEO. **Pergunta-chave: "o que essa pessoa precisa que o CEO FAÇA hoje?"**. Se a resposta for "nada, é informativo" → \`arquivar\`. Se for qualquer outra coisa → um dos 5 baldes de ação.
+- Remetente SISTEMA (noreply@, notification@, no-reply@) e não pede ação → \`arquivar\`
+- Domínio do remetente é \`.gov.br\`, \`.jus.br\`, procon, OAB, Receita Federal → SEMPRE \`responder_hoje\`
 - Recibo/confirmação de pagamento JÁ FEITO → \`arquivar\` (NÃO é pagar; já foi pago)
 - Cobrança ATIVA (boleto vencendo, fatura aberta) → \`pagar\`
-- Sócio do time pedindo OK → \`decidir\`
-- Lead comercial / proposta nova → \`responder_hoje\`
+- Sócio/funcionário interno do time pedindo OK → \`decidir\` (não responder_hoje)
+- Lead comercial / proposta nova / orçamento → \`responder_hoje\`
 - Reclamação de cliente → \`responder_hoje\`
-- Newsletter / promoção / GitHub / Slack / Notion notif → \`arquivar\`
+- Pessoa real (não sistema) escrevendo email pessoal pedindo resposta → \`responder_hoje\`
+- **Em dúvida entre \`responder_hoje\` e \`decidir\`**: se a contraparte é EXTERNA (cliente, fornecedor, lead), é \`responder_hoje\`. Se é INTERNA (sócio, funcionário), é \`decidir\`.
+- **Em dúvida entre AÇÃO e \`arquivar\`**: SE EM DÚVIDA, escolhe ação. Não joga tudo em arquivar por falta de contexto. Arquivar é SÓ quando tem CERTEZA que não precisa fazer nada.
+
+## ANTI-PADRÕES (NÃO faça)
+
+- ❌ Classificar TUDO como \`arquivar\` porque "não tem certeza". Se o email é de pessoa real falando algo concreto, é AÇÃO.
+- ❌ Confundir cobrança ativa (\`pagar\`) com recibo (\`arquivar\`). Cobrança = "pague até X". Recibo = "pagamento recebido".
+- ❌ Jogar lead comercial no \`arquivar\` só porque é primeira vez que escreve.
 
 ## FORMATO DE RESPOSTA
 
-Devolva JSON com array \`classificacoes\`. Cada item tem:
-- \`id\`: id do email (string)
-- \`balde\`: slug do balde (string — UM dos slugs acima)
-- \`motivo_curto\`: máximo 8 palavras explicando
+Devolva JSON. Cada email do input vira UMA entrada na resposta. NÃO PULE NENHUM. Não invente id. Use SÓ os 6 slugs válidos.
 
-Exemplo:
-{"classificacoes":[{"id":"abc123","balde":"responder_hoje","motivo_curto":"cliente reclamando do produto"}]}`;
+\`\`\`json
+{"classificacoes":[{"id":"<id_email>","balde":"<slug>","motivo_curto":"<sinal concreto, max 80 chars>"}]}
+\`\`\``;
 
 async function classificarEmails(emails: EmailMeta[], openaiKey: string): Promise<Array<{ id: string; balde: string; motivo_curto: string }>> {
   if (emails.length === 0) return [];
@@ -156,7 +169,7 @@ async function classificarEmails(emails: EmailMeta[], openaiKey: string): Promis
         { role: 'system', content: PROMPT_CLASSIFICADOR },
         { role: 'user', content: userMsg },
       ],
-      temperature: 0.1,
+      temperature: 0.3,
       max_tokens: 4000,
     }),
   });
@@ -223,8 +236,8 @@ async function executarTriagem(opts: { cliente_id: string; conexao_id?: string; 
   const { access_token, conexao } = await obterAccessTokenSocio(opts);
 
   // 2) Lista emails das últimas 24h
-  // Gmail query: newer_than:1d
-  const ids = await gmailListIds(access_token, 'newer_than:1d in:inbox');
+  // Gmail query: newer_than:1d -in:spam -in:trash (não filtra in:inbox pra pegar tb Promoções/Atualizações/Social)
+  const ids = await gmailListIds(access_token, 'newer_than:1d -in:spam -in:trash -in:chats');
 
   // Limita a 80 (custo + tempo)
   const idsLimited = ids.slice(0, 80);
