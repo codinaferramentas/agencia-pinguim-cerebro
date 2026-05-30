@@ -32,12 +32,44 @@ function sb() {
   });
 }
 
+// Resolve cliente_id real do sócio. Aceita:
+// - cliente_id de pinguim.socios (já é o final)
+// - id de auth.users (mapeia via email → pinguim.socios.email → pinguim.socios.cliente_id)
+// Retorna o cliente_id usado nas tabelas Pinguim (socios, conexoes_google, etc).
+export async function resolverClienteIdSocio(cliente_id_ou_auth_id: string): Promise<string> {
+  // 1) Tenta como cliente_id de pinguim.socios direto
+  const { data: socioDireto } = await sb().from('socios')
+    .select('cliente_id').eq('cliente_id', cliente_id_ou_auth_id).maybeSingle();
+  if (socioDireto) return socioDireto.cliente_id;
+
+  // 2) Tenta como auth.users.id → busca email → busca socio por email
+  // (cliente fora de socios = auth user fora da agência. Retorna ele mesmo.)
+  try {
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.45.0');
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const sbAuth = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+    const { data } = await sbAuth.auth.admin.getUserById(cliente_id_ou_auth_id);
+    const email = data?.user?.email;
+    if (email) {
+      const { data: socioPorEmail } = await sb().from('socios')
+        .select('cliente_id').eq('email', email).maybeSingle();
+      if (socioPorEmail) return socioPorEmail.cliente_id;
+    }
+  } catch (_) { /* ignora */ }
+
+  // 3) Não é sócio → retorna ele mesmo (uso futuro pra usuários não-sócios)
+  return cliente_id_ou_auth_id;
+}
+
 // Busca conexão ativa do sócio. Se label/conexao_id, filtra. Senão pega is_padrao.
+// IMPORTANTE: resolve cliente_id antes (aceita auth.user.id também).
 export async function buscarConexaoSocio(opts: { cliente_id: string; conexao_id?: string; label?: string }): Promise<{ id: string; refresh_token: string; email_google: string; label: string } | null> {
-  const { cliente_id, conexao_id, label } = opts;
+  const cid = await resolverClienteIdSocio(opts.cliente_id);
+  const { conexao_id, label } = opts;
   let q = sb().from('conexoes_google')
     .select('id, refresh_token, email_google, label, is_padrao')
-    .eq('cliente_id', cliente_id)
+    .eq('cliente_id', cid)
     .is('revogado_em', null);
   if (conexao_id) q = q.eq('id', conexao_id);
   if (label) q = q.eq('label', label);
@@ -49,9 +81,10 @@ export async function buscarConexaoSocio(opts: { cliente_id: string; conexao_id?
 
 // Lista todas conexões ativas do sócio (pra desambiguar quando tem >1)
 export async function listarConexoesSocio(cliente_id: string): Promise<Array<{ id: string; label: string; email_google: string; is_padrao: boolean }>> {
+  const cid = await resolverClienteIdSocio(cliente_id);
   const { data, error } = await sb().from('conexoes_google')
     .select('id, label, email_google, is_padrao')
-    .eq('cliente_id', cliente_id)
+    .eq('cliente_id', cid)
     .is('revogado_em', null)
     .order('is_padrao', { ascending: false })
     .order('criado_em', { ascending: true });
