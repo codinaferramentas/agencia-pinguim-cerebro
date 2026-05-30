@@ -545,6 +545,60 @@ Faça a análise completa e profunda. Compare contra a média do perfil. Cite fr
     return b.engagement_score - a.engagement_score;
   });
 
+  // ============================================================
+  // ETAPA 8: Imagens em base64 (HTML standalone offline)
+  // Avatar + thumbs do top/worst/intermediários/pessoais.
+  // Sem isso, links do CDN do Instagram bloqueiam por CORS quando
+  // o HTML é aberto localmente (file://).
+  // ============================================================
+  async function imageToDataUrl(url: string | undefined | null): Promise<string | null> {
+    if (!url) return null;
+    try {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 15_000);
+      const r = await fetch(url, {
+        signal: ctrl.signal,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      });
+      clearTimeout(tid);
+      if (!r.ok) return null;
+      const ct = r.headers.get('content-type') || 'image/jpeg';
+      if (!ct.startsWith('image/')) return null;
+      const buf = new Uint8Array(await r.arrayBuffer());
+      if (buf.byteLength > 5 * 1024 * 1024) return null; // > 5MB skip
+      // Convert to base64 (Deno-friendly)
+      let bin = '';
+      const chunk = 0x8000;
+      for (let i = 0; i < buf.length; i += chunk) {
+        bin += String.fromCharCode(...buf.subarray(i, i + chunk));
+      }
+      const b64 = btoa(bin);
+      return `data:${ct};base64,${b64}`;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Coleta TODAS as URLs em paralelo
+  const allPosts = [top_post, worst_post, ...other_posts_analyzed, ...norm.personal];
+  const imageJobs: Promise<void>[] = [];
+
+  // Avatar
+  imageJobs.push((async () => {
+    const data = await imageToDataUrl(norm.profile.avatar_url);
+    if (data) norm.profile.avatar_url = data;
+  })());
+
+  // Thumbs de cada post
+  for (const p of allPosts) {
+    imageJobs.push((async () => {
+      const data = await imageToDataUrl(p.thumb_url);
+      if (data) p.thumb_url = data;
+    })());
+  }
+
+  await Promise.all(imageJobs);
+
   // Estrutura final
   const result = {
     meta: {
