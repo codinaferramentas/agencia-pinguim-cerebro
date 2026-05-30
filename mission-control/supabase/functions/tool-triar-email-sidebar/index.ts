@@ -106,6 +106,76 @@ const BALDES = [
   { slug: 'arquivar', emoji: '📦', nome: 'Arquivar', desc: 'Sem ação necessária. Newsletter, confirmação automática, notificação, CC informativo' },
 ];
 
+// ============================================================
+// HEURÍSTICA RÁPIDA (portada do cron) — pré-classifica antes do LLM
+// Itens claramente "arquivar" pulam o LLM. LLM só vê os ambíguos.
+// ============================================================
+const REGEX_HEURISTICA: Record<string, RegExp> = {
+  spam: /\bunsubscribe\b|black friday|cyber monday|imperd[íi]vel|s[óo] hoje|[íi]ltima chance/i,
+  arquivar: /newsletter|substack|medium\.com|digest|weekly|aviso de pol[íi]tica|terms of service|atualizamos? nossos termos|notifica[çc][ãa]o do (slack|discord|github|drive|asana|notion)|backup conclu[íi]do|login (detectado|realizado)|nova sess[ãa]o|seu (resumo|relat[óo]rio) semanal/i,
+  pagar: /\bboleto\b|fatura|2ª via|segunda via|pagamento (pendente|atrasad|vencid)|vencimento|nota fiscal|nfe|nfse|reembolso|estorno|chargeback|cobran[çc]a/i,
+  decidir: /\baprovar?\??\b|ok pra seguir|pode autorizar|preciso da sua (assinatura|aprova[çc][ãa]o)|valida[çc][ãa]o|pode revisar|d[áa] uma olhada\??/i,
+  acompanhar: /aguardando (sua )?resposta|estou esperando|qualquer atualiza[çc][ãa]o|me retorna quando|fico no aguardo/i,
+  responder_hoje: /\burgente\b|preciso de retorno hoje|n[ãa]o consegui acessar|reclama[çc][ãa]o|n[ãa]o funciona|cancelar contrato|vou cancelar|chargeback|intima[çc][ãa]o|notifica[çc][ãa]o (judicial|extrajudicial)|auto de infra[çc][ãa]o|procon|jur[íi]dico/i,
+  juridico_fiscal: /@.*\.(gov\.br|jus\.br)$|@.*procon|@.*oab\.org\.br|@.*receita\.fazenda/i,
+  delegar: /\bcadastr|preciso de acesso|n[ãa]o recebi (o )?(login|acesso|email)|como fa[çc]o para|pode me ajudar|d[úu]vida sobre o produto|suporte/i,
+};
+
+function classificarHeuristico(email: EmailMeta): { balde: string | null; confianca: 'alta' | 'media' | 'baixa' } {
+  const assunto = email.assunto || '';
+  const snippet = email.snippet || '';
+  const de = email.de_email || '';
+  const txt = `${assunto} ${snippet}`;
+  const remetente = de.toLowerCase();
+
+  // Ordem importa — checa mais específico primeiro
+  if (REGEX_HEURISTICA.spam.test(txt)) return { balde: 'spam', confianca: 'alta' };
+  if (REGEX_HEURISTICA.juridico_fiscal.test(remetente)) return { balde: 'responder_hoje', confianca: 'alta' };
+  if (REGEX_HEURISTICA.responder_hoje.test(txt)) return { balde: 'responder_hoje', confianca: 'media' };
+  if (REGEX_HEURISTICA.pagar.test(txt)) return { balde: 'pagar', confianca: 'alta' };
+  if (REGEX_HEURISTICA.decidir.test(txt)) return { balde: 'decidir', confianca: 'media' };
+  if (REGEX_HEURISTICA.acompanhar.test(txt)) return { balde: 'acompanhar', confianca: 'media' };
+  if (REGEX_HEURISTICA.delegar.test(txt)) return { balde: 'delegar', confianca: 'media' };
+  if (REGEX_HEURISTICA.arquivar.test(txt)) return { balde: 'arquivar', confianca: 'alta' };
+
+  return { balde: null, confianca: 'baixa' }; // ambíguo — LLM decide
+}
+
+// ============================================================
+// Baldes custom + aprendizados do sócio (portado do cron)
+// ============================================================
+async function carregarBaldesCustom(cliente_id: string): Promise<Array<{ slug: string; nome: string; icone: string; descricao: string }>> {
+  try {
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.45.0');
+    const sbAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false }, db: { schema: 'pinguim' } });
+    const { data } = await sbAdmin.from('triagem_baldes_custom')
+      .select('slug, nome, icone, descricao')
+      .eq('cliente_id', cliente_id)
+      .eq('desativado', false)
+      .order('criado_em', { ascending: true });
+    return data || [];
+  } catch (e) {
+    console.error('[triar-email] carregarBaldesCustom:', e instanceof Error ? e.message : String(e));
+    return [];
+  }
+}
+
+async function carregarAprendizados(cliente_id: string, limite = 30): Promise<Array<{ assunto: string; remetente_email: string; remetente_nome: string; balde_antigo: string; balde_novo: string; motivo_humano: string | null }>> {
+  try {
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.45.0');
+    const sbAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false }, db: { schema: 'pinguim' } });
+    const { data } = await sbAdmin.from('triagem_aprendizados')
+      .select('assunto, remetente_email, remetente_nome, balde_antigo, balde_novo, motivo_humano')
+      .eq('cliente_id', cliente_id)
+      .order('criado_em', { ascending: false })
+      .limit(limite);
+    return data || [];
+  } catch (e) {
+    console.error('[triar-email] carregarAprendizados:', e instanceof Error ? e.message : String(e));
+    return [];
+  }
+}
+
 const PROMPT_CLASSIFICADOR = `Você é o classificador de TRIAGEM EXECUTIVA de email. Sua tarefa é colocar cada email em UM dos baldes de AÇÃO abaixo, como uma SECRETÁRIA EXECUTIVA classificaria pro CEO ler.
 
 ## BALDES NATIVOS (6)
@@ -147,17 +217,70 @@ Devolva JSON. Cada email do input vira UMA entrada na resposta. NÃO PULE NENHUM
 {"classificacoes":[{"id":"<id_email>","balde":"<slug>","motivo_curto":"<sinal concreto, max 80 chars>"}]}
 \`\`\``;
 
-async function classificarEmails(emails: EmailMeta[], openaiKey: string): Promise<Array<{ id: string; balde: string; motivo_curto: string }>> {
+async function classificarEmails(
+  emails: Array<EmailMeta & { _heur_balde?: string | null; _heur_confianca?: 'alta' | 'media' | 'baixa' }>,
+  openaiKey: string,
+  baldesCustom: Array<{ slug: string; nome: string; icone: string; descricao: string }>,
+  aprendizados: Array<{ assunto: string; remetente_email: string; remetente_nome: string; balde_antigo: string; balde_novo: string; motivo_humano: string | null }>,
+): Promise<Array<{ id: string; balde: string; motivo_curto: string }>> {
   if (emails.length === 0) return [];
 
-  const listaPraIA = emails.map((e) => ({
+  // Só manda pro LLM os ambíguos OU os de média confiança
+  const ambiguos = emails.filter((e) => !e._heur_balde || e._heur_confianca === 'baixa' || e._heur_confianca === 'media');
+
+  if (ambiguos.length === 0) {
+    // Todos foram resolvidos pela heurística (alta confiança)
+    return emails.map((e) => ({
+      id: e.id,
+      balde: e._heur_balde || 'arquivar',
+      motivo_curto: 'heurística (alta confiança)',
+    }));
+  }
+
+  // Lista compacta pro LLM
+  const listaPraIA = ambiguos.map((e) => ({
     id: e.id,
     de: `${e.de_nome} <${e.de_email}>`.slice(0, 80),
-    assunto: e.assunto.slice(0, 120),
-    snippet: e.snippet.slice(0, 200),
+    assunto: (e.assunto || '').slice(0, 120),
+    snippet: (e.snippet || '').slice(0, 200),
+    palpite_heuristico: e._heur_balde || null,
   }));
 
-  const userMsg = `Classifica esses ${emails.length} emails em baldes:\n\n${JSON.stringify(listaPraIA, null, 2)}`;
+  // Bloco de baldes custom (igual cron)
+  const SLUGS_NATIVOS = ['responder_hoje', 'decidir', 'pagar', 'delegar', 'acompanhar', 'arquivar', 'spam'];
+  const SLUGS_VALIDOS = [...SLUGS_NATIVOS, ...baldesCustom.map((b) => b.slug)];
+  const blocoCustom = baldesCustom.length === 0 ? '' : `
+
+## BALDES CUSTOM DO SÓCIO (criados por ele — TEM PRIORIDADE quando casar com o sentido)
+
+${baldesCustom.map((b) => `| \`${b.slug}\` | ${b.icone || '🏷'} ${b.nome}${b.descricao ? ' — ' + b.descricao : ''} |`).join('\n')}
+`;
+
+  // Bloco de aprendizados (igual cron)
+  const blocoAprendizados = aprendizados.length === 0 ? '' : `
+
+## REGRAS APRENDIDAS DESTE SÓCIO (correções manuais anteriores — RESPEITAR padrão)
+
+${aprendizados.slice(0, 20).map((a) => {
+  const fonte = a.remetente_nome || a.remetente_email || '?';
+  const assuntoCurto = (a.assunto || '').slice(0, 80);
+  const motivo = a.motivo_humano ? ` (motivo: ${a.motivo_humano})` : '';
+  return `- "${assuntoCurto}" de ${fonte} → balde \`${a.balde_novo}\` (sócio corrigiu de \`${a.balde_antigo}\`)${motivo}`;
+}).join('\n')}
+
+QUANDO VIR EMAIL PARECIDO (mesmo remetente OU padrão de assunto similar), CLASSIFICA NO BALDE QUE O SÓCIO ESCOLHEU.
+`;
+
+  // Prompt completo (igual cron)
+  const promptCompleto = `${PROMPT_CLASSIFICADOR}${blocoCustom}${blocoAprendizados}
+
+## SLUGS VÁLIDOS
+
+${SLUGS_VALIDOS.map((s) => `- \`${s}\``).join('\n')}
+
+Regras finais: cada email do input vira UMA entrada na resposta. Não pule nenhum. Não invente id. Use SÓ os slugs válidos acima.`;
+
+  const userMsg = `Classifica esses ${ambiguos.length} emails em baldes:\n\n${JSON.stringify(listaPraIA, null, 2)}`;
 
   const r = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -166,7 +289,7 @@ async function classificarEmails(emails: EmailMeta[], openaiKey: string): Promis
       model: 'gpt-4o',
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: PROMPT_CLASSIFICADOR },
+        { role: 'system', content: promptCompleto },
         { role: 'user', content: userMsg },
       ],
       temperature: 0.3,
@@ -180,7 +303,29 @@ async function classificarEmails(emails: EmailMeta[], openaiKey: string): Promis
   const j = await r.json();
   const conteudo = j.choices?.[0]?.message?.content || '{}';
   const parsed = JSON.parse(conteudo);
-  return parsed.classificacoes || [];
+  const classifsLLM: Array<{ id: string; balde: string; motivo_curto: string }> = parsed.classificacoes || [];
+
+  // Filtra slugs válidos
+  const mapaLLM = new Map<string, { balde: string; motivo_curto: string }>();
+  for (const c of classifsLLM) {
+    if (c && c.id && SLUGS_VALIDOS.includes(c.balde)) {
+      mapaLLM.set(c.id, { balde: c.balde, motivo_curto: c.motivo_curto || '' });
+    }
+  }
+
+  // MERGE: alta confiança usa heurística; ambíguos usam LLM
+  return emails.map((e) => {
+    if (e._heur_confianca === 'alta' && e._heur_balde) {
+      return { id: e.id, balde: e._heur_balde, motivo_curto: 'heurística' };
+    }
+    const r2 = mapaLLM.get(e.id);
+    if (r2) return { id: e.id, ...r2 };
+    return {
+      id: e.id,
+      balde: e._heur_balde || 'arquivar',
+      motivo_curto: 'fallback heurístico',
+    };
+  });
 }
 
 const PROMPT_TOP3 = `Você é o chief of staff do CEO. Recebe os emails mais urgentes (balde "responder_hoje") e devolve um plano de ação curto pra cada um.
@@ -264,11 +409,27 @@ async function executarTriagem(opts: { cliente_id: string; conexao_id?: string; 
     };
   }
 
-  // 4) Classifica todos via GPT-4o
-  const openaiKey = await getChave('OPENAI_API_KEY', 'tool-triar-email-sidebar');
-  const classificacoes = await classificarEmails(emails, openaiKey);
+  // 4) Resolve cliente_id do sócio (auth → socios) — pra carregar baldes/aprendizados certos
+  const { resolverClienteIdSocio } = await import('../_shared/oauth-google.ts');
+  const clienteIdSocio = await resolverClienteIdSocio(opts.cliente_id);
 
-  // Mapeia classificação → email
+  // 5) Aplica heurística rápida em todos
+  const emailsComHeur = emails.map((e) => {
+    const h = classificarHeuristico(e);
+    return { ...e, _heur_balde: h.balde, _heur_confianca: h.confianca };
+  });
+
+  // 6) Carrega baldes custom + aprendizados do sócio
+  const [baldesCustom, aprendizados] = await Promise.all([
+    carregarBaldesCustom(clienteIdSocio),
+    carregarAprendizados(clienteIdSocio, 30),
+  ]);
+
+  // 7) Classifica via GPT-4o (só os ambíguos, com baldes custom + aprendizados no prompt)
+  const openaiKey = await getChave('OPENAI_API_KEY', 'tool-triar-email-sidebar');
+  const classificacoes = await classificarEmails(emailsComHeur, openaiKey, baldesCustom, aprendizados);
+
+  // 8) Mapeia classificação → email
   const motivoPorId = new Map<string, string>();
   const baldePorId = new Map<string, string>();
   for (const c of classificacoes) {
@@ -276,21 +437,28 @@ async function executarTriagem(opts: { cliente_id: string; conexao_id?: string; 
     baldePorId.set(c.id, c.balde);
   }
 
-  // 5) Agrupa em baldes
+  // 9) Lista FINAL de baldes (nativos + custom)
+  const baldesCompletos = [
+    ...BALDES,
+    ...baldesCustom.map((b) => ({ slug: b.slug, emoji: b.icone || '🏷', nome: b.nome, desc: b.descricao || '' })),
+  ];
+
+  // 10) Agrupa em baldes
   const baldesMap: Record<string, EmailMeta[]> = {};
-  for (const b of BALDES) baldesMap[b.slug] = [];
-  for (const e of emails) {
+  for (const b of baldesCompletos) baldesMap[b.slug] = [];
+  baldesMap['spam'] = []; // spam é nativo mas não está em BALDES (não mostra no relatório)
+  for (const e of emailsComHeur) {
     const balde = baldePorId.get(e.id) || 'arquivar';
     if (!baldesMap[balde]) baldesMap[balde] = [];
     (e as any).motivo_curto = motivoPorId.get(e.id) || '';
     baldesMap[balde].push(e);
   }
 
-  // 6) Top 3 do responder_hoje
+  // 11) Top 3 do responder_hoje
   const responderHoje = baldesMap['responder_hoje'] || [];
   const top3 = await gerarTop3(responderHoje, openaiKey);
 
-  // 7) Estrutura final
+  // 12) Estrutura final
   return {
     meta: {
       cliente_id: opts.cliente_id,
@@ -298,8 +466,10 @@ async function executarTriagem(opts: { cliente_id: string; conexao_id?: string; 
       gerado_em: new Date().toISOString(),
       duracao_s: Math.round((Date.now() - tInicio) / 1000),
       total_emails: emails.length,
+      baldes_custom_aplicados: baldesCustom.length,
+      aprendizados_aplicados: aprendizados.length,
     },
-    baldes: BALDES.map((b) => ({
+    baldes: baldesCompletos.map((b) => ({
       ...b,
       emails: baldesMap[b.slug] || [],
     })),
