@@ -8,8 +8,6 @@
    Escreve via Edge `tool-cerebro-fonte-planejada` (CRUD fontes planejadas).
 */
 
-import { getSupabase } from './sb-client.js?v=20260421p';
-
 const ENV = window.__ENV__ || {};
 const SB_URL = ENV.SUPABASE_URL || '';
 const ANON   = ENV.SUPABASE_ANON_KEY || '';
