@@ -8,6 +8,8 @@
    Escreve via Edge `tool-cerebro-fonte-planejada` (CRUD fontes planejadas).
 */
 
+import { getSupabase } from './sb-client.js?v=20260421p';
+
 const ENV = window.__ENV__ || {};
 const SB_URL = ENV.SUPABASE_URL || '';
 const ANON   = ENV.SUPABASE_ANON_KEY || '';
@@ -45,11 +47,16 @@ function emojiStatus(s) {
 }
 
 async function callEdge(nome, opts = {}) {
+  // Pega sessao do usuario logado (padrao Mission Control — ver integracoes.js).
+  const sb = getSupabase();
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) throw new Error('Sem sessão. Faça login no Mission Control.');
+
   const url = `${SB_URL}/functions/v1/${nome}${opts.query || ''}`;
   const r = await fetch(url, {
     method: opts.method || 'GET',
     headers: {
-      'Authorization': `Bearer ${ANON}`,
+      'Authorization': `Bearer ${session.access_token}`,
       'apikey': ANON,
       'Content-Type': 'application/json',
     },
