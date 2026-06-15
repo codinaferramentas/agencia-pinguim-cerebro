@@ -35,6 +35,7 @@ interface AgenteCatalogo {
   categoria: string;
   produto_inferido: string | null;
   dominio_universal: string | null;
+  funcao_inferida: string | null;
   quando_acionar: string;
 }
 
@@ -49,7 +50,7 @@ async function carregarCatalogo(): Promise<AgenteCatalogo[]> {
     db: { schema: 'pinguim' },
   });
   const { data, error } = await sb.from('agentes')
-    .select('slug, nome, categoria, produto_inferido, dominio_universal, quando_acionar')
+    .select('slug, nome, categoria, produto_inferido, dominio_universal, funcao_inferida, quando_acionar')
     .eq('status_publicacao', 'liberado')
     .not('quando_acionar', 'is', null);
   if (error) throw new Error('catalogo: ' + error.message);
@@ -98,11 +99,19 @@ Regras críticas:
 - "instagram" inclui "insta", "perfil ig", "raio-x do perfil"
 - "tuarus" inclui "taurus" (variante)
 - "lo-fi" inclui "lofi", "low-fi", "desafio lo-fi", "desafio low-fi"
-- Se a pergunta cita o produto NOMINALMENTE (ex: "do Lyra", "no Elo", "do ProAlt"), é PRODUTO (mesmo se a frase é longa)
+- ⚠️ **REGRA CRÍTICA — DETECÇÃO DE PRODUTO É AGRESSIVA:** se o nome do produto aparece NA FRASE (qualquer posição: início, meio, fim), é PRODUTO. Não importa onde nem o tamanho da frase.
+  - "preciso escrever copy pra página de venda do Elo" → "Elo" tá lá no fim → produto=elo
+  - "email de nutrição pra lead Elo" → "Elo" tá lá no fim → produto=elo
+  - "headlines novos pra rodar nessa semana do Elo" → produto=elo
 - Se a pergunta pergunta "QUAL produto/programa tem X?" (cross-produto), devolva "nenhum"
 - Se a pergunta é sobre uma PESSOA (o que comprou, tem acesso, viu aulas) mesmo citando o produto, ainda devolva o produto — quem decide é o Hop 2A
+- Se há AMBIGUIDADE (email pode ser gmail ou copy de email-de-vendas), priorize o produto que aparece nominalmente na frase ANTES de aplicar regra de domínio
 
 EXEMPLOS:
+- "preciso escrever copy pra página de venda do Elo" → { "produto": "elo" } (CITA Elo nominalmente — produto sempre ganha)
+- "email de nutrição pra lead Elo" → { "produto": "elo" } (CITA Elo nominalmente — não confunde com gmail)
+- "headlines pra ads do Elo essa semana" → { "produto": "elo" }
+- "VSL nova do Elo, 10 minutos" → { "produto": "elo" }
 - "qual o módulo de prova social do Lyra?" → { "produto": "lyra" } (cita Lyra nominalmente)
 - "qual o método ensinado no lyra?" → { "produto": "lyra" } (cita lyra no fim da frase)
 - "ela tem dúvida sobre o Elo" → { "produto": "elo" } (cita Elo)
@@ -129,22 +138,115 @@ Responda em JSON: { "produto": "<elo|proalt|lyra|tuarus|lo-fi|mentoria-express|s
   }
 }
 
+// v0.36.1 — Mapa de função → categoria-funil
+// Resolve o "lost in the middle" quando produto tem 40+ agentes:
+// agrupa a lista do Hop 2A por categoria do funil pra LLM navegar melhor.
+const FUNCAO_PARA_CATEGORIA: Record<string, string> = {
+  // TRÁFEGO/PRÉ-VENDA
+  'copy-anuncio-meta': '📱 TRÁFEGO/PRÉ-VENDA',
+  'copy-anuncio-google': '📱 TRÁFEGO/PRÉ-VENDA',
+  'criativo-reels': '📱 TRÁFEGO/PRÉ-VENDA',
+  'post-organico': '📱 TRÁFEGO/PRÉ-VENDA',
+  'sequencia-aquecimento': '📱 TRÁFEGO/PRÉ-VENDA',
+  'headlines-anuncio': '📱 TRÁFEGO/PRÉ-VENDA',
+  'ganchos-stories': '📱 TRÁFEGO/PRÉ-VENDA',
+  'roteiro-vsl': '📱 TRÁFEGO/PRÉ-VENDA',
+  'copy-pagina-venda': '📱 TRÁFEGO/PRÉ-VENDA',
+  'post-linkedin': '📱 TRÁFEGO/PRÉ-VENDA',
+  // VENDAS/COMERCIAL
+  'briefing-cliente': '💼 VENDAS/COMERCIAL',
+  'quebrador-objecao': '💼 VENDAS/COMERCIAL',
+  'quebrador-objecao-preco': '💼 VENDAS/COMERCIAL',
+  'prova-social': '💼 VENDAS/COMERCIAL',
+  'roteiro-call-vendas': '💼 VENDAS/COMERCIAL',
+  'calculadora-roi': '💼 VENDAS/COMERCIAL',
+  'gerador-oferta-bump': '💼 VENDAS/COMERCIAL',
+  'responder-dm-instagram': '💼 VENDAS/COMERCIAL',
+  'agendador-call': '💼 VENDAS/COMERCIAL',
+  'roteiro-discovery': '💼 VENDAS/COMERCIAL',
+  'perfil-ideal-aluna': '💼 VENDAS/COMERCIAL',
+  'follow-up-lead-frio': '💼 VENDAS/COMERCIAL',
+  // ONBOARDING/CS
+  'pos-venda-onboarding': '🎉 ONBOARDING/CS',
+  'suporte-aluna': '🎉 ONBOARDING/CS',
+  'corretor-tarefa': '🎉 ONBOARDING/CS',
+  'motivador-aluna': '🎉 ONBOARDING/CS',
+  'checkin-progresso': '🎉 ONBOARDING/CS',
+  // RETENÇÃO/CHURN
+  'reativador-aluno-sumido': '🔄 RETENÇÃO/CHURN',
+  'renovacao': '🔄 RETENÇÃO/CHURN',
+  'retencao-reembolso': '🔄 RETENÇÃO/CHURN',
+  // LTV/EXPANSÃO
+  'upsell-recomendador': '⬆ LTV/EXPANSÃO',
+  'indicacao-aluna': '⬆ LTV/EXPANSÃO',
+  'affiliate-recruiter': '⬆ LTV/EXPANSÃO',
+  // CONTEÚDO/MARKETING
+  'storyteller-aluna': '📰 CONTEÚDO/MARKETING',
+  'email-vendas': '📰 CONTEÚDO/MARKETING',
+  'newsletter': '📰 CONTEÚDO/MARKETING',
+  'email-nutricao': '📰 CONTEÚDO/MARKETING',
+  'podcast-script': '📰 CONTEÚDO/MARKETING',
+  'carta-vendas-direct-mail': '📰 CONTEÚDO/MARKETING',
+  // CONTEÚDO/CONHECIMENTO DO PRODUTO
+  'buscador-cerebro': '📚 CONHECIMENTO DO PRODUTO',
+  // ADMIN/UTILS
+  'cadastrar-editar-acesso': '⚙ ADMIN',
+  'gerador-faq-vivo': '⚙ ADMIN',
+  'garantia-criativa': '⚙ ADMIN',
+  'jornada-cliente': '⚙ ADMIN',
+};
+
+function agruparAgentesPorCategoria(agentes: AgenteCatalogo[]): string {
+  const grupos: Record<string, AgenteCatalogo[]> = {};
+  for (const a of agentes) {
+    const funcKey = (a as any).funcao_inferida || 'outros';
+    const cat = FUNCAO_PARA_CATEGORIA[funcKey] || '🔧 OUTROS';
+    if (!grupos[cat]) grupos[cat] = [];
+    grupos[cat].push(a);
+  }
+  // Ordem fixa das categorias
+  const ordem = ['📱 TRÁFEGO/PRÉ-VENDA', '💼 VENDAS/COMERCIAL', '🎉 ONBOARDING/CS', '🔄 RETENÇÃO/CHURN', '⬆ LTV/EXPANSÃO', '📰 CONTEÚDO/MARKETING', '📚 CONHECIMENTO DO PRODUTO', '⚙ ADMIN', '🔧 OUTROS'];
+  let texto = '';
+  for (const cat of ordem) {
+    if (!grupos[cat]) continue;
+    texto += `\n=== ${cat} ===\n`;
+    for (const a of grupos[cat]) {
+      texto += `- ${a.slug}: ${a.quando_acionar}\n`;
+    }
+  }
+  return texto.trim();
+}
+
 async function hop2a_funcaoNoProduto(query: string, produto: string, agentes: AgenteCatalogo[]) {
-  const opcoes = agentes.map(a => `- ${a.slug}: ${a.quando_acionar}`).join('\n');
+  const opcoes = agruparAgentesPorCategoria(agentes);
   const sys = `Você escolhe qual agente do produto "${produto}" atende a pergunta.
 
-Agentes disponíveis:
+Agentes disponíveis (agrupados por categoria do funil):
 ${opcoes}
 
-Regras:
-- Escolha o agente cujo "quando_acionar" mais combina com a intenção REAL da pergunta
-- Considere sinônimos, gírias, typos — entenda intenção, não palavra exata
-- Se a pergunta é sobre PESSOA (o que comprou, tem acesso, viu aulas, está ativo, engajada) mesmo mencionando o produto, devolva "consultor-geral"
-- Se a pergunta é "dúvida sobre X" ou "questionamento sobre X" no contexto do produto, é objeção → quebrador-objecao-PRODUTO
-- Se o produto NÃO TEM um agente específico pra função pedida (ex: prova social só existe pro Elo; outros produtos não têm), tente o substituto mais próximo (ex: buscador-cerebro-PRODUTO que busca depoimentos). Se nem isso existir, devolva "sem_agente"
-- "qual o módulo de X do Y?" / "tem aula sobre X no Y?" → buscador-cerebro-Y (consultar conteúdo do produto)
+PROCESSO (siga em ordem):
+1. **PRIMEIRO** identifique a INTENÇÃO da pergunta e mapeie pra UMA das categorias acima:
+   - "anúncio/copy/headline/criativo/reels/post/VSL/aquecimento" → TRÁFEGO/PRÉ-VENDA
+   - "objeção/preço/briefing/call/cliente/lead/oferta/prova social/discovery/ROI" → VENDAS/COMERCIAL
+   - "onboarding/suporte/aluna nova/correção tarefa/motivação/check-in" → ONBOARDING/CS
+   - "reativar/renovação/reembolso/aluna sumida" → RETENÇÃO/CHURN
+   - "upsell/indicação/afiliada" → LTV/EXPANSÃO
+   - "newsletter/email vendas/email nutrição/LinkedIn/podcast/storyteller/carta vendas" → CONTEÚDO/MARKETING
+   - "aula sobre X/módulo/conteúdo/mecanismo/garantia do produto" → CONHECIMENTO DO PRODUTO
+   - "cadastrar aluna/editar acesso/FAQ/garantia (criação)/jornada" → ADMIN
+2. **DEPOIS** olhe APENAS a categoria identificada e escolha o agente cujo "quando_acionar" mais combina.
+
+Regras adicionais:
+- Considere sinônimos, gírias, typos
+- Pergunta sobre PESSOA (o que comprou, tem acesso, viu aulas) mesmo citando produto → "consultor-geral"
+- "dúvida sobre X" no contexto comercial = objeção → quebrador-objecao-PRODUTO
+- Se o produto NÃO TEM agente da função pedida → tente substituto próximo (ex: buscador-cerebro-PRODUTO) ou "sem_agente"
+- "qual o módulo de X?" / "tem aula sobre X?" → buscador-cerebro-PRODUTO
 
 EXEMPLOS:
+- "email de nutrição pra lead Elo" → categoria CONTEÚDO/MARKETING → { "slug": "email-nutricao-elo" } (NÃO é gmail/inbox, é email-tipo-copy de nutrição)
+- "preciso de anúncio do Elo pro Meta" → categoria TRÁFEGO/PRÉ-VENDA → { "slug": "copy-anuncio-meta-elo" }
+- "newsletter do Elo essa semana" → categoria CONTEÚDO/MARKETING → { "slug": "newsletter-elo" }
 - "preciso de provas pra fechar venda do elo" → { "slug": "prova-social-elo" } (PROVAS pra VENDA = prova social, não objeção)
 - "uma menina que teve resultado no elo" → { "slug": "prova-social-elo" } (resultado de aluna = prova social)
 - "tem prova social do ProAlt?" (produto=proalt, mas só Elo tem prova-social) → { "slug": "buscador-cerebro-proalt" } (substituto, não inventa)
@@ -203,6 +305,10 @@ EXEMPLOS:
 - "le essa pagina ai pra mim" → { "dominio": "operacao" } (ler página)
 - "edita célula B5 com valor 100" → { "dominio": "dado" } (editar planilha = dado)
 - "qual a soma da coluna B desse Sheets?" → { "dominio": "dado" } (analisar planilha)
+- "relatório Hotmart" / "vendas Hotmart" / "receita Hotmart" / "reembolsos Hotmart" / "ranking de produtos" / "top compradores" → { "dominio": "dado" } (RELATÓRIO DE VENDAS = dado)
+- "quanto faturei na Hotmart em maio" → { "dominio": "dado" }
+- "csv das vendas Hotmart" → { "dominio": "dado" }
+- "planilha das vendas de fevereiro" → { "dominio": "dado" }
 - "meu ROAS caiu" → { "dominio": "trafego" }
 - "quem tá com ROAS melhor essa semana?" → { "dominio": "trafego" } (ROAS/conta/campanha = trafego, mesmo com "quem")
 - "qual criativo tá cansando mais?" → { "dominio": "trafego" } (criativo cansando = fadiga em ads)
@@ -277,6 +383,23 @@ EXEMPLOS dentro de domínio "dado":
 - "edita célula B5" → { "slug": "editor-de-planilha" }
 - "saúde geral da minha inbox" → { "slug": "avinash-kaushik" }
 
+REGRA CRÍTICA — analista-hotmart vs consultor de pessoa:
+- Pedidos de RELATÓRIO / PLANILHA / CSV / DADOS em MASSA de vendas Hotmart → SEMPRE { "slug": "analista-hotmart" }
+- Pedidos de CONSULTA de UM comprador específico (email/nome/CPF) → outro agente (consultor-hotmart ou consultar-pessoa, dominio "pessoa")
+
+EXEMPLOS analista-hotmart (extrai dado, gera planilha):
+- "me dá uma planilha das vendas Hotmart de fevereiro" → { "slug": "analista-hotmart" }
+- "relatório de receita Hotmart" → { "slug": "analista-hotmart" }
+- "quanto faturei na Hotmart em maio" → { "slug": "analista-hotmart" }
+- "csv das vendas Hotmart por dia" → { "slug": "analista-hotmart" }
+- "top 50 compradores em receita" → { "slug": "analista-hotmart" }
+- "ranking de produtos mais vendidos Hotmart" → { "slug": "analista-hotmart" }
+- "reembolsos Hotmart da semana" → { "slug": "analista-hotmart" }
+- "quanto perdi em reembolso" → { "slug": "analista-hotmart" }
+- "vendas Hotmart por forma de pagamento" → { "slug": "analista-hotmart" }
+- "qual produto Hotmart faturou mais este ano" → { "slug": "analista-hotmart" }
+- "faturamento Hotmart YTD" → { "slug": "analista-hotmart" }
+
 EXEMPLOS dentro de domínio "operacao":
 - "o que tem nessa tela?" → { "slug": "pinguim-analisador-tela" } (tela ativa do browser)
 - "le essa página" → { "slug": "pinguim-analisador-tela" } (página visível)
@@ -290,15 +413,36 @@ EXEMPLOS dentro de domínio "operacao":
 
 EXEMPLOS dentro de domínio "trafego":
 - "CBO ou ABO?" → { "slug": "tiago-tessmann" }
-- "ROAS caiu" / "meu ROAS do Meta Ads caiu" → { "slug": "pedro-sobral" }
-- "quem tá com ROAS melhor essa semana?" → { "slug": "pedro-sobral" }
+- "ROAS caiu" / "meu ROAS do Meta Ads caiu" → { "slug": "pedro-sobral" } (CONSELHO estratégico)
 - "fadiga de criativo" / "qual criativo tá cansando" → { "slug": "felipe-mello" }
 - "análise de funil de Meta Ads" / "audiência + lead magnet" → { "slug": "molly-pittman" }
 - "audiência incremental, scaling multi-marca" → { "slug": "depesh-mandalia" }
 - "olhar estratégico de conta - fundo vs topo de funil" → { "slug": "tatiana-pizzato" }
-- "análise quantitativa ROAS por conta" → { "slug": "andre-vaz" }
 - "gastando muito no face e nao vende" (vago, sem métrica) → { "slug": "sem_agente" }
 - "como melhoro minha conversão?" (vago) → { "slug": "sem_agente" }
+
+REGRA CRÍTICA — analista-meta-ads vs clones de tráfego:
+- Pedidos de RELATÓRIO / DADOS / PLANILHA / CSV / EXTRAIR / EXPORTAR Meta Ads → SEMPRE { "slug": "analista-meta-ads" }
+- Pedidos de CONSELHO / ESTRATÉGIA / "o que faço?" Meta Ads → vai pros clones (pedro-sobral, etc)
+
+EXEMPLOS analista-meta-ads (extrai dado, gera planilha):
+- "me dá um relatório Meta" → { "slug": "analista-meta-ads" }
+- "relatório do Meta Ads" → { "slug": "analista-meta-ads" }
+- "planilha do gasto Meta" → { "slug": "analista-meta-ads" }
+- "csv das campanhas Meta" → { "slug": "analista-meta-ads" }
+- "quanto gastei em fevereiro na Meta" → { "slug": "analista-meta-ads" }
+- "exporta gasto por placement" → { "slug": "analista-meta-ads" }
+- "puxa ROAS por campanha em planilha" → { "slug": "analista-meta-ads" }
+- "performance Meta em CSV" → { "slug": "analista-meta-ads" }
+- "ranking de criativos por CPA" → { "slug": "analista-meta-ads" } (DADO, não conselho)
+- "tabela de impressões por dia" → { "slug": "analista-meta-ads" }
+- "quais minhas campanhas ativas Meta?" → { "slug": "analista-meta-ads" }
+
+EXEMPLOS clones (querem CONSELHO):
+- "meu ROAS caiu, o que faço?" → { "slug": "pedro-sobral" }
+- "como otimizar campanha cansada?" → { "slug": "pedro-sobral" }
+- "vale escalar essa campanha?" → { "slug": "pedro-sobral" }
+
 - IMPORTANTE: Nunca devolva "sem_agente" se existir alguém com "quando_acionar" que casa razoavelmente. Só "sem_agente" se a pergunta for genuinamente vaga (sem métrica específica, sem mestre citado, sem contexto).
 
 Responda em JSON: { "slug": "<slug-do-agente-ou-sem_agente>" }`;
