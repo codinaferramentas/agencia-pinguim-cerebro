@@ -4592,6 +4592,17 @@ app.listen(PORT, () => {
       console.warn(`  [scheduler-cron] falha ao iniciar: ${e.message}`);
     }
   }
+
+  // V3 (2026-06-16) — scheduler dedicado de depoimentos Discord (4h BRT diario)
+  if (process.env.SCHEDULER_DEPOIMENTOS_ENABLED !== '0') {
+    try {
+      const schedDep = require('./lib/scheduler-depoimentos');
+      schedDep.iniciar();
+      console.log('  [scheduler-depoimentos] ATIVO (1x/dia 4h BRT, raspa Discord #depoimentos)');
+    } catch (e) {
+      console.warn(`  [scheduler-depoimentos] falha ao iniciar: ${e.message}`);
+    }
+  }
 });
 
 // Shutdown gracioso — fecha bot Discord antes de sair (evita reconexao spam quando reiniciar)

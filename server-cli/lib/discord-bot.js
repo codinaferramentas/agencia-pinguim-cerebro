@@ -446,6 +446,7 @@ class DiscordBot {
       thread_id:         m.thread?.id || null,
       anexos_qtd:        (m.attachments || []).length,
       embed_qtd:         (m.embeds || []).length,
+      metadata:          this._montarMetadata(m),
     };
 
     if (ehBot) {
@@ -750,6 +751,26 @@ class DiscordBot {
     return await db.rodarSQL(sql);
   }
 
+  // V3 (2026-06-16) — Monta metadata jsonb com URLs de anexos pra processadores
+  // posteriores (ex: motor de depoimentos baixa video/audio/imagem desses URLs).
+  _montarMetadata(m) {
+    const meta = {};
+    if (Array.isArray(m.attachments) && m.attachments.length > 0) {
+      meta.attachments = m.attachments.map(a => ({
+        id: a.id,
+        filename: a.filename,
+        content_type: a.content_type || null,
+        size: a.size || null,
+        url: a.url || null,
+        proxy_url: a.proxy_url || null,
+        width: a.width || null,
+        height: a.height || null,
+        duration_secs: a.duration_secs || null,
+      }));
+    }
+    return Object.keys(meta).length > 0 ? meta : null;
+  }
+
   async _insertMensagem(r) {
     const esc = (v) => {
       if (v === null || v === undefined) return 'NULL';
@@ -762,18 +783,25 @@ class DiscordBot {
       return `'${String(v).replace(/'/g, "''")}'`;
     };
 
+    // metadata vira jsonb (com URLs dos anexos quando houver)
+    const metaSql = r.metadata
+      ? `'${JSON.stringify(r.metadata).replace(/'/g, "''")}'::jsonb`
+      : `'{}'::jsonb`;
+
     const sql = `
       INSERT INTO pinguim.discord_mensagens (
         message_id, guild_id, guild_nome, canal_id, canal_nome, canal_tipo, parent_canal_id,
         autor_id, autor_nome, autor_bot, conteudo, postado_em, editado_em,
-        mencoes_users, mencoes_roles, menciona_everyone, reacoes_qtd, thread_id, anexos_qtd, embed_qtd
+        mencoes_users, mencoes_roles, menciona_everyone, reacoes_qtd, thread_id, anexos_qtd, embed_qtd,
+        metadata
       ) VALUES (
         ${esc(r.message_id)}, ${esc(r.guild_id)}, ${esc(r.guild_nome)},
         ${esc(r.canal_id)}, ${esc(r.canal_nome)}, ${esc(r.canal_tipo)}, ${esc(r.parent_canal_id)},
         ${esc(r.autor_id)}, ${esc(r.autor_nome)}, ${esc(r.autor_bot)}, ${esc(r.conteudo)},
         ${esc(r.postado_em)}, ${esc(r.editado_em)},
         ${esc(r.mencoes_users)}, ${esc(r.mencoes_roles)}, ${esc(r.menciona_everyone)},
-        ${esc(r.reacoes_qtd)}, ${esc(r.thread_id)}, ${esc(r.anexos_qtd)}, ${esc(r.embed_qtd)}
+        ${esc(r.reacoes_qtd)}, ${esc(r.thread_id)}, ${esc(r.anexos_qtd)}, ${esc(r.embed_qtd)},
+        ${metaSql}
       )
       ON CONFLICT (message_id) DO NOTHING;
     `;
