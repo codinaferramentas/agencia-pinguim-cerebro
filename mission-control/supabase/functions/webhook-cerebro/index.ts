@@ -152,8 +152,29 @@ serve(async (req) => {
 });
 
 function gerarTitulo(payload: any, produto_nome: string, categoria_slug: string): string {
-  const cand = payload?.respondent?.name || payload?.name || payload?.nome ||
-               payload?.respondent_name || payload?.email || payload?.respondent?.email;
+  // Tenta YA Forms: response.answers[fieldId].fieldTitle = "Nome..." -> content
+  let cand = null;
+  const resp = payload?.response || payload;
+  const answers = resp?.answers;
+  if (answers && typeof answers === 'object' && !Array.isArray(answers)) {
+    for (const ans of Object.values(answers as Record<string, any>)) {
+      const t = String(ans?.fieldTitle || '').toLowerCase();
+      if ((t.includes('nome') && t.includes('complet')) || t === 'nome') {
+        if (ans?.content) { cand = String(ans.content).trim(); break; }
+      }
+    }
+    if (!cand) {
+      // tenta email
+      for (const ans of Object.values(answers as Record<string, any>)) {
+        const t = String(ans?.fieldTitle || '').toLowerCase();
+        if (t.includes('mail')) {
+          if (ans?.content) { cand = String(ans.content).trim(); break; }
+        }
+      }
+    }
+  }
+  cand = cand || payload?.respondent?.name || payload?.name || payload?.nome ||
+                 payload?.respondent_name || payload?.email || payload?.respondent?.email;
   const data = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   if (cand) return `${produto_nome} — ${categoria_slug}: ${cand} (${data})`;
   return `${produto_nome} — ${categoria_slug} (${data})`;
@@ -167,14 +188,49 @@ function payloadParaMarkdown(payload: any): string {
   if (!payload || typeof payload !== 'object') return String(payload || '');
   const linhas: string[] = [];
 
-  const answers = payload?.data?.fields || payload?.answers || payload?.fields || payload?.respostas;
-  if (Array.isArray(answers)) {
-    for (const a of answers) {
-      const k = a.label || a.question || a.title || a.key || a.pergunta || 'campo';
-      const v = a.value ?? a.answer ?? a.resposta ?? '';
-      linhas.push(`**${k}**\n${normalizarValor(v)}\n`);
+  // YA Forms: { response: { answers: { fieldId: { fieldTitle, content } }, geolocation, ... } }
+  const resp = payload?.response || payload;
+  const meta: string[] = [];
+
+  // Metadata util (geolocalizacao, tempo, dispositivo)
+  if (resp.geolocation?.city) meta.push(`Cidade: ${resp.geolocation.city}/${resp.geolocation.state || resp.geolocation.region || ''}`);
+  if (resp.deviceType) meta.push(`Dispositivo: ${resp.deviceType}${resp.operatingSystem ? ' ('+resp.operatingSystem+')' : ''}`);
+  if (resp.timeToComplete) meta.push(`Tempo: ${Math.round(resp.timeToComplete)}s`);
+  if (resp.submittedAt) meta.push(`Enviado: ${resp.submittedAt}`);
+  if (resp.referrerUrl) meta.push(`Origem: ${resp.referrerUrl}`);
+  if (meta.length) linhas.push('## Contexto da resposta\n' + meta.map(m => `- ${m}`).join('\n') + '\n');
+
+  // YA Forms answers: objeto indexado por fieldId, cada um com fieldTitle + content
+  const answers = resp.answers || payload?.data?.fields || payload?.fields || payload?.respostas;
+  let appended = false;
+
+  if (answers && typeof answers === 'object' && !Array.isArray(answers)) {
+    linhas.push('## Respostas\n');
+    for (const [_id, ans] of Object.entries(answers as Record<string, any>)) {
+      const titulo = ans?.fieldTitle || ans?.label || ans?.question || ans?.title;
+      const conteudo = ans?.content ?? ans?.value ?? ans?.answer ?? ans?.resposta;
+      if (titulo === null || titulo === undefined) continue;
+      // Pula items decorativos (titulo de secao sem content)
+      if (conteudo === null || conteudo === undefined || conteudo === '') continue;
+      // Limpa HTML do titulo
+      const tituloLimpo = String(titulo).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      linhas.push(`**${tituloLimpo}**`);
+      linhas.push(normalizarValor(conteudo));
+      linhas.push('');
+      appended = true;
     }
-  } else {
+  } else if (Array.isArray(answers)) {
+    linhas.push('## Respostas\n');
+    for (const a of answers) {
+      const k = a.label || a.question || a.title || a.key || a.pergunta || a.fieldTitle || 'campo';
+      const v = a.value ?? a.answer ?? a.resposta ?? a.content;
+      linhas.push(`**${String(k).replace(/<[^>]+>/g, ' ').trim()}**\n${normalizarValor(v)}\n`);
+      appended = true;
+    }
+  }
+
+  if (!appended) {
+    // Fallback: objeto plano
     for (const [k, v] of Object.entries(payload)) {
       if (k.startsWith('_') || (typeof v === 'object' && v === null)) continue;
       linhas.push(`**${k}**\n${normalizarValor(v)}\n`);
@@ -185,6 +241,14 @@ function payloadParaMarkdown(payload: any): string {
 
 function normalizarValor(v: any): string {
   if (v === null || v === undefined) return '_(vazio)_';
+  if (Array.isArray(v)) {
+    // arrays de string viram lista bullet ou inline (se 1 so item)
+    if (v.length === 0) return '_(vazio)_';
+    if (v.length === 1 && typeof v[0] !== 'object') return String(v[0]).trim();
+    if (v.every(x => typeof x !== 'object')) {
+      return v.map(x => `- ${String(x).trim()}`).join('\n');
+    }
+  }
   if (typeof v === 'object') return '```json\n' + JSON.stringify(v, null, 2) + '\n```';
-  return String(v);
+  return String(v).trim();
 }
