@@ -438,10 +438,35 @@ function cardCategoria(p, integracoes, cerebro_id) {
   }
 
   // Linha 3: ações
-  const podeRodar = p.origem_pasta_drive_id && p.origem_pasta_drive_id.length > 0;
+  // Regra de UX (2026-06-16): se categoria roda automatica (evento_auto, evento_avisar, webhook)
+  // E status = 'rodando', NAO mostrar "Rodar agora" — confunde. Sistema cuida sozinho.
+  // Mostrar "Rodar agora" SO quando:
+  //   - trigger manual (sempre util)
+  //   - trigger cron mas usuario quer forçar antes do horario
+  //   - status em_construcao/falhou/pausada (precisa intervencao)
+  //   - status sem_coleta com origem configurada (pra ativar pela 1a vez)
+  const automatico = ['evento_auto', 'evento_avisar', 'webhook'].includes(p.trigger_tipo);
+  const statusRodando = p.status_automacao === 'rodando';
+  const temOrigem = (p.origem_pasta_drive_id && p.origem_pasta_drive_id.length > 0)
+    || (p.origem_configurada && p.origem_configurada.length > 0);
+  const precisaIntervir = ['em_construcao', 'falhou', 'pausada'].includes(p.status_automacao);
+
   const acoes = [];
 
-  if (podeRodar) {
+  if (automatico && statusRodando) {
+    // Estado limpo: roda sozinho. Mostra texto explicativo + opcao secundaria de forçar.
+    const txtExplicacao = p.trigger_tipo === 'webhook'
+      ? '✓ Recebendo dados em tempo real'
+      : '✓ Detector roda a cada 10min sozinho';
+    acoes.push(el('span', { class: 'pc-status-auto' }, txtExplicacao));
+    if (temOrigem && p.trigger_tipo !== 'webhook') {
+      acoes.push(el('button', {
+        class: 'pc-btn-secondary',
+        onclick: (e) => disparararJob(p, cerebro_id, e.currentTarget),
+        title: 'Antecipar — força rodar agora em vez de esperar o detector',
+      }, '⏩ Antecipar'));
+    }
+  } else if (temOrigem && (precisaIntervir || p.trigger_tipo === 'manual' || p.trigger_tipo === 'cron')) {
     acoes.push(el('button', {
       class: 'pc-btn-primary',
       onclick: (e) => disparararJob(p, cerebro_id, e.currentTarget),
@@ -953,6 +978,8 @@ function injetarEstilos() {
     .pc-btn-primary:hover { background: #1D4ED8; }
     .pc-btn-secondary { background: transparent; color: #CBD5E1; border: 1px solid #334155; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
     .pc-btn-secondary:hover { background: #334155; }
+
+    .pc-status-auto { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; color: #22C55E; font-size: 0.85rem; font-weight: 500; background: rgba(34, 197, 94, 0.08); border-radius: 6px; border: 1px solid rgba(34, 197, 94, 0.2); }
 
     .pc-empty { color: #64748B; padding: 32px; text-align: center; font-style: italic; border: 1px dashed #334155; border-radius: 8px; }
 

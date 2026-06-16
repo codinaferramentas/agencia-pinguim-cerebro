@@ -53,6 +53,36 @@ async function resolverClienteId(passado) {
 const CLIENTE_ID_PADRAO = CLIENTE_ID_FALLBACK;
 
 // ============================================================
+// inserirFonteRest — INSERT em pinguim.cerebro_fontes via REST API (PostgREST)
+// Pra payloads grandes (transcricoes >100KB) que estouram limite da Management API.
+// Retorna { id } da row inserida.
+// ============================================================
+async function inserirFonteRest({ cerebro_id, tipo, titulo, origem, url, conteudo_md }) {
+  const supabaseUrl = ENV_LOCAL.SUPABASE_URL || process.env.SUPABASE_URL;
+  const serviceKey = ENV_LOCAL.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error('SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY nao definidos em .env.local');
+  }
+  const r = await fetch(`${supabaseUrl}/rest/v1/cerebro_fontes`, {
+    method: 'POST',
+    headers: {
+      'apikey': serviceKey,
+      'Authorization': `Bearer ${serviceKey}`,
+      'Content-Type': 'application/json',
+      'Content-Profile': 'pinguim',
+      'Prefer': 'return=representation',
+    },
+    body: JSON.stringify({ cerebro_id, tipo, titulo, origem, url, conteudo_md }),
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`REST insert cerebro_fontes: ${r.status} ${t.slice(0, 300)}`);
+  }
+  const data = await r.json();
+  return data[0];
+}
+
+// ============================================================
 // rodarSQL — POST direto na Management API
 // ============================================================
 async function rodarSQL(sql) {
@@ -657,4 +687,6 @@ module.exports = {
   logarExecucaoAtendente,
   // V2.14 D Refator V3 — detector pra Reflection sem side-effect
   turnoTeveAcaoDestrutiva,
+  // V3 (2026-06-16) — REST API pra payload grande (transcricoes)
+  inserirFonteRest,
 };

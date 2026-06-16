@@ -101,22 +101,17 @@ async function ingerirPastaDrive({
       });
       on_log({ etapa: 'transcreveu', chars: t.texto.length, chunks: t.chunks, duracao_segundos: t.duracao_segundos });
 
-      // 4. Salva em cerebro_fontes
-      const fonteRow = await db.rodarSQL(`
-        INSERT INTO pinguim.cerebro_fontes
-          (cerebro_id, tipo, titulo, origem, url, conteudo_md, criado_em)
-        VALUES (
-          '${cerebro_id}'::uuid,
-          '${tipo_fonte}',
-          ${esc(arq.name)},
-          'google_drive',
-          ${esc(arq.webViewLink || '')},
-          ${esc(t.texto)},
-          now()
-        )
-        RETURNING id;
-      `);
-      const fonteId = fonteRow[0].id;
+      // 4. Salva em cerebro_fontes via REST API (suporta payload grande,
+      // Management API tem limite ~100KB de query que estoura transcricao 4h)
+      const fonteRow = await db.inserirFonteRest({
+        cerebro_id,
+        tipo: tipo_fonte,
+        titulo: arq.name,
+        origem: 'google_drive',
+        url: arq.webViewLink || '',
+        conteudo_md: t.texto,
+      });
+      const fonteId = fonteRow.id;
 
       // 5. Marca em fontes_processadas
       await db.rodarSQL(`
