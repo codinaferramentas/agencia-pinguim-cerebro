@@ -87,6 +87,30 @@ async function ingerirChatPastaDrive({
         on_log({ etapa: 'leu_txt', chars: texto.length });
       }
 
+      // Limpa caracteres que quebram serializacao JSON do postgres/PostgREST:
+      //   - control chars (mantem \t \n \r)
+      //   - surrogates UTF-16 nao-pareados (comum em emojis quebrados do export iOS)
+      // Bug pego em 2026-06-16 com 2 chats que falharam vetorizacao.
+      const tamOriginal = texto.length;
+      texto = texto.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+      // Remove surrogates orfaos (high sem low ou vice-versa)
+      texto = texto.replace(/[\uD800-\uDFFF]/g, (match, offset, str) => {
+        const code = match.charCodeAt(0);
+        // High surrogate: precisa de low na sequencia
+        if (code >= 0xD800 && code <= 0xDBFF) {
+          const next = str.charCodeAt(offset + 1);
+          if (next >= 0xDC00 && next <= 0xDFFF) return match; // par valido
+          return '';
+        }
+        // Low surrogate: precisa de high antes
+        const prev = str.charCodeAt(offset - 1);
+        if (prev >= 0xD800 && prev <= 0xDBFF) return match;
+        return '';
+      });
+      if (texto.length !== tamOriginal) {
+        on_log({ etapa: 'limpou_chars_invalidos', removidos: tamOriginal - texto.length });
+      }
+
       if (!texto || texto.length < 50) {
         throw new Error(`conteudo vazio ou muito curto (${texto?.length || 0} chars)`);
       }
