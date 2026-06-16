@@ -104,9 +104,32 @@ serve(async (req) => {
     // 3. Monta titulo + conteudo markdown
     const fonte_externa = req.headers.get('x-webhook-source') || url.searchParams.get('fonte') || 'webhook';
     const titulo = gerarTitulo(payload, produto_nome, categoria_slug);
+
+    // 4. CHECK IDEMPOTENCIA PRIMEIRO (antes de inserir cerebro_fonte)
+    // Se response.id ja foi processado pra este (cerebro, categoria), pula salvar
+    const fonteExternaId = extrairIdExterno(payload);
+    if (fonteExternaId) {
+      const { data: jaProc } = await sb
+        .from('fontes_processadas')
+        .select('id, cerebro_fonte_id')
+        .eq('cerebro_id', cerebro_id)
+        .eq('categoria_slug', categoria_slug)
+        .eq('fonte_origem', fonte_externa)
+        .eq('fonte_externa_id', fonteExternaId)
+        .limit(1);
+      if (jaProc && jaProc.length > 0) {
+        return json({
+          ok: true,
+          duplicado: true,
+          cerebro_fonte_id: (jaProc[0] as any).cerebro_fonte_id,
+          msg: 'response.id ja processado anteriormente, ignorando',
+        });
+      }
+    }
+
     const conteudoMd = payloadParaMarkdown(payload);
 
-    // 4. Salva como cerebro_fonte
+    // 5. Salva como cerebro_fonte (so passa daqui se nao for duplicata)
     const { data: fonte, error: errF } = await sb
       .from('cerebro_fontes')
       .insert({
@@ -122,12 +145,12 @@ serve(async (req) => {
     if (errF) throw new Error('insert cerebro_fontes: ' + errF.message);
     const cerebro_fonte_id = (fonte as any).id;
 
-    // 5. Marca em fontes_processadas (idempotencia)
-    const fonteExternaId = extrairIdExterno(payload) || `${Date.now()}-${cerebro_fonte_id.slice(0,8)}`;
+    // 6. Marca em fontes_processadas (idempotencia formal)
+    const finalFonteExternaId = fonteExternaId || `${Date.now()}-${cerebro_fonte_id.slice(0,8)}`;
     await sb.from('fontes_processadas').insert({
       cerebro_id,
       categoria_slug,
-      fonte_externa_id: fonteExternaId,
+      fonte_externa_id: finalFonteExternaId,
       fonte_origem: fonte_externa,
       cerebro_fonte_id,
       metadata: { titulo, fonte_externa, payload_keys: Object.keys(payload || {}) },
@@ -181,7 +204,13 @@ function gerarTitulo(payload: any, produto_nome: string, categoria_slug: string)
 }
 
 function extrairIdExterno(payload: any): string | null {
-  return payload?.response_id || payload?.id || payload?.submission_id || payload?.respondent?.id || null;
+  // YA Forms: response.id (aninhado dentro de response)
+  return payload?.response?.id ||
+         payload?.response_id ||
+         payload?.id ||
+         payload?.submission_id ||
+         payload?.respondent?.id ||
+         null;
 }
 
 function payloadParaMarkdown(payload: any): string {
