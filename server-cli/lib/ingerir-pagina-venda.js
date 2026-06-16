@@ -28,6 +28,17 @@ async function ingerirPaginaVenda({
   if (!categoria_slug) throw new Error('categoria_slug obrigatorio');
   if (!url_alvo) throw new Error('url_alvo obrigatorio');
 
+  // Resolve cliente_id (V2.13 padrao SOCIO_SLUG do .env.local, fallback Codina)
+  if (!cliente_id) {
+    try {
+      const socio = require('./socio');
+      const s = await socio.getSocioAtual();
+      cliente_id = s.cliente_id;
+    } catch {
+      cliente_id = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'; // fallback Codina
+    }
+  }
+
   on_log({ etapa: 'inicio', url_alvo });
 
   // 1. Descobre URLs candidatas (raiz + /v1, /v2, /v3 se existirem)
@@ -45,6 +56,7 @@ async function ingerirPaginaVenda({
     try {
       on_log({ etapa: 'clonando', url });
       const briefing = await _chamarEdgeClonar({ url, cliente_id });
+      if (!briefing) throw new Error('edge retornou null');
       if (!briefing || !briefing.ok) {
         throw new Error(briefing?.erro || 'edge retornou sem ok');
       }
