@@ -372,16 +372,19 @@ function cardCategoria(p, integracoes, cerebro_id) {
   }
 
   // Linha 3: ações
+  const btnAvancar = el('button', {
+    class: 'pc-btn-primary',
+    onclick: (e) => avancarStatus(p.plano_id, cerebro_id, e.currentTarget),
+    title: 'Avançar pra próximo estágio do ciclo',
+  }, meta.proximoLabel);
+
   card.append(el('div', { class: 'pc-cat-acoes' }, [
-    el('button', {
-      class: 'pc-btn-primary',
-      onclick: () => avancarStatus(p.plano_id, cerebro_id),
-      title: 'Avançar pra próximo estágio do ciclo',
-    }, meta.proximoLabel),
+    btnAvancar,
     el('button', {
       class: 'pc-btn-secondary',
       onclick: () => abrirModalEditar(p, integracoes, cerebro_id),
-    }, '⚙️ Editar plano'),
+      title: 'Editar tudo — origem, schedule, status, voltar pra trás',
+    }, '📝 Editar / mudar status'),
   ]));
 
   return card;
@@ -497,7 +500,14 @@ async function salvarPlano(plano_id, cerebro_id) {
   } catch (e) { alert('Erro: ' + e.message); }
 }
 
-async function avancarStatus(plano_id, cerebro_id) {
+async function avancarStatus(plano_id, cerebro_id, btnEl) {
+  // Feedback imediato no botao
+  const labelOriginal = btnEl ? btnEl.textContent : '';
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.textContent = '⏳ salvando...';
+    btnEl.style.opacity = '0.6';
+  }
   try {
     const r = await callEdge('tool-cerebro-plano-categoria', {
       method: 'POST',
@@ -505,7 +515,14 @@ async function avancarStatus(plano_id, cerebro_id) {
     });
     if (!r.ok) throw new Error(r.erro);
     await recarregarCerebro(cerebro_id);
-  } catch (e) { alert('Erro: ' + e.message); }
+  } catch (e) {
+    if (btnEl) {
+      btnEl.disabled = false;
+      btnEl.textContent = labelOriginal;
+      btnEl.style.opacity = '';
+    }
+    alert('Erro: ' + e.message);
+  }
 }
 
 async function recarregarCerebro(cerebro_id) {
