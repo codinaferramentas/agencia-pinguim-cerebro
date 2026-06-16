@@ -18,6 +18,7 @@
 const drive = require('./google-drive-content');
 const db = require('./db');
 const { transcreverMidia } = require('./transcrever-midia');
+const { vetorizarFonte } = require('./vetorizar-fonte');
 
 // IDs canonicos (mesmo padrao do db.js)
 const TENANT_ID_PINGUIM = '00000000-0000-0000-0000-000000000001';
@@ -112,6 +113,10 @@ async function ingerirPastaDrive({
         conteudo_md: t.texto,
       });
       const fonteId = fonteRow.id;
+
+      // 4.5. Vetoriza (REGRA DURA — sem isso, fonte fica invisivel pros agentes)
+      const vetR = await vetorizarFonte(fonteId);
+      on_log({ etapa: 'vetorizado', ok: vetR.ok, chunks: vetR.chunks, erro: vetR.erro });
 
       // 5. Marca em fontes_processadas
       await db.rodarSQL(`

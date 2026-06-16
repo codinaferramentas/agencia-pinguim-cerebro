@@ -167,7 +167,31 @@ serve(async (req) => {
       })
       .eq('id', (catList[0] as any).plano_id);
 
-    return json({ ok: true, cerebro_fonte_id, titulo, tipo_fonte: tipoFonte });
+    // 7. Vetoriza (REGRA DURA — sem isso fonte fica invisivel pros agentes)
+    // Chama internamente a Edge Function revetorizar-fonte. Tolerante a falha.
+    let vetorizado = false;
+    let vetorizado_chunks = 0;
+    try {
+      const vetR = await fetch(`${SUPABASE_URL}/functions/v1/revetorizar-fonte`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ fonte_id: cerebro_fonte_id }),
+      });
+      if (vetR.ok) {
+        const vd = await vetR.json();
+        vetorizado = true;
+        vetorizado_chunks = vd.chunks || 0;
+      } else {
+        console.warn(`vetorizacao falhou (nao bloqueante): HTTP ${vetR.status}`);
+      }
+    } catch (e) {
+      console.warn(`vetorizacao falhou (nao bloqueante): ${(e as Error).message}`);
+    }
+
+    return json({ ok: true, cerebro_fonte_id, titulo, tipo_fonte: tipoFonte, vetorizado, vetorizado_chunks });
   } catch (e) {
     console.error('webhook-cerebro erro:', e);
     return json({ ok: false, erro: (e as Error).message }, 500);

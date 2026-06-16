@@ -16,6 +16,7 @@
 
 const db = require('./db');
 const crypto = require('crypto');
+const { vetorizarFonte } = require('./vetorizar-fonte');
 
 async function ingerirPaginaVenda({
   cerebro_id,
@@ -116,9 +117,14 @@ async function ingerirPaginaVenda({
         ON CONFLICT DO NOTHING;
       `);
 
+      // Vetoriza (REGRA DURA — sem isso, fonte fica invisivel pros agentes)
+      const vetR = await vetorizarFonte(fonteId);
+      on_log({ etapa: 'vetorizado', url, ok: vetR.ok, chunks: vetR.chunks, erro: vetR.erro });
+
       det.ok = true;
       det.cerebro_fonte_id = fonteId;
       det.chars = conteudoMd.length;
+      det.vetorizado = vetR.ok;
       novos_ok++;
       on_log({ etapa: 'salvou', url, cerebro_fonte_id: fonteId });
     } catch (e) {

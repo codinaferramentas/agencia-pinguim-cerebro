@@ -15,6 +15,7 @@
 const drive = require('./google-drive-content');
 const db = require('./db');
 const enriquecedores = require('./enriquecedores');
+const { vetorizarFonte } = require('./vetorizar-fonte');
 
 const MIME_TEXT = ['text/'];
 const MIME_ZIP = ['application/zip', 'application/x-zip-compressed'];
@@ -125,7 +126,11 @@ async function ingerirChatPastaDrive({
         ON CONFLICT DO NOTHING;
       `);
 
-      // 6. Aplica camada de enriquecedores (LLM extrai perfis estruturados, conceitos, etc)
+      // 6. Vetoriza (REGRA DURA — sem isso, fonte fica invisivel pros agentes)
+      const vetR = await vetorizarFonte(fonteId);
+      on_log({ etapa: 'vetorizado', ok: vetR.ok, chunks: vetR.chunks, erro: vetR.erro });
+
+      // 7. Aplica camada de enriquecedores (LLM extrai perfis estruturados, conceitos, etc)
       const msgsParseadas = _parsearMensagensWhatsapp(texto);
       const enriqResultados = await enriquecedores.aplicarEnriquecedores({
         cerebro_id,
@@ -140,6 +145,7 @@ async function ingerirChatPastaDrive({
       det.cerebro_fonte_id = fonteId;
       det.chars = texto.length;
       det.estatisticas = estatisticas;
+      det.vetorizado = vetR.ok;
       det.enriquecedores = enriqResultados;
       novos_ok++;
       on_log({ etapa: 'salvou', cerebro_fonte_id: fonteId });
