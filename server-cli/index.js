@@ -4557,6 +4557,17 @@ app.listen(PORT, () => {
       console.warn(`  [detector-fontes] falha ao iniciar: ${e.message}`);
     }
   }
+
+  // V3 (2026-06-16) — scheduler cron pra categorias com trigger_tipo='cron'
+  if (process.env.SCHEDULER_CRON_ENABLED !== '0') {
+    try {
+      const scheduler = require('./lib/scheduler-cron-categorias');
+      scheduler.iniciar();
+      console.log('  [scheduler-cron] ATIVO (varre crons a cada 5min)');
+    } catch (e) {
+      console.warn(`  [scheduler-cron] falha ao iniciar: ${e.message}`);
+    }
+  }
 });
 
 // Shutdown gracioso — fecha bot Discord antes de sair (evita reconexao spam quando reiniciar)

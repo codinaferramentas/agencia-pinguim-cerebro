@@ -17,7 +17,22 @@ const db = require('./db');
 const drive = require('./google-drive-content');
 
 const INTERVALO_MS_DEFAULT = parseInt(process.env.DETECTOR_INTERVALO_MS, 10) || 10 * 60 * 1000; // 10 min
-const MIME_PREFIX_MIDIA = ['video/', 'audio/'];
+
+// Filtros de MIME por tipo de fonte que a categoria espera (vem de tipos_fonte do catalogo)
+// Se a categoria nao mapear pra nenhum desses, o detector aceita qualquer arquivo nao-pasta.
+const FILTROS_POR_TIPO_FONTE = {
+  // midia: video + audio (transcricao via Whisper)
+  transcricao_midia: (a) => /^video\//.test(a.mimeType || '') || /^audio\//.test(a.mimeType || ''),
+  aula:              (a) => /^video\//.test(a.mimeType || '') || /^audio\//.test(a.mimeType || ''),
+  // chat_export: txt/zip do WhatsApp "Exportar conversa"
+  chat_export:       (a) => {
+    const m = (a.mimeType || '').toLowerCase();
+    const n = (a.name || '').toLowerCase();
+    return m === 'text/plain' || m === 'application/zip' || m === 'application/x-zip-compressed' || n.endsWith('.txt') || n.endsWith('.zip');
+  },
+  // csv: planilha/csv
+  csv:               (a) => /csv|spreadsheet/.test((a.mimeType || '').toLowerCase()) || /\.(csv|tsv)$/i.test(a.name || ''),
+};
 
 let _rodando = false;
 let _parar = false;
@@ -62,7 +77,7 @@ async function _executarCiclo() {
   const rows = await db.rodarSQL(`
     SELECT
       vp.plano_id, vp.cerebro_id, vp.categoria_slug, vp.categoria_nome,
-      vp.trigger_tipo, vp.origem_pasta_drive_id
+      vp.trigger_tipo, vp.origem_pasta_drive_id, vp.categoria_tipos_fonte
     FROM pinguim.vw_cerebro_plano_categoria vp
     WHERE vp.trigger_tipo IN ('evento_avisar','evento_auto')
       AND vp.origem_pasta_drive_id IS NOT NULL
@@ -78,6 +93,7 @@ async function _executarCiclo() {
         cerebro_id: r.cerebro_id,
         categoria_slug: r.categoria_slug,
         pasta_drive_id: r.origem_pasta_drive_id,
+        tipos_fonte: r.categoria_tipos_fonte || [],
       });
       if (novos.length === 0) continue;
       _stats.encontrados_no_ultimo += novos.length;
@@ -101,10 +117,17 @@ async function _executarCiclo() {
   }
 }
 
-async function _checarPastaDrive({ cerebro_id, categoria_slug, pasta_drive_id }) {
-  // Lista arquivos da pasta (video + audio)
+async function _checarPastaDrive({ cerebro_id, categoria_slug, pasta_drive_id, tipos_fonte = [] }) {
+  // Lista arquivos da pasta e filtra por tipo de fonte que a categoria aceita
   const arquivos = await drive.listarArquivosDaPasta({ pastaId: pasta_drive_id });
-  const midias = arquivos.filter(a => MIME_PREFIX_MIDIA.some(p => (a.mimeType || '').startsWith(p)));
+  // Ignora subpastas
+  const semPasta = arquivos.filter(a => (a.mimeType || '') !== 'application/vnd.google-apps.folder');
+
+  // Aplica filtro por tipo (se categoria mapeia pra um filtro conhecido)
+  const filtros = (tipos_fonte || []).map(t => FILTROS_POR_TIPO_FONTE[t]).filter(Boolean);
+  const midias = filtros.length > 0
+    ? semPasta.filter(a => filtros.some(f => f(a)))
+    : semPasta; // sem filtro = aceita qualquer arquivo nao-pasta
   if (midias.length === 0) return [];
 
   // Filtra ja processados

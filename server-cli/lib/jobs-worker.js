@@ -23,8 +23,10 @@ const db = require('./db');
 const os = require('os');
 // V2.15 Fase 4 — Reflexao Camada 2 EPP sobre output do executor de jobs
 const { verificarOutput } = require('./verificador');
-// V3 (2026-06-16) — handler de ingestao de categoria (midia/etc)
+// V3 (2026-06-16) — handler de ingestao de categoria (midia/chat/etc)
 const { ingerirPastaDrive } = require('./ingerir-midia-drive');
+const { ingerirChatPastaDrive } = require('./ingerir-chat-drive');
+const { ingerirPaginaVenda } = require('./ingerir-pagina-venda');
 
 const POLL_INTERVALO_VAZIO_MS = parseInt(process.env.WORKER_POLL_MS, 10) || 15_000;
 const POLL_INTERVALO_OCUPADO_MS = 1_000;
@@ -98,21 +100,48 @@ async function _processarUmJob() {
     // ========================================================
     if (job.tipo_pedido === 'ingerir-categoria-midia') {
       const p = job.plano_json || {};
-      console.log(`[jobs-worker] ingestao categoria | cerebro=${p.cerebro_id} categoria=${p.categoria_slug} pasta=${p.origem_pasta_drive_id}`);
+      console.log(`[jobs-worker] ingestao categoria | cerebro=${p.cerebro_id} categoria=${p.categoria_slug} pasta=${p.origem_pasta_drive_id || '-'}`);
 
-      if (!p.cerebro_id || !p.categoria_slug || !p.origem_pasta_drive_id) {
-        await jobs.falharJob({ job_id: job.id, motivo: 'payload incompleto: cerebro_id+categoria_slug+origem_pasta_drive_id obrigatorios' });
+      if (!p.cerebro_id || !p.categoria_slug) {
+        await jobs.falharJob({ job_id: job.id, motivo: 'payload incompleto: cerebro_id+categoria_slug obrigatorios' });
         return true;
       }
 
+      // Decide o handler pelo tipos_fonte da categoria
+      const catInfo = await db.rodarSQL(`
+        SELECT categoria_tipos_fonte, origem_configurada FROM pinguim.vw_cerebro_plano_categoria
+        WHERE cerebro_id = '${p.cerebro_id}'::uuid AND categoria_slug = '${p.categoria_slug}'
+        LIMIT 1
+      `);
+      const tipos = (catInfo && catInfo[0] && catInfo[0].categoria_tipos_fonte) || [];
+      const origemConfig = (catInfo && catInfo[0] && catInfo[0].origem_configurada) || '';
+      const ehChat = tipos.includes('chat_export');
+      const ehPaginaVenda = tipos.includes('pagina_venda');
+      const handlerNome = ehPaginaVenda ? 'pagina-venda' : (ehChat ? 'chat-drive' : 'midia-drive');
+      console.log(`  [ingerir] handler=${handlerNome} tipos_fonte=[${tipos.join(',')}]`);
+
+      // Validacao de payload por handler
+      if (ehPaginaVenda) {
+        const m = origemConfig.match(/https?:\/\/[^\s,;)]+/);
+        if (!m) {
+          await jobs.falharJob({ job_id: job.id, motivo: 'pagina_venda: nenhuma URL encontrada em origem_configurada' });
+          return true;
+        }
+        p._url_alvo = m[0];
+      } else {
+        if (!p.origem_pasta_drive_id) {
+          await jobs.falharJob({ job_id: job.id, motivo: 'midia/chat: origem_pasta_drive_id obrigatorio' });
+          return true;
+        }
+      }
+
+      const handler = ehPaginaVenda ? ingerirPaginaVenda : (ehChat ? ingerirChatPastaDrive : ingerirPastaDrive);
+
       try {
-        const resultado = await ingerirPastaDrive({
-          cerebro_id: p.cerebro_id,
-          categoria_slug: p.categoria_slug,
-          pasta_drive_id: p.origem_pasta_drive_id,
-          // cliente_id default = padrao do socio configurado (.env.local SOCIO_SLUG)
-          on_log: (ev) => console.log(`  [ingerir] ${JSON.stringify(ev).slice(0, 240)}`),
-        });
+        const args = ehPaginaVenda
+          ? { cerebro_id: p.cerebro_id, categoria_slug: p.categoria_slug, url_alvo: p._url_alvo, on_log: (ev) => console.log(`  [ingerir] ${JSON.stringify(ev).slice(0, 240)}`) }
+          : { cerebro_id: p.cerebro_id, categoria_slug: p.categoria_slug, pasta_drive_id: p.origem_pasta_drive_id, on_log: (ev) => console.log(`  [ingerir] ${JSON.stringify(ev).slice(0, 240)}`) };
+        const resultado = await handler(args);
         const dur = Date.now() - t0;
 
         // Atualiza ultima_execucao + status_run no plano

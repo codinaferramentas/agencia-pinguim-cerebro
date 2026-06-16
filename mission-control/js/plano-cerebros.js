@@ -52,7 +52,7 @@ function freshnessTexto(iso) {
 const STATUS_META = {
   sem_coleta:    { label: 'sem coleta',     cor: '#64748B', emoji: '⚫', proximoLabel: '+ Priorizar pra reunião' },
   planejada:     { label: 'planejada',      cor: '#3B82F6', emoji: '🔵', proximoLabel: '▶ Marcar em construção' },
-  em_construcao: { label: 'em construção',  cor: '#F59E0B', emoji: '🟡', proximoLabel: '▶ Ativar cron' },
+  em_construcao: { label: 'em construção',  cor: '#F59E0B', emoji: '🟡', proximoLabel: '▶ Marcar como rodando' },
   rodando:       { label: 'rodando',        cor: '#22C55E', emoji: '🟢', proximoLabel: '⏸ Pausar' },
   pausada:       { label: 'pausada',        cor: '#94A3B8', emoji: '⏸', proximoLabel: '▶ Retomar' },
   falhou:        { label: 'falhou',         cor: '#EF4444', emoji: '❌', proximoLabel: '▶ Retomar' },
@@ -60,7 +60,7 @@ const STATUS_META = {
 
 const TRIGGER_META = {
   manual:        { label: 'manual',              emoji: '🖐', descricao: 'Você clica "Rodar agora" pra disparar.' },
-  cron:          { label: 'agendado',            emoji: '⏰', descricao: 'pg_cron dispara no horário configurado.' },
+  cron:          { label: 'agendado',            emoji: '⏰', descricao: 'Scheduler local (server-cli) dispara no horário configurado.' },
   evento_avisar: { label: 'avisar quando achar', emoji: '🔔', descricao: 'Detector híbrido percebe arquivo novo e mostra badge — você clica pra processar.' },
   evento_auto:   { label: 'automático evento',   emoji: '🤖', descricao: 'Detector híbrido percebe arquivo novo e processa direto.' },
 };

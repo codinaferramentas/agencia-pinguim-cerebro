@@ -104,9 +104,8 @@ async function ingerirPastaDrive({
       // 4. Salva em cerebro_fontes
       const fonteRow = await db.rodarSQL(`
         INSERT INTO pinguim.cerebro_fontes
-          (tenant_id, cerebro_id, tipo, titulo, origem, url, conteudo, criado_em)
+          (cerebro_id, tipo, titulo, origem, url, conteudo_md, criado_em)
         VALUES (
-          '${TENANT_ID_PINGUIM}'::uuid,
           '${cerebro_id}'::uuid,
           '${tipo_fonte}',
           ${esc(arq.name)},
