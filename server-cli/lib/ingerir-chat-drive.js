@@ -92,6 +92,9 @@ async function ingerirChatPastaDrive({
       const estatisticas = _estatisticasChatWhatsapp(texto);
       on_log({ etapa: 'estatisticas', ...estatisticas });
 
+      const perfis = _extrairPerfisAlunos(texto);
+      on_log({ etapa: 'perfis_extraidos', total: perfis.length });
+
       // 4. Salva em cerebro_fontes
       const fonteRow = await db.rodarSQL(`
         INSERT INTO pinguim.cerebro_fontes
@@ -119,15 +122,45 @@ async function ingerirChatPastaDrive({
           ${esc(arq.id)},
           'google_drive',
           '${fonteId}'::uuid,
-          ${esc(JSON.stringify({ name: arq.name, mime: arq.mimeType, bytes: det.bytes, chars: texto.length, ...estatisticas }))}::jsonb
+          ${esc(JSON.stringify({ name: arq.name, mime: arq.mimeType, bytes: det.bytes, chars: texto.length, perfis_count: perfis.length, ...estatisticas }))}::jsonb
         )
         ON CONFLICT DO NOTHING;
       `);
+
+      // 6. Salva perfis extraidos em pinguim.perfis_alunos_chat
+      let perfis_salvos = 0;
+      for (const p of perfis) {
+        try {
+          await db.rodarSQL(`
+            INSERT INTO pinguim.perfis_alunos_chat
+              (cerebro_id, cerebro_fonte_id, autor, instagram, primeira_mencao_em, primeira_mensagem, total_msgs, nicho_hints)
+            VALUES (
+              '${cerebro_id}'::uuid,
+              '${fonteId}'::uuid,
+              ${esc(p.autor)},
+              ${esc(p.instagram)},
+              ${esc(p.primeira_mencao_em)},
+              ${esc(p.primeira_mensagem)},
+              ${p.total_msgs || 0},
+              ARRAY[${(p.nicho_hints || []).map(n => esc(n)).join(',') || ''}]::text[]
+            )
+            ON CONFLICT (cerebro_fonte_id, autor) DO UPDATE SET
+              instagram = COALESCE(EXCLUDED.instagram, pinguim.perfis_alunos_chat.instagram),
+              total_msgs = EXCLUDED.total_msgs,
+              nicho_hints = EXCLUDED.nicho_hints;
+          `);
+          perfis_salvos++;
+        } catch (e) {
+          on_log({ etapa: 'perfil_falha', autor: p.autor, erro: e.message });
+        }
+      }
+      on_log({ etapa: 'perfis_salvos', total: perfis_salvos });
 
       det.ok = true;
       det.cerebro_fonte_id = fonteId;
       det.chars = texto.length;
       det.estatisticas = estatisticas;
+      det.perfis = perfis.length;
       novos_ok++;
       on_log({ etapa: 'salvou', cerebro_fonte_id: fonteId });
     } catch (e) {
@@ -165,32 +198,110 @@ async function _extrairTxtDoZip(buf) {
   });
 }
 
+// Parseia mensagens do WhatsApp export. Suporta 2 formatos:
+//  1) iOS/macOS: "[DD/MM/AAAA, HH:MM:SS] Autor: msg"
+//  2) Android BR: "DD/MM/AAAA HH:MM - Autor: msg"
+// Retorna lista estruturada de { data, hora, autor, texto, eh_sistema }
+function _parsearMensagensWhatsapp(texto) {
+  const linhas = texto.split('\n');
+  const REGEX_IOS = /^\[(\d{1,2}\/\d{1,2}\/\d{2,4}),\s*(\d{1,2}:\d{2}(?::\d{2})?)\]\s*([^:]+?):\s*(.*)$/;
+  const REGEX_ANDROID = /^(\d{1,2}\/\d{1,2}\/\d{2,4})[\s,]+(\d{1,2}:\d{2}(?::\d{2})?)\s*[-]\s*([^:]+?):\s*(.*)$/;
+
+  const msgs = [];
+  let atual = null;
+  for (const linha of linhas) {
+    const limpa = linha.replace(/‎|‏/g, ''); // remove LRM/RLM marks que WhatsApp insere
+    const m = limpa.match(REGEX_IOS) || limpa.match(REGEX_ANDROID);
+    if (m) {
+      // commit anterior
+      if (atual) msgs.push(atual);
+      const autor = m[3].trim();
+      const txt = (m[4] || '').trim();
+      const ehSistema = _ehLinhaSistema(autor, txt);
+      atual = { data: m[1], hora: m[2], autor, texto: txt, eh_sistema: ehSistema };
+    } else if (atual && limpa.trim()) {
+      // continuacao de mensagem multilinha
+      atual.texto += '\n' + limpa.trim();
+    }
+  }
+  if (atual) msgs.push(atual);
+  return msgs;
+}
+
+// Detecta linhas de sistema do WhatsApp (entrou no grupo, mudou descricao, etc)
+function _ehLinhaSistema(autor, texto) {
+  if (/criptografia de ponta a ponta/i.test(texto)) return true;
+  if (/criou o grupo/i.test(texto)) return true;
+  if (/adicionou voc[êe]/i.test(texto)) return true;
+  if (/mudou as configura/i.test(texto)) return true;
+  if (/mudou a descri/i.test(texto)) return true;
+  if (/voc[êe] agora [eé] um admin/i.test(texto)) return true;
+  if (/adicionou /i.test(texto) && /\b(Adm|Bot)\b/.test(autor)) return true;
+  if (/saiu/i.test(texto) && texto.length < 50) return true;
+  if (/removeu/i.test(texto)) return true;
+  if (/\bmensagem apagada\b/i.test(texto)) return true;
+  if (autor === texto.split(':')[0]) return true; // self-ref tipico de evento
+  return false;
+}
+
 // Estatisticas basicas do export WhatsApp pra metadata.
 function _estatisticasChatWhatsapp(texto) {
   const linhas = texto.split('\n');
-  // Padrao do export: "DD/MM/AAAA HH:MM - Autor: msg" (formato brasileiro)
-  // Outros formatos: "[DD/MM/AAAA HH:MM:SS] Autor: msg" (formato iOS)
-  let primeira_data = null, ultima_data = null;
-  const autores = new Set();
-  let total_msgs = 0;
-  for (const linha of linhas) {
-    const m = linha.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})[ ,]+\d{1,2}:\d{2}(?::\d{2})?[\s-]+([^:]+?):/);
-    if (m) {
-      total_msgs++;
-      const data = m[1];
-      const autor = m[2].trim();
-      autores.add(autor);
-      if (!primeira_data) primeira_data = data;
-      ultima_data = data;
-    }
-  }
+  const msgs = _parsearMensagensWhatsapp(texto);
+  const msgsReais = msgs.filter(m => !m.eh_sistema);
+  const autores = new Set(msgsReais.map(m => m.autor));
   return {
     total_linhas: linhas.length,
-    total_msgs,
+    total_msgs: msgs.length,
+    total_msgs_reais: msgsReais.length,
     autores_distintos: autores.size,
-    primeira_data,
-    ultima_data,
+    primeira_data: msgs[0]?.data || null,
+    ultima_data: msgs[msgs.length - 1]?.data || null,
   };
+}
+
+// Extrai perfis de alunos a partir das apresentacoes nos grupos.
+// Heuristica: procura msgs com Instagram (@usuario) E menciona nicho/profissao.
+// Retorna lista de { autor, instagram, primeira_mencao_texto, nicho_palavras_chave }
+function _extrairPerfisAlunos(texto) {
+  const msgs = _parsearMensagensWhatsapp(texto).filter(m => !m.eh_sistema);
+  const porAutor = new Map();
+  const REGEX_IG = /(?:^|[\s\(])@([a-z0-9._]{3,30})\b/i;
+
+  for (const m of msgs) {
+    if (!porAutor.has(m.autor)) {
+      porAutor.set(m.autor, {
+        autor: m.autor,
+        instagram: null,
+        primeira_mencao_em: `${m.data} ${m.hora}`,
+        primeira_mensagem: m.texto.slice(0, 500),
+        total_msgs: 0,
+        nicho_hints: [],
+      });
+    }
+    const p = porAutor.get(m.autor);
+    p.total_msgs++;
+
+    // Pega 1o Instagram mencionado
+    if (!p.instagram) {
+      const ig = m.texto.match(REGEX_IG);
+      if (ig && !['todos','vcs','voce','vc'].includes(ig[1].toLowerCase())) {
+        p.instagram = '@' + ig[1];
+      }
+    }
+
+    // Heuristica de nicho: palavras-chave de profissao na 1a/2a/3a msg do autor
+    if (p.total_msgs <= 3) {
+      const txt = m.texto.toLowerCase();
+      const NICHOS = ['moda','beleza','fitness','marketing','direito','advocacia','psicologia','nutri','medic','dentist','arquite','engenh','design','imobil','financ','contab','coach','professor','infoproduto','agencia','barber','salao','salão','tatuad','imobili','vendas','consultor','terapeuta','personal','contadora','contador','psicolog','crossfit','pilates','yoga','restaurante','cafe','café','padaria','confeit','bolo','doces','foto','filmmaker','videom','social media','copyw','trafego','gestor de t','mentor','mentora'];
+      for (const n of NICHOS) {
+        if (txt.includes(n) && !p.nicho_hints.includes(n)) {
+          p.nicho_hints.push(n);
+        }
+      }
+    }
+  }
+  return Array.from(porAutor.values());
 }
 
 function esc(s) {
