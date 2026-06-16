@@ -2,11 +2,11 @@
 // GET /functions/v1/tool-plano-cerebros-snapshot
 // GET /functions/v1/tool-plano-cerebros-snapshot?cerebro_id=<uuid>  (detalhe de 1)
 //
-// Retorna foto consolidada do Plano de Cerebros pro Mission Control renderizar:
-//  - resumo (3 cards do topo)
-//  - cerebros: lista 10 cérebros internos com status_carga, fontes, persona
-//  - cerebro_detalhe (se cerebro_id passado): fontes cadastradas + planejadas + sugestoes
-//  - integracoes_catalogo: cardapio pra cadastrar fonte nova
+// V2 (2026-06-15) — layout Kanban:
+// - Lista de cerebros vem com contagens das 3 colunas (atuais/a_incluir/automatizar)
+// - Detalhe de 1 cerebro retorna fontes ja agrupadas por coluna do Kanban
+// - Catalogo de integracoes vem com descricao_equipe + flag cofre_tem_chaves
+// - REMOVIDO bloco "sugestoes" (Andre cravou: sem invencao)
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
@@ -14,33 +14,6 @@ import { requireAuthTool, corsTool, jsonRespTool } from '../_shared/auth-tool.ts
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-// Pra cada integracao do catalogo, gera sugestao automatica pra um cerebro produto.
-// "Voce nao usa essa integracao, mas podia — daria pra alimentar com isso".
-function sugestoesParaCerebro(produto_slug: string, integracoes: any[], fontesExistentes: Set<string>): any[] {
-  const sugs: any[] = [];
-  for (const integ of integracoes) {
-    // Se sócio ja tem fonte por essa integracao, pula
-    if (fontesExistentes.has(integ.slug)) continue;
-    // Aplica heuristica de relevancia
-    if (integ.slug === 'manual') continue; // manual sempre disponivel, nao precisa sugerir
-    if (integ.slug.startsWith('supabase-')) {
-      // Supabase externo só sugere se for do produto correspondente
-      const slugProduto = integ.slug.replace('supabase-', '');
-      if (slugProduto !== produto_slug) continue;
-    }
-    sugs.push({
-      integracao_slug: integ.slug,
-      nome: integ.nome,
-      emoji: integ.emoji,
-      categoria: integ.categoria,
-      descricao: integ.descricao,
-      exemplo_uso: integ.exemplo_uso,
-      ativa: integ.ativa,
-    });
-  }
-  return sugs;
-}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsTool });
@@ -62,12 +35,24 @@ serve(async (req) => {
       .select('*');
     if (errC) throw new Error('view: ' + errC.message);
 
-    // 2) Catalogo de integracoes
+    // 2) Catalogo de integracoes + verifica cofre
     const { data: integracoes, error: errI } = await sb
       .from('integracoes_catalogo')
       .select('*')
       .order('categoria, nome');
     if (errI) throw new Error('integracoes: ' + errI.message);
+
+    // 2b) Checa cofre — pra cada integracao, ver se TODAS chaves estao no cofre
+    const { data: cofreRows } = await sb
+      .from('cofre_chaves')
+      .select('nome')
+      .eq('ativo', true);
+    const chavesNoCofre = new Set((cofreRows || []).map((r: any) => r.nome));
+    const integracoesComStatus = (integracoes || []).map((i: any) => {
+      const chaves = (i.cofre_chaves || []) as string[];
+      const todasNoCofre = chaves.length === 0 ? true : chaves.every(k => chavesNoCofre.has(k));
+      return { ...i, cofre_ok: todasNoCofre };
+    });
 
     // 3) Resumo do topo
     const total = (cerebros || []).length;
@@ -75,7 +60,7 @@ serve(async (req) => {
     const amarelo = (cerebros || []).filter((c: any) => c.status_carga === 'amarelo').length;
     const vermelho = (cerebros || []).filter((c: any) => c.status_carga === 'vermelho').length;
 
-    // 4) Total de fontes planejadas em todos cerebros
+    // 4) Total de fontes mapeadas pra automacao em todos cerebros
     const totalPlanejadas = (cerebros || []).reduce((s: number, c: any) =>
       s + (Number(c.fontes_planejadas_mapeadas) || 0) + (Number(c.fontes_planejadas_rodando) || 0), 0);
     const totalRodando = (cerebros || []).reduce((s: number, c: any) =>
@@ -95,7 +80,7 @@ serve(async (req) => {
         ok: true,
         resumo,
         cerebros,
-        integracoes_catalogo: integracoes,
+        integracoes_catalogo: integracoesComStatus,
       });
     }
 
@@ -103,40 +88,34 @@ serve(async (req) => {
     const cerebro = (cerebros || []).find((c: any) => c.cerebro_id === cerebro_id);
     if (!cerebro) return jsonRespTool({ ok: false, erro: 'cerebro nao encontrado' }, 404);
 
-    // Fontes cadastradas (cerebro_fontes)
-    const { data: fontesCadastradas } = await sb
+    // 6a) Coluna 1 do Kanban — Fontes Atuais (cerebro_fontes ja vetorizadas)
+    const { data: fontesAtuais } = await sb
       .from('cerebro_fontes')
       .select('id, tipo, titulo, origem, autor, url, criado_em, ingest_status')
       .eq('cerebro_id', cerebro_id)
-      .order('criado_em', { ascending: false })
-      .limit(100);
+      .order('criado_em', { ascending: false });
 
-    // Fontes planejadas (cerebro_fontes_planejadas)
+    // 6b) Coluna 2 (A Incluir) + Coluna 3 (Automatizar) — cerebro_fontes_planejadas separadas por status
     const { data: fontesPlanejadas } = await sb
       .from('cerebro_fontes_planejadas')
-      .select('id, integracao_slug, tipo_fonte, titulo, descricao, url_origem, status, prioridade, proposta_cron, cron_descricao, observacoes, criado_em')
+      .select('id, integracao_slug, tipo_fonte, titulo, descricao, url_origem, status, prioridade, proposta_cron, cron_descricao, observacoes, documentacao_automacao, criado_em, atualizado_em')
       .eq('cerebro_id', cerebro_id)
       .order('prioridade', { ascending: false })
       .order('criado_em', { ascending: false });
 
-    // Quais integracoes ele JA usa
-    const slugsUsados = new Set<string>();
-    for (const f of fontesPlanejadas || []) {
-      if (f.integracao_slug) slugsUsados.add(f.integracao_slug);
-    }
-    // tipo "origem" das cerebro_fontes nao casa 1:1 com slug — sao manuais. Nao popula slugsUsados deles.
-
-    // Sugestoes (integracoes que nao foram cadastradas como planejada ainda)
-    const sugestoes = sugestoesParaCerebro(cerebro.produto_slug, integracoes || [], slugsUsados);
+    const fontesAIncluir = (fontesPlanejadas || []).filter((f: any) => f.status === 'mapeada');
+    const fontesAutomatizar = (fontesPlanejadas || []).filter((f: any) => ['em_construcao', 'rodando', 'pausada'].includes(f.status));
 
     return jsonRespTool({
       ok: true,
       resumo,
       cerebro,
-      fontes_cadastradas: fontesCadastradas || [],
-      fontes_planejadas: fontesPlanejadas || [],
-      sugestoes,
-      integracoes_catalogo: integracoes,
+      kanban: {
+        atuais: fontesAtuais || [],
+        a_incluir: fontesAIncluir,
+        automatizar: fontesAutomatizar,
+      },
+      integracoes_catalogo: integracoesComStatus,
     });
   } catch (e: any) {
     return jsonRespTool({ ok: false, erro: e?.message || String(e) }, 500);

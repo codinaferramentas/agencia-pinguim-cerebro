@@ -1,15 +1,26 @@
 // Edge: tool-cerebro-fonte-planejada
 // POST /functions/v1/tool-cerebro-fonte-planejada
 //
-// CRUD de fontes planejadas pro Plano de Cerebros.
+// CRUD de fontes planejadas pro Plano de Cerebros v2 (Kanban).
 //
-// Body: { acao: 'criar'|'atualizar_status'|'remover', ... }
+// Body: { acao: 'criar'|'atualizar_status'|'editar'|'remover'|'duplicar_de_atual', ... }
 //
 // Criar:
 //   { acao: 'criar', cerebro_id, titulo, integracao_slug, descricao?, url_origem?,
-//     proposta_cron?, cron_descricao?, prioridade?, observacoes?, cliente_id? }
-// Atualizar status:
+//     proposta_cron?, cron_descricao?, prioridade?, observacoes?, cliente_id?,
+//     status? (default 'mapeada'), documentacao_automacao? }
+//
+// Atualizar status (mover entre colunas Kanban via drag):
 //   { acao: 'atualizar_status', id, status: 'mapeada'|'em_construcao'|'rodando'|'pausada' }
+//
+// Editar (form de detalhe do card):
+//   { acao: 'editar', id, titulo?, descricao?, integracao_slug?, url_origem?,
+//     documentacao_automacao?, status? }
+//
+// Duplicar de cerebro_fontes (drag de "Atuais" pra "A Incluir" ou "Automatizar"):
+//   { acao: 'duplicar_de_atual', cerebro_id, fonte_atual_id, status_inicial,
+//     descricao?, documentacao_automacao? }
+//
 // Remover:
 //   { acao: 'remover', id }
 
@@ -19,6 +30,8 @@ import { requireAuthTool, corsTool, jsonRespTool } from '../_shared/auth-tool.ts
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+const ACOES = ['criar', 'atualizar_status', 'editar', 'remover', 'duplicar_de_atual'];
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsTool });
@@ -32,8 +45,8 @@ serve(async (req) => {
   }
 
   const acao = String(body.acao || '').trim();
-  if (!['criar', 'atualizar_status', 'remover'].includes(acao)) {
-    return jsonRespTool({ ok: false, erro: 'acao invalida (use criar|atualizar_status|remover)' }, 400);
+  if (!ACOES.includes(acao)) {
+    return jsonRespTool({ ok: false, erro: `acao invalida (use ${ACOES.join('|')})` }, 400);
   }
 
   const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -62,6 +75,17 @@ serve(async (req) => {
         p_cliente_id: body.cliente_id || null,
       });
       if (error) throw new Error(error.message);
+
+      // Se status inicial != 'mapeada' OU veio documentacao_automacao, edita logo
+      const status_inicial = body.status || 'mapeada';
+      const doc = body.documentacao_automacao || null;
+      if (status_inicial !== 'mapeada' || doc) {
+        await sb.rpc('cerebro_fonte_planejada_editar', {
+          p_id: data,
+          p_status: status_inicial !== 'mapeada' ? status_inicial : null,
+          p_documentacao_automacao: doc,
+        });
+      }
       return jsonRespTool({ ok: true, id: data });
     }
 
@@ -78,6 +102,64 @@ serve(async (req) => {
       });
       if (error) throw new Error(error.message);
       return jsonRespTool({ ok: true });
+    }
+
+    if (acao === 'editar') {
+      const id = String(body.id || '').trim();
+      if (!id) return jsonRespTool({ ok: false, erro: 'id obrigatorio' }, 400);
+      const { error } = await sb.rpc('cerebro_fonte_planejada_editar', {
+        p_id: id,
+        p_titulo: body.titulo ?? null,
+        p_descricao: body.descricao ?? null,
+        p_integracao_slug: body.integracao_slug ?? null,
+        p_url_origem: body.url_origem ?? null,
+        p_documentacao_automacao: body.documentacao_automacao ?? null,
+        p_status: body.status ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return jsonRespTool({ ok: true });
+    }
+
+    if (acao === 'duplicar_de_atual') {
+      const cerebro_id = String(body.cerebro_id || '').trim();
+      const fonte_atual_id = String(body.fonte_atual_id || '').trim();
+      const status_inicial = String(body.status_inicial || 'mapeada').trim();
+      if (!cerebro_id || !fonte_atual_id) {
+        return jsonRespTool({ ok: false, erro: 'cerebro_id e fonte_atual_id obrigatorios' }, 400);
+      }
+
+      // Le a fonte atual
+      const { data: fonteAtual, error: errF } = await sb
+        .from('cerebro_fontes')
+        .select('titulo, origem, url, tipo')
+        .eq('id', fonte_atual_id)
+        .single();
+      if (errF || !fonteAtual) {
+        return jsonRespTool({ ok: false, erro: 'fonte atual nao encontrada' }, 404);
+      }
+
+      const { data: novoId, error: errC } = await sb.rpc('cerebro_fonte_planejada_criar', {
+        p_cerebro_id: cerebro_id,
+        p_titulo: fonteAtual.titulo || '(sem titulo)',
+        p_integracao_slug: body.integracao_slug || null,
+        p_tipo_fonte: 'mapeada',
+        p_descricao: body.descricao || `Duplicada de fonte atual: ${fonteAtual.origem || 'sem origem'}`,
+        p_url_origem: fonteAtual.url || null,
+        p_observacoes: `Origem: cerebro_fontes.id=${fonte_atual_id}`,
+      });
+      if (errC) throw new Error(errC.message);
+
+      // Se status inicial != 'mapeada' OU veio documentacao_automacao, edita
+      const doc = body.documentacao_automacao || null;
+      if (status_inicial !== 'mapeada' || doc) {
+        await sb.rpc('cerebro_fonte_planejada_editar', {
+          p_id: novoId,
+          p_status: status_inicial !== 'mapeada' ? status_inicial : null,
+          p_documentacao_automacao: doc,
+        });
+      }
+
+      return jsonRespTool({ ok: true, id: novoId });
     }
 
     if (acao === 'remover') {
