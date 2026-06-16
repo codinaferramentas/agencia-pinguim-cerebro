@@ -4477,6 +4477,30 @@ app.get('/', (req, res) => {
 });
 
 // ============================================================
+// ============================================================
+// POST /api/webhook-cerebro/:slug_produto/:categoria_slug — V3 (2026-06-16)
+// Endpoint generico que recebe webhook externo (YA Forms, Tally, Typeform...)
+// e ingere como fonte do cerebro/categoria especificada.
+// URL exemplo: POST /api/webhook-cerebro/desafio-de-conte-do-lo-fi/pesquisas
+// ============================================================
+app.post('/api/webhook-cerebro/:slug_produto/:categoria_slug', async (req, res) => {
+  try {
+    const { slug_produto, categoria_slug } = req.params;
+    const fonte_externa = req.headers['x-webhook-source'] || req.query.fonte || 'webhook';
+    const webhookCerebro = require('./lib/webhook-cerebro');
+    const r = await webhookCerebro.processarWebhook({
+      slug_produto,
+      categoria_slug,
+      payload: req.body || {},
+      fonte_externa,
+    });
+    res.json({ ok: true, cerebro_fonte_id: r.cerebro_fonte_id, titulo: r.titulo, enriquecedores: r.enriquecedores });
+  } catch (e) {
+    console.error(`[webhook-cerebro] erro: ${e.message}`);
+    res.status(500).json({ ok: false, erro: e.message });
+  }
+});
+
 // GET /api/info — info do agente (skills disponiveis, etc)
 // ============================================================
 app.get('/api/info', (req, res) => {

@@ -14,6 +14,7 @@
 
 const drive = require('./google-drive-content');
 const db = require('./db');
+const enriquecedores = require('./enriquecedores');
 
 const MIME_TEXT = ['text/'];
 const MIME_ZIP = ['application/zip', 'application/x-zip-compressed'];
@@ -92,9 +93,6 @@ async function ingerirChatPastaDrive({
       const estatisticas = _estatisticasChatWhatsapp(texto);
       on_log({ etapa: 'estatisticas', ...estatisticas });
 
-      const perfis = _extrairPerfisAlunos(texto);
-      on_log({ etapa: 'perfis_extraidos', total: perfis.length });
-
       // 4. Salva em cerebro_fontes
       const fonteRow = await db.rodarSQL(`
         INSERT INTO pinguim.cerebro_fontes
@@ -127,40 +125,22 @@ async function ingerirChatPastaDrive({
         ON CONFLICT DO NOTHING;
       `);
 
-      // 6. Salva perfis extraidos em pinguim.perfis_alunos_chat
-      let perfis_salvos = 0;
-      for (const p of perfis) {
-        try {
-          await db.rodarSQL(`
-            INSERT INTO pinguim.perfis_alunos_chat
-              (cerebro_id, cerebro_fonte_id, autor, instagram, primeira_mencao_em, primeira_mensagem, total_msgs, nicho_hints)
-            VALUES (
-              '${cerebro_id}'::uuid,
-              '${fonteId}'::uuid,
-              ${esc(p.autor)},
-              ${esc(p.instagram)},
-              ${esc(p.primeira_mencao_em)},
-              ${esc(p.primeira_mensagem)},
-              ${p.total_msgs || 0},
-              ARRAY[${(p.nicho_hints || []).map(n => esc(n)).join(',') || ''}]::text[]
-            )
-            ON CONFLICT (cerebro_fonte_id, autor) DO UPDATE SET
-              instagram = COALESCE(EXCLUDED.instagram, pinguim.perfis_alunos_chat.instagram),
-              total_msgs = EXCLUDED.total_msgs,
-              nicho_hints = EXCLUDED.nicho_hints;
-          `);
-          perfis_salvos++;
-        } catch (e) {
-          on_log({ etapa: 'perfil_falha', autor: p.autor, erro: e.message });
-        }
-      }
-      on_log({ etapa: 'perfis_salvos', total: perfis_salvos });
+      // 6. Aplica camada de enriquecedores (LLM extrai perfis estruturados, conceitos, etc)
+      const msgsParseadas = _parsearMensagensWhatsapp(texto);
+      const enriqResultados = await enriquecedores.aplicarEnriquecedores({
+        cerebro_id,
+        cerebro_fonte_id: fonteId,
+        tipo_fonte: 'chat_export',
+        texto,
+        extras: { msgs: msgsParseadas },
+        on_log: (ev) => on_log({ etapa: 'enriquecedor', ...ev }),
+      });
 
       det.ok = true;
       det.cerebro_fonte_id = fonteId;
       det.chars = texto.length;
       det.estatisticas = estatisticas;
-      det.perfis = perfis.length;
+      det.enriquecedores = enriqResultados;
       novos_ok++;
       on_log({ etapa: 'salvou', cerebro_fonte_id: fonteId });
     } catch (e) {
@@ -260,49 +240,8 @@ function _estatisticasChatWhatsapp(texto) {
   };
 }
 
-// Extrai perfis de alunos a partir das apresentacoes nos grupos.
-// Heuristica: procura msgs com Instagram (@usuario) E menciona nicho/profissao.
-// Retorna lista de { autor, instagram, primeira_mencao_texto, nicho_palavras_chave }
-function _extrairPerfisAlunos(texto) {
-  const msgs = _parsearMensagensWhatsapp(texto).filter(m => !m.eh_sistema);
-  const porAutor = new Map();
-  const REGEX_IG = /(?:^|[\s\(])@([a-z0-9._]{3,30})\b/i;
-
-  for (const m of msgs) {
-    if (!porAutor.has(m.autor)) {
-      porAutor.set(m.autor, {
-        autor: m.autor,
-        instagram: null,
-        primeira_mencao_em: `${m.data} ${m.hora}`,
-        primeira_mensagem: m.texto.slice(0, 500),
-        total_msgs: 0,
-        nicho_hints: [],
-      });
-    }
-    const p = porAutor.get(m.autor);
-    p.total_msgs++;
-
-    // Pega 1o Instagram mencionado
-    if (!p.instagram) {
-      const ig = m.texto.match(REGEX_IG);
-      if (ig && !['todos','vcs','voce','vc'].includes(ig[1].toLowerCase())) {
-        p.instagram = '@' + ig[1];
-      }
-    }
-
-    // Heuristica de nicho: palavras-chave de profissao na 1a/2a/3a msg do autor
-    if (p.total_msgs <= 3) {
-      const txt = m.texto.toLowerCase();
-      const NICHOS = ['moda','beleza','fitness','marketing','direito','advocacia','psicologia','nutri','medic','dentist','arquite','engenh','design','imobil','financ','contab','coach','professor','infoproduto','agencia','barber','salao','salão','tatuad','imobili','vendas','consultor','terapeuta','personal','contadora','contador','psicolog','crossfit','pilates','yoga','restaurante','cafe','café','padaria','confeit','bolo','doces','foto','filmmaker','videom','social media','copyw','trafego','gestor de t','mentor','mentora'];
-      for (const n of NICHOS) {
-        if (txt.includes(n) && !p.nicho_hints.includes(n)) {
-          p.nicho_hints.push(n);
-        }
-      }
-    }
-  }
-  return Array.from(porAutor.values());
-}
+// (Funcao _extrairPerfisAlunos removida — agora vive em enriquecedores/extrator-perfis-chat.js
+//  como modelo plugavel que usa LLM em vez de regex hardcoded)
 
 function esc(s) {
   if (s === null || s === undefined) return 'NULL';

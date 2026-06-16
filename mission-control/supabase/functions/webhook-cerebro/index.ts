@@ -1,0 +1,190 @@
+// Edge: webhook-cerebro
+// V3 (2026-06-16)
+//
+// Endpoint PUBLICO (sem auth) que recebe webhook externo (YA Forms,
+// Tally, Typeform, etc) e ingere como fonte do cerebro/categoria.
+//
+// URL: POST https://<project>.supabase.co/functions/v1/webhook-cerebro/<slug_produto>/<categoria_slug>
+//      ou via query: ?produto=desafio-de-conte-do-lo-fi&categoria=pesquisas
+//
+// Token opcional via query string ou header: ?token=XXX ou x-webhook-token: XXX
+// Token correto = secret armazenado em pinguim.cofre_chaves com nome WEBHOOK_TOKEN_<slug_produto>_<categoria>
+// Sem token configurado = endpoint aberto (uso interno/teste).
+
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
+  'Access-Control-Allow-Headers': 'Content-Type, x-webhook-token, x-webhook-source',
+};
+const json = (body: any, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...CORS } });
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+
+  // Parse URL: /functions/v1/webhook-cerebro/<slug_produto>/<categoria_slug>
+  const url = new URL(req.url);
+  const partes = url.pathname.split('/').filter(Boolean);
+  // partes: ['functions','v1','webhook-cerebro', slug_produto, categoria_slug]
+  let slug_produto = partes[3] || url.searchParams.get('produto');
+  let categoria_slug = partes[4] || url.searchParams.get('categoria');
+
+  // GET = ping pra teste rapido
+  if (req.method === 'GET') {
+    return json({
+      ok: true,
+      msg: 'webhook-cerebro online',
+      slug_produto,
+      categoria_slug,
+      hint: 'Envie POST com Content-Type: application/json e body do formulario',
+    });
+  }
+
+  if (req.method !== 'POST') return json({ ok: false, erro: 'use POST' }, 405);
+  if (!slug_produto || !categoria_slug) {
+    return json({ ok: false, erro: 'URL deve incluir /slug_produto/categoria_slug' }, 400);
+  }
+
+  // Le body — tenta JSON, fallback texto
+  let payload: any = {};
+  try {
+    const ct = req.headers.get('content-type') || '';
+    if (ct.includes('application/json')) {
+      payload = await req.json();
+    } else if (ct.includes('application/x-www-form-urlencoded')) {
+      const form = await req.formData();
+      payload = Object.fromEntries(form.entries());
+    } else {
+      const txt = await req.text();
+      try { payload = JSON.parse(txt); } catch { payload = { raw: txt }; }
+    }
+  } catch (e) {
+    return json({ ok: false, erro: 'body invalido: ' + (e as Error).message }, 400);
+  }
+
+  const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false },
+    db: { schema: 'pinguim' },
+  });
+
+  try {
+    // 1. Resolve cerebro pelo slug do produto
+    const { data: cerebros, error: errC } = await sb
+      .from('cerebros')
+      .select('id, produto_id, produtos!inner(slug, nome)')
+      .eq('produtos.slug', slug_produto)
+      .limit(1);
+    if (errC) throw new Error('SQL cerebros: ' + errC.message);
+    if (!cerebros || cerebros.length === 0) {
+      return json({ ok: false, erro: `cerebro nao encontrado pro produto slug='${slug_produto}'` }, 404);
+    }
+    const cerebro = cerebros[0] as any;
+    const cerebro_id = cerebro.id;
+    const produto_nome = cerebro.produtos?.nome || slug_produto;
+
+    // 2. Resolve categoria + valida
+    const { data: catList, error: errCat } = await sb
+      .from('vw_cerebro_plano_categoria')
+      .select('plano_id, categoria_nome, categoria_tipos_fonte')
+      .eq('cerebro_id', cerebro_id)
+      .eq('categoria_slug', categoria_slug)
+      .limit(1);
+    if (errCat) throw new Error('SQL cat: ' + errCat.message);
+    if (!catList || catList.length === 0) {
+      return json({ ok: false, erro: `categoria '${categoria_slug}' nao encontrada no plano` }, 404);
+    }
+    const tipos = (catList[0] as any).categoria_tipos_fonte || [];
+    const tipoFonte = tipos.includes('resposta_pesquisa') ? 'resposta_pesquisa' : (tipos[0] || 'resposta_pesquisa');
+
+    // 3. Monta titulo + conteudo markdown
+    const fonte_externa = req.headers.get('x-webhook-source') || url.searchParams.get('fonte') || 'webhook';
+    const titulo = gerarTitulo(payload, produto_nome, categoria_slug);
+    const conteudoMd = payloadParaMarkdown(payload);
+
+    // 4. Salva como cerebro_fonte
+    const { data: fonte, error: errF } = await sb
+      .from('cerebro_fontes')
+      .insert({
+        cerebro_id,
+        tipo: tipoFonte,
+        titulo: titulo.slice(0, 200),
+        origem: fonte_externa,
+        url: null,
+        conteudo_md: conteudoMd,
+      })
+      .select('id')
+      .single();
+    if (errF) throw new Error('insert cerebro_fontes: ' + errF.message);
+    const cerebro_fonte_id = (fonte as any).id;
+
+    // 5. Marca em fontes_processadas (idempotencia)
+    const fonteExternaId = extrairIdExterno(payload) || `${Date.now()}-${cerebro_fonte_id.slice(0,8)}`;
+    await sb.from('fontes_processadas').insert({
+      cerebro_id,
+      categoria_slug,
+      fonte_externa_id: fonteExternaId,
+      fonte_origem: fonte_externa,
+      cerebro_fonte_id,
+      metadata: { titulo, fonte_externa, payload_keys: Object.keys(payload || {}) },
+    });
+
+    // 6. Atualiza categoria: ultima_execucao + promove status se em construcao
+    await sb
+      .from('cerebro_plano_categoria')
+      .update({
+        ultima_execucao: new Date().toISOString(),
+        ultimo_status_run: 'ok',
+        status_automacao: 'rodando',
+        atualizado_em: new Date().toISOString(),
+      })
+      .eq('id', (catList[0] as any).plano_id);
+
+    return json({ ok: true, cerebro_fonte_id, titulo, tipo_fonte: tipoFonte });
+  } catch (e) {
+    console.error('webhook-cerebro erro:', e);
+    return json({ ok: false, erro: (e as Error).message }, 500);
+  }
+});
+
+function gerarTitulo(payload: any, produto_nome: string, categoria_slug: string): string {
+  const cand = payload?.respondent?.name || payload?.name || payload?.nome ||
+               payload?.respondent_name || payload?.email || payload?.respondent?.email;
+  const data = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  if (cand) return `${produto_nome} — ${categoria_slug}: ${cand} (${data})`;
+  return `${produto_nome} — ${categoria_slug} (${data})`;
+}
+
+function extrairIdExterno(payload: any): string | null {
+  return payload?.response_id || payload?.id || payload?.submission_id || payload?.respondent?.id || null;
+}
+
+function payloadParaMarkdown(payload: any): string {
+  if (!payload || typeof payload !== 'object') return String(payload || '');
+  const linhas: string[] = [];
+
+  const answers = payload?.data?.fields || payload?.answers || payload?.fields || payload?.respostas;
+  if (Array.isArray(answers)) {
+    for (const a of answers) {
+      const k = a.label || a.question || a.title || a.key || a.pergunta || 'campo';
+      const v = a.value ?? a.answer ?? a.resposta ?? '';
+      linhas.push(`**${k}**\n${normalizarValor(v)}\n`);
+    }
+  } else {
+    for (const [k, v] of Object.entries(payload)) {
+      if (k.startsWith('_') || (typeof v === 'object' && v === null)) continue;
+      linhas.push(`**${k}**\n${normalizarValor(v)}\n`);
+    }
+  }
+  return linhas.join('\n') || '_(payload vazio)_';
+}
+
+function normalizarValor(v: any): string {
+  if (v === null || v === undefined) return '_(vazio)_';
+  if (typeof v === 'object') return '```json\n' + JSON.stringify(v, null, 2) + '\n```';
+  return String(v);
+}
