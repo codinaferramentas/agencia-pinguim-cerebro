@@ -253,7 +253,7 @@ async function renderTelaCerebro(conteudo, cerebro_id) {
   const c = detalhe.cerebro;
   const pc = c.plano_counts || {};
 
-  // Header
+  // Header (fixo — nao re-renderiza)
   headerWrap.append(
     el('button', { class: 'pc-btn-voltar', onclick: voltarParaGrid }, '← Voltar pros 10 cérebros'),
     el('div', { class: 'pc-cer-titulo' }, [
@@ -264,27 +264,60 @@ async function renderTelaCerebro(conteudo, cerebro_id) {
           `${detalhe.plano.length} categorias · ${c.total_fontes || 0} fontes vetorizadas · Persona v${c.persona_versao || '—'}`),
       ]),
     ]),
-    // KPI strip do cérebro
-    el('div', { class: 'pc-cer-stats' }, [
-      stat('🟢', pc.rodando || 0, 'rodando', '#22C55E'),
-      stat('🟡', pc.em_construcao || 0, 'em construção', '#F59E0B'),
-      stat('🔵', pc.planejada || 0, 'planejadas', '#3B82F6'),
-      stat('⚫', pc.sem_coleta || 0, 'sem coleta', '#94A3B8'),
-    ]),
-    // Filtros
-    el('div', { class: 'pc-filtros' }, [
-      filtroChip('todos', 'Todas', detalhe.plano.length),
-      filtroChip('sem_coleta', '⚫ Sem coleta', pc.sem_coleta || 0),
-      filtroChip('planejada', '🔵 Planejadas', pc.planejada || 0),
-      filtroChip('em_construcao', '🟡 Em construção', pc.em_construcao || 0),
-      filtroChip('rodando', '🟢 Rodando', pc.rodando || 0),
-    ]),
+    // KPI strip + filtros (re-renderizam parcialmente quando status muda)
+    el('div', { id: 'pc-cer-stats-wrap' }),
+    el('div', { id: 'pc-cer-filtros-wrap' }),
   );
 
   // Lista de cards-categoria
   const listaWrap = el('div', { class: 'pc-cat-lista', id: 'pc-cat-lista' });
   conteudo.append(listaWrap);
-  renderListaCategorias(listaWrap, detalhe.plano, detalhe.integracoes_catalogo, cerebro_id);
+
+  // Render parcial das 3 areas que mudam
+  atualizarParcialDoCerebro(detalhe, cerebro_id);
+}
+
+/* Atualiza so KPIs + chips de filtro + lista de cards.
+   NAO mexe no header (titulo, botao voltar) — evita flash. */
+function atualizarParcialDoCerebro(detalhe, cerebro_id) {
+  const pc = recomputarPlanoCounts(detalhe.plano);
+
+  // KPI strip
+  const statsWrap = document.getElementById('pc-cer-stats-wrap');
+  if (statsWrap) {
+    statsWrap.className = 'pc-cer-stats';
+    statsWrap.innerHTML = '';
+    statsWrap.append(
+      stat('🟢', pc.rodando, 'rodando', '#22C55E'),
+      stat('🟡', pc.em_construcao, 'em construção', '#F59E0B'),
+      stat('🔵', pc.planejada, 'planejadas', '#3B82F6'),
+      stat('⚫', pc.sem_coleta, 'sem coleta', '#94A3B8'),
+    );
+  }
+
+  // Filtros
+  const filtrosWrap = document.getElementById('pc-cer-filtros-wrap');
+  if (filtrosWrap) {
+    filtrosWrap.className = 'pc-filtros';
+    filtrosWrap.innerHTML = '';
+    filtrosWrap.append(
+      filtroChip('todos', 'Todas', detalhe.plano.length),
+      filtroChip('sem_coleta', '⚫ Sem coleta', pc.sem_coleta),
+      filtroChip('planejada', '🔵 Planejadas', pc.planejada),
+      filtroChip('em_construcao', '🟡 Em construção', pc.em_construcao),
+      filtroChip('rodando', '🟢 Rodando', pc.rodando),
+    );
+  }
+
+  // Lista
+  const listaWrap = document.getElementById('pc-cat-lista');
+  if (listaWrap) renderListaCategorias(listaWrap, detalhe.plano, detalhe.integracoes_catalogo, cerebro_id);
+}
+
+function recomputarPlanoCounts(plano) {
+  const c = { sem_coleta: 0, planejada: 0, em_construcao: 0, rodando: 0, pausada: 0, falhou: 0 };
+  for (const p of (plano || [])) c[p.status_automacao] = (c[p.status_automacao] || 0) + 1;
+  return c;
 }
 
 function stat(emoji, num, label, cor) {
@@ -300,9 +333,8 @@ function filtroChip(slug, label, qtd) {
     class: 'pc-filtro' + (ativa ? ' pc-filtro-ativo' : '') + (qtd === 0 ? ' pc-filtro-zero' : ''),
     onclick: () => {
       _filtroStatus = slug;
-      const conteudo = document.getElementById('pc-conteudo');
-      conteudo.innerHTML = '';
-      renderTelaCerebro(conteudo, _cerebroAberto);
+      const det = _detalheCache.get(_cerebroAberto);
+      if (det) atualizarParcialDoCerebro(det, _cerebroAberto);
     },
   }, `${label} · ${qtd}`);
 }
@@ -479,58 +511,79 @@ function fecharModal() {
 
 async function salvarPlano(plano_id, cerebro_id) {
   const val = (id) => document.getElementById(id)?.value.trim() || null;
+  const novosCampos = {
+    status_automacao:   val('pc-fld-status'),
+    origem_configurada: val('pc-fld-origem'),
+    schedule_descricao: val('pc-fld-schedule-desc'),
+    schedule_cron:      val('pc-fld-schedule-cron'),
+    ferramenta:         val('pc-fld-ferramenta'),
+    responsavel:        val('pc-fld-responsavel'),
+    notas:              val('pc-fld-notas'),
+  };
+
+  // Otimistic local
+  const det = _detalheCache.get(cerebro_id);
+  const p = det ? det.plano.find(x => x.plano_id === plano_id) : null;
+  const snapshotAntes = p ? { ...p } : null;
+  if (p) Object.assign(p, novosCampos);
+
+  fecharModal();
+  if (det) atualizarParcialDoCerebro(det, cerebro_id);
+
   try {
     const r = await callEdge('tool-cerebro-plano-categoria', {
       method: 'POST',
-      body: {
-        acao: 'editar',
-        plano_id,
-        status_automacao: val('pc-fld-status'),
-        origem_configurada: val('pc-fld-origem'),
-        schedule_descricao: val('pc-fld-schedule-desc'),
-        schedule_cron: val('pc-fld-schedule-cron'),
-        ferramenta: val('pc-fld-ferramenta'),
-        responsavel: val('pc-fld-responsavel'),
-        notas: val('pc-fld-notas'),
-      },
+      body: { acao: 'editar', plano_id, ...novosCampos },
     });
     if (!r.ok) throw new Error(r.erro);
-    fecharModal();
-    await recarregarCerebro(cerebro_id);
-  } catch (e) { alert('Erro: ' + e.message); }
+    callEdge('tool-plano-cerebros-snapshot').then(s => { if (s.ok) _snapshot = s; });
+  } catch (e) {
+    if (snapshotAntes && p) {
+      Object.assign(p, snapshotAntes);
+      if (det) atualizarParcialDoCerebro(det, cerebro_id);
+    }
+    alert('Erro ao salvar: ' + e.message);
+  }
 }
 
+/* Mapa de proximo status no client — espelha a RPC cerebro_plano_categoria_avancar
+   no Postgres. Mantem em sync com schema-010. */
+const PROXIMO_STATUS = {
+  sem_coleta:    'planejada',
+  planejada:     'em_construcao',
+  em_construcao: 'rodando',
+  rodando:       'pausada',
+  pausada:       'rodando',
+  falhou:        'rodando',
+};
+
 async function avancarStatus(plano_id, cerebro_id, btnEl) {
-  // Feedback imediato no botao
-  const labelOriginal = btnEl ? btnEl.textContent : '';
-  if (btnEl) {
-    btnEl.disabled = true;
-    btnEl.textContent = '⏳ salvando...';
-    btnEl.style.opacity = '0.6';
-  }
+  const det = _detalheCache.get(cerebro_id);
+  if (!det) return;
+  const p = det.plano.find(x => x.plano_id === plano_id);
+  if (!p) return;
+
+  const statusAntes = p.status_automacao;
+  const statusDepois = PROXIMO_STATUS[statusAntes] || statusAntes;
+
+  // OTIMISTIC: atualiza local antes de chamar edge
+  p.status_automacao = statusDepois;
+  atualizarParcialDoCerebro(det, cerebro_id);
+
   try {
     const r = await callEdge('tool-cerebro-plano-categoria', {
       method: 'POST',
       body: { acao: 'avancar', plano_id },
     });
     if (!r.ok) throw new Error(r.erro);
-    await recarregarCerebro(cerebro_id);
+    // Atualiza snapshot global (KPIs do grid) em background, sem flash
+    callEdge('tool-plano-cerebros-snapshot').then(s => { if (s.ok) _snapshot = s; });
   } catch (e) {
-    if (btnEl) {
-      btnEl.disabled = false;
-      btnEl.textContent = labelOriginal;
-      btnEl.style.opacity = '';
-    }
-    alert('Erro: ' + e.message);
+    // Reverte
+    p.status_automacao = statusAntes;
+    atualizarParcialDoCerebro(det, cerebro_id);
+    alert('Erro ao avançar status: ' + e.message);
   }
-}
-
-async function recarregarCerebro(cerebro_id) {
-  _detalheCache.delete(cerebro_id);
-  try { _snapshot = await callEdge('tool-plano-cerebros-snapshot'); } catch {}
-  const conteudo = document.getElementById('pc-conteudo');
-  conteudo.innerHTML = '';
-  await renderTelaCerebro(conteudo, cerebro_id);
 }
 
 // ============================================================
@@ -645,8 +698,9 @@ function injetarEstilos() {
 
     /* Cards de categoria */
     .pc-cat-lista { display: flex; flex-direction: column; gap: 10px; }
-    .pc-cat-card { background: #1E293B; border: 1px solid #334155; border-left: 4px solid #64748B; border-radius: 10px; padding: 14px 16px; transition: border-color 0.15s; }
+    .pc-cat-card { background: #1E293B; border: 1px solid #334155; border-left: 4px solid #64748B; border-radius: 10px; padding: 14px 16px; transition: border-color 0.15s, border-left-color 0.25s ease, transform 0.18s ease, opacity 0.18s ease; animation: pc-card-in 0.22s ease; }
     .pc-cat-card:hover { border-color: #475569; }
+    @keyframes pc-card-in { from { opacity: 0.4; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 
     .pc-cat-l1 { display: grid; grid-template-columns: auto auto 1fr auto; gap: 14px; align-items: center; margin-bottom: 10px; }
     .pc-cat-emoji { font-size: 2rem; line-height: 1; }
