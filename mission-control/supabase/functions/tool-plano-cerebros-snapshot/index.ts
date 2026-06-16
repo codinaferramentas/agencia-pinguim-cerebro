@@ -1,12 +1,11 @@
 // Edge: tool-plano-cerebros-snapshot
-// GET /functions/v1/tool-plano-cerebros-snapshot
-// GET /functions/v1/tool-plano-cerebros-snapshot?cerebro_id=<uuid>  (detalhe de 1)
+// V3 (2026-06-16) — virada arquitetural:
+// Unidade fundamental agora eh CATEGORIA (catalogo fixo), nao fonte individual.
 //
-// V2 (2026-06-15) — layout Kanban:
-// - Lista de cerebros vem com contagens das 3 colunas (atuais/a_incluir/automatizar)
-// - Detalhe de 1 cerebro retorna fontes ja agrupadas por coluna do Kanban
-// - Catalogo de integracoes vem com descricao_equipe + flag cofre_tem_chaves
-// - REMOVIDO bloco "sugestoes" (Andre cravou: sem invencao)
+// GET /functions/v1/tool-plano-cerebros-snapshot
+//   -> lista 10 cerebros + KPIs agregados por status_automacao + integracoes
+// GET /functions/v1/tool-plano-cerebros-snapshot?cerebro_id=<uuid>
+//   -> detalhe: plano por categoria (vw_cerebro_plano_categoria) + integracoes
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
@@ -29,20 +28,17 @@ serve(async (req) => {
       db: { schema: 'pinguim' },
     });
 
-    // 1) Lista cerebros via view
-    const { data: cerebros, error: errC } = await sb
-      .from('vw_plano_cerebros')
-      .select('*');
-    if (errC) throw new Error('view: ' + errC.message);
+    // 1) Lista cerebros via view existente
+    const { data: cerebros, error: errC } = await sb.from('vw_plano_cerebros').select('*');
+    if (errC) throw new Error('view cerebros: ' + errC.message);
 
-    // 2) Catalogo de integracoes + verifica cofre
+    // 2) Catalogo de integracoes + cofre check
     const { data: integracoes, error: errI } = await sb
       .from('integracoes_catalogo')
       .select('*')
       .order('categoria, nome');
     if (errI) throw new Error('integracoes: ' + errI.message);
 
-    // 2b) Checa cofre — pra cada integracao, ver se TODAS chaves estao no cofre
     const { data: cofreRows } = await sb
       .from('cofre_chaves')
       .select('nome')
@@ -50,28 +46,50 @@ serve(async (req) => {
     const chavesNoCofre = new Set((cofreRows || []).map((r: any) => r.nome));
     const integracoesComStatus = (integracoes || []).map((i: any) => {
       const chaves = (i.cofre_chaves || []) as string[];
-      const todasNoCofre = chaves.length === 0 ? true : chaves.every(k => chavesNoCofre.has(k));
-      return { ...i, cofre_ok: todasNoCofre };
+      const cofre_ok = chaves.length === 0 ? true : chaves.every((k) => chavesNoCofre.has(k));
+      return { ...i, cofre_ok };
     });
 
-    // 3) Resumo do topo
-    const total = (cerebros || []).length;
-    const verde = (cerebros || []).filter((c: any) => c.status_carga === 'verde').length;
-    const amarelo = (cerebros || []).filter((c: any) => c.status_carga === 'amarelo').length;
-    const vermelho = (cerebros || []).filter((c: any) => c.status_carga === 'vermelho').length;
+    // 3) Para cada cerebro, garantir plano e contar status_automacao
+    // Faz UMA query agregada por status pra todos os cerebros
+    const { data: agreg } = await sb
+      .from('vw_cerebro_plano_categoria')
+      .select('cerebro_id, status_automacao');
+    const porCerebro: Record<string, any> = {};
+    for (const row of (agreg || []) as any[]) {
+      if (!porCerebro[row.cerebro_id]) {
+        porCerebro[row.cerebro_id] = { sem_coleta: 0, planejada: 0, em_construcao: 0, rodando: 0, pausada: 0, falhou: 0 };
+      }
+      porCerebro[row.cerebro_id][row.status_automacao] = (porCerebro[row.cerebro_id][row.status_automacao] || 0) + 1;
+    }
+    // Anexa nos cerebros + garante plano se nunca foi gerado
+    const cerebrosOut: any[] = [];
+    for (const c of (cerebros || []) as any[]) {
+      const counts = porCerebro[c.cerebro_id];
+      if (!counts && c.cerebro_id) {
+        // Auto-popula plano na 1a abertura
+        await sb.rpc('cerebro_plano_garantir', { p_cerebro_id: c.cerebro_id });
+      }
+      cerebrosOut.push({
+        ...c,
+        plano_counts: counts || { sem_coleta: 11, planejada: 0, em_construcao: 0, rodando: 0, pausada: 0, falhou: 0 },
+      });
+    }
 
-    // 4) Total de fontes mapeadas pra automacao em todos cerebros
-    const totalPlanejadas = (cerebros || []).reduce((s: number, c: any) =>
-      s + (Number(c.fontes_planejadas_mapeadas) || 0) + (Number(c.fontes_planejadas_rodando) || 0), 0);
-    const totalRodando = (cerebros || []).reduce((s: number, c: any) =>
-      s + (Number(c.fontes_planejadas_rodando) || 0), 0);
+    // 4) Resumo agregado global
+    const totalSem = cerebrosOut.reduce((s, c) => s + (c.plano_counts?.sem_coleta || 0), 0);
+    const totalPlan = cerebrosOut.reduce((s, c) => s + (c.plano_counts?.planejada || 0), 0);
+    const totalCons = cerebrosOut.reduce((s, c) => s + (c.plano_counts?.em_construcao || 0), 0);
+    const totalRod = cerebrosOut.reduce((s, c) => s + (c.plano_counts?.rodando || 0), 0);
+    const totalPaus = cerebrosOut.reduce((s, c) => s + (c.plano_counts?.pausada || 0), 0);
 
     const resumo = {
-      total_cerebros: total,
-      verde, amarelo, vermelho,
-      fontes_planejadas_total: totalPlanejadas,
-      fontes_planejadas_rodando: totalRodando,
-      fontes_planejadas_pendentes: totalPlanejadas - totalRodando,
+      total_cerebros: cerebrosOut.length,
+      categorias_sem_coleta: totalSem,
+      categorias_planejadas: totalPlan,
+      categorias_em_construcao: totalCons,
+      categorias_rodando: totalRod,
+      categorias_pausadas: totalPaus,
     };
 
     // 5) Se nao pediu detalhe, retorna lista
@@ -79,42 +97,29 @@ serve(async (req) => {
       return jsonRespTool({
         ok: true,
         resumo,
-        cerebros,
+        cerebros: cerebrosOut,
         integracoes_catalogo: integracoesComStatus,
       });
     }
 
-    // 6) Detalhe de UM cerebro
-    const cerebro = (cerebros || []).find((c: any) => c.cerebro_id === cerebro_id);
+    // 6) Detalhe: plano por categoria
+    const cerebro = cerebrosOut.find((c) => c.cerebro_id === cerebro_id);
     if (!cerebro) return jsonRespTool({ ok: false, erro: 'cerebro nao encontrado' }, 404);
 
-    // 6a) Coluna 1 do Kanban — Fontes Atuais (cerebro_fontes ja vetorizadas)
-    const { data: fontesAtuais } = await sb
-      .from('cerebro_fontes')
-      .select('id, tipo, titulo, origem, autor, url, criado_em, ingest_status')
-      .eq('cerebro_id', cerebro_id)
-      .order('criado_em', { ascending: false });
+    // Garante plano (idempotente — se ja tem, NOOP)
+    await sb.rpc('cerebro_plano_garantir', { p_cerebro_id: cerebro_id });
 
-    // 6b) Coluna 2 (A Incluir) + Coluna 3 (Automatizar) — cerebro_fontes_planejadas separadas por status
-    const { data: fontesPlanejadas } = await sb
-      .from('cerebro_fontes_planejadas')
-      .select('id, integracao_slug, tipo_fonte, titulo, descricao, url_origem, status, prioridade, proposta_cron, cron_descricao, observacoes, documentacao_automacao, criado_em, atualizado_em')
+    const { data: plano } = await sb
+      .from('vw_cerebro_plano_categoria')
+      .select('*')
       .eq('cerebro_id', cerebro_id)
-      .order('prioridade', { ascending: false })
-      .order('criado_em', { ascending: false });
-
-    const fontesAIncluir = (fontesPlanejadas || []).filter((f: any) => f.status === 'mapeada');
-    const fontesAutomatizar = (fontesPlanejadas || []).filter((f: any) => ['em_construcao', 'rodando', 'pausada'].includes(f.status));
+      .order('categoria_ordem');
 
     return jsonRespTool({
       ok: true,
       resumo,
       cerebro,
-      kanban: {
-        atuais: fontesAtuais || [],
-        a_incluir: fontesAIncluir,
-        automatizar: fontesAutomatizar,
-      },
+      plano: plano || [],
       integracoes_catalogo: integracoesComStatus,
     });
   } catch (e: any) {
