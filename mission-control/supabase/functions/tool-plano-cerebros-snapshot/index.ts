@@ -32,7 +32,7 @@ serve(async (req) => {
     const { data: cerebros, error: errC } = await sb.from('vw_plano_cerebros').select('*');
     if (errC) throw new Error('view cerebros: ' + errC.message);
 
-    // 2) Catalogo de integracoes + cofre check
+    // 2) Catalogo de integracoes + verificacao real de prontidao
     const { data: integracoes, error: errI } = await sb
       .from('integracoes_catalogo')
       .select('*')
@@ -44,10 +44,29 @@ serve(async (req) => {
       .select('nome')
       .eq('ativo', true);
     const chavesNoCofre = new Set((cofreRows || []).map((r: any) => r.nome));
+
+    // Contas Google conectadas (multi-conta — 1 autorizacao = Drive+Gmail+Calendar)
+    const { data: contasGoogle } = await sb
+      .from('conexoes_google')
+      .select('id, cliente_id, label, email_google, is_padrao, incluir_em_relatorio, criado_em, atualizado_em')
+      .is('revogado_em', null)
+      .order('criado_em', { ascending: true });
+
+    const GOOGLE_SLUGS = new Set(['google-drive', 'google-gmail', 'google-calendar']);
+
     const integracoesComStatus = (integracoes || []).map((i: any) => {
       const chaves = (i.cofre_chaves || []) as string[];
-      const cofre_ok = chaves.length === 0 ? true : chaves.every((k) => chavesNoCofre.has(k));
-      return { ...i, cofre_ok };
+      const out: any = { ...i };
+
+      if (GOOGLE_SLUGS.has(i.slug)) {
+        // Pra integracoes Google: prontidao = pelo menos 1 conta conectada
+        out.contas_conectadas = contasGoogle || [];
+        out.cofre_ok = (contasGoogle || []).length > 0;
+      } else {
+        // Resto: chave estatica no cofre
+        out.cofre_ok = chaves.length === 0 ? true : chaves.every((k) => chavesNoCofre.has(k));
+      }
+      return out;
     });
 
     // 3) Para cada cerebro, garantir plano e contar status_automacao

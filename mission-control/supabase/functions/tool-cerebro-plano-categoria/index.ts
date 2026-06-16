@@ -3,12 +3,14 @@
 //
 // Acoes pra editar o plano de automacao de uma categoria.
 //
-// POST body { acao: 'editar' | 'avancar', plano_id, ...campos }
+// POST body { acao: 'editar' | 'avancar' | 'criar_categoria', ...campos }
 //
 // editar: { acao:'editar', plano_id, status_automacao?, origem_configurada?, schedule_cron?,
 //           schedule_descricao?, ferramenta?, responsavel?, notas?, prioridade? }
 // avancar: { acao:'avancar', plano_id }
 //   -> avanca status pelo mapa: sem_coleta→planejada→em_construcao→rodando→pausada→rodando
+// criar_categoria: { acao:'criar_categoria', nome, emoji?, descricao?, tipos_fonte? }
+//   -> cria categoria global + auto-popula em todos cerebros internos
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
@@ -30,7 +32,10 @@ serve(async (req) => {
 
   const acao = String(body.acao || '').trim();
   const plano_id = String(body.plano_id || '').trim();
-  if (!plano_id) return jsonRespTool({ ok: false, erro: 'plano_id obrigatorio' }, 400);
+  // plano_id eh obrigatorio so pra editar/avancar — criar_categoria nao precisa
+  if (acao !== 'criar_categoria' && !plano_id) {
+    return jsonRespTool({ ok: false, erro: 'plano_id obrigatorio' }, 400);
+  }
 
   const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
@@ -38,6 +43,19 @@ serve(async (req) => {
   });
 
   try {
+    if (acao === 'criar_categoria') {
+      const nome = String(body.nome || '').trim();
+      if (!nome) return jsonRespTool({ ok: false, erro: 'nome obrigatorio' }, 400);
+      const { data, error } = await sb.rpc('cerebro_categoria_criar', {
+        p_nome: nome,
+        p_emoji: body.emoji || '📦',
+        p_descricao: body.descricao || null,
+        p_tipos_fonte: body.tipos_fonte || [],
+      });
+      if (error) throw new Error(error.message);
+      return jsonRespTool({ ok: true, slug: data });
+    }
+
     if (acao === 'editar') {
       const { error } = await sb.rpc('cerebro_plano_categoria_editar', {
         p_id: plano_id,
@@ -60,7 +78,7 @@ serve(async (req) => {
       return jsonRespTool({ ok: true, novo_status: data });
     }
 
-    return jsonRespTool({ ok: false, erro: 'acao invalida (use editar|avancar)' }, 400);
+    return jsonRespTool({ ok: false, erro: 'acao invalida (use editar|avancar|criar_categoria)' }, 400);
   } catch (e: any) {
     return jsonRespTool({ ok: false, erro: e?.message || String(e) }, 500);
   }

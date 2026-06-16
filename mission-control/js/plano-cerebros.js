@@ -258,11 +258,16 @@ async function renderTelaCerebro(conteudo, cerebro_id) {
     el('button', { class: 'pc-btn-voltar', onclick: voltarParaGrid }, '← Voltar pros 10 cérebros'),
     el('div', { class: 'pc-cer-titulo' }, [
       el('span', { class: 'pc-emoji', style: 'font-size:2.5rem' }, c.produto_emoji || '🧠'),
-      el('div', null, [
+      el('div', { style: 'flex:1' }, [
         el('h2', { style: 'margin:0;color:white' }, c.produto_nome),
         el('div', { class: 'pc-mini', style: 'color:#94A3B8' },
           `${detalhe.plano.length} categorias · ${c.total_fontes || 0} fontes vetorizadas · Persona v${c.persona_versao || '—'}`),
       ]),
+      el('button', {
+        class: 'pc-btn-nova-cat',
+        onclick: () => abrirModalNovaCategoria(cerebro_id),
+        title: 'Adicionar categoria nova (vale pra todos os cérebros)',
+      }, '+ Nova categoria'),
     ]),
     // KPI strip + filtros (re-renderizam parcialmente quando status muda)
     el('div', { id: 'pc-cer-stats-wrap' }),
@@ -587,7 +592,85 @@ async function avancarStatus(plano_id, cerebro_id, btnEl) {
 }
 
 // ============================================================
-// ABA 2 — Integrações (igual v2, sera revisada)
+// Modal: Nova categoria (cria global, auto-popula em todos cerebros)
+// ============================================================
+function abrirModalNovaCategoria(cerebro_id) {
+  const modal = document.getElementById('pc-modal');
+  modal.innerHTML = '';
+  modal.classList.remove('pc-hidden');
+
+  const inner = el('div', { class: 'pc-modal-inner', style: 'max-width:520px' });
+  modal.append(inner);
+
+  inner.append(
+    el('div', { class: 'pc-modal-head' }, [
+      el('h2', null, '+ Nova categoria de fonte'),
+      el('button', { class: 'pc-close', onclick: fecharModal }, '×'),
+    ]),
+    el('p', { class: 'pc-modal-sub' },
+      'Categoria nova aparece em TODOS os 10 cérebros (status sem_coleta). Use pra adicionar uma fonte que não pensamos no catálogo inicial (ex: "Comentários Instagram", "Notion docs").'),
+  );
+
+  const body = el('div', { class: 'pc-modal-body' });
+  inner.append(body);
+
+  body.append(
+    el('div', { class: 'pc-form-row' }, [
+      el('div', { class: 'pc-form-campo' }, [
+        el('label', null, 'Nome *'),
+        el('input', { id: 'pc-nc-nome', type: 'text', class: 'pc-input', placeholder: 'Ex: Comentários Instagram' }),
+      ]),
+      el('div', { class: 'pc-form-campo', style: 'max-width:90px' }, [
+        el('label', null, 'Emoji'),
+        el('input', { id: 'pc-nc-emoji', type: 'text', class: 'pc-input', placeholder: '📦', maxlength: 4 }),
+      ]),
+    ]),
+    el('div', { class: 'pc-form-campo' }, [
+      el('label', null, 'Descrição (o que entra aqui)'),
+      el('textarea', { id: 'pc-nc-desc', class: 'pc-input', rows: 2, placeholder: 'Ex: Comentários raspados de posts do Instagram do produto' }),
+    ]),
+    el('div', { class: 'pc-form-campo' }, [
+      el('label', null, 'Tipo de fonte no banco (opcional)'),
+      el('input', { id: 'pc-nc-tipos', type: 'text', class: 'pc-input', placeholder: 'Ex: comentario_instagram (separar por vírgula se mais de 1)' }),
+      el('small', { style: 'color:#64748B' }, 'Usado pra contar fontes vetorizadas. Se não souber, deixa em branco.'),
+    ]),
+  );
+
+  inner.append(el('div', { class: 'pc-form-acoes' }, [
+    el('button', { class: 'pc-btn-cancel', onclick: fecharModal }, 'Cancelar'),
+    el('button', { class: 'pc-btn-primary', onclick: () => criarNovaCategoria(cerebro_id) }, 'Criar categoria'),
+  ]));
+}
+
+async function criarNovaCategoria(cerebro_id) {
+  const nome = document.getElementById('pc-nc-nome')?.value.trim() || '';
+  const emoji = document.getElementById('pc-nc-emoji')?.value.trim() || '📦';
+  const desc = document.getElementById('pc-nc-desc')?.value.trim() || null;
+  const tiposRaw = document.getElementById('pc-nc-tipos')?.value.trim() || '';
+  const tipos = tiposRaw ? tiposRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+  if (!nome) { alert('Nome é obrigatório'); return; }
+
+  try {
+    const r = await callEdge('tool-cerebro-plano-categoria', {
+      method: 'POST',
+      body: { acao: 'criar_categoria', nome, emoji, descricao: desc, tipos_fonte: tipos },
+    });
+    if (!r.ok) throw new Error(r.erro);
+    fecharModal();
+    // Invalida cache de TODOS os cerebros (categoria nova entrou em todos)
+    _detalheCache.clear();
+    // Recarrega detalhe atual
+    const conteudo = document.getElementById('pc-conteudo');
+    conteudo.innerHTML = '';
+    // Atualiza snapshot global em paralelo
+    try { _snapshot = await callEdge('tool-plano-cerebros-snapshot'); } catch {}
+    await renderTelaCerebro(conteudo, cerebro_id);
+  } catch (e) { alert('Erro: ' + e.message); }
+}
+
+// ============================================================
+// ABA 2 — Integrações
 // ============================================================
 function renderAbaIntegracoes(integracoes) {
   const wrap = el('div', { class: 'pc-int-wrap' });
@@ -621,22 +704,54 @@ function renderAbaIntegracoes(integracoes) {
 
 function cardIntegracao(i) {
   const chaves = (i.cofre_chaves || []);
-  return el('div', { class: 'pc-int-card' }, [
-    el('div', { class: 'pc-int-card-head' }, [
-      el('span', { class: 'pc-emoji', style: 'font-size:1.7rem' }, i.emoji || '🔌'),
-      el('div', null, [
-        el('div', { class: 'pc-int-nome' }, i.nome),
-        el('div', { class: 'pc-int-slug' }, i.slug),
-      ]),
-      el('div', { class: 'pc-int-status' }, [
-        i.cofre_ok
-          ? el('span', { class: 'pc-int-ok', title: 'Cofre tem chaves: ' + chaves.join(', ') }, '✅ pronta')
-          : el('span', { class: 'pc-int-ko', title: chaves.length === 0 ? 'Sem chave' : 'Faltam: ' + chaves.join(', ') }, '⚠ a configurar'),
-      ]),
+  const ehGoogle = ['google-drive', 'google-gmail', 'google-calendar'].includes(i.slug);
+  const contas = i.contas_conectadas || [];
+
+  const card = el('div', { class: 'pc-int-card' });
+
+  card.append(el('div', { class: 'pc-int-card-head' }, [
+    el('span', { class: 'pc-emoji', style: 'font-size:1.7rem' }, i.emoji || '🔌'),
+    el('div', null, [
+      el('div', { class: 'pc-int-nome' }, i.nome),
+      el('div', { class: 'pc-int-slug' }, i.slug),
     ]),
-    el('div', { class: 'pc-int-tecnica' }, i.descricao || ''),
-    chaves.length > 0 ? el('div', { class: 'pc-int-chaves' }, `🔑 ${chaves.join(', ')}`) : null,
-  ]);
+    el('div', { class: 'pc-int-status' },
+      i.cofre_ok
+        ? el('span', { class: 'pc-int-ok', title: ehGoogle ? `${contas.length} conta(s) conectada(s)` : 'Cofre OK' }, '✅ pronta')
+        : el('span', { class: 'pc-int-ko', title: ehGoogle ? 'Nenhuma conta conectada ainda' : (chaves.length === 0 ? 'Sem chave' : 'Faltam: ' + chaves.join(', ')) }, '⚠ a configurar'),
+    ),
+  ]));
+
+  card.append(el('div', { class: 'pc-int-tecnica' }, i.descricao || ''));
+
+  // Bloco especifico Google: lista contas conectadas + botao Conectar
+  if (ehGoogle) {
+    card.append(el('div', { class: 'pc-int-contas' }, [
+      el('div', { class: 'pc-int-contas-label' }, `📬 Contas conectadas (${contas.length}):`),
+      ...contas.map(c => el('div', { class: 'pc-int-conta-row' }, [
+        el('span', { class: 'pc-int-conta-label' }, c.label || '(sem nome)'),
+        el('span', { class: 'pc-int-conta-email' }, c.email_google || '(sem email)'),
+        c.is_padrao ? el('span', { class: 'pc-int-tag-padrao', title: 'Conta padrão' }, '⭐') : null,
+        c.incluir_em_relatorio ? el('span', { class: 'pc-int-tag-rel', title: 'Em relatórios' }, '📊') : null,
+      ])),
+      contas.length === 0
+        ? el('div', { class: 'pc-int-empty' }, 'Nenhuma caixa Google conectada ainda.')
+        : null,
+      el('button', {
+        class: 'pc-int-btn-conectar',
+        onclick: () => {
+          const btn = document.querySelector('.nav-item[data-page="integracoes"]');
+          if (btn) btn.click();
+        },
+      }, '+ Conectar nova caixa Google'),
+    ]));
+  }
+
+  if (chaves.length > 0) {
+    card.append(el('div', { class: 'pc-int-chaves' }, `🔑 ${chaves.join(', ')}`));
+  }
+
+  return card;
 }
 
 // ============================================================
@@ -761,6 +876,21 @@ function injetarEstilos() {
     .pc-int-ko { color: #F59E0B; }
     .pc-int-tecnica { color: #94A3B8; font-size: 0.8rem; padding-top: 6px; border-top: 1px dashed #334155; }
     .pc-int-chaves { color: #64748B; font-size: 0.7rem; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #334155; font-family: monospace; }
+
+    /* Contas conectadas (Google) */
+    .pc-int-contas { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #334155; display: flex; flex-direction: column; gap: 6px; }
+    .pc-int-contas-label { color: #CBD5E1; font-size: 0.78rem; font-weight: 600; }
+    .pc-int-conta-row { display: flex; align-items: center; gap: 6px; background: #0F172A; padding: 5px 8px; border-radius: 5px; font-size: 0.78rem; }
+    .pc-int-conta-label { color: white; font-weight: 600; }
+    .pc-int-conta-email { color: #94A3B8; font-family: monospace; font-size: 0.72rem; flex: 1; }
+    .pc-int-tag-padrao, .pc-int-tag-rel { font-size: 0.85rem; }
+    .pc-int-empty { color: #64748B; font-size: 0.78rem; font-style: italic; padding: 6px; }
+    .pc-int-btn-conectar { background: #1D4ED8; color: white; border: none; padding: 6px 10px; border-radius: 5px; cursor: pointer; font-size: 0.78rem; font-weight: 600; margin-top: 4px; text-align: center; text-decoration: none; display: block; }
+    .pc-int-btn-conectar:hover { background: #1E40AF; }
+
+    /* Botao + Nova categoria */
+    .pc-btn-nova-cat { background: #1E293B; color: #CBD5E1; border: 1px dashed #475569; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; transition: all 0.15s; }
+    .pc-btn-nova-cat:hover { background: #334155; color: white; border-color: #64748B; }
   `;
   document.head.append(el('style', { id: 'pc-style', html: css }));
 }
