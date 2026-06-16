@@ -58,6 +58,13 @@ const STATUS_META = {
   falhou:        { label: 'falhou',         cor: '#EF4444', emoji: '❌', proximoLabel: '▶ Retomar' },
 };
 
+const TRIGGER_META = {
+  manual:        { label: 'manual',              emoji: '🖐', descricao: 'Você clica "Rodar agora" pra disparar.' },
+  cron:          { label: 'agendado',            emoji: '⏰', descricao: 'pg_cron dispara no horário configurado.' },
+  evento_avisar: { label: 'avisar quando achar', emoji: '🔔', descricao: 'Detector híbrido percebe arquivo novo e mostra badge — você clica pra processar.' },
+  evento_auto:   { label: 'automático evento',   emoji: '🤖', descricao: 'Detector híbrido percebe arquivo novo e processa direto.' },
+};
+
 async function callEdge(nome, opts = {}) {
   const sb = getSupabase();
   const { data: { session } } = await sb.auth.getSession();
@@ -367,10 +374,12 @@ function renderListaCategorias(wrap, plano, integracoes, cerebro_id) {
 
 function cardCategoria(p, integracoes, cerebro_id) {
   const meta = STATUS_META[p.status_automacao] || STATUS_META.sem_coleta;
+  const triggerMeta = TRIGGER_META[p.trigger_tipo] || TRIGGER_META.manual;
   const fresh = freshnessTexto(p.ultima_fonte_em);
+  const pendencias = Number(p.pendencias_count || 0);
 
   const card = el('div', {
-    class: 'pc-cat-card',
+    class: 'pc-cat-card' + (pendencias > 0 ? ' pc-cat-card-pendencias' : ''),
     style: `border-left-color:${meta.cor}`,
   });
 
@@ -385,8 +394,23 @@ function cardCategoria(p, integracoes, cerebro_id) {
       el('div', { class: 'pc-cat-nome' }, p.categoria_nome),
       el('div', { class: 'pc-cat-desc' }, p.categoria_descricao || ''),
     ]),
-    el('span', { class: 'pc-status-pill', style: `background:${meta.cor}` }, `${meta.emoji} ${meta.label}`),
+    el('div', { class: 'pc-cat-pills' }, [
+      el('span', { class: 'pc-trigger-pill', title: triggerMeta.descricao }, `${triggerMeta.emoji} ${triggerMeta.label}`),
+      el('span', { class: 'pc-status-pill', style: `background:${meta.cor}` }, `${meta.emoji} ${meta.label}`),
+    ]),
   ]));
+
+  // Badge de pendências (se tiver)
+  if (pendencias > 0) {
+    card.append(el('div', { class: 'pc-cat-badge-pendencia' }, [
+      el('span', { class: 'pc-pend-icon' }, '🔔'),
+      el('strong', null, `${pendencias} arquivo${pendencias > 1 ? 's' : ''} aguardando processamento`),
+      el('button', {
+        class: 'pc-btn-mini-acao',
+        onclick: (e) => disparararJob(p, cerebro_id, e.currentTarget),
+      }, '▶ Processar agora'),
+    ]));
+  }
 
   // Linha 2: origem · freshness · schedule
   const meta2 = [];
@@ -395,6 +419,11 @@ function cardCategoria(p, integracoes, cerebro_id) {
   meta2.push(['⏰ Schedule', p.schedule_descricao || '—']);
   if (p.ferramenta) meta2.push(['🛠 Ferramenta', p.ferramenta]);
   if (p.responsavel) meta2.push(['👤 Responsável', p.responsavel]);
+  if (p.ultima_execucao) {
+    const dataExec = freshnessTexto(p.ultima_execucao);
+    const statusRunCor = p.ultimo_status_run === 'falha' ? '#EF4444' : (p.ultimo_status_run === 'ok' ? '#22C55E' : '#94A3B8');
+    meta2.push(['▶️ Última execução', `${dataExec.texto} · ${p.ultimo_status_run || '—'}`, statusRunCor]);
+  }
 
   card.append(el('div', { class: 'pc-cat-l2' }, meta2.map(([k, v, cor]) =>
     el('span', { class: 'pc-cat-attr' }, [
@@ -409,22 +438,77 @@ function cardCategoria(p, integracoes, cerebro_id) {
   }
 
   // Linha 3: ações
-  const btnAvancar = el('button', {
-    class: 'pc-btn-primary',
-    onclick: (e) => avancarStatus(p.plano_id, cerebro_id, e.currentTarget),
-    title: 'Avançar pra próximo estágio do ciclo',
-  }, meta.proximoLabel);
+  const podeRodar = p.origem_pasta_drive_id && p.origem_pasta_drive_id.length > 0;
+  const acoes = [];
 
-  card.append(el('div', { class: 'pc-cat-acoes' }, [
-    btnAvancar,
-    el('button', {
-      class: 'pc-btn-secondary',
-      onclick: () => abrirModalEditar(p, integracoes, cerebro_id),
-      title: 'Editar tudo — origem, schedule, status, voltar pra trás',
-    }, '📝 Editar / mudar status'),
-  ]));
+  if (podeRodar) {
+    acoes.push(el('button', {
+      class: 'pc-btn-primary',
+      onclick: (e) => disparararJob(p, cerebro_id, e.currentTarget),
+      title: 'Roda o pipeline agora — lê pasta Drive, transcreve novos, salva no cérebro',
+    }, '▶ Rodar agora'));
+  } else {
+    acoes.push(el('button', {
+      class: 'pc-btn-primary',
+      onclick: (e) => avancarStatus(p.plano_id, cerebro_id, e.currentTarget),
+      title: 'Avançar pra próximo estágio do ciclo',
+    }, meta.proximoLabel));
+  }
+
+  acoes.push(el('button', {
+    class: 'pc-btn-secondary',
+    onclick: () => abrirModalEditar(p, integracoes, cerebro_id),
+    title: 'Editar tudo — origem, pasta Drive, trigger, status, schedule',
+  }, '📝 Editar plano'));
+
+  card.append(el('div', { class: 'pc-cat-acoes' }, acoes));
 
   return card;
+}
+
+async function disparararJob(p, cerebro_id, btnEl) {
+  if (!p.origem_pasta_drive_id) {
+    alert('Categoria sem origem_pasta_drive_id configurada. Edita o plano e adiciona a pasta primeiro.');
+    return;
+  }
+  const labelOriginal = btnEl ? btnEl.textContent : '';
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.textContent = '⏳ enfileirando...';
+    btnEl.style.opacity = '0.6';
+  }
+  try {
+    const r = await callEdge('tool-disparar-job-categoria', {
+      method: 'POST',
+      body: { cerebro_id, categoria_slug: p.categoria_slug },
+    });
+    if (!r.ok) throw new Error(r.erro);
+    if (btnEl) {
+      btnEl.textContent = '✓ enfileirado — worker processa em até 15s';
+      btnEl.style.background = '#22C55E';
+    }
+    // Recarrega snapshot em ~20s pra mostrar nova ultima_execucao
+    setTimeout(() => recarregarCerebroSilencioso(cerebro_id), 25_000);
+  } catch (e) {
+    if (btnEl) {
+      btnEl.disabled = false;
+      btnEl.textContent = labelOriginal;
+      btnEl.style.opacity = '';
+    }
+    alert('Erro ao disparar job: ' + e.message);
+  }
+}
+
+async function recarregarCerebroSilencioso(cerebro_id) {
+  _detalheCache.delete(cerebro_id);
+  try { _snapshot = await callEdge('tool-plano-cerebros-snapshot'); } catch {}
+  try {
+    const detalhe = await callEdge('tool-plano-cerebros-snapshot', { query: `?cerebro_id=${cerebro_id}` });
+    if (detalhe.ok) {
+      _detalheCache.set(cerebro_id, detalhe);
+      if (_cerebroAberto === cerebro_id) atualizarParcialDoCerebro(detalhe, cerebro_id);
+    }
+  } catch {}
 }
 
 function voltarParaGrid() {
@@ -464,13 +548,22 @@ function abrirModalEditar(plano, integracoes, cerebro_id) {
         seletorStatus(plano.status_automacao),
       ]),
       el('div', { class: 'pc-form-campo' }, [
-        el('label', null, 'Responsável'),
-        el('input', { id: 'pc-fld-responsavel', type: 'text', class: 'pc-input', value: plano.responsavel || '', placeholder: 'Quem cuida disso' }),
+        el('label', null, 'Trigger (como dispara)'),
+        seletorTrigger(plano.trigger_tipo || 'manual'),
       ]),
+    ]),
+    el('div', { class: 'pc-form-campo' }, [
+      el('label', null, 'Responsável'),
+      el('input', { id: 'pc-fld-responsavel', type: 'text', class: 'pc-input', value: plano.responsavel || '', placeholder: 'Quem cuida disso' }),
     ]),
     el('div', { class: 'pc-form-campo' }, [
       el('label', null, 'Origem (de onde vem)'),
       el('input', { id: 'pc-fld-origem', type: 'text', class: 'pc-input', value: plano.origem_configurada || '', placeholder: 'Ex: Hotmart Members API, Google Drive pasta X, YA Forms' }),
+    ]),
+    el('div', { class: 'pc-form-campo' }, [
+      el('label', null, 'Pasta Drive monitorada (ID — pra trigger evento_*)'),
+      el('input', { id: 'pc-fld-pasta-drive', type: 'text', class: 'pc-input', value: plano.origem_pasta_drive_id || '', placeholder: 'Cole aqui o ID da pasta do Drive (parte final da URL)' }),
+      el('small', { style: 'color:#64748B' }, 'Detector híbrido monitora essa pasta a cada 10min se trigger for evento_avisar ou evento_auto.'),
     ]),
     el('div', { class: 'pc-form-row' }, [
       el('div', { class: 'pc-form-campo' }, [
@@ -509,6 +602,17 @@ function seletorStatus(atual) {
   return sel;
 }
 
+function seletorTrigger(atual) {
+  const sel = el('select', { id: 'pc-fld-trigger', class: 'pc-input' });
+  for (const k of ['manual', 'cron', 'evento_avisar', 'evento_auto']) {
+    const meta = TRIGGER_META[k];
+    const opt = el('option', { value: k }, `${meta.emoji} ${meta.label} — ${meta.descricao}`);
+    if (k === atual) opt.selected = true;
+    sel.append(opt);
+  }
+  return sel;
+}
+
 function fecharModal() {
   const modal = document.getElementById('pc-modal');
   if (modal) { modal.classList.add('pc-hidden'); modal.innerHTML = ''; }
@@ -517,13 +621,15 @@ function fecharModal() {
 async function salvarPlano(plano_id, cerebro_id) {
   const val = (id) => document.getElementById(id)?.value.trim() || null;
   const novosCampos = {
-    status_automacao:   val('pc-fld-status'),
-    origem_configurada: val('pc-fld-origem'),
-    schedule_descricao: val('pc-fld-schedule-desc'),
-    schedule_cron:      val('pc-fld-schedule-cron'),
-    ferramenta:         val('pc-fld-ferramenta'),
-    responsavel:        val('pc-fld-responsavel'),
-    notas:              val('pc-fld-notas'),
+    status_automacao:      val('pc-fld-status'),
+    trigger_tipo:          val('pc-fld-trigger'),
+    origem_configurada:    val('pc-fld-origem'),
+    origem_pasta_drive_id: val('pc-fld-pasta-drive'),
+    schedule_descricao:    val('pc-fld-schedule-desc'),
+    schedule_cron:         val('pc-fld-schedule-cron'),
+    ferramenta:            val('pc-fld-ferramenta'),
+    responsavel:           val('pc-fld-responsavel'),
+    notas:                 val('pc-fld-notas'),
   };
 
   // Otimistic local
@@ -826,6 +932,14 @@ function injetarEstilos() {
     .pc-cat-nome { color: white; font-weight: 600; font-size: 1rem; }
     .pc-cat-desc { color: #94A3B8; font-size: 0.8rem; margin-top: 2px; }
     .pc-status-pill { color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
+    .pc-trigger-pill { background: #0F172A; color: #94A3B8; padding: 3px 9px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; white-space: nowrap; border: 1px solid #334155; }
+    .pc-cat-pills { display: flex; gap: 6px; flex-direction: column; align-items: flex-end; }
+    .pc-cat-card-pendencias { box-shadow: 0 0 0 1px #F59E0B66; }
+    .pc-cat-badge-pendencia { display: flex; align-items: center; gap: 10px; background: #422006; border: 1px solid #F59E0B; color: #FCD34D; padding: 8px 12px; border-radius: 8px; margin: 8px 0; font-size: 0.85rem; }
+    .pc-cat-badge-pendencia strong { color: white; }
+    .pc-pend-icon { font-size: 1.1rem; }
+    .pc-btn-mini-acao { background: #F59E0B; color: #0F172A; border: none; padding: 4px 10px; border-radius: 5px; cursor: pointer; font-weight: 700; font-size: 0.75rem; margin-left: auto; }
+    .pc-btn-mini-acao:hover { background: #EAB308; }
 
     .pc-cat-l2 { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.8rem; padding-top: 8px; border-top: 1px dashed #334155; }
     .pc-cat-attr { display: flex; gap: 4px; align-items: center; }

@@ -420,6 +420,65 @@ async function adicionarLinha({ fileId, cliente_id, aba, valores }) {
   };
 }
 
+// ============================================================
+// V3 (2026-06-16) — lista pasta + download binario + cria pasta
+// Usado por ingestao automatica de arsenal (aulas, videos, audios).
+// ============================================================
+
+/**
+ * Lista arquivos dentro de uma pasta do Drive.
+ * @param {object} args
+ * @param {string} args.pastaId   - ID da pasta no Drive
+ * @param {string} args.cliente_id
+ * @param {string} [args.label]   - label da conexao (opcional, default = padrao do socio)
+ * @param {string} [args.mimePrefix] - filtro mime (ex: 'video/' ou 'audio/')
+ * @returns {Promise<Array<{id,name,mimeType,size,modifiedTime,webViewLink}>>}
+ */
+async function listarArquivosDaPasta({ pastaId, cliente_id, label, mimePrefix = null }) {
+  const access_token = await oauth.obterAccessTokenAtivo({ cliente_id, label });
+  let q = `'${pastaId}' in parents and trashed = false`;
+  if (mimePrefix) q += ` and mimeType contains '${mimePrefix}'`;
+  const params = new URLSearchParams({
+    q,
+    fields: 'files(id,name,mimeType,size,modifiedTime,webViewLink,md5Checksum)',
+    supportsAllDrives: 'true',
+    includeItemsFromAllDrives: 'true',
+    pageSize: '200',
+  });
+  const json = await _fetchJson(`${DRIVE_API}/files?${params}`, {}, access_token);
+  return json.files || [];
+}
+
+/**
+ * Baixa o binario de um arquivo do Drive.
+ * Pra Google Docs/Sheets nao funciona — use lerAuto. Pra MP4/MP3/PDF/etc funciona.
+ * @returns {Promise<Buffer>}
+ */
+async function baixarBinario({ fileId, cliente_id, label }) {
+  const access_token = await oauth.obterAccessTokenAtivo({ cliente_id, label });
+  const url = `${DRIVE_API}/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`;
+  const ab = await _fetchBytes(url, access_token);
+  return Buffer.from(ab);
+}
+
+/**
+ * Cria uma pasta no Drive. Idempotente — se ja existe pasta com mesmo nome no parent, devolve.
+ */
+async function garantirPasta({ nome, parent_id, cliente_id, label }) {
+  const access_token = await oauth.obterAccessTokenAtivo({ cliente_id, label });
+  // Procura existente
+  const q = `name = '${nome.replace(/'/g, "\\'")}' and '${parent_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+  const params = new URLSearchParams({ q, fields: 'files(id,name)', supportsAllDrives: 'true', includeItemsFromAllDrives: 'true' });
+  const lista = await _fetchJson(`${DRIVE_API}/files?${params}`, {}, access_token);
+  if (lista.files && lista.files[0]) return { ...lista.files[0], criada: false };
+  // Cria
+  const criada = await _fetchJson(`${DRIVE_API}/files?supportsAllDrives=true`, {
+    method: 'POST',
+    body: JSON.stringify({ name: nome, mimeType: 'application/vnd.google-apps.folder', parents: [parent_id] }),
+  }, access_token);
+  return { ...criada, criada: true };
+}
+
 module.exports = {
   // Fase 2 — leitura
   lerAuto,
@@ -433,4 +492,8 @@ module.exports = {
   editarCelula,
   editarRange,
   adicionarLinha,
+  // V3 — pasta + binario
+  listarArquivosDaPasta,
+  baixarBinario,
+  garantirPasta,
 };

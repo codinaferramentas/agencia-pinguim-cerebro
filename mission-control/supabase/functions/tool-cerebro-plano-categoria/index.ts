@@ -59,14 +59,16 @@ serve(async (req) => {
     if (acao === 'editar') {
       const { error } = await sb.rpc('cerebro_plano_categoria_editar', {
         p_id: plano_id,
-        p_status_automacao:   body.status_automacao   ?? null,
-        p_origem_configurada: body.origem_configurada ?? null,
-        p_schedule_cron:      body.schedule_cron      ?? null,
-        p_schedule_descricao: body.schedule_descricao ?? null,
-        p_ferramenta:         body.ferramenta         ?? null,
-        p_responsavel:        body.responsavel        ?? null,
-        p_notas:              body.notas              ?? null,
-        p_prioridade:         body.prioridade         ?? null,
+        p_status_automacao:      body.status_automacao      ?? null,
+        p_origem_configurada:    body.origem_configurada    ?? null,
+        p_schedule_cron:         body.schedule_cron         ?? null,
+        p_schedule_descricao:    body.schedule_descricao    ?? null,
+        p_ferramenta:            body.ferramenta            ?? null,
+        p_responsavel:           body.responsavel           ?? null,
+        p_notas:                 body.notas                 ?? null,
+        p_prioridade:            body.prioridade            ?? null,
+        p_trigger_tipo:          body.trigger_tipo          ?? null,
+        p_origem_pasta_drive_id: body.origem_pasta_drive_id ?? null,
       });
       if (error) throw new Error(error.message);
       return jsonRespTool({ ok: true });

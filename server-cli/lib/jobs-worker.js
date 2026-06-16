@@ -23,6 +23,8 @@ const db = require('./db');
 const os = require('os');
 // V2.15 Fase 4 — Reflexao Camada 2 EPP sobre output do executor de jobs
 const { verificarOutput } = require('./verificador');
+// V3 (2026-06-16) — handler de ingestao de categoria (midia/etc)
+const { ingerirPastaDrive } = require('./ingerir-midia-drive');
 
 const POLL_INTERVALO_VAZIO_MS = parseInt(process.env.WORKER_POLL_MS, 10) || 15_000;
 const POLL_INTERVALO_OCUPADO_MS = 1_000;
@@ -92,9 +94,126 @@ async function _processarUmJob() {
 
   try {
     // ========================================================
+    // V3 (2026-06-16) — INGESTAO DE CATEGORIA (midia/etc)
+    // ========================================================
+    if (job.tipo_pedido === 'ingerir-categoria-midia') {
+      const p = job.plano_json || {};
+      console.log(`[jobs-worker] ingestao categoria | cerebro=${p.cerebro_id} categoria=${p.categoria_slug} pasta=${p.origem_pasta_drive_id}`);
+
+      if (!p.cerebro_id || !p.categoria_slug || !p.origem_pasta_drive_id) {
+        await jobs.falharJob({ job_id: job.id, motivo: 'payload incompleto: cerebro_id+categoria_slug+origem_pasta_drive_id obrigatorios' });
+        return true;
+      }
+
+      try {
+        const resultado = await ingerirPastaDrive({
+          cerebro_id: p.cerebro_id,
+          categoria_slug: p.categoria_slug,
+          pasta_drive_id: p.origem_pasta_drive_id,
+          // cliente_id default = padrao do socio configurado (.env.local SOCIO_SLUG)
+          on_log: (ev) => console.log(`  [ingerir] ${JSON.stringify(ev).slice(0, 240)}`),
+        });
+        const dur = Date.now() - t0;
+
+        // Atualiza ultima_execucao + status_run no plano
+        await db.rodarSQL(`
+          UPDATE pinguim.cerebro_plano_categoria
+             SET ultima_execucao = now(),
+                 ultimo_status_run = '${resultado.falhas > 0 ? 'falha' : 'ok'}',
+                 atualizado_em = now()
+           WHERE id = '${p.plano_id}'
+        `);
+
+        // Se a categoria estava em_construcao e processou com sucesso, promove pra rodando
+        if (resultado.novos > 0 && resultado.falhas === 0) {
+          await db.rodarSQL(`
+            UPDATE pinguim.cerebro_plano_categoria
+               SET status_automacao = 'rodando'
+             WHERE id = '${p.plano_id}' AND status_automacao IN ('em_construcao','sem_coleta','planejada')
+          `);
+        }
+
+        // Resolve notificacao se veio de uma
+        if (p.notificacao_id) {
+          await db.rodarSQL(`
+            UPDATE pinguim.notificacoes_pendentes
+               SET resolvido_em = now(), resolvido_por = 'processado:job=${job.id}'
+             WHERE id = '${p.notificacao_id}'
+          `);
+        }
+        // Resolve TODAS notificacoes pendentes da categoria cujos arquivos viraram fonte_processada
+        await db.rodarSQL(`
+          UPDATE pinguim.notificacoes_pendentes
+             SET resolvido_em = now(), resolvido_por = 'auto-cleanup:job=${job.id}'
+           WHERE cerebro_id = '${p.cerebro_id}'::uuid
+             AND categoria_slug = '${p.categoria_slug}'
+             AND resolvido_em IS NULL
+             AND (payload->>'fonte_externa_id') IN (
+               SELECT fonte_externa_id FROM pinguim.fontes_processadas
+                WHERE cerebro_id = '${p.cerebro_id}'::uuid
+                  AND categoria_slug = '${p.categoria_slug}'
+             )
+        `);
+
+        await jobs.concluirJob({
+          job_id: job.id,
+          resultado_json: {
+            categoria: p.categoria_slug,
+            novos: resultado.novos,
+            falhas: resultado.falhas,
+            ja_processados: resultado.ja_processados,
+            duracao_ms: dur,
+            detalhes: resultado.detalhes,
+          },
+          executor_duracao_ms: dur,
+        });
+        console.log(`[jobs-worker] INGESTAO OK job=${job.id} | novos=${resultado.novos} falhas=${resultado.falhas} ja_processados=${resultado.ja_processados} | ${(dur/1000).toFixed(1)}s`);
+        return true;
+      } catch (e) {
+        const motivo = `ingestao categoria falhou: ${e.message || String(e)}`;
+        console.error(`[jobs-worker] ERRO ingestao job=${job.id}: ${motivo}`);
+        await db.rodarSQL(`
+          UPDATE pinguim.cerebro_plano_categoria
+             SET ultima_execucao = now(), ultimo_status_run = 'falha', atualizado_em = now()
+           WHERE id = '${p.plano_id}'
+        `);
+        await jobs.falharJob({ job_id: job.id, motivo: motivo.slice(0, 500) });
+        return true;
+      }
+    }
+
+    // ========================================================
     // Desvio por tipo_pedido (V2.15 — cron-relatorio é fluxo dedicado)
     // ========================================================
     if (job.tipo_pedido === 'cron-relatorio') {
+      // ── Camada 2 anti-duplicacao (rede de seguranca do worker) ──
+      // Se ja existe job concluido/executando com mesmo relatorio_id nos ultimos 5 min,
+      // pula este (provavelmente pg_cron disparou multiplas vezes).
+      const relatorio_id = job.plano_json?.relatorio_id;
+      if (relatorio_id) {
+        try {
+          const dupSql = `
+            SELECT id FROM pinguim.jobs
+             WHERE id != '${job.id}'
+               AND tipo_pedido = 'cron-relatorio'
+               AND status IN ('concluido', 'executando')
+               AND plano_json->>'relatorio_id' = '${relatorio_id}'
+               AND criado_em > now() - INTERVAL '5 minutes'
+             LIMIT 1
+          `;
+          const dupR = await db.rodarSQL(dupSql);
+          if (Array.isArray(dupR) && dupR[0]) {
+            console.log(`[jobs-worker] SKIP duplicata: job=${job.id} — ja existe job ${dupR[0].id} concluido/executando pro mesmo relatorio nos ultimos 5min`);
+            await jobs.falharJob({ job_id: job.id, motivo: 'pulado:duplicata_recente' });
+            return true;
+          }
+        } catch (dupErr) {
+          // Erro na checagem nao bloqueia execucao — segue normal
+          console.warn(`[jobs-worker] erro checando duplicata (nao bloqueante): ${dupErr.message}`);
+        }
+      }
+      // ── Fim camada 2 anti-duplicacao ──
+
       const r = await cronRelatorios.executarJobCronRelatorio(job);
       const dur_total = Date.now() - t0;
       if (!r.ok) {

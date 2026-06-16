@@ -47,6 +47,7 @@ const { renderEntregavel } = require('./lib/template-html'); // V2.10 — entreg
 const db = require('./lib/db'); // V2.7+V2.11 — persistencia em pinguim.conversas + pinguim.entregaveis
 const { revisarConsolidado } = require('./lib/reviewer'); // V2.6 — revisor pos-pipeline (portugues + clareza)
 const oauthGoogle = require('./lib/oauth-google'); // V2.12 Fase 0 — OAuth Drive + Calendar
+const conexoesGoogle = require('./lib/conexoes-google'); // V2.14.7 — multi-conta Google por socio
 const googleDrive = require('./lib/google-drive'); // V2.12 Fase 1 — busca arquivos no Drive
 const googleDriveContent = require('./lib/google-drive-content'); // V2.12 Fase 2+4 — ler e editar conteudo
 const googleGmail = require('./lib/google-gmail'); // V2.13 — listar/ler/responder/modificar Gmail
@@ -60,6 +61,11 @@ const templateRelatorioMetaAds = require('./lib/template-relatorio-meta-ads'); /
 const templateRelatorioTriagemEmails = require('./lib/template-relatorio-triagem-emails'); // V2.15.3 — Triagem de Emails diária (book com squad data)
 const evolution = require('./lib/evolution'); // V2.14 Frente D — WhatsApp Evolution
 
+// V2.16 Etapa 1.1 — Migração CLI: substitui Edge Functions Supabase por handlers locais.
+const edgeRouter = require('./lib/edge-router');
+const cofreSupabase = require('./lib/cofre-supabase');
+const claudeLLM = require('./lib/claude-llm');
+
 const app = express();
 const PORT = parseInt(process.env.PORT, 10) || 3737;
 const PROJECT_DIR = __dirname;
@@ -71,7 +77,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, ngrok-skip-browser-warning');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
@@ -1027,6 +1033,29 @@ app.get('/api/health', async (req, res) => {
 });
 
 // ============================================================
+// V2.16 Etapa 1.1 — Roteador de Edge Functions migradas pro CLI local
+// Sidebar/mission-control chama POST /api/edge/<nome-funcao> com MESMO body
+// que mandaria pra Supabase Edge. Aqui despachamos pra handler local.
+// GET /api/edge → lista o que já migrou (útil pra debug da migração).
+// ============================================================
+app.use('/api/edge', express.json({ limit: '10mb' }), edgeRouter.middleware());
+
+// Smoke handler de teste — registrado direto aqui pra validar o pipeline
+// (chamar via `curl -X POST http://localhost:3737/api/edge/_ping -d '{}'`)
+edgeRouter.registrar('_ping', async (body) => {
+  return {
+    ok: true,
+    pong: true,
+    recebido_em: new Date().toISOString(),
+    echo: body,
+    diagnostico: {
+      cofre_disponivel: typeof cofreSupabase.getChave === 'function',
+      claude_llm_disponivel: typeof claudeLLM.chamarLLM === 'function',
+    },
+  };
+});
+
+// ============================================================
 // GET /entregavel/:id  —  V2.10 + V2.7
 // Renderiza entregavel grande como HTML standalone.
 // V2.7: aceita UUID e busca em pinguim.entregaveis (durável).
@@ -1093,10 +1122,37 @@ app.get('/entregavel/:id', async (req, res) => {
           return;
         }
 
+        // V2.15.5 — Highlights diário (cards por lançamento ativo + outros + total)
+        if (ent.tipo === 'relatorio-highlights-diario') {
+          const templateHighlights = require('./lib/template-relatorio-highlights');
+          const html = templateHighlights.renderRelatorioHighlights({
+            markdown: ent.conteudo_md,
+            titulo: ent.titulo,
+            conteudo_estruturado: ent.conteudo_estruturado || {},
+            criadoEm: new Date(ent.criado_em).getTime(),
+            versionamento,
+          });
+          res.type('html').send(html);
+          return;
+        }
+
         // V2.15.3 — Triagem de Emails diária (book com squad data + ApexCharts)
         if (ent.tipo === 'relatorio-triagem-emails-diario') {
           const html = templateRelatorioTriagemEmails.renderRelatorioTriagemEmails({
             markdown: ent.conteudo_md,
+            titulo: ent.titulo,
+            conteudo_estruturado: ent.conteudo_estruturado || {},
+            criadoEm: new Date(ent.criado_em).getTime(),
+            versionamento,
+          });
+          res.type('html').send(html);
+          return;
+        }
+
+        // V2.15 — Radar IA Diário (curadoria do mundo de IA, 4 baldes)
+        if (ent.tipo === 'relatorio-radar-ia-diario') {
+          const templateRadarIA = require('./lib/template-relatorio-radar-ia');
+          const html = templateRadarIA.renderRelatorioRadarIA({
             titulo: ent.titulo,
             conteudo_estruturado: ent.conteudo_estruturado || {},
             criadoEm: new Date(ent.criado_em).getTime(),
@@ -1407,11 +1463,11 @@ app.post('/api/drive/editar', async (req, res) => {
 
 app.post('/api/gmail/listar', async (req, res) => {
   try {
-    const { query = 'in:inbox', pageSize = 10, cliente_id } = req.body || {};
+    const { query = 'in:inbox', pageSize = 10, cliente_id, label, conexao_id } = req.body || {};
     const t0 = Date.now();
-    const r = await googleGmail.listarEmails({ query, pageSize, cliente_id });
+    const r = await googleGmail.listarEmails({ query, pageSize, cliente_id, label, conexao_id });
     const dur_ms = Date.now() - t0;
-    console.log(`[gmail-listar] ${dur_ms}ms | query="${query}" | retornou=${r.total_retornado}/${r.total_estimado}`);
+    console.log(`[gmail-listar] ${dur_ms}ms | query="${query}" | label="${label || '(padrao)'}" | retornou=${r.total_retornado}/${r.total_estimado}`);
     res.json({ ok: true, ...r, latencia_ms: dur_ms });
   } catch (e) {
     console.error('[gmail-listar] erro:', e.message);
@@ -1557,11 +1613,11 @@ app.post('/api/calendar/listar-calendarios', async (req, res) => {
 
 app.post('/api/calendar/listar-eventos', async (req, res) => {
   try {
-    const { calendarId = 'primary', timeMin, timeMax, maxResults = 50, cliente_id } = req.body || {};
+    const { calendarId = 'primary', timeMin, timeMax, maxResults = 50, cliente_id, label, conexao_id } = req.body || {};
     const t0 = Date.now();
-    const r = await googleCalendar.listarEventos({ calendarId, timeMin, timeMax, maxResults, cliente_id });
+    const r = await googleCalendar.listarEventos({ calendarId, timeMin, timeMax, maxResults, cliente_id, label, conexao_id });
     const dur_ms = Date.now() - t0;
-    console.log(`[calendar-listar-evts] ${dur_ms}ms | cal=${calendarId} | janela=[${(timeMin||'now').slice(0,10)}..${(timeMax||'+24h').slice(0,10)}] | retornou=${r.total}`);
+    console.log(`[calendar-listar-evts] ${dur_ms}ms | cal=${calendarId} | label="${label || '(padrao)'}" | janela=[${(timeMin||'now').slice(0,10)}..${(timeMax||'+24h').slice(0,10)}] | retornou=${r.total}`);
     res.json({ ok: true, ...r, latencia_ms: dur_ms });
   } catch (e) {
     console.error('[calendar-listar-evts] erro:', e.message);
@@ -1571,10 +1627,10 @@ app.post('/api/calendar/listar-eventos', async (req, res) => {
 
 app.post('/api/calendar/ler-evento', async (req, res) => {
   try {
-    const { calendarId = 'primary', eventId, cliente_id } = req.body || {};
+    const { calendarId = 'primary', eventId, cliente_id, label, conexao_id } = req.body || {};
     if (!eventId) return res.status(400).json({ ok: false, error: 'eventId obrigatorio' });
     const t0 = Date.now();
-    const r = await googleCalendar.lerEvento({ calendarId, eventId, cliente_id });
+    const r = await googleCalendar.lerEvento({ calendarId, eventId, cliente_id, label, conexao_id });
     const dur_ms = Date.now() - t0;
     console.log(`[calendar-ler-evt] ${dur_ms}ms | id=${eventId.slice(0, 12)} | titulo="${(r.titulo || '').slice(0, 40)}"`);
     res.json({ ok: true, ...r, latencia_ms: dur_ms });
@@ -3908,6 +3964,29 @@ app.post('/api/relatorio/meta-ads', async (req, res) => {
 });
 
 // ============================================================
+// V2.15 — Radar IA Diário on-demand (Andre 2026-05-14)
+// Curadoria do mundo de IA pra Pinguim. RSS labs + curadores +
+// HN + Reddit + GitHub Trending + Twitter (nitter), classifica em
+// 4 níveis (crítico/estratégico/tendência/descartar) via Sonnet 4.6
+// ============================================================
+const relatorioRadarIA = require('./lib/relatorio-radar-ia');
+
+app.post('/api/relatorio/radar-ia', async (req, res) => {
+  try {
+    const { cliente_id, salvar = true, parent_id = null } = req.body || {};
+    console.log(`[relatorio-radar-ia] iniciando | cliente_id=${cliente_id || 'auto'}`);
+    const t0 = Date.now();
+    const r = await relatorioRadarIA.gerarRelatorioRadarIA({ cliente_id, salvar, parent_id });
+    const dur_ms = Date.now() - t0;
+    console.log(`[relatorio-radar-ia] OK ${dur_ms}ms | entregavel=${r.entregavel_id || 'NAO_SALVO'} | distribuicao=${JSON.stringify(r.distribuicao)} | total_coletado=${r.estatisticas?.total}`);
+    res.json({ ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[relatorio-radar-ia] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
 // V2.15.3 — Hotmart Diário on-demand (Andre 2026-05-14)
 // Book completo com plano de ação Board Advisory + ApexCharts
 // Universal (mesmo relatório pra todos os sócios)
@@ -3927,6 +4006,31 @@ app.post('/api/relatorio/hotmart', async (req, res) => {
     res.json({ ...r, latencia_ms: dur_ms });
   } catch (e) {
     console.error('[relatorio-hotmart] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
+// V2.15.5 — Highlights diário (Andre 2026-05-18)
+// Relatório curto pré-executivo. Universal. 1 card por lançamento ativo
+// + card "Outros Produtos" + TOTAL. Sem squad de mestres, sem LLM —
+// formato WhatsApp determinístico. Latência alvo 3-8s.
+// ============================================================
+const relatorioHighlights = require('./lib/relatorio-highlights');
+
+app.post('/api/relatorio/highlights', async (req, res) => {
+  try {
+    const { cliente_id, dia_alvo_brt, moeda = 'BRL', salvar = true, parent_id = null } = req.body || {};
+    console.log(`[relatorio-highlights] iniciando | dia_alvo=${dia_alvo_brt || 'auto'} | moeda=${moeda}`);
+    const t0 = Date.now();
+    const r = await relatorioHighlights.gerarRelatorioHighlights({
+      cliente_id, dia_alvo_brt, moeda, salvar, parent_id,
+    });
+    const dur_ms = Date.now() - t0;
+    console.log(`[relatorio-highlights] OK ${dur_ms}ms | entregavel=${r.entregavel_id || 'NAO_SALVO'} | cards=${r.cards_qtd}`);
+    res.json({ ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[relatorio-highlights] erro:', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
@@ -4153,6 +4257,219 @@ code{background:#1a1a28;padding:.1rem .35rem;border-radius:3px;font-size:.85em}<
 });
 
 // ============================================================
+// V2.14.7 — Endpoints /api/conexoes/* (multi-conta Google por socio)
+// ============================================================
+// Fluxo:
+//   POST /api/conexoes/iniciar      — recebe {nome, telefone, label}, gera state,
+//                                     devolve authorize_url do Google
+//   GET  /api/conexoes/callback     — recebe ?code&state do Google, troca por refresh_token,
+//                                     descobre email da conta, grava em conexoes_google
+//   GET  /api/conexoes/listar       — lista conexoes ativas de um socio (por telefone ou cliente_id)
+//   POST /api/conexoes/padrao       — marca conexao como padrao
+//   POST /api/conexoes/revogar      — soft-delete (revoga conexao)
+//
+// Diferenca pro /conectar-google antigo:
+//   - Aquele continua usando localhost (so o socio dono da maquina conecta)
+//   - Esses usam PUBLIC_BASE_URL (ngrok) — qualquer socio do laptop dele
+//   - Aquele sobrescreve unica chave em cofre_chaves; esses suportam N contas
+// ============================================================
+
+// CORS pra Vercel (mission-control chama de origem diferente)
+app.use('/api/conexoes', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, ngrok-skip-browser-warning');
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  next();
+});
+
+app.post('/api/conexoes/iniciar', async (req, res) => {
+  try {
+    const { nome, telefone, label, marcar_padrao, incluir_em_relatorio } = req.body || {};
+    if (!nome || !String(nome).trim()) return res.status(400).json({ ok: false, error: 'nome obrigatorio' });
+    if (!telefone || !String(telefone).trim()) return res.status(400).json({ ok: false, error: 'telefone obrigatorio' });
+    if (!label || !String(label).trim()) return res.status(400).json({ ok: false, error: 'label obrigatorio (ex: Pinguim, Pessoal)' });
+
+    // Confirma que o telefone bate com algum socio em whatsapp_socios
+    const socio = await conexoesGoogle.resolverSocioPorTelefone(String(telefone).trim());
+    if (!socio) {
+      return res.status(404).json({
+        ok: false,
+        error: 'telefone nao encontrado em pinguim.whatsapp_socios. Cadastre o telefone do socio antes de conectar Google.',
+      });
+    }
+
+    const client_id = await db.lerChaveSistema('GOOGLE_OAUTH_CLIENT_ID', 'conexoes-iniciar');
+    if (!client_id) {
+      return res.status(500).json({ ok: false, error: 'GOOGLE_OAUTH_CLIENT_ID nao cadastrado no cofre' });
+    }
+
+    const redirect_uri = await conexoesGoogle.obterRedirectUri();
+    // Normaliza marcar_padrao: aceita true/false/null (null = decisao automatica no banco)
+    const padraoNorm = (marcar_padrao === true || marcar_padrao === false) ? marcar_padrao : null;
+    // Default true se nao veio
+    const incluirNorm = (incluir_em_relatorio === false) ? false : true;
+
+    const state = conexoesGoogle.gerarState({
+      nome: String(nome).trim(),
+      telefone: String(telefone).trim(),
+      label: String(label).trim(),
+      marcar_padrao: padraoNorm,
+      incluir_em_relatorio: incluirNorm,
+    });
+
+    const authorize_url = oauthGoogle.montarUrlAutorizacao({
+      client_id,
+      redirect_uri,
+      state,
+    });
+
+    console.log(`[conexoes] iniciando OAuth pra ${socio.socio_slug} (${socio.apelido}) label="${label}" padrao=${padraoNorm} relatorio=${incluirNorm}`);
+    res.json({ ok: true, authorize_url, socio: { slug: socio.socio_slug, apelido: socio.apelido } });
+  } catch (e) {
+    console.error('[conexoes-iniciar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/conexoes/callback', async (req, res) => {
+  const { code, error, error_description, state } = req.query;
+
+  const htmlErro = (titulo, msg) => `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${titulo}</title>
+<style>body{background:#0a0a0f;color:#f1f5f9;font-family:'Inter',-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:2rem;text-align:center}
+.card{background:#111118;border:1px solid #2a2a3e;border-radius:12px;padding:2.5rem;max-width:520px}
+h1{color:#ef4444;margin:0 0 .75rem;font-size:1.3rem}p{color:#94a3b8;margin:.75rem 0;line-height:1.6}
+pre{background:#1a1a28;padding:1rem;border-radius:8px;text-align:left;font-size:.85em;overflow:auto;color:#f1f5f9}</style></head>
+<body><div class="card"><h1>${titulo}</h1><p>${msg}</p></div></body></html>`;
+
+  if (error) {
+    return res.status(400).type('html').send(htmlErro('Autorização recusada', `${error}: ${error_description || ''}`));
+  }
+  if (!code) return res.status(400).type('html').send(htmlErro('Faltou ?code', 'Tente conectar de novo a partir do Mission Control.'));
+  if (!state) return res.status(400).type('html').send(htmlErro('Faltou state', 'Sessão expirou. Tente conectar de novo.'));
+
+  const dadosState = conexoesGoogle.consumirState(String(state));
+  if (!dadosState) {
+    return res.status(400).type('html').send(htmlErro('State expirou ou inválido', 'A sessão de autorização expirou (limite 10 minutos). Volte ao Mission Control e tente de novo.'));
+  }
+
+  try {
+    const [client_id, client_secret] = await Promise.all([
+      db.lerChaveSistema('GOOGLE_OAUTH_CLIENT_ID', 'conexoes-callback'),
+      db.lerChaveSistema('GOOGLE_OAUTH_CLIENT_SECRET', 'conexoes-callback'),
+    ]);
+    if (!client_id || !client_secret) {
+      throw new Error('GOOGLE_OAUTH_CLIENT_ID/SECRET nao cadastrados no cofre');
+    }
+
+    const redirect_uri = await conexoesGoogle.obterRedirectUri();
+    const tokens = await oauthGoogle.trocarCodePorTokens({
+      code: String(code),
+      client_id,
+      client_secret,
+      redirect_uri,
+    });
+
+    // Descobre email da conta Google que foi conectada (precisa pra UPSERT)
+    const email_google = await conexoesGoogle.buscarEmailGoogle(tokens.access_token);
+
+    // Resolve cliente_id via telefone
+    const socio = await conexoesGoogle.resolverSocioPorTelefone(dadosState.telefone);
+    if (!socio) {
+      throw new Error(`Telefone ${dadosState.telefone} nao bate com nenhum socio em whatsapp_socios. Cadastre o socio primeiro.`);
+    }
+
+    // UPSERT em conexoes_google
+    const r = await conexoesGoogle.registrarConexao({
+      cliente_id: socio.cliente_id,
+      socio_slug: socio.socio_slug,
+      label: dadosState.label,
+      email_google,
+      refresh_token: tokens.refresh_token,
+      escopo: tokens.scope,
+      telefone_socio: dadosState.telefone,
+      marcar_padrao: dadosState.marcar_padrao,
+      incluir_em_relatorio: dadosState.incluir_em_relatorio,
+    });
+
+    console.log(`[conexoes-callback] OK | socio=${socio.socio_slug} | label="${dadosState.label}" | email=${email_google} | id=${r?.id} | padrao=${r?.is_padrao} | nova=${r?.criada_nova}`);
+
+    res.type('html').send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Conta conectada</title>
+<style>body{background:#0a0a0f;color:#f1f5f9;font-family:'Inter',-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:2rem;text-align:center}
+.card{background:#111118;border:1px solid #2a2a3e;border-radius:12px;padding:2.5rem;max-width:520px}
+h1{color:#10b981;margin:0 0 .75rem;font-size:1.4rem}h1 span{color:#E85C00}
+p{color:#94a3b8;margin:.5rem 0;line-height:1.6}
+.email{color:#f1f5f9;font-weight:600}
+.tag{display:inline-block;background:rgba(232,92,0,.15);color:#E85C00;padding:.2rem .65rem;border-radius:6px;font-size:.8em;font-weight:600;margin-left:.4rem}
+.badge{display:inline-block;background:rgba(16,185,129,.15);color:#10b981;padding:.2rem .65rem;border-radius:6px;font-size:.8em;font-weight:600;margin-left:.4rem}
+.btn{display:inline-block;background:#E85C00;color:white;padding:.85rem 1.5rem;border-radius:8px;text-decoration:none;font-weight:600;margin-top:1.5rem}</style></head>
+<body><div class="card"><h1>✓ Conta conectada <span>🐧</span></h1>
+<p>Olá <strong>${(dadosState.nome || '').replace(/</g,'&lt;')}</strong> — sua conta Google foi conectada ao Pinguim OS.</p>
+<p class="email">${(email_google || '').replace(/</g,'&lt;')} <span class="tag">${(dadosState.label || '').replace(/</g,'&lt;')}</span>${r?.is_padrao ? '<span class="badge">⭐ padrão</span>' : ''}</p>
+<p style="font-size:.85em;margin-top:1.5rem">Pode fechar essa aba — sua conta já está pronta pra ser usada nos relatórios.</p>
+</div></body></html>`);
+  } catch (e) {
+    console.error('[conexoes-callback] erro:', e.message);
+    res.status(500).type('html').send(htmlErro('Erro ao registrar conexão', e.message));
+  }
+});
+
+app.get('/api/conexoes/listar', async (req, res) => {
+  try {
+    const { telefone, cliente_id } = req.query;
+    let cid = cliente_id;
+    if (!cid) {
+      if (!telefone) return res.status(400).json({ ok: false, error: 'informe telefone ou cliente_id' });
+      const socio = await conexoesGoogle.resolverSocioPorTelefone(String(telefone));
+      if (!socio) return res.json({ ok: true, socio: null, conexoes: [] });
+      cid = socio.cliente_id;
+    }
+    const conexoes = await conexoesGoogle.listarConexoes(cid);
+    res.json({ ok: true, cliente_id: cid, conexoes });
+  } catch (e) {
+    console.error('[conexoes-listar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/conexoes/padrao', async (req, res) => {
+  try {
+    const { conexao_id } = req.body || {};
+    if (!conexao_id) return res.status(400).json({ ok: false, error: 'conexao_id obrigatorio' });
+    await conexoesGoogle.marcarPadrao(conexao_id);
+    res.json({ ok: true, conexao_id });
+  } catch (e) {
+    console.error('[conexoes-padrao] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/conexoes/toggle-relatorio', async (req, res) => {
+  try {
+    const { conexao_id, valor } = req.body || {};
+    if (!conexao_id) return res.status(400).json({ ok: false, error: 'conexao_id obrigatorio' });
+    if (typeof valor !== 'boolean') return res.status(400).json({ ok: false, error: 'valor (boolean) obrigatorio' });
+    await conexoesGoogle.toggleRelatorio(conexao_id, valor);
+    res.json({ ok: true, conexao_id, incluir_em_relatorio: valor });
+  } catch (e) {
+    console.error('[conexoes-toggle-relatorio] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/conexoes/revogar', async (req, res) => {
+  try {
+    const { conexao_id } = req.body || {};
+    if (!conexao_id) return res.status(400).json({ ok: false, error: 'conexao_id obrigatorio' });
+    await conexoesGoogle.revogar(conexao_id);
+    res.json({ ok: true, conexao_id });
+  } catch (e) {
+    console.error('[conexoes-revogar] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
 // GET / — pagina HTML do chat
 // ============================================================
 app.get('/', (req, res) => {
@@ -4228,6 +4545,17 @@ app.listen(PORT, () => {
     }
   } else {
     console.log('  [jobs-worker] DESLIGADO via WORKER_JOBS_ENABLED=0 — cron de relatorios NAO vai executar');
+  }
+
+  // V3 (2026-06-16) — detector hibrido de fontes novas em pastas Drive monitoradas
+  if (process.env.DETECTOR_FONTES_ENABLED !== '0') {
+    try {
+      const detector = require('./lib/detector-fontes-novas');
+      detector.iniciar();
+      console.log('  [detector-fontes] ATIVO (varre Drive a cada 10min)');
+    } catch (e) {
+      console.warn(`  [detector-fontes] falha ao iniciar: ${e.message}`);
+    }
   }
 });
 
