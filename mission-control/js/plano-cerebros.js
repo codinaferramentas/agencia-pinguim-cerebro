@@ -56,7 +56,11 @@ const STATUS_META = {
   rodando:       { label: 'rodando',        cor: '#22C55E', emoji: '🟢', proximoLabel: '⏸ Pausar' },
   pausada:       { label: 'pausada',        cor: '#94A3B8', emoji: '⏸', proximoLabel: '▶ Retomar' },
   falhou:        { label: 'falhou',         cor: '#EF4444', emoji: '❌', proximoLabel: '▶ Retomar' },
+  nao_aplicavel: { label: 'não se aplica',  cor: '#A1A1AA', emoji: '🚫', proximoLabel: '↩ Reativar' },
 };
+
+// V3 (2026-06-17) — estado global do toggle "mostrar não aplicáveis" por sessão
+let _mostrarNaoAplicaveis = false;
 
 const TRIGGER_META = {
   manual:        { label: 'manual',              emoji: '🖐', descricao: 'Você clica "Rodar agora" pra disparar.' },
@@ -312,13 +316,27 @@ function atualizarParcialDoCerebro(detalhe, cerebro_id) {
   if (filtrosWrap) {
     filtrosWrap.className = 'pc-filtros';
     filtrosWrap.innerHTML = '';
+    // "Todas" agora conta só as aplicáveis (nao_aplicavel sai do default)
     filtrosWrap.append(
-      filtroChip('todos', 'Todas', detalhe.plano.length),
+      filtroChip('todos', 'Todas', pc.total_aplicaveis),
       filtroChip('sem_coleta', '⚫ Sem coleta', pc.sem_coleta),
       filtroChip('planejada', '🔵 Planejadas', pc.planejada),
       filtroChip('em_construcao', '🟡 Em construção', pc.em_construcao),
       filtroChip('rodando', '🟢 Rodando', pc.rodando),
     );
+    // Toggle "Mostrar não aplicáveis" — só aparece se houver alguma marcada
+    if (pc.nao_aplicavel > 0) {
+      const ativo = _mostrarNaoAplicaveis;
+      filtrosWrap.append(el('button', {
+        class: 'pc-filtro pc-filtro-toggle-naoap' + (ativo ? ' pc-filtro-ativo' : ''),
+        title: ativo ? 'Esconder categorias marcadas como "não se aplica"' : 'Mostrar categorias marcadas como "não se aplica"',
+        onclick: () => {
+          _mostrarNaoAplicaveis = !_mostrarNaoAplicaveis;
+          const det = _detalheCache.get(_cerebroAberto);
+          if (det) atualizarParcialDoCerebro(det, _cerebroAberto);
+        },
+      }, `🚫 Não se aplica · ${pc.nao_aplicavel} ${ativo ? '(👁 visível)' : '(👁 mostrar)'}`));
+    }
   }
 
   // Lista
@@ -327,8 +345,11 @@ function atualizarParcialDoCerebro(detalhe, cerebro_id) {
 }
 
 function recomputarPlanoCounts(plano) {
-  const c = { sem_coleta: 0, planejada: 0, em_construcao: 0, rodando: 0, pausada: 0, falhou: 0 };
-  for (const p of (plano || [])) c[p.status_automacao] = (c[p.status_automacao] || 0) + 1;
+  const c = { sem_coleta: 0, planejada: 0, em_construcao: 0, rodando: 0, pausada: 0, falhou: 0, nao_aplicavel: 0, total_aplicaveis: 0 };
+  for (const p of (plano || [])) {
+    c[p.status_automacao] = (c[p.status_automacao] || 0) + 1;
+    if (p.status_automacao !== 'nao_aplicavel') c.total_aplicaveis++;
+  }
   return c;
 }
 
@@ -353,15 +374,20 @@ function filtroChip(slug, label, qtd) {
 
 function renderListaCategorias(wrap, plano, integracoes, cerebro_id) {
   wrap.innerHTML = '';
-  const lista = (plano || []).filter(p => _filtroStatus === 'todos' || p.status_automacao === _filtroStatus);
+  // V3 (2026-06-17) — nao_aplicavel só aparece se toggle "mostrar não aplicáveis" estiver ON
+  // ou se o usuário tiver explicitamente filtrado nesse status.
+  const lista = (plano || []).filter(p => {
+    if (p.status_automacao === 'nao_aplicavel' && !_mostrarNaoAplicaveis) return false;
+    return _filtroStatus === 'todos' || p.status_automacao === _filtroStatus;
+  });
 
   if (lista.length === 0) {
     wrap.append(el('div', { class: 'pc-empty' }, 'Nenhuma categoria nesse filtro.'));
     return;
   }
 
-  // Ordena: sem_coleta primeiro, depois pela ordem do catalogo
-  const ordemStatus = { sem_coleta: 0, planejada: 1, em_construcao: 2, falhou: 3, pausada: 4, rodando: 5 };
+  // Ordena: sem_coleta primeiro, nao_aplicavel por último, resto pela ordem do catalogo
+  const ordemStatus = { sem_coleta: 0, planejada: 1, em_construcao: 2, falhou: 3, pausada: 4, rodando: 5, nao_aplicavel: 9 };
   const sorted = [...lista].sort((a, b) => {
     const sa = ordemStatus[a.status_automacao] ?? 9;
     const sb = ordemStatus[b.status_automacao] ?? 9;
@@ -377,6 +403,32 @@ function cardCategoria(p, integracoes, cerebro_id) {
   const triggerMeta = TRIGGER_META[p.trigger_tipo] || TRIGGER_META.manual;
   const fresh = freshnessTexto(p.ultima_fonte_em);
   const pendencias = Number(p.pendencias_count || 0);
+
+  // V3 (2026-06-17) — card minimal pra status nao_aplicavel
+  if (p.status_automacao === 'nao_aplicavel') {
+    const cardNa = el('div', {
+      class: 'pc-cat-card pc-cat-card-naoaplicavel',
+      style: `border-left-color:${meta.cor};opacity:.65`,
+    });
+    cardNa.append(el('div', { class: 'pc-cat-l1', style: 'opacity:.85' }, [
+      el('span', { class: 'pc-cat-emoji' }, p.categoria_emoji || '📦'),
+      el('div', { class: 'pc-cat-info' }, [
+        el('div', { class: 'pc-cat-nome' }, p.categoria_nome),
+        el('div', { class: 'pc-cat-desc', style: 'font-style:italic' }, 'Marcada como "não se aplica" a esse produto'),
+      ]),
+      el('div', { class: 'pc-cat-pills' }, [
+        el('span', { class: 'pc-status-pill', style: `background:${meta.cor}` }, `${meta.emoji} ${meta.label}`),
+      ]),
+    ]));
+    cardNa.append(el('div', { class: 'pc-cat-acoes' }, [
+      el('button', {
+        class: 'pc-btn-secondary',
+        onclick: (e) => marcarAplicavel(p, cerebro_id, e.currentTarget),
+        title: 'Reativa essa categoria — volta pra "sem coleta" e pode ser configurada normalmente',
+      }, '↩ Aplicar a esse produto'),
+    ]));
+    return cardNa;
+  }
 
   const card = el('div', {
     class: 'pc-cat-card' + (pendencias > 0 ? ' pc-cat-card-pendencias' : ''),
@@ -619,7 +671,17 @@ function abrirModalEditar(plano, integracoes, cerebro_id) {
     ]),
   );
 
-  inner.append(el('div', { class: 'pc-form-acoes' }, [
+  inner.append(el('div', { class: 'pc-form-acoes', style: 'display:flex;gap:.5rem;align-items:center' }, [
+    // Botão "Não se aplica" — disponível em QUALQUER categoria, vira atalho universal.
+    // Não aparece quando já é nao_aplicavel (nesse caso, fechar e usar "↩ Aplicar" do card).
+    plano.status_automacao !== 'nao_aplicavel'
+      ? el('button', {
+          class: 'pc-btn-secondary',
+          style: 'margin-right:auto;color:#A1A1AA',
+          onclick: () => marcarNaoAplicavel(plano.plano_id, cerebro_id),
+          title: 'Esconde essa categoria deste cérebro — útil quando o produto não tem essa fonte (ex: produto sem WhatsApp, sem Discord, etc). Reversível.',
+        }, '🚫 Não se aplica a esse produto')
+      : null,
     el('button', { class: 'pc-btn-cancel', onclick: fecharModal }, 'Cancelar'),
     el('button', { class: 'pc-btn-primary', onclick: () => salvarPlano(plano.plano_id, cerebro_id) }, 'Salvar'),
   ]));
@@ -861,6 +923,65 @@ async function avancarStatus(plano_id, cerebro_id, btnEl) {
     p.status_automacao = statusAntes;
     atualizarParcialDoCerebro(det, cerebro_id);
     alert('Erro ao avançar status: ' + e.message);
+  }
+}
+
+// ============================================================
+// V3 (2026-06-17) — Marcar categoria como "não se aplica" / reativar
+// ============================================================
+// Usa tool-cerebro-plano-categoria acao=editar com status_automacao = 'nao_aplicavel' ou 'sem_coleta'.
+// Otimistic update + confirmação no caso destrutivo de marcar.
+// ============================================================
+async function marcarNaoAplicavel(plano_id, cerebro_id) {
+  const det = _detalheCache.get(cerebro_id);
+  if (!det) return;
+  const p = det.plano.find(x => x.plano_id === plano_id);
+  if (!p) return;
+
+  const ok = confirm(`Marcar "${p.categoria_nome}" como NÃO se aplica a esse produto?\n\nO card vai sumir da listagem padrão. Pode reativar depois clicando em "🚫 Não se aplica" no topo.`);
+  if (!ok) return;
+
+  const statusAntes = p.status_automacao;
+  p.status_automacao = 'nao_aplicavel';
+  fecharModal();
+  atualizarParcialDoCerebro(det, cerebro_id);
+
+  try {
+    const r = await callEdge('tool-cerebro-plano-categoria', {
+      method: 'POST',
+      body: { acao: 'editar', plano_id, status_automacao: 'nao_aplicavel' },
+    });
+    if (!r.ok) throw new Error(r.erro);
+    callEdge('tool-plano-cerebros-snapshot').then(s => { if (s.ok) _snapshot = s; });
+  } catch (e) {
+    p.status_automacao = statusAntes;
+    atualizarParcialDoCerebro(det, cerebro_id);
+    alert('Erro ao marcar como não se aplica: ' + e.message);
+  }
+}
+
+async function marcarAplicavel(p, cerebro_id, btnEl) {
+  const det = _detalheCache.get(cerebro_id);
+  if (!det) return;
+  const plano = det.plano.find(x => x.plano_id === p.plano_id);
+  if (!plano) return;
+
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳ reativando...'; }
+  const statusAntes = plano.status_automacao;
+  plano.status_automacao = 'sem_coleta';
+  atualizarParcialDoCerebro(det, cerebro_id);
+
+  try {
+    const r = await callEdge('tool-cerebro-plano-categoria', {
+      method: 'POST',
+      body: { acao: 'editar', plano_id: p.plano_id, status_automacao: 'sem_coleta' },
+    });
+    if (!r.ok) throw new Error(r.erro);
+    callEdge('tool-plano-cerebros-snapshot').then(s => { if (s.ok) _snapshot = s; });
+  } catch (e) {
+    plano.status_automacao = statusAntes;
+    atualizarParcialDoCerebro(det, cerebro_id);
+    alert('Erro ao reativar: ' + e.message);
   }
 }
 
