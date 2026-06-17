@@ -27,6 +27,7 @@ const { verificarOutput } = require('./verificador');
 const { ingerirPastaDrive } = require('./ingerir-midia-drive');
 const { ingerirChatPastaDrive } = require('./ingerir-chat-drive');
 const { ingerirPaginaVenda } = require('./ingerir-pagina-venda');
+const { processarAnunciosMeta } = require('./processar-anuncios-meta');
 
 const POLL_INTERVALO_VAZIO_MS = parseInt(process.env.WORKER_POLL_MS, 10) || 15_000;
 const POLL_INTERVALO_OCUPADO_MS = 1_000;
@@ -117,11 +118,21 @@ async function _processarUmJob() {
       const origemConfig = (catInfo && catInfo[0] && catInfo[0].origem_configurada) || '';
       const ehChat = tipos.includes('chat_export');
       const ehPaginaVenda = tipos.includes('pagina_venda');
-      const handlerNome = ehPaginaVenda ? 'pagina-venda' : (ehChat ? 'chat-drive' : 'midia-drive');
+      const ehAnuncioMeta = tipos.includes('anuncio_meta');
+      const handlerNome = ehAnuncioMeta ? 'anuncios-meta' : (ehPaginaVenda ? 'pagina-venda' : (ehChat ? 'chat-drive' : 'midia-drive'));
       console.log(`  [ingerir] handler=${handlerNome} tipos_fonte=[${tipos.join(',')}]`);
 
       // Validacao de payload por handler
-      if (ehPaginaVenda) {
+      if (ehAnuncioMeta) {
+        // Keywords vem das notas/origem_configurada. Padrao se tiver DCL ou Lofi no nome.
+        const notas = (catInfo && catInfo[0] && catInfo[0].notas) || '';
+        const keywords = _extrairKeywordsAnuncios(notas, origemConfig);
+        if (keywords.length === 0) {
+          await jobs.falharJob({ job_id: job.id, motivo: 'anuncios_meta: nenhuma keyword identificada em notas/origem_configurada (use "Filtra ... XYZ ... no nome")' });
+          return true;
+        }
+        p._keywords = keywords;
+      } else if (ehPaginaVenda) {
         const m = origemConfig.match(/https?:\/\/[^\s,;)]+/);
         if (!m) {
           await jobs.falharJob({ job_id: job.id, motivo: 'pagina_venda: nenhuma URL encontrada em origem_configurada' });
@@ -135,12 +146,16 @@ async function _processarUmJob() {
         }
       }
 
-      const handler = ehPaginaVenda ? ingerirPaginaVenda : (ehChat ? ingerirChatPastaDrive : ingerirPastaDrive);
+      const handler = ehAnuncioMeta ? processarAnunciosMeta :
+                      (ehPaginaVenda ? ingerirPaginaVenda :
+                       (ehChat ? ingerirChatPastaDrive : ingerirPastaDrive));
 
       try {
-        const args = ehPaginaVenda
-          ? { cerebro_id: p.cerebro_id, categoria_slug: p.categoria_slug, url_alvo: p._url_alvo, on_log: (ev) => console.log(`  [ingerir] ${JSON.stringify(ev).slice(0, 240)}`) }
-          : { cerebro_id: p.cerebro_id, categoria_slug: p.categoria_slug, pasta_drive_id: p.origem_pasta_drive_id, on_log: (ev) => console.log(`  [ingerir] ${JSON.stringify(ev).slice(0, 240)}`) };
+        const args = ehAnuncioMeta
+          ? { cerebro_id: p.cerebro_id, keywords: p._keywords, janela_dias: 90, top_percent: 20, on_log: (ev) => console.log(`  [anuncios] ${JSON.stringify(ev).slice(0, 240)}`) }
+          : (ehPaginaVenda
+              ? { cerebro_id: p.cerebro_id, categoria_slug: p.categoria_slug, url_alvo: p._url_alvo, on_log: (ev) => console.log(`  [ingerir] ${JSON.stringify(ev).slice(0, 240)}`) }
+              : { cerebro_id: p.cerebro_id, categoria_slug: p.categoria_slug, pasta_drive_id: p.origem_pasta_drive_id, on_log: (ev) => console.log(`  [ingerir] ${JSON.stringify(ev).slice(0, 240)}`) });
         const resultado = await handler(args);
         const dur = Date.now() - t0;
 
@@ -383,6 +398,23 @@ async function _processarUmJob() {
 }
 
 function _sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+// Extrai keywords pra filtro de campanhas Meta. Le `notas` e `origem_configurada`
+// procurando padroes como "DCL", "Lofi", "keyword: X,Y,Z" etc.
+function _extrairKeywordsAnuncios(notas, origemConfig) {
+  const texto = `${notas} ${origemConfig}`;
+  // Padroes comuns: "DCL", "Lofi" (palavras com 2-15 letras em CAPS ou misturado)
+  const explicito = texto.match(/keywords?\s*[:=]\s*([^.\n]+)/i);
+  if (explicito) {
+    return explicito[1].split(/[,;]/).map(s => s.trim()).filter(s => s.length >= 2 && s.length <= 20);
+  }
+  // Heuristica: pega palavras que aparecem "no nome" + estao com aspas ou em CAPS
+  const heuristica = texto.match(/\b(DCL|Lofi|Lo-fi|ProAlt|Pro Alt|Elo|ELO|Lyra|Taurus|Tuarus|Orion|Ciclo|CICLO)\b/gi);
+  if (heuristica) {
+    return [...new Set(heuristica.map(s => s.trim()))];
+  }
+  return [];
+}
 
 module.exports = {
   iniciar,
