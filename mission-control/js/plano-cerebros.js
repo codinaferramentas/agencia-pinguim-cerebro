@@ -480,6 +480,15 @@ function cardCategoria(p, integracoes, cerebro_id) {
     }, meta.proximoLabel));
   }
 
+  // Botao extra: aulas ao vivo aceitam URL de YouTube manualmente (1 video por vez)
+  if (p.categoria_slug === 'transcricoes_aula_ao_vivo') {
+    acoes.push(el('button', {
+      class: 'pc-btn-secondary',
+      onclick: () => abrirModalAulaYoutube(p, cerebro_id),
+      title: 'Cola uma URL do YouTube — Apify pega o transcript + metadata, salva como fonte e vetoriza',
+    }, '▶ Adicionar aula via YouTube'));
+  }
+
   acoes.push(el('button', {
     class: 'pc-btn-secondary',
     onclick: () => abrirModalEditar(p, integracoes, cerebro_id),
@@ -641,6 +650,139 @@ function seletorTrigger(atual) {
 function fecharModal() {
   const modal = document.getElementById('pc-modal');
   if (modal) { modal.classList.add('pc-hidden'); modal.innerHTML = ''; }
+}
+
+// ============================================================
+// MODAL — Adicionar aula via YouTube (1 URL por vez)
+// Chama server-cli local via ngrok. Apify pega transcript +
+// metadata, salva como cerebro_fonte e vetoriza.
+// ============================================================
+const SERVER_CLI_BASE = 'https://almost-pawing-urban.ngrok-free.dev';
+
+function abrirModalAulaYoutube(plano, cerebro_id) {
+  const modal = document.getElementById('pc-modal');
+  modal.innerHTML = '';
+  modal.classList.remove('pc-hidden');
+
+  const inner = el('div', { class: 'pc-modal-inner', style: 'max-width:560px' });
+  modal.append(inner);
+
+  inner.append(
+    el('div', { class: 'pc-modal-head' }, [
+      el('h2', null, '▶ Adicionar aula via YouTube'),
+      el('button', { class: 'pc-close', onclick: fecharModal }, '×'),
+    ]),
+    el('p', { class: 'pc-modal-sub' }, 'Cola a URL de UM vídeo do YouTube. Apify pega o transcript em ~10s, salva no cérebro como transcrição de aula e vetoriza pro RAG.'),
+  );
+
+  const body = el('div', { class: 'pc-modal-body' });
+  inner.append(body);
+
+  const inputUrl = el('input', {
+    id: 'pc-fld-yt-url',
+    type: 'url',
+    placeholder: 'https://www.youtube.com/watch?v=...',
+    style: 'width:100%;padding:10px 12px;border:1px solid #CBD5E1;border-radius:6px;font-size:14px',
+  });
+
+  body.append(
+    el('label', { style: 'display:block;font-weight:600;margin-bottom:6px' }, 'URL do vídeo'),
+    inputUrl,
+    el('div', {
+      style: 'margin-top:10px;font-size:12px;color:#64748B;line-height:1.5',
+    }, 'Aceita youtube.com/watch?v=..., youtu.be/... e youtube.com/shorts/.... 1 URL = 1 vídeo (sem playlist em lote).'),
+  );
+
+  const statusBox = el('div', { id: 'pc-yt-status', style: 'margin-top:14px;font-size:13px' });
+  body.append(statusBox);
+
+  inner.append(el('div', { class: 'pc-modal-foot' }, [
+    el('button', { class: 'pc-btn-secondary', onclick: fecharModal }, 'Cancelar'),
+    el('button', {
+      id: 'pc-btn-yt-processar',
+      class: 'pc-btn-primary',
+      onclick: () => processarAulaYoutube(plano, cerebro_id),
+    }, '▶ Processar'),
+  ]));
+
+  setTimeout(() => inputUrl.focus(), 50);
+}
+
+async function processarAulaYoutube(plano, cerebro_id) {
+  const url = document.getElementById('pc-fld-yt-url')?.value?.trim();
+  const btn = document.getElementById('pc-btn-yt-processar');
+  const statusBox = document.getElementById('pc-yt-status');
+  if (!url) {
+    statusBox.innerHTML = '<span style="color:#EF4444">Cola uma URL primeiro.</span>';
+    return;
+  }
+  if (!/youtube\.com|youtu\.be/i.test(url)) {
+    statusBox.innerHTML = '<span style="color:#EF4444">URL não parece YouTube. Confere e tenta de novo.</span>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Apify pegando transcript...';
+  btn.style.opacity = '0.6';
+  statusBox.innerHTML = '<span style="color:#64748B">📡 Chamando Apify → baixando transcript + metadata...</span>';
+
+  try {
+    const t0 = Date.now();
+    const r = await fetch(SERVER_CLI_BASE + '/api/cerebro/processar-aula-youtube', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': '1',
+      },
+      body: JSON.stringify({
+        cerebro_id,
+        categoria_slug: plano.categoria_slug,
+        url,
+      }),
+    });
+    const dur = ((Date.now() - t0) / 1000).toFixed(1);
+    const j = await r.json().catch(() => ({}));
+
+    if (!r.ok || !j.ok) {
+      const msg = j.error || j.erro || `HTTP ${r.status}`;
+      statusBox.innerHTML = `<span style="color:#EF4444">❌ Falhou: ${escapeHtml(msg)}</span>`;
+      btn.disabled = false;
+      btn.textContent = '▶ Processar';
+      btn.style.opacity = '';
+      return;
+    }
+
+    if (j.ja_existia) {
+      statusBox.innerHTML = `<span style="color:#F59E0B">⚠ Vídeo já está no cérebro (fonte ${j.fonte_id?.slice(0, 8)}...). Nada a fazer.</span>`;
+      btn.textContent = '✓ Já existia';
+      btn.style.background = '#F59E0B';
+      setTimeout(() => { fecharModal(); recarregarCerebroSilencioso(cerebro_id); }, 1800);
+      return;
+    }
+
+    const min = Math.floor((j.duracao_segundos || 0) / 60);
+    const linhas = [
+      `<div style="color:#22C55E;font-weight:600;margin-bottom:6px">✓ Aula processada em ${dur}s</div>`,
+      `<div><strong>Título:</strong> ${escapeHtml(j.titulo || '—')}</div>`,
+      j.canal ? `<div><strong>Canal:</strong> ${escapeHtml(j.canal)}</div>` : '',
+      `<div><strong>Duração:</strong> ${min ? min + 'min' : '—'}</div>`,
+      `<div><strong>Transcript:</strong> ${(j.transcript_chars || 0).toLocaleString('pt-BR')} chars</div>`,
+      `<div><strong>Vetorizado:</strong> ${j.vetorizado ? '✓ sim — ' + j.chunks + ' chunks' : '⚠ pendente'}</div>`,
+    ].filter(Boolean).join('');
+    statusBox.innerHTML = linhas;
+    btn.textContent = '✓ Pronto';
+    btn.style.background = '#22C55E';
+    setTimeout(() => { fecharModal(); recarregarCerebroSilencioso(cerebro_id); }, 2500);
+  } catch (e) {
+    statusBox.innerHTML = `<span style="color:#EF4444">❌ Server-cli local não respondeu. PC ligado? Ngrok rodando?<br><small>${escapeHtml(e.message || String(e))}</small></span>`;
+    btn.disabled = false;
+    btn.textContent = '▶ Processar';
+    btn.style.opacity = '';
+  }
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 async function salvarPlano(plano_id, cerebro_id) {

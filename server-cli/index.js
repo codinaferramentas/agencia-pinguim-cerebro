@@ -1943,6 +1943,32 @@ app.post('/api/relatorio/top-engajados', async (req, res) => {
   }
 });
 
+// ============================================================
+// V3 (2026-06-17) — Processar 1 aula do YouTube via Apify
+// Manual: MC chama com {cerebro_id, url}. 1 URL = 1 video.
+// ============================================================
+app.post('/api/cerebro/processar-aula-youtube', async (req, res) => {
+  try {
+    const { cerebro_id, url, categoria_slug = 'transcricoes_aula_ao_vivo' } = req.body || {};
+    if (!cerebro_id) return res.status(400).json({ ok: false, error: 'cerebro_id obrigatorio' });
+    if (!url) return res.status(400).json({ ok: false, error: 'url obrigatoria' });
+    const { processarAulaYoutube } = require('./lib/processar-aula-youtube');
+    const t0 = Date.now();
+    const r = await processarAulaYoutube({
+      cerebro_id,
+      categoria_slug,
+      url,
+      on_log: (ev) => console.log(`[aula-youtube] ${JSON.stringify(ev).slice(0, 240)}`),
+    });
+    const dur_ms = Date.now() - t0;
+    console.log(`[aula-youtube] ${dur_ms}ms | ${r.ok ? (r.ja_existia ? 'ja_existia' : 'novo') : 'erro:' + r.erro}`);
+    res.json({ ...r, duracao_ms: dur_ms });
+  } catch (e) {
+    console.error('[aula-youtube] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // V2.14 D — Apagar mensagem do bot no Discord (só apaga próprias mensagens)
 app.post('/api/discord/apagar', async (req, res) => {
   try {
