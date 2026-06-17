@@ -1572,17 +1572,20 @@ function renderView() {
     b.classList.toggle('active', ['kanban','lista','timeline'][i] === viewModoAtual);
   });
 
-  // Indicador de filtro ativo (texto pequeno topo)
-  const filtrosAtivos = [];
-  if (filtroTipoAtual) filtrosAtivos.push(`tipo = ${labelTipo(filtroTipoAtual)}`);
-  if (filtroStatusAtual === 'erro') filtrosAtivos.push('com erro');
-  else if (filtroStatusAtual === 'ok' && !filtroTipoAtual) filtrosAtivos.push('vetorizadas');
-  if (filtrosAtivos.length > 0) {
+  // Indicador de filtro só aparece em Lista/Timeline (Kanban mostra tudo)
+  // e só quando algum filtro NÃO-default está ativo (tipo específico ou erro).
+  const ehFiltroNaoDefault = filtroTipoAtual || filtroStatusAtual === 'erro';
+  if (viewModoAtual !== 'kanban' && ehFiltroNaoDefault) {
+    const filtrosAtivos = [];
+    if (filtroTipoAtual) filtrosAtivos.push(`tipo = ${labelTipo(filtroTipoAtual)}`);
+    if (filtroStatusAtual === 'erro') filtrosAtivos.push('com erro');
     area.append(el('div', { style: 'font-size:.75rem;color:var(--fg-muted);margin-bottom:.5rem' },
       `Mostrando ${pecasCache.length} fonte${pecasCache.length === 1 ? '' : 's'} — filtro: ${filtrosAtivos.join(' · ')}`));
   }
 
-  if (pecasCache.length === 0) {
+  // Caso Kanban sem amostra mas com totais no resumo (ex: filtro de erro com 0 retornos OK)
+  // continua renderizando colunas; outros casos mostram empty state
+  if (pecasCache.length === 0 && viewModoAtual !== 'kanban') {
     area.append(el('div', { style: 'padding:2rem;color:var(--fg-muted);text-align:center' }, 'Nenhuma fonte no filtro atual.'));
     return;
   }
@@ -1624,8 +1627,8 @@ function renderView() {
     area.append(tl);
   }
 
-  // Botão "Carregar mais" se houver mais páginas
-  if (temMaisPaginas) {
+  // Botão "Carregar mais" só faz sentido em Lista/Timeline (Kanban tem "Ver todas" por coluna)
+  if (temMaisPaginas && viewModoAtual !== 'kanban') {
     const btn = el('button', {
       class: 'btn',
       style: 'display:block;margin:1.5rem auto;padding:.6rem 1.5rem',
@@ -2335,17 +2338,29 @@ const ORIGEM_META = {
 };
 
 function renderKanbanFontes(area, fontes) {
-  // Agrupar por tipo
+  // Agrupa fontes carregadas (amostra) por tipo
   const grupos = {};
   fontes.forEach(f => {
     if (!grupos[f.tipo]) grupos[f.tipo] = [];
     grupos[f.tipo].push(f);
   });
 
-  // Só colunas que têm fontes, na ordem canonica
-  const tiposVisiveis = TIPO_ORDEM.filter(t => grupos[t]?.length > 0);
-  // Acrescenta tipos fora da ordem (defensivo)
-  Object.keys(grupos).forEach(t => { if (!tiposVisiveis.includes(t)) tiposVisiveis.push(t); });
+  // V3 (2026-06-17) — totais REAIS do RPC (resumoCache). Mostra TODAS as colunas
+  // que existem no cérebro, mesmo se a amostra carregada não tiver fonte daquele tipo.
+  // Considera só fontes com ingest_status='ok' pro Kanban (erros têm chip dedicado).
+  const totaisPorTipo = {};
+  if (resumoCache && resumoCache.por_tipo) {
+    for (const t of resumoCache.por_tipo) totaisPorTipo[t.tipo] = t.ok || 0;
+  }
+
+  // Tipos a renderizar = união (tipos com fontes carregadas) + (tipos com total>0 no resumo)
+  const setTipos = new Set();
+  Object.keys(grupos).forEach(t => setTipos.add(t));
+  Object.keys(totaisPorTipo).forEach(t => { if (totaisPorTipo[t] > 0) setTipos.add(t); });
+
+  // Ordena pela ordem canonica primeiro, resto no fim
+  const tiposVisiveis = TIPO_ORDEM.filter(t => setTipos.has(t));
+  for (const t of setTipos) if (!tiposVisiveis.includes(t)) tiposVisiveis.push(t);
 
   const kanban = el('div', { class: 'fontes-kanban' });
 
@@ -2353,7 +2368,31 @@ function renderKanbanFontes(area, fontes) {
     const meta = TIPO_META[tipo] || { label: tipo, icon: '📦', desc: '' };
     const cor = `var(--peca-${tipo.replace('_','-')}, var(--peca-outro))`;
     const corBg = `var(--peca-${tipo.replace('_','-')}-bg, var(--peca-outro-bg))`;
-    const count = grupos[tipo].length;
+    const carregadas = grupos[tipo] || [];
+    const totalReal = totaisPorTipo[tipo] || carregadas.length;
+    const faltam = totalReal - carregadas.length;
+
+    const corpoItens = carregadas.map(f => renderFonteCard(f, tipo));
+
+    // Se há mais fontes desse tipo do que carregadas na amostra, oferece drill-down
+    if (faltam > 0) {
+      corpoItens.push(el('button', {
+        class: 'fontes-col-ver-todas',
+        style: 'display:block;width:100%;margin-top:.5rem;padding:.5rem;background:transparent;border:1px dashed var(--border-subtle,#CBD5E1);border-radius:6px;color:var(--fg-muted,#64748B);cursor:pointer;font-size:.8125rem',
+        onclick: () => {
+          filtroTipoAtual = tipo;
+          filtroStatusAtual = 'ok';
+          viewModoAtual = 'lista';
+          recarregarListaFontes();
+        },
+        title: `Mostrar as ${totalReal.toLocaleString('pt-BR')} fontes de ${meta.label} em formato Lista`,
+      }, `↓ Ver todas as ${totalReal.toLocaleString('pt-BR')}`));
+    }
+
+    // Header da coluna com total REAL (não a amostra)
+    const labelCount = (carregadas.length > 0 && faltam > 0)
+      ? `${carregadas.length} de ${totalReal.toLocaleString('pt-BR')}`
+      : String(totalReal.toLocaleString('pt-BR'));
 
     const col = el('div', { class: 'fontes-col', 'data-tipo': tipo }, [
       el('div', { class: 'fontes-col-header', style: `--col-color: ${cor}; --col-bg: ${corBg}` }, [
@@ -2362,11 +2401,9 @@ function renderKanbanFontes(area, fontes) {
           el('div', { class: 'fontes-col-title' }, meta.label),
           el('div', { class: 'fontes-col-desc' }, meta.desc),
         ]),
-        el('div', { class: 'fontes-col-count' }, String(count)),
+        el('div', { class: 'fontes-col-count' }, labelCount),
       ]),
-      el('div', { class: 'fontes-col-body' },
-        grupos[tipo].map(f => renderFonteCard(f, tipo))
-      ),
+      el('div', { class: 'fontes-col-body' }, corpoItens),
     ]);
 
     kanban.appendChild(col);
