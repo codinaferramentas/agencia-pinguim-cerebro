@@ -327,15 +327,24 @@ function atualizarParcialDoCerebro(detalhe, cerebro_id) {
     // Toggle "Mostrar não aplicáveis" — só aparece se houver alguma marcada
     if (pc.nao_aplicavel > 0) {
       const ativo = _mostrarNaoAplicaveis;
+      // Visual destacado pra deixar OBVIO que dá pra reativar
+      const corBg = ativo ? '#A1A1AA' : '#FEF3C7';
+      const corBorda = ativo ? '#A1A1AA' : '#F59E0B';
+      const corTexto = ativo ? '#fff' : '#92400E';
       filtrosWrap.append(el('button', {
         class: 'pc-filtro pc-filtro-toggle-naoap' + (ativo ? ' pc-filtro-ativo' : ''),
-        title: ativo ? 'Esconder categorias marcadas como "não se aplica"' : 'Mostrar categorias marcadas como "não se aplica"',
+        style: `background:${corBg};border:1px solid ${corBorda};color:${corTexto};font-weight:600`,
+        title: ativo
+          ? 'Clica pra esconder essas categorias de novo'
+          : `Clica pra ver as ${pc.nao_aplicavel} categoria${pc.nao_aplicavel === 1 ? '' : 's'} marcada${pc.nao_aplicavel === 1 ? '' : 's'} como "não se aplica" e reativar quando quiser`,
         onclick: () => {
           _mostrarNaoAplicaveis = !_mostrarNaoAplicaveis;
           const det = _detalheCache.get(_cerebroAberto);
           if (det) atualizarParcialDoCerebro(det, _cerebroAberto);
         },
-      }, `🚫 Não se aplica · ${pc.nao_aplicavel} ${ativo ? '(👁 visível)' : '(👁 mostrar)'}`));
+      }, ativo
+          ? `👁 Mostrando ${pc.nao_aplicavel} não-aplicáveis · clica pra esconder`
+          : `🚫 ${pc.nao_aplicavel} marcada${pc.nao_aplicavel === 1 ? '' : 's'} como "não se aplica" · 👁 ver e reativar`));
     }
   }
 
@@ -938,7 +947,14 @@ async function marcarNaoAplicavel(plano_id, cerebro_id) {
   const p = det.plano.find(x => x.plano_id === plano_id);
   if (!p) return;
 
-  const ok = confirm(`Marcar "${p.categoria_nome}" como NÃO se aplica a esse produto?\n\nO card vai sumir da listagem padrão. Pode reativar depois clicando em "🚫 Não se aplica" no topo.`);
+  // Modal de confirmação no padrão do sistema (substitui confirm() nativo feio)
+  const ok = await confirmarPcModal({
+    titulo: '🚫 Marcar como "não se aplica"',
+    mensagem: `Vai esconder a categoria <strong>${escapeHtml(p.categoria_nome)}</strong> desse cérebro.<br><br>É útil quando o produto não tem essa fonte (ex: produto sem WhatsApp, sem aulas gravadas).<br><br><strong>Pra reativar depois:</strong> clica no chip <strong>"🚫 Não se aplica · N (👁 mostrar)"</strong> que vai aparecer no topo dos filtros — daí os cards reaparecem com botão "↩ Aplicar a esse produto".`,
+    confirmar_label: 'Sim, marcar como não se aplica',
+    confirmar_cor: '#A1A1AA',
+    cancelar_label: 'Cancelar',
+  });
   if (!ok) return;
 
   const statusAntes = p.status_automacao;
@@ -958,6 +974,47 @@ async function marcarNaoAplicavel(plano_id, cerebro_id) {
     atualizarParcialDoCerebro(det, cerebro_id);
     alert('Erro ao marcar como não se aplica: ' + e.message);
   }
+}
+
+// ============================================================
+// V3 (2026-06-17) — Modal de confirmação no padrão pc-modal
+// Substitui confirm() nativo. Retorna Promise<boolean>.
+// ============================================================
+function confirmarPcModal({ titulo, mensagem, confirmar_label = 'Confirmar', confirmar_cor = '#22C55E', cancelar_label = 'Cancelar' }) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('pc-modal');
+    modal.innerHTML = '';
+    modal.classList.remove('pc-hidden');
+
+    const inner = el('div', { class: 'pc-modal-inner', style: 'max-width:480px' });
+    modal.append(inner);
+
+    const fechar = (valor) => {
+      modal.classList.add('pc-hidden');
+      modal.innerHTML = '';
+      resolve(valor);
+    };
+
+    inner.append(
+      el('div', { class: 'pc-modal-head' }, [
+        el('h2', null, titulo),
+        el('button', { class: 'pc-close', onclick: () => fechar(false) }, '×'),
+      ]),
+    );
+
+    const body = el('div', { class: 'pc-modal-body', style: 'padding:1.25rem 1.5rem' });
+    body.innerHTML = `<div style="line-height:1.6;color:var(--fg,#1E293B)">${mensagem}</div>`;
+    inner.append(body);
+
+    inner.append(el('div', { class: 'pc-modal-foot', style: 'display:flex;gap:.5rem;justify-content:flex-end;padding:1rem 1.5rem;border-top:1px solid var(--border-subtle,#E2E8F0)' }, [
+      el('button', { class: 'pc-btn-secondary', onclick: () => fechar(false) }, cancelar_label),
+      el('button', {
+        class: 'pc-btn-primary',
+        style: `background:${confirmar_cor};border-color:${confirmar_cor}`,
+        onclick: () => fechar(true),
+      }, confirmar_label),
+    ]));
+  });
 }
 
 async function marcarAplicavel(p, cerebro_id, btnEl) {
