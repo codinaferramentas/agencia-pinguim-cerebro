@@ -66,16 +66,56 @@ export async function fetchCerebrosCatalogo() {
 // `conteudo_md` é puxado sob demanda quando o drawer abre (fetchFonteConteudo).
 const COLUNAS_FONTE_LEVE = 'id, cerebro_id, tipo, titulo, autor, origem, url, criado_em, atualizado_em, ingest_status, ingest_lote_id, mime, tamanho_bytes, arquivo_nome, metadata';
 
-// Versão otimizada: recebe cerebro_id direto (a view vw_cerebros_catalogo já tem).
-// Economiza 2 round-trips antes da query principal.
-export async function fetchFontesByCerebroId(cerebroId) {
+// Tamanho de página padrão pra lazy load. Cérebros grandes (Lo-fi tem 5k+ fontes)
+// não cabem em 1 request — PostgREST trunca em 1000 silenciosamente.
+export const FONTES_PAGE_SIZE = 200;
+
+// Resumo agregado por tipo + ingest_status. UMA query via RPC, leve, traz TUDO.
+// Pra Lo-fi com 5.105 fontes, retorna ~10 linhas: {tipo, ingest_status, qtd}.
+// RPC: pinguim.resumo_fontes_cerebro(p_cerebro_id uuid) — SECURITY DEFINER.
+export async function fetchResumoFontesPorTipo(cerebroId) {
+  if (mode !== 'supabase' || !cerebroId) return { por_tipo: [], total_ok: 0, total_erro: 0, total: 0 };
+  const { data, error } = await sb.rpc('resumo_fontes_cerebro', { p_cerebro_id: cerebroId });
+  if (error) {
+    console.error('[resumo_fontes] RPC erro:', error);
+    return { por_tipo: [], total_ok: 0, total_erro: 0, total: 0 };
+  }
+  const porTipoMap = new Map();
+  let total_ok = 0, total_erro = 0, total = 0;
+  for (const row of (data || [])) {
+    const qtd = Number(row.qtd) || 0;
+    total += qtd;
+    if (row.ingest_status === 'ok') total_ok += qtd;
+    else if (row.ingest_status === 'erro') total_erro += qtd;
+    if (!porTipoMap.has(row.tipo)) porTipoMap.set(row.tipo, { tipo: row.tipo, ok: 0, erro: 0, pendente: 0, sem_status: 0, total: 0 });
+    const t = porTipoMap.get(row.tipo);
+    t[row.ingest_status] = (t[row.ingest_status] || 0) + qtd;
+    t.total += qtd;
+  }
+  const por_tipo = Array.from(porTipoMap.values()).sort((a, b) => b.total - a.total);
+  return { por_tipo, total_ok, total_erro, total };
+}
+
+// Fontes paginadas. Opcional: filtra por tipo e ingest_status.
+// `offset` em incrementos de FONTES_PAGE_SIZE.
+export async function fetchFontesPaginadas(cerebroId, { tipo = null, ingest_status = null, offset = 0, limit = FONTES_PAGE_SIZE } = {}) {
   if (mode !== 'supabase' || !cerebroId) return [];
-  const { data, error } = await sb.from('cerebro_fontes').select(COLUNAS_FONTE_LEVE)
+  let q = sb.from('cerebro_fontes').select(COLUNAS_FONTE_LEVE)
     .eq('cerebro_id', cerebroId)
-    .eq('ingest_status', 'ok')
-    .order('criado_em', { ascending: false });
+    .order('criado_em', { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (tipo) q = q.eq('tipo', tipo);
+  if (ingest_status === 'sem_status') q = q.is('ingest_status', null);
+  else if (ingest_status) q = q.eq('ingest_status', ingest_status);
+  const { data, error } = await q;
   if (error) throw error;
   return data || [];
+}
+
+// Versão otimizada (legacy): traz primeira página de OK. Substituída por fetchFontesPaginadas
+// na tela nova, mas mantida pra retrocompat.
+export async function fetchFontesByCerebroId(cerebroId) {
+  return fetchFontesPaginadas(cerebroId, { ingest_status: 'ok', offset: 0, limit: FONTES_PAGE_SIZE });
 }
 
 // Mantida pra compat: se algum chamador só tem o slug, ainda funciona.

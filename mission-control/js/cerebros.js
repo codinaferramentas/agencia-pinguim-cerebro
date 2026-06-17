@@ -1,6 +1,6 @@
 /* Tela Cérebros — catálogo + detalhe com Grafo/Lista/Timeline */
 
-import { fetchCerebrosCatalogo, fetchCerebroPecas, fetchFontesByCerebroId, fetchFonteConteudo, fetchQuarentenaCount, getSupabase } from './sb-client.js?v=20260426b';
+import { fetchCerebrosCatalogo, fetchCerebroPecas, fetchFontesByCerebroId, fetchFontesPaginadas, fetchResumoFontesPorTipo, fetchFonteConteudo, fetchQuarentenaCount, getSupabase, FONTES_PAGE_SIZE } from './sb-client.js?v=20260617b';
 import { renderGrafo, coresTipo, labelTipo } from './grafo.js?v=20260421p';
 import { iniciarSquadParalelo } from './squad-modal.js?v=20260425e';
 import { iconeNode } from './icone.js?v=20260425g';
@@ -447,6 +447,12 @@ if (typeof window !== 'undefined') {
 let pecasCache = [];
 let cerebroAtual = null;
 let viewModoAtual = 'kanban';
+// V3 (2026-06-17) — agregado real por tipo + filtros + paginação
+let resumoCache = null;        // {por_tipo:[{tipo, ok, erro, total}], total_ok, total_erro, total}
+let filtroTipoAtual = null;    // null = todos; string = só esse tipo
+let filtroStatusAtual = 'ok';  // 'ok' | 'erro' | 'todos'
+let proximaPaginaOffset = 0;   // pra "Carregar mais"
+let temMaisPaginas = false;
 
 export async function abrirCerebroDetalhe(slug) {
   cerebroAtual = cerebrosCache.find(c => c.slug === slug);
@@ -526,6 +532,9 @@ export async function abrirCerebroDetalhe(slug) {
     el('button', { class: viewModoAtual === 'timeline' ? 'active' : '', onclick: () => { viewModoAtual = 'timeline'; renderView(); } }, '⌚ Timeline'),
   ]);
 
+  // V3 (2026-06-17) — chips por tipo (filtro real, agregado servidor)
+  const chipsSlot = el('div', { id: 'cerebro-chips-slot' });
+
   // Busca semantica e a viewArea ja entram no DOM, mas vazias ate fontes chegarem
   const buscaSlot = el('div', { id: 'cerebro-busca-slot' });
   const viewArea = el('div', { id: 'cerebro-view-area' });
@@ -542,32 +551,155 @@ export async function abrirCerebroDetalhe(slug) {
     header,
     clonePainel,
     buscaSlot,
+    chipsSlot,
     toggle,
     viewArea,
   ]));
 
-  // CARREGAMENTO PARALELO: fontes + quarentena disparados juntos, usando IDs ja em cache
+  // V3 carregamento: resumo agregado + 1a página + quarentena, todos em paralelo
   const cerebroId = cerebroAtual.cerebro_id;
-  const [fontesResult, quarentenaResult] = await Promise.allSettled([
-    fetchFontesByCerebroId(cerebroId),
+  filtroTipoAtual = null;
+  filtroStatusAtual = 'ok';
+  proximaPaginaOffset = 0;
+
+  const [resumoResult, fontesResult, quarentenaResult] = await Promise.allSettled([
+    fetchResumoFontesPorTipo(cerebroId),
+    fetchFontesPaginadas(cerebroId, { ingest_status: 'ok', offset: 0, limit: FONTES_PAGE_SIZE }),
     fetchQuarentenaCount(cerebroId),
   ]);
 
+  resumoCache = resumoResult.status === 'fulfilled' ? resumoResult.value : { por_tipo: [], total_ok: 0, total_erro: 0, total: 0 };
   const fontesServidor = fontesResult.status === 'fulfilled' ? fontesResult.value : [];
   const qtdQuarentena = quarentenaResult.status === 'fulfilled' ? quarentenaResult.value : 0;
+  if (resumoResult.status === 'rejected') console.error('Erro ao carregar resumo:', resumoResult.reason);
   if (fontesResult.status === 'rejected') console.error('Erro ao carregar fontes:', fontesResult.reason);
 
   pecasCache = fontesServidor;
+  proximaPaginaOffset = fontesServidor.length;
+  temMaisPaginas = fontesServidor.length === FONTES_PAGE_SIZE && (resumoCache.total_ok > fontesServidor.length);
 
-  // Atualiza header e botoes com dados reais
-  contadorEl.textContent = `${pecasCache.length} font${pecasCache.length === 1 ? 'e' : 'es'}`;
-  renderAcoes(qtdQuarentena, pecasCache.length > 0);
+  // Atualiza header com contadores REAIS (do RPC, não do JS)
+  contadorEl.textContent = montarTextoContador(resumoCache);
+  renderAcoes(qtdQuarentena, resumoCache.total > 0);
+
+  // Renderiza chips de tipo
+  renderChipsTipo(chipsSlot);
 
   // Renderiza busca semantica se houver fontes
   buscaSlot.innerHTML = '';
-  if (pecasCache.length > 0) buscaSlot.append(blocoBuscaSemantica());
+  if (resumoCache.total > 0) buscaSlot.append(blocoBuscaSemantica());
 
   renderView();
+}
+
+function montarTextoContador(resumo) {
+  if (!resumo || resumo.total === 0) return '0 fontes';
+  const partes = [];
+  partes.push(`${resumo.total_ok.toLocaleString('pt-BR')} font${resumo.total_ok === 1 ? 'e' : 'es'} vetorizada${resumo.total_ok === 1 ? '' : 's'}`);
+  if (resumo.total_erro > 0) partes.push(`<span style="color:var(--danger,#EF4444);font-weight:600">${resumo.total_erro} com erro</span>`);
+  return partes.join(' · ');
+}
+
+// Chips por tipo — clica e filtra. Mostra contagem por tipo + chip "Erros" se houver.
+function renderChipsTipo(container) {
+  container.innerHTML = '';
+  if (!resumoCache || resumoCache.por_tipo.length === 0) return;
+
+  const wrap = el('div', { class: 'cerebro-chips-wrap', style: 'display:flex;gap:.5rem;flex-wrap:wrap;margin:1rem 0;padding:.75rem;background:var(--bg-subtle,#F8FAFC);border-radius:8px;border:1px solid var(--border-subtle,#E2E8F0)' });
+
+  // Chip "Tudo"
+  const ehTudo = filtroTipoAtual === null && filtroStatusAtual === 'ok';
+  wrap.append(_chipFiltro('Tudo vetorizado', resumoCache.total_ok, ehTudo, () => {
+    filtroTipoAtual = null;
+    filtroStatusAtual = 'ok';
+    recarregarListaFontes();
+  }));
+
+  // 1 chip por tipo
+  for (const t of resumoCache.por_tipo) {
+    if (t.ok > 0) {
+      const ativo = filtroTipoAtual === t.tipo && filtroStatusAtual === 'ok';
+      wrap.append(_chipFiltro(labelTipo(t.tipo), t.ok, ativo, () => {
+        filtroTipoAtual = t.tipo;
+        filtroStatusAtual = 'ok';
+        recarregarListaFontes();
+      }, coresTipo()[t.tipo]));
+    }
+  }
+
+  // Chip "Erros" — só aparece se tiver erro
+  if (resumoCache.total_erro > 0) {
+    const ehErro = filtroStatusAtual === 'erro';
+    wrap.append(_chipFiltro('⚠ Com erro', resumoCache.total_erro, ehErro, () => {
+      filtroTipoAtual = null;
+      filtroStatusAtual = 'erro';
+      recarregarListaFontes();
+    }, '#EF4444'));
+  }
+
+  container.append(wrap);
+}
+
+function _chipFiltro(label, qtd, ativo, onclick, cor) {
+  const corBase = cor || '#64748B';
+  const style = ativo
+    ? `padding:.4rem .75rem;border-radius:999px;background:${corBase};color:#fff;border:1px solid ${corBase};cursor:pointer;font-size:.8125rem;font-weight:600;white-space:nowrap`
+    : `padding:.4rem .75rem;border-radius:999px;background:#fff;color:${corBase};border:1px solid ${corBase};cursor:pointer;font-size:.8125rem;font-weight:500;white-space:nowrap`;
+  return el('button', { style, onclick }, `${label} · ${qtd.toLocaleString('pt-BR')}`);
+}
+
+async function recarregarListaFontes() {
+  if (!cerebroAtual) return;
+  const cerebroId = cerebroAtual.cerebro_id;
+  proximaPaginaOffset = 0;
+  const viewArea = document.getElementById('cerebro-view-area');
+  if (viewArea) viewArea.innerHTML = '<div style="padding:2rem;color:var(--fg-muted);text-align:center">Carregando…</div>';
+  try {
+    const fontes = await fetchFontesPaginadas(cerebroId, {
+      tipo: filtroTipoAtual,
+      ingest_status: filtroStatusAtual === 'todos' ? null : filtroStatusAtual,
+      offset: 0,
+      limit: FONTES_PAGE_SIZE,
+    });
+    pecasCache = fontes;
+    proximaPaginaOffset = fontes.length;
+    // Calcula se tem mais páginas com base no resumo
+    const totalEsperado = filtroStatusAtual === 'erro' ? resumoCache.total_erro
+      : (filtroTipoAtual
+          ? (resumoCache.por_tipo.find(t => t.tipo === filtroTipoAtual)?.ok || 0)
+          : resumoCache.total_ok);
+    temMaisPaginas = fontes.length === FONTES_PAGE_SIZE && totalEsperado > fontes.length;
+    // Re-renderiza chips pra atualizar o ativo
+    const chipsSlot = document.getElementById('cerebro-chips-slot');
+    if (chipsSlot) renderChipsTipo(chipsSlot);
+    renderView();
+  } catch (e) {
+    if (viewArea) viewArea.innerHTML = `<div style="padding:2rem;color:var(--danger,#EF4444);text-align:center">Erro: ${e.message}</div>`;
+  }
+}
+
+async function carregarMaisFontes(btnEl) {
+  if (!cerebroAtual || !temMaisPaginas) return;
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳ Carregando…'; }
+  try {
+    const novas = await fetchFontesPaginadas(cerebroAtual.cerebro_id, {
+      tipo: filtroTipoAtual,
+      ingest_status: filtroStatusAtual === 'todos' ? null : filtroStatusAtual,
+      offset: proximaPaginaOffset,
+      limit: FONTES_PAGE_SIZE,
+    });
+    pecasCache = pecasCache.concat(novas);
+    proximaPaginaOffset += novas.length;
+    const totalEsperado = filtroStatusAtual === 'erro' ? resumoCache.total_erro
+      : (filtroTipoAtual
+          ? (resumoCache.por_tipo.find(t => t.tipo === filtroTipoAtual)?.ok || 0)
+          : resumoCache.total_ok);
+    temMaisPaginas = novas.length === FONTES_PAGE_SIZE && proximaPaginaOffset < totalEsperado;
+    renderView();
+  } catch (e) {
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Tentar de novo'; }
+    console.error('[carregar-mais] erro:', e);
+  }
 }
 
 /* ================================================================
@@ -1440,23 +1572,39 @@ function renderView() {
     b.classList.toggle('active', ['kanban','lista','timeline'][i] === viewModoAtual);
   });
 
+  // Indicador de filtro ativo (texto pequeno topo)
+  const filtrosAtivos = [];
+  if (filtroTipoAtual) filtrosAtivos.push(`tipo = ${labelTipo(filtroTipoAtual)}`);
+  if (filtroStatusAtual === 'erro') filtrosAtivos.push('com erro');
+  else if (filtroStatusAtual === 'ok' && !filtroTipoAtual) filtrosAtivos.push('vetorizadas');
+  if (filtrosAtivos.length > 0) {
+    area.append(el('div', { style: 'font-size:.75rem;color:var(--fg-muted);margin-bottom:.5rem' },
+      `Mostrando ${pecasCache.length} fonte${pecasCache.length === 1 ? '' : 's'} — filtro: ${filtrosAtivos.join(' · ')}`));
+  }
+
+  if (pecasCache.length === 0) {
+    area.append(el('div', { style: 'padding:2rem;color:var(--fg-muted);text-align:center' }, 'Nenhuma fonte no filtro atual.'));
+    return;
+  }
+
   if (viewModoAtual === 'kanban') {
     const fontes = pecasCache;
     renderKanbanFontes(area, fontes);
   } else if (viewModoAtual === 'lista') {
     const tabela = el('table', { class: 'pecas-tabela' });
     tabela.innerHTML = `<thead><tr>
-      <th>Título</th><th>Tipo</th><th>Origem</th><th>Autor</th><th>Data</th><th>Peso</th>
+      <th>Título</th><th>Tipo</th><th>Origem</th><th>Autor</th><th>Data</th><th>Status</th>
     </tr></thead>`;
     const tbody = el('tbody');
     pecasCache.forEach(p => {
+      const statusCor = p.ingest_status === 'erro' ? '#EF4444' : (p.ingest_status === 'ok' ? '#22C55E' : '#94A3B8');
       const tr = el('tr', { onclick: () => abrirDrawer(p) }, [
         el('td', {}, p.titulo),
         el('td', { html: `<span style="color:${coresTipo()[p.tipo]||'#71717A'};font-weight:600">${labelTipo(p.tipo)}</span>` }),
         el('td', {}, p.origem || '—'),
         el('td', {}, p.autor || '—'),
         el('td', {}, new Date(p.criado_em).toLocaleDateString('pt-BR')),
-        el('td', {}, String(p.peso || '—')),
+        el('td', { html: `<span style="color:${statusCor};font-weight:600">${p.ingest_status || '—'}</span>` }),
       ]);
       tbody.append(tr);
     });
@@ -1474,6 +1622,16 @@ function renderView() {
         ]));
       });
     area.append(tl);
+  }
+
+  // Botão "Carregar mais" se houver mais páginas
+  if (temMaisPaginas) {
+    const btn = el('button', {
+      class: 'btn',
+      style: 'display:block;margin:1.5rem auto;padding:.6rem 1.5rem',
+      onclick: (e) => carregarMaisFontes(e.currentTarget),
+    }, `↓ Carregar mais ${FONTES_PAGE_SIZE}`);
+    area.append(btn);
   }
 }
 
