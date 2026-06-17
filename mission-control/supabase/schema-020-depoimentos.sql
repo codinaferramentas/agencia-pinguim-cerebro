@@ -101,3 +101,19 @@ ON CONFLICT (alias) DO NOTHING;
 INSERT INTO pinguim.produto_aliases (alias, produto_id, fonte)
 SELECT 'LoFi', id, 'manual' FROM pinguim.produtos WHERE slug = 'desafio-de-conte-do-lo-fi'
 ON CONFLICT (alias) DO NOTHING;
+
+-- 3) Categoria anuncios_meta (V3 2026-06-17)
+INSERT INTO pinguim.cerebro_categorias_catalogo (slug, nome, emoji, descricao, tipos_fonte, ordem)
+VALUES (
+  'anuncios_meta',
+  'Anuncios Meta',
+  '🎯',
+  'Top anuncios da Meta filtrados por keyword no nome (DCL/Lofi/etc), por CPA baixo + maior investimento. Atualizado semanal.',
+  ARRAY['anuncio_meta']::text[],
+  11
+)
+ON CONFLICT (slug) DO UPDATE SET
+  nome = EXCLUDED.nome,
+  emoji = EXCLUDED.emoji,
+  descricao = EXCLUDED.descricao,
+  tipos_fonte = EXCLUDED.tipos_fonte;
