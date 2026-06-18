@@ -65,6 +65,65 @@ async function buscarArquivos({
   };
 }
 
+// ============================================================
+// listarPastas — V3 (2026-06-18) browser hierarquico de pastas Drive
+// Lista APENAS pastas dentro de parent_id. Se parent_id ausente, mostra
+// raiz do MyDrive. Usado pelo modal "Escolher pasta" no Mission Control.
+// ============================================================
+async function listarPastas({ parent_id, cliente_id, pageSize = 100 } = {}) {
+  const access_token = await oauth.obterAccessTokenAtivo({ cliente_id });
+
+  // Drive query: mimeType=folder + parent específico OU raiz
+  let q;
+  if (parent_id) {
+    q = `mimeType='application/vnd.google-apps.folder' and '${parent_id}' in parents and trashed=false`;
+  } else {
+    q = `mimeType='application/vnd.google-apps.folder' and 'root' in parents and trashed=false`;
+  }
+
+  const params = new URLSearchParams({
+    q,
+    pageSize: String(pageSize),
+    orderBy: 'name',
+    fields: 'files(id,name,parents,modifiedTime,webViewLink),nextPageToken',
+    includeItemsFromAllDrives: 'true',
+    supportsAllDrives: 'true',
+    corpora: 'allDrives',
+  });
+
+  const resp = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
+    headers: { 'Authorization': `Bearer ${access_token}`, 'Accept': 'application/json' },
+  });
+  const json = await resp.json();
+  if (!resp.ok) {
+    const msg = json.error?.message || 'erro desconhecido';
+    throw new Error(`Drive API ${resp.status}: ${msg}`);
+  }
+
+  // Se parent_id veio, busca tambem o nome do parent (breadcrumb)
+  let parentInfo = null;
+  if (parent_id) {
+    try {
+      const r2 = await fetch(`https://www.googleapis.com/drive/v3/files/${parent_id}?fields=id,name,parents&supportsAllDrives=true`, {
+        headers: { 'Authorization': `Bearer ${access_token}`, 'Accept': 'application/json' },
+      });
+      const j2 = await r2.json();
+      if (r2.ok) parentInfo = { id: j2.id, nome: j2.name, parents: j2.parents || [] };
+    } catch { /* ignora */ }
+  }
+
+  return {
+    parent: parentInfo,
+    pastas: (json.files || []).map(f => ({
+      id: f.id,
+      nome: f.name,
+      link: f.webViewLink,
+      modificado_em: f.modifiedTime,
+    })),
+    proxima_pagina: json.nextPageToken || null,
+  };
+}
+
 // Mapa amigavel de mimeTypes mais comuns
 const MIME_LABELS = {
   'application/vnd.google-apps.document':     'Doc',
@@ -86,6 +145,7 @@ function rotuloMime(mime) {
 
 module.exports = {
   buscarArquivos,
+  listarPastas,
   rotuloMime,
   MIME_LABELS,
 };

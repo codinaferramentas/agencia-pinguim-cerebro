@@ -124,6 +124,17 @@ export async function renderPlanoCerebros() {
   const modal = el('div', { id: 'pc-modal', class: 'pc-modal-bg pc-hidden' });
   container.append(modal);
   modal.addEventListener('click', (e) => { if (e.target.id === 'pc-modal') fecharModal(); });
+
+  // V3 (2026-06-18) modal secundario (sobreposto) — usado pelo browser de pasta Drive
+  // sem fechar o modal de Editar Plano que tá embaixo
+  const modal2 = el('div', { id: 'pc-modal-2', class: 'pc-modal-bg pc-hidden', style: 'z-index:1050' });
+  container.append(modal2);
+  modal2.addEventListener('click', (e) => { if (e.target.id === 'pc-modal-2') fecharModal2(); });
+}
+
+function fecharModal2() {
+  const m = document.getElementById('pc-modal-2');
+  if (m) { m.classList.add('pc-hidden'); m.innerHTML = ''; }
 }
 
 function renderHeader() {
@@ -672,8 +683,17 @@ function abrirModalEditar(plano, integracoes, cerebro_id) {
     ]),
     el('div', { class: 'pc-form-campo' }, [
       el('label', null, 'Pasta Drive monitorada (ID — pra trigger evento_*)'),
-      el('input', { id: 'pc-fld-pasta-drive', type: 'text', class: 'pc-input', value: plano.origem_pasta_drive_id || '', placeholder: 'Cole aqui o ID da pasta do Drive (parte final da URL)' }),
-      el('small', { style: 'color:#64748B' }, 'Detector híbrido monitora essa pasta a cada 10min se trigger for evento_avisar ou evento_auto.'),
+      el('div', { style: 'display:flex;gap:.5rem;align-items:stretch' }, [
+        el('input', { id: 'pc-fld-pasta-drive', type: 'text', class: 'pc-input', style: 'flex:1', value: plano.origem_pasta_drive_id || '', placeholder: 'Cole o ID OU clica em Escolher pasta' }),
+        el('button', {
+          type: 'button',
+          class: 'pc-btn-secondary',
+          style: 'white-space:nowrap',
+          onclick: () => abrirBrowserPastaDrive(),
+          title: 'Navega pelo Drive e escolhe a pasta visualmente',
+        }, '📂 Escolher pasta'),
+      ]),
+      el('small', { id: 'pc-fld-pasta-drive-nome', style: 'color:#64748B;display:block;margin-top:.25rem' }, plano.origem_pasta_drive_id ? '(pasta atual — clica em Escolher pra trocar)' : 'Detector híbrido monitora a cada 10min se trigger for evento_*'),
     ]),
     el('div', { class: 'pc-form-row' }, [
       el('div', { class: 'pc-form-campo' }, [
@@ -996,6 +1016,155 @@ async function ativarWebhookPesquisa(plano_id, cerebro_id) {
     atualizarParcialDoCerebro(det, cerebro_id);
     alert('Erro ao ativar webhook: ' + e.message);
   }
+}
+
+// ============================================================
+// MODAL 2 — Browser hierarquico de pastas Drive
+// Chama server-cli /api/drive/listar-pastas via ngrok.
+// Estado interno: stack de breadcrumb (arrays de {id, nome}).
+// Click em pasta = entra (push). Botao Voltar = pop.
+// "Usar esta pasta" = preenche pc-fld-pasta-drive e fecha.
+// ============================================================
+let _driveBrowserStack = []; // [{id, nome}] do MyDrive ate o atual
+
+function abrirBrowserPastaDrive() {
+  _driveBrowserStack = []; // sempre comeca na raiz
+  const modal = document.getElementById('pc-modal-2');
+  modal.innerHTML = '';
+  modal.classList.remove('pc-hidden');
+
+  const inner = el('div', { class: 'pc-modal-inner', style: 'max-width:640px;max-height:80vh;display:flex;flex-direction:column' });
+  modal.append(inner);
+
+  inner.append(
+    el('div', { class: 'pc-modal-head' }, [
+      el('h2', null, '📂 Escolher pasta do Drive'),
+      el('button', { class: 'pc-close', onclick: fecharModal2 }, '×'),
+    ]),
+    el('p', { class: 'pc-modal-sub' },
+      'Navega pelas pastas do seu Drive. Clica em uma pasta pra entrar. Quando achar a pasta certa, clica em "Usar esta pasta".'),
+  );
+
+  // Breadcrumb (preenchido dinamicamente)
+  inner.append(el('div', { id: 'pc-drive-breadcrumb', style: 'padding:.5rem 1rem;border-bottom:1px solid #E2E8F0;font-size:.875rem;color:#475569;background:#F8FAFC' }));
+
+  // Lista (rolavel)
+  inner.append(el('div', { id: 'pc-drive-list', style: 'flex:1;overflow-y:auto;padding:.5rem' }));
+
+  // Footer
+  inner.append(el('div', { class: 'pc-modal-foot', style: 'border-top:1px solid #E2E8F0;display:flex;justify-content:space-between;align-items:center;gap:.5rem' }, [
+    el('span', { id: 'pc-drive-status', style: 'font-size:.8125rem;color:#64748B' }, ''),
+    el('div', { style: 'display:flex;gap:.5rem' }, [
+      el('button', { class: 'pc-btn-secondary', onclick: fecharModal2 }, 'Cancelar'),
+      el('button', { id: 'pc-btn-usar-pasta', class: 'pc-btn-primary', onclick: () => usarPastaAtual(), disabled: 'disabled', style: 'opacity:.5' }, 'Usar esta pasta'),
+    ]),
+  ]));
+
+  carregarPastas(null);
+}
+
+const SERVER_CLI_URL = 'https://almost-pawing-urban.ngrok-free.dev';
+
+async function carregarPastas(parent_id) {
+  const list = document.getElementById('pc-drive-list');
+  const status = document.getElementById('pc-drive-status');
+  const btnUsar = document.getElementById('pc-btn-usar-pasta');
+  if (!list) return;
+
+  list.innerHTML = '<div style="padding:2rem;text-align:center;color:#64748B">⏳ Carregando pastas…</div>';
+  status.textContent = '';
+  btnUsar.disabled = true;
+  btnUsar.style.opacity = '.5';
+
+  try {
+    const r = await fetch(SERVER_CLI_URL + '/api/drive/listar-pastas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+      body: JSON.stringify({ parent_id }),
+    });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'erro desconhecido');
+
+    list.innerHTML = '';
+    renderBreadcrumb();
+
+    if (j.pastas.length === 0) {
+      list.append(el('div', { style: 'padding:2rem;text-align:center;color:#64748B;font-style:italic' }, '(pasta vazia — sem subpastas)'));
+    } else {
+      for (const p of j.pastas) {
+        const row = el('div', {
+          class: 'pc-drive-row',
+          style: 'padding:.6rem .75rem;border-bottom:1px solid #F1F5F9;cursor:pointer;display:flex;align-items:center;gap:.6rem;font-size:.875rem;transition:background .12s',
+          onmouseenter: (e) => e.currentTarget.style.background = '#EFF6FF',
+          onmouseleave: (e) => e.currentTarget.style.background = '',
+          onclick: () => {
+            _driveBrowserStack.push({ id: p.id, nome: p.nome });
+            carregarPastas(p.id);
+          },
+        }, [
+          el('span', { style: 'font-size:1.125rem' }, '📁'),
+          el('span', { style: 'flex:1;color:#0F172A;font-weight:500' }, p.nome),
+          el('span', { style: 'color:#94A3B8;font-size:.75rem' }, '›'),
+        ]);
+        list.append(row);
+      }
+    }
+
+    // Habilita "Usar esta pasta" se estamos DENTRO de uma pasta (nao na raiz)
+    if (_driveBrowserStack.length > 0) {
+      btnUsar.disabled = false;
+      btnUsar.style.opacity = '1';
+      const atual = _driveBrowserStack[_driveBrowserStack.length - 1];
+      status.textContent = `Pasta atual: ${atual.nome}`;
+    } else {
+      status.textContent = 'Navegue ate a pasta desejada e clica em "Usar esta pasta".';
+    }
+  } catch (e) {
+    list.innerHTML = `<div style="padding:2rem;text-align:center;color:#EF4444">❌ ${escapeHtml(e.message)}<br><small>Server-cli local respondendo? Drive autorizado?</small></div>`;
+  }
+}
+
+function renderBreadcrumb() {
+  const bc = document.getElementById('pc-drive-breadcrumb');
+  if (!bc) return;
+  bc.innerHTML = '';
+
+  // Raiz sempre
+  const raiz = el('button', {
+    style: 'background:none;border:none;color:#3B82F6;cursor:pointer;font-size:.875rem;text-decoration:underline;padding:0',
+    onclick: () => { _driveBrowserStack = []; carregarPastas(null); },
+  }, '🏠 MyDrive');
+  bc.append(raiz);
+
+  for (let i = 0; i < _driveBrowserStack.length; i++) {
+    bc.append(el('span', { style: 'margin:0 .4rem;color:#94A3B8' }, '›'));
+    const ehUltimo = i === _driveBrowserStack.length - 1;
+    if (ehUltimo) {
+      bc.append(el('span', { style: 'font-weight:600;color:#0F172A' }, _driveBrowserStack[i].nome));
+    } else {
+      const idx = i;
+      bc.append(el('button', {
+        style: 'background:none;border:none;color:#3B82F6;cursor:pointer;font-size:.875rem;text-decoration:underline;padding:0',
+        onclick: () => {
+          _driveBrowserStack = _driveBrowserStack.slice(0, idx + 1);
+          carregarPastas(_driveBrowserStack[idx].id);
+        },
+      }, _driveBrowserStack[i].nome));
+    }
+  }
+}
+
+function usarPastaAtual() {
+  if (_driveBrowserStack.length === 0) return;
+  const atual = _driveBrowserStack[_driveBrowserStack.length - 1];
+  // Caminho completo pra mostrar no small
+  const caminho = _driveBrowserStack.map(s => s.nome).join(' / ');
+
+  const inp = document.getElementById('pc-fld-pasta-drive');
+  if (inp) inp.value = atual.id;
+  const nome = document.getElementById('pc-fld-pasta-drive-nome');
+  if (nome) nome.textContent = `✓ Pasta escolhida: ${caminho}`;
+  fecharModal2();
 }
 
 function escapeHtml(s) {

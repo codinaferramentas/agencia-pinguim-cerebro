@@ -1358,6 +1358,27 @@ app.post('/api/drive/buscar', async (req, res) => {
 });
 
 // ============================================================
+// V3 (2026-06-18) — POST /api/drive/listar-pastas
+// Body: { parent_id?, cliente_id?, pageSize? }
+// Resposta: { parent: {id,nome,parents}, pastas: [...] }
+// Usado pelo MC pra browser hierarquico no modal "Escolher pasta".
+// Sem parent_id, mostra raiz do MyDrive.
+// ============================================================
+app.post('/api/drive/listar-pastas', async (req, res) => {
+  try {
+    const { parent_id, cliente_id, pageSize = 100 } = req.body || {};
+    const t0 = Date.now();
+    const r = await googleDrive.listarPastas({ parent_id, cliente_id, pageSize });
+    const dur_ms = Date.now() - t0;
+    console.log(`[drive-listar-pastas] ${dur_ms}ms | parent=${parent_id || 'root'} | retornou=${r.pastas.length}`);
+    res.json({ ok: true, ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[drive-listar-pastas] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
 // V2.12 Fase 2 — POST /api/drive/ler
 // Body: { fileId, cliente_id?, tipo?: 'auto'|'doc'|'planilha'|'pdf'|'texto', aba?, range?, limite_linhas? }
 // Resposta varia por tipo:
