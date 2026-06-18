@@ -284,34 +284,20 @@ function reRenderFiltrado() {
 // Hover: tooltip com categoria + horario + ultima execucao + status.
 // Click na linha (produto): abre drill-down do cerebro.
 
-const FREQ_COLS = [
-  { key: 'diario',    label: 'Diário',     icon: '🌅' },
-  { key: 'seg',       label: 'Seg',        icon: '📍' },
-  { key: 'ter',       label: 'Ter',        icon: '📍' },
-  { key: 'qua',       label: 'Qua',        icon: '📍' },
-  { key: 'qui',       label: 'Qui',        icon: '📍' },
-  { key: 'sex',       label: 'Sex',        icon: '📍' },
-  { key: 'sab',       label: 'Sáb',        icon: '📍' },
-  { key: 'dom',       label: 'Dom',        icon: '📍' },
-  { key: 'tempo_real',label: 'Tempo real', icon: '⚡' },
-  { key: 'manual',    label: 'Manual',     icon: '✋' },
+// 6 cadencias x 2 modos (A/M) = 12 sub-colunas potenciais.
+// Colunas com 0 itens sao escondidas pra nao poluir.
+const CADENCIAS = [
+  { key: 'diario',       label: 'Diário',       icon: '🌅' },
+  { key: 'semanal',      label: 'Semanal',      icon: '📅' },
+  { key: 'quinzenal',    label: 'Quinzenal',    icon: '📆' },
+  { key: 'mensal',       label: 'Mensal',       icon: '🗓' },
+  { key: 'tempo_real',   label: 'Tempo real',   icon: '⚡' },
+  { key: 'sem_cadencia', label: 'Sem cadência', icon: '∞' },
 ];
-
-function _freqDeLinha(l) {
-  // Retorna a chave de coluna onde essa linha cai
-  if (l.trigger_tipo === 'manual') return 'manual';
-  if (l.trigger_tipo === 'webhook' || l.trigger_tipo === 'evento_auto' || l.trigger_tipo === 'evento_avisar') return 'tempo_real';
-  if (!l.schedule_cron) return null;
-  const parts = l.schedule_cron.trim().split(/\s+/);
-  if (parts.length < 5) return null;
-  const dow = parts[4];
-  if (dow === '*') return 'diario';
-  // Pode ter multiplos (ex: '1,3' = seg+qua). Pega o primeiro como representativo.
-  const map = { 0: 'dom', 1: 'seg', 2: 'ter', 3: 'qua', 4: 'qui', 5: 'sex', 6: 'sab', 7: 'dom' };
-  const first = parseInt(dow.split(',')[0].split('-')[0], 10);
-  if (isNaN(first)) return null;
-  return map[first % 7];
-}
+const MODOS = [
+  { key: 'automatico', label: 'A', cor: '#22C55E', tip: 'Automático: roda sozinho (cron, webhook ou disparo de terceiro). Você não precisa fazer nada.' },
+  { key: 'manual',     label: 'M', cor: '#F59E0B', tip: 'Manual: VOCÊ precisa rodar (subir arquivo no Drive, colar URL no botão, etc). Sem você, não acontece.' },
+];
 
 function _horaBrt(cron) {
   if (!cron) return null;
@@ -323,51 +309,83 @@ function _horaBrt(cron) {
   return `${String(h).padStart(2,'0')}:${minUtc.padStart(2,'0')} BRT`;
 }
 
+function _dowToLabel(cron) {
+  if (!cron) return null;
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length < 5) return null;
+  const dow = parts[4];
+  if (dow === '*') return null;
+  const dias = { '0':'domingo', '1':'segunda', '2':'terça', '3':'quarta', '4':'quinta', '5':'sexta', '6':'sábado', '7':'domingo' };
+  return dias[dow.split(',')[0]] || null;
+}
+
 function renderMatrizFrequencia(linhas) {
   const wrap = el('div');
-  wrap.append(el('h2', { class: 'pc-section-title' }, '📊 Matriz Produto × Frequência'));
-  wrap.append(el('p', { class: 'pc-sub' }, 'Linha = produto, coluna = quando roda. Bata o olho e veja o quê roda diário/semanal/tempo-real. Hover na célula pra detalhe. Clique na linha pra abrir o cérebro.'));
+  wrap.append(el('h2', { class: 'pc-section-title' }, '📊 Matriz Produto × Cadência × Modo'));
+  wrap.append(el('p', { class: 'pc-sub' }, 'Linhas = produtos. Colunas agrupam Cadência (Diário/Semanal/...) × Modo (A=automático, M=manual). Hover na célula pra detalhe. Clique na linha pra abrir o cérebro.'));
 
   if (linhas.length === 0) {
     wrap.append(el('div', { style: 'padding:2rem;color:#64748B;text-align:center' }, 'Nada rodando ainda.'));
     return wrap;
   }
 
-  // Agrupa por (produto, frequencia) -> [categorias]
+  // Agrupa por (produto, cadencia-modo) -> [categorias]
   const porProduto = new Map();
   for (const l of linhas) {
     if (!porProduto.has(l.produto_nome)) {
       porProduto.set(l.produto_nome, { cerebro_id: l.cerebro_id, produto_emoji: l.produto_emoji, celulas: {} });
     }
-    const freq = _freqDeLinha(l);
-    if (!freq) continue;
+    const key = `${l.cadencia}__${l.modo_disparo}`;
     const entry = porProduto.get(l.produto_nome);
-    if (!entry.celulas[freq]) entry.celulas[freq] = [];
-    entry.celulas[freq].push(l);
+    if (!entry.celulas[key]) entry.celulas[key] = [];
+    entry.celulas[key].push(l);
   }
 
-  // Detecta colunas com pelo menos 1 item (esconde colunas vazias pra nao poluir)
-  const colsUsadas = new Set();
-  for (const [, entry] of porProduto) {
-    for (const k of Object.keys(entry.celulas)) colsUsadas.add(k);
-  }
-  const cols = FREQ_COLS.filter(c => colsUsadas.has(c.key));
+  // Descobre quais (cadencia, modo) tem pelo menos 1 item
+  const usados = new Set();
+  for (const [, entry] of porProduto) for (const k of Object.keys(entry.celulas)) usados.add(k);
 
-  // Container da tabela com scroll horizontal
+  // Constroi colunas: pra cada cadencia usada, pra cada modo, se tem item, vira coluna
+  const cols = [];
+  for (const c of CADENCIAS) {
+    for (const m of MODOS) {
+      const key = `${c.key}__${m.key}`;
+      if (usados.has(key)) cols.push({ key, cadencia: c, modo: m });
+    }
+  }
+
+  // Tabela com 2 niveis de header (cadencia agrupando A/M)
   const tableWrap = el('div', { style: 'overflow-x:auto;border:1px solid #1E293B;border-radius:6px;background:#0F172A' });
   const table = el('table', { style: 'width:100%;border-collapse:collapse;font-size:.8125rem' });
 
-  // Header
+  // Header nivel 1: cadencias (com colspan)
   const thead = el('thead');
-  const trHead = el('tr', { style: 'background:#1E293B' });
-  trHead.append(el('th', { style: 'padding:.7rem .85rem;text-align:left;color:#E2E8F0;font-weight:600;position:sticky;left:0;background:#1E293B;z-index:2;min-width:170px' }, 'Cérebro'));
-  for (const c of cols) {
-    trHead.append(el('th', { style: 'padding:.7rem .5rem;text-align:center;color:#94A3B8;font-weight:600;min-width:78px' }, [
-      el('div', { style: 'font-size:1rem' }, c.icon),
-      el('div', { style: 'font-size:.7rem;margin-top:.1rem' }, c.label),
+  const trCad = el('tr', { style: 'background:#1E293B' });
+  trCad.append(el('th', { rowspan: 2, style: 'padding:.7rem .85rem;text-align:left;color:#E2E8F0;font-weight:600;position:sticky;left:0;background:#1E293B;z-index:2;min-width:170px;border-right:1px solid #334155' }, 'Cérebro'));
+  // Agrupa cols por cadencia pra rowspan
+  let i = 0;
+  while (i < cols.length) {
+    const cadKey = cols[i].cadencia.key;
+    let span = 1;
+    while (i + span < cols.length && cols[i + span].cadencia.key === cadKey) span++;
+    const cad = cols[i].cadencia;
+    trCad.append(el('th', { colspan: span, style: 'padding:.5rem .3rem;text-align:center;color:#E2E8F0;font-weight:600;border-left:1px solid #334155;background:#1E293B' }, [
+      el('div', { style: 'font-size:.95rem' }, cad.icon),
+      el('div', { style: 'font-size:.7rem;margin-top:.1rem' }, cad.label),
     ]));
+    i += span;
   }
-  thead.append(trHead);
+  thead.append(trCad);
+
+  // Header nivel 2: A/M
+  const trMod = el('tr', { style: 'background:#152033' });
+  for (const c of cols) {
+    trMod.append(el('th', {
+      style: `padding:.35rem .4rem;text-align:center;color:${c.modo.cor};font-weight:700;font-size:.75rem;min-width:55px;border-left:1px solid #334155`,
+      title: c.modo.tip,
+    }, c.modo.label));
+  }
+  thead.append(trMod);
   table.append(thead);
 
   // Body
@@ -380,13 +398,13 @@ function renderMatrizFrequencia(linhas) {
       onmouseout: function() { this.style.background = ''; },
       onclick: () => abrirCerebro(entry.cerebro_id),
     });
-    tr.append(el('td', { style: 'padding:.7rem .85rem;color:#E2E8F0;font-weight:600;position:sticky;left:0;background:#0F172A;z-index:1' }, [
+    tr.append(el('td', { style: 'padding:.7rem .85rem;color:#E2E8F0;font-weight:600;position:sticky;left:0;background:#0F172A;z-index:1;border-right:1px solid #334155' }, [
       el('span', { style: 'margin-right:.4rem' }, entry.produto_emoji || '🧠'),
       nome,
     ]));
     for (const c of cols) {
       const cats = entry.celulas[c.key] || [];
-      const td = el('td', { style: 'padding:.5rem;text-align:center;vertical-align:middle' });
+      const td = el('td', { style: 'padding:.5rem .3rem;text-align:center;vertical-align:middle;border-left:1px solid #334155' });
       if (cats.length === 0) {
         td.append(el('span', { style: 'color:#334155;font-size:.65rem' }, '—'));
       } else {
@@ -394,10 +412,12 @@ function renderMatrizFrequencia(linhas) {
         for (const cat of cats) {
           const corBorda = cat.ultimo_status_run === 'falha' ? '#EF4444'
                          : cat.ultimo_status_run === 'ok' ? '#22C55E' : '#475569';
+          const dowLabel = _dowToLabel(cat.schedule_cron);
           const tip = [
             `${cat.categoria_emoji} ${cat.categoria_nome}`,
             cat.motor_unico ? '⚙ Motor central (1 cron distribui pros 10)' : null,
             cat.schedule_descricao ? `🕐 ${cat.schedule_descricao}` : null,
+            dowLabel ? `Dia: ${dowLabel}` : null,
             _horaBrt(cat.schedule_cron) ? `Horário: ${_horaBrt(cat.schedule_cron)}` : null,
             cat.ultima_execucao ? `Última: ${new Date(cat.ultima_execucao).toLocaleString('pt-BR')} (${cat.ultimo_status_run || '—'})` : 'Nunca rodou',
           ].filter(Boolean).join('\n');
@@ -425,6 +445,8 @@ function renderMatrizFrequencia(linhas) {
 
   // Legenda
   const legenda = el('div', { style: 'display:flex;gap:1.2rem;flex-wrap:wrap;padding:.6rem 0;font-size:.7rem;color:#94A3B8;margin-top:.5rem' });
+  legenda.append(el('span', { style: 'color:#22C55E;font-weight:700' }, 'A = Automático (roda sozinho)'));
+  legenda.append(el('span', { style: 'color:#F59E0B;font-weight:700' }, 'M = Manual (você precisa rodar)'));
   legenda.append(el('span', {}, '🟢 borda verde = última execução OK'));
   legenda.append(el('span', {}, '🔴 borda vermelha = falhou'));
   legenda.append(el('span', {}, '⚪ borda cinza = ainda não rodou'));
