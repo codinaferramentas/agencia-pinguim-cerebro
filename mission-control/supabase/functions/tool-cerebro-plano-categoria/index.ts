@@ -8,7 +8,7 @@
 // editar: { acao:'editar', plano_id, status_automacao?, origem_configurada?, schedule_cron?,
 //           schedule_descricao?, ferramenta?, responsavel?, notas?, prioridade? }
 // avancar: { acao:'avancar', plano_id }
-//   -> avanca status pelo mapa: sem_coleta→planejada→em_construcao→rodando→pausada→rodando
+//   -> avanca status pelo mapa: sem_coleta→planejada→em_construcao→ativo→pausada→ativo
 // criar_categoria: { acao:'criar_categoria', nome, emoji?, descricao?, tipos_fonte? }
 //   -> cria categoria global + auto-popula em todos cerebros internos
 

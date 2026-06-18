@@ -158,7 +158,7 @@ async function processarAulaYoutube({ cerebro_id, categoria_slug = 'transcricoes
          SET ultima_execucao = now(),
              ultimo_status_run = 'ok',
              status_automacao = CASE
-               WHEN status_automacao IN ('sem_coleta','planejada','em_construcao') THEN 'rodando'
+               WHEN status_automacao IN ('sem_coleta','planejada','em_construcao') THEN 'ativo'
                ELSE status_automacao
              END,
              trigger_tipo = CASE

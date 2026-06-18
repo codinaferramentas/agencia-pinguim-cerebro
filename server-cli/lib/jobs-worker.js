@@ -47,7 +47,39 @@ function iniciar() {
   _rodando = true;
   _parar = false;
   console.log(`[jobs-worker] iniciado worker_id=${WORKER_ID} | poll vazio=${POLL_INTERVALO_VAZIO_MS}ms`);
+  _recuperarOrfaos().catch(e => console.error(`[jobs-worker] recovery orfaos falhou: ${e.message}`));
   _loop();
+}
+
+// ============================================================
+// Andre 2026-06-18: recovery de jobs orfaos no boot.
+// Cenario real: server crashou as 8h hoje, job Highlights ficou
+// status='executando' com worker_id de processo morto. Worker novo
+// nunca pegava (pegarProximoJob filtra por status='aprovado').
+// Solucao: no boot, jobs marcados 'executando' ha mais de 15min sao
+// re-postos como 'aprovado' pra rodar de novo.
+// ============================================================
+async function _recuperarOrfaos() {
+  const sql = `
+    UPDATE pinguim.jobs
+       SET status = 'aprovado',
+           worker_id = NULL,
+           iniciado_em = NULL
+     WHERE status = 'executando'
+       AND iniciado_em < now() - interval '15 minutes'
+    RETURNING id, tipo_pedido, worker_id;
+  `;
+  try {
+    const orfaos = await db.rodarSQL(sql);
+    if (Array.isArray(orfaos) && orfaos.length > 0) {
+      console.warn(`[jobs-worker] recovery: ${orfaos.length} job(s) orfao(s) re-enfileirado(s):`);
+      for (const j of orfaos) {
+        console.warn(`  - ${j.id} (tipo=${j.tipo_pedido})`);
+      }
+    }
+  } catch (e) {
+    console.error(`[jobs-worker] recovery orfaos: ${e.message}`);
+  }
 }
 
 // ============================================================
@@ -172,7 +204,7 @@ async function _processarUmJob() {
         if (resultado.novos > 0 && resultado.falhas === 0) {
           await db.rodarSQL(`
             UPDATE pinguim.cerebro_plano_categoria
-               SET status_automacao = 'rodando'
+               SET status_automacao = 'ativo'
              WHERE id = '${p.plano_id}' AND status_automacao IN ('em_construcao','sem_coleta','planejada')
           `);
         }

@@ -162,7 +162,7 @@ serve(async (req) => {
       .update({
         ultima_execucao: new Date().toISOString(),
         ultimo_status_run: 'ok',
-        status_automacao: 'rodando',
+        status_automacao: 'ativo',
         atualizado_em: new Date().toISOString(),
       })
       .eq('id', (catList[0] as any).plano_id);

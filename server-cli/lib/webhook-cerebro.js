@@ -100,7 +100,7 @@ async function processarWebhook({ slug_produto, categoria_slug, payload, fonte_e
        SET ultima_execucao = now(),
            ultimo_status_run = 'ok',
            status_automacao = CASE
-             WHEN status_automacao IN ('em_construcao','sem_coleta','planejada') THEN 'rodando'
+             WHEN status_automacao IN ('em_construcao','sem_coleta','planejada') THEN 'ativo'
              ELSE status_automacao
            END,
            atualizado_em = now()

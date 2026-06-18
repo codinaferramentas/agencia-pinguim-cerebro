@@ -52,12 +52,14 @@ function freshnessTexto(iso) {
 const STATUS_META = {
   sem_coleta:    { label: 'sem coleta',     cor: '#64748B', emoji: '⚫', proximoLabel: '+ Priorizar pra reunião' },
   planejada:     { label: 'planejada',      cor: '#3B82F6', emoji: '🔵', proximoLabel: '▶ Marcar em construção' },
-  em_construcao: { label: 'em construção',  cor: '#F59E0B', emoji: '🟡', proximoLabel: '▶ Marcar como rodando' },
-  rodando:       { label: 'rodando',        cor: '#22C55E', emoji: '🟢', proximoLabel: '⏸ Pausar' },
+  em_construcao: { label: 'em construção',  cor: '#F59E0B', emoji: '🟡', proximoLabel: '▶ Marcar como ativo' },
+  ativo:         { label: 'ativo',          cor: '#22C55E', emoji: '🟢', proximoLabel: '⏸ Pausar' },
   pausada:       { label: 'pausada',        cor: '#94A3B8', emoji: '⏸', proximoLabel: '▶ Retomar' },
   falhou:        { label: 'falhou',         cor: '#EF4444', emoji: '❌', proximoLabel: '▶ Retomar' },
   nao_aplicavel: { label: 'não se aplica',  cor: '#A1A1AA', emoji: '🚫', proximoLabel: '↩ Reativar' },
 };
+// V9 (2026-06-18 noite) alias: dado historico pode vir com 'rodando' — renderiza igual ativo.
+STATUS_META.rodando = STATUS_META.ativo;
 
 // V3 (2026-06-17) — estado global do toggle "mostrar não aplicáveis" por sessão
 let _mostrarNaoAplicaveis = false;
@@ -93,7 +95,7 @@ let _snapshot = null;
 let _detalheCache = new Map();
 let _abaAtiva = 'cerebros';
 let _cerebroAberto = null;
-let _filtroStatus = 'todos'; // 'todos' | 'sem_coleta' | 'planejada' | 'em_construcao' | 'rodando' | 'pausada'
+let _filtroStatus = 'todos'; // 'todos' | 'sem_coleta' | 'planejada' | 'em_construcao' | 'ativo' | 'pausada'
 
 // ============================================================
 // Render principal
@@ -378,10 +380,10 @@ function _dowToLabel(cron) {
 function renderMatrizFrequencia(linhas) {
   const wrap = el('div');
   wrap.append(el('h2', { class: 'pc-section-title' }, '📊 Matriz Produto × Cadência × Modo'));
-  wrap.append(el('p', { class: 'pc-sub' }, 'Linhas = produtos. Colunas: Cadência × Modo (A/M) pra motores rodando + coluna GAP no fim com o que falta fazer. Hover na célula pra detalhe. Clique na linha pra abrir o cérebro.'));
+  wrap.append(el('p', { class: 'pc-sub' }, 'Linhas = produtos. Colunas: Cadência × Modo (A/M) pra motores ativos + coluna GAP no fim com o que falta fazer. Hover na célula pra detalhe. Clique na linha pra abrir o cérebro.'));
 
   if (linhas.length === 0) {
-    wrap.append(el('div', { style: 'padding:2rem;color:#64748B;text-align:center' }, 'Nada rodando ainda.'));
+    wrap.append(el('div', { style: 'padding:2rem;color:#64748B;text-align:center' }, 'Nenhum motor ativo ainda.'));
     return wrap;
   }
 
@@ -400,7 +402,7 @@ function renderMatrizFrequencia(linhas) {
       });
     }
     const entry = porProduto.get(l.produto_nome);
-    if (l.status_automacao === 'rodando') {
+    if (l.status_automacao === 'ativo' || l.status_automacao === 'rodando') {
       const key = `${l.cadencia}__${l.modo_disparo}`;
       if (!entry.celulas[key]) entry.celulas[key] = [];
       entry.celulas[key].push(l);
@@ -568,7 +570,7 @@ function renderMatrizFrequencia(linhas) {
   const legenda = el('div', { style: 'display:flex;gap:1.2rem;flex-wrap:wrap;padding:.6rem 0;font-size:.7rem;color:#94A3B8;margin-top:.5rem' });
   legenda.append(el('span', { style: 'color:#22C55E;font-weight:700' }, 'A = Automático (roda sozinho)'));
   legenda.append(el('span', { style: 'color:#F59E0B;font-weight:700' }, 'M = Manual (você precisa rodar)'));
-  legenda.append(el('span', {}, 'borda SÓLIDA verde/vermelha/cinza = motor rodando (ok/falha/nunca)'));
+  legenda.append(el('span', {}, 'borda SÓLIDA verde/vermelha/cinza = motor ativo (última execução ok/falha/nunca)'));
   legenda.append(el('span', {}, 'borda TRACEJADA amarela/azul/cinza = GAP (em_construção/planejada/sem_coleta)'));
   legenda.append(el('span', {}, [
     el('span', { style: 'background:#A78BFA;color:#fff;width:14px;height:14px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;margin-right:.3rem' }, '*'),
@@ -586,13 +588,13 @@ function renderPainelKpis(k) {
       tip: 'Crons que executaram pelo menos 1 vez nas últimas 24h (independente de sucesso ou falha).',
     },
     {
-      num: k.total_rodando || 0, label: 'automatizadas (rodando)', cor: '#3B82F6', emoji: '🟢',
+      num: k.total_rodando || 0, label: 'motores ativos', cor: '#3B82F6', emoji: '🟢',
       sub: `de ${k.total_categorias_aplicaveis || 0} categorias`,
-      tip: 'Categorias de cérebros com status "rodando" — ou seja, têm cron ativo, webhook, ou processamento por evento.',
+      tip: 'Categorias de cérebros com status "ativo" — ou seja, têm cron, webhook, evento ou disparo manual configurado. Modo automático OU manual.',
     },
     {
-      num: k.total_manuais || 0, label: 'manuais (você controla)', cor: '#F59E0B', emoji: '✋',
-      tip: 'Categorias que você precisa rodar à mão (ex: subir aula no Drive). Não tem cron.',
+      num: k.total_manuais || 0, label: 'manuais (você dispara)', cor: '#F59E0B', emoji: '✋',
+      tip: 'Subset dos ativos: categorias que precisam de você pra rodar (subir arquivo no Drive, colar URL no botão). Sem cron — sem você, não acontece.',
     },
     {
       num: k.total_falhou_24h || 0, label: 'falharam nas últimas 24h', cor: (k.total_falhou_24h || 0) > 0 ? '#EF4444' : '#94A3B8', emoji: '✗',
@@ -600,7 +602,7 @@ function renderPainelKpis(k) {
     },
     {
       num: k.total_defasadas_7d || 0, label: 'defasadas (sem update >7d)', cor: (k.total_defasadas_7d || 0) > 0 ? '#F59E0B' : '#94A3B8', emoji: '⚠',
-      tip: 'Categorias marcadas "rodando" mas que NUNCA rodaram, ou cuja última execução foi há mais de 7 dias. Geralmente: configurou mas o cron ainda não disparou pela primeira vez.',
+      tip: 'Categorias marcadas "ativo" mas que NUNCA rodaram, ou cuja última execução foi há mais de 7 dias. Geralmente: configurou mas o cron ainda não disparou pela primeira vez OU é manual e você não subiu nada recentemente.',
     },
   ];
   const wrap = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.6rem;padding:1rem 0' });
@@ -620,7 +622,7 @@ function renderPainelKpis(k) {
 function renderPainelAlertas(alertas) {
   const titulos = {
     cron_falhou: { label: '❌ Falhou no último run', cor: '#EF4444' },
-    rodando_defasada: { label: '⚠ Rodando mas defasada >7d', cor: '#F59E0B' },
+    rodando_defasada: { label: '⚠ Ativa mas defasada >7d', cor: '#F59E0B' },
     manual_sem_update: { label: '✋ Manual sem update', cor: '#A78BFA' },
   };
   const porTipo = new Map();
@@ -703,7 +705,7 @@ function cardCerebro(c) {
       }, alertaEdicao.status === 'atrasado' ? '⚠ ATRASADO' : '⏰ PROX') : null,
     ]),
     el('div', { class: 'pc-card-counts' }, [
-      mini('🟢', pc.rodando || 0, '#22C55E', 'Rodando: categorias com automação ativa (cron, webhook ou evento) já configurada e funcionando.'),
+      mini('🟢', pc.rodando || 0, '#22C55E', 'Ativo: categorias com motor configurado e funcionando (automático via cron/webhook/evento OU manual disparado por você).'),
       mini('🟡', pc.em_construcao || 0, '#F59E0B', 'Em construção: categorias decididas na reunião e em implementação.'),
       mini('🔵', pc.planejada || 0, '#3B82F6', 'Planejada: categorias acordadas na reunião, ainda não começaram a ser implementadas.'),
       mini('⚫', pc.sem_coleta || 0, '#94A3B8', 'Sem coleta: categorias pendentes de discussão ou que dependem de pré-requisito externo (ex: comercial fazer call).'),
@@ -793,7 +795,7 @@ function atualizarParcialDoCerebro(detalhe, cerebro_id) {
     statsWrap.className = 'pc-cer-stats';
     statsWrap.innerHTML = '';
     statsWrap.append(
-      stat('🟢', pc.rodando, 'rodando', '#22C55E'),
+      stat('🟢', pc.rodando, 'ativo', '#22C55E'),
       stat('🟡', pc.em_construcao, 'em construção', '#F59E0B'),
       stat('🔵', pc.planejada, 'planejadas', '#3B82F6'),
       stat('⚫', pc.sem_coleta, 'sem coleta', '#94A3B8'),
@@ -811,7 +813,7 @@ function atualizarParcialDoCerebro(detalhe, cerebro_id) {
       filtroChip('sem_coleta', '⚫ Sem coleta', pc.sem_coleta),
       filtroChip('planejada', '🔵 Planejadas', pc.planejada),
       filtroChip('em_construcao', '🟡 Em construção', pc.em_construcao),
-      filtroChip('rodando', '🟢 Rodando', pc.rodando),
+      filtroChip('ativo', '🟢 Ativos', pc.rodando),
     );
     // Toggle "Mostrar não aplicáveis" — só aparece se houver alguma marcada
     if (pc.nao_aplicavel > 0) {
@@ -846,9 +848,12 @@ function atualizarParcialDoCerebro(detalhe, cerebro_id) {
 }
 
 function recomputarPlanoCounts(plano) {
+  // V9: chave c.rodando agora conta 'ativo' (novo) E 'rodando' (legado) somados —
+  // mantida pra UI nao quebrar (stat/chip lerao c.rodando).
   const c = { sem_coleta: 0, planejada: 0, em_construcao: 0, rodando: 0, pausada: 0, falhou: 0, nao_aplicavel: 0, total_aplicaveis: 0 };
   for (const p of (plano || [])) {
-    c[p.status_automacao] = (c[p.status_automacao] || 0) + 1;
+    const stKey = p.status_automacao === 'ativo' ? 'rodando' : p.status_automacao;
+    c[stKey] = (c[stKey] || 0) + 1;
     if (p.status_automacao !== 'nao_aplicavel') c.total_aplicaveis++;
   }
   return c;
@@ -888,7 +893,7 @@ function renderListaCategorias(wrap, plano, integracoes, cerebro_id) {
   }
 
   // Ordena: sem_coleta primeiro, nao_aplicavel por último, resto pela ordem do catalogo
-  const ordemStatus = { sem_coleta: 0, planejada: 1, em_construcao: 2, falhou: 3, pausada: 4, rodando: 5, nao_aplicavel: 9 };
+  const ordemStatus = { sem_coleta: 0, planejada: 1, em_construcao: 2, falhou: 3, pausada: 4, ativo: 5, rodando: 5, nao_aplicavel: 9 };
   const sorted = [...lista].sort((a, b) => {
     const sa = ordemStatus[a.status_automacao] ?? 9;
     const sb = ordemStatus[b.status_automacao] ?? 9;
@@ -999,7 +1004,7 @@ function cardCategoria(p, integracoes, cerebro_id) {
   //   - status em_construcao/falhou/pausada (precisa intervencao)
   //   - status sem_coleta com origem configurada (pra ativar pela 1a vez)
   const automatico = ['evento_auto', 'evento_avisar', 'webhook'].includes(p.trigger_tipo);
-  const statusRodando = p.status_automacao === 'rodando';
+  const statusRodando = p.status_automacao === 'ativo' || p.status_automacao === 'rodando';
   const temOrigem = (p.origem_pasta_drive_id && p.origem_pasta_drive_id.length > 0)
     || (p.origem_configurada && p.origem_configurada.length > 0);
   const precisaIntervir = ['em_construcao', 'falhou', 'pausada'].includes(p.status_automacao);
@@ -1211,10 +1216,12 @@ function abrirModalEditar(plano, integracoes, cerebro_id) {
 
 function seletorStatus(atual) {
   const sel = el('select', { id: 'pc-fld-status', class: 'pc-input' });
-  for (const k of ['sem_coleta', 'planejada', 'em_construcao', 'rodando', 'pausada', 'falhou']) {
+  // V9: 'rodando' renomeado pra 'ativo' (Andre cravou: "rodando" da sensacao de "roda sozinho")
+  const atualNorm = atual === 'rodando' ? 'ativo' : atual;
+  for (const k of ['sem_coleta', 'planejada', 'em_construcao', 'ativo', 'pausada', 'falhou']) {
     const meta = STATUS_META[k];
     const opt = el('option', { value: k }, `${meta.emoji} ${meta.label}`);
-    if (k === atual) opt.selected = true;
+    if (k === atualNorm) opt.selected = true;
     sel.append(opt);
   }
   return sel;
@@ -1379,7 +1386,7 @@ function abrirModalWebhookPesquisa(plano, cerebro_id) {
   }
 
   const url = `${SB_URL}/functions/v1/webhook-cerebro?produto=${encodeURIComponent(produtoSlug)}&categoria=${encodeURIComponent(plano.categoria_slug)}`;
-  const jaAtivo = plano.status_automacao === 'rodando' && plano.trigger_tipo === 'webhook';
+  const jaAtivo = (plano.status_automacao === 'ativo' || plano.status_automacao === 'rodando') && plano.trigger_tipo === 'webhook';
 
   const modal = document.getElementById('pc-modal');
   modal.innerHTML = '';
@@ -1441,7 +1448,7 @@ function abrirModalWebhookPesquisa(plano, cerebro_id) {
           '✓ Esta categoria ja esta ativa como webhook. Pode colar a URL no YA Forms — respostas vao entrar em tempo real.')
       : el('div', { style: 'margin-top:1rem;padding:.75rem;background:rgba(59,130,246,0.08);border:1px solid #3B82F6;border-radius:6px;font-size:.8125rem;color:#1E40AF;line-height:1.5' }, [
           el('strong', null, '🚀 Quer ativar agora? '),
-          'Clica no botao abaixo. A categoria vai pra status "rodando" + trigger "webhook". Quando o YA Forms enviar a primeira resposta, voce ja recebe vetorizado.',
+          'Clica no botao abaixo. A categoria vai pra status "ativo" + trigger "webhook". Quando o YA Forms enviar a primeira resposta, voce ja recebe vetorizado.',
         ]),
   );
 
@@ -1451,7 +1458,7 @@ function abrirModalWebhookPesquisa(plano, cerebro_id) {
       class: 'pc-btn-primary',
       onclick: () => ativarWebhookPesquisa(plano.plano_id, cerebro_id),
       style: 'background:#22C55E;border-color:#22C55E',
-    }, '🚀 Ativar webhook (status=rodando)'));
+    }, '🚀 Ativar webhook (status=ativo)'));
   }
   acoes.push(el('button', { class: 'pc-btn-secondary', onclick: fecharModal }, 'Fechar'));
   inner.append(el('div', { class: 'pc-modal-foot' }, acoes));
@@ -1468,7 +1475,7 @@ async function ativarWebhookPesquisa(plano_id, cerebro_id) {
   const schedAntes = p.schedule_descricao;
 
   // Otimistic
-  p.status_automacao = 'rodando';
+  p.status_automacao = 'ativo';
   p.trigger_tipo = 'webhook';
   p.schedule_descricao = 'tempo real (webhook YA Forms)';
   fecharModal();
@@ -1480,7 +1487,7 @@ async function ativarWebhookPesquisa(plano_id, cerebro_id) {
       body: {
         acao: 'editar',
         plano_id,
-        status_automacao: 'rodando',
+        status_automacao: 'ativo',
         trigger_tipo: 'webhook',
         schedule_descricao: 'tempo real (webhook YA Forms)',
       },
@@ -1693,10 +1700,11 @@ async function salvarPlano(plano_id, cerebro_id) {
 const PROXIMO_STATUS = {
   sem_coleta:    'planejada',
   planejada:     'em_construcao',
-  em_construcao: 'rodando',
-  rodando:       'pausada',
-  pausada:       'rodando',
-  falhou:        'rodando',
+  em_construcao: 'ativo',
+  ativo:         'pausada',
+  rodando:       'pausada',  // alias historico
+  pausada:       'ativo',
+  falhou:        'ativo',
 };
 
 async function avancarStatus(plano_id, cerebro_id, btnEl) {

@@ -67,7 +67,7 @@ async function _executarCiclo() {
     WHERE vp.trigger_tipo = 'cron'
       AND vp.schedule_cron IS NOT NULL
       AND vp.schedule_cron <> ''
-      AND vp.status_automacao IN ('rodando','em_construcao')
+      AND vp.status_automacao IN ('ativo','rodando','em_construcao')
   `);
 
   if (!rows || rows.length === 0) return;

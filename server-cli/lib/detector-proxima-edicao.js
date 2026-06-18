@@ -145,7 +145,7 @@ async function detectarTodos({ on_log = () => {} } = {}) {
       JOIN pinguim.cerebros c ON c.produto_id = p.id
       JOIN pinguim.cerebro_plano_categoria cpc ON cpc.cerebro_id = c.id
      WHERE cpc.categoria_slug = 'paginas_venda'
-       AND cpc.status_automacao = 'rodando'
+       AND cpc.status_automacao = 'ativo'
        AND p.nome IN ('Lo-fi Desafio','Elo','Proalt','Lyra','Orion','Taurus',
                       'Low Ticket Desafio','Mentoria Express','365 Roteiros validados','Analise de Perfil')
      ORDER BY p.nome;
