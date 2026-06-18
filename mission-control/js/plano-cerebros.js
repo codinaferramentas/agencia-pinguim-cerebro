@@ -172,13 +172,23 @@ function renderAbaAtiva(conteudo) {
   if (_abaAtiva === 'cerebros') {
     if (_cerebroAberto) renderTelaCerebro(conteudo, _cerebroAberto);
     else {
-      // V3 (2026-06-18) — fusao com Painel de Automacao.
-      // Ordem visual: KPIs + Alertas (topo) -> Tabs cronologico/calendario (meio) -> Grid 10 cerebros (fim).
-      // Resumo simples antigo (4 cards) substituido pelos KPIs ricos do schema-023.
-      const painelSlot = el('div', { id: 'pa-painel-slot' });
-      conteudo.append(painelSlot);
-      conteudo.append(renderGridCerebros(_snapshot.cerebros));
-      carregarPainelAutomacao(painelSlot); // assincrono, popula depois sem bloquear grid
+      // V4 (2026-06-18 final) — feedback do Andre pra reuniao.
+      // Ordem visual:
+      //   1) KPIs (topo - resumo rapido)
+      //   2) Alertas (se houver)
+      //   3) Filtro por produto (chips)
+      //   4) Cards dos 10 cerebros (FOCO PRINCIPAL)
+      //   5) Tabs cronologico/calendario (fim - secundario)
+      const kpisSlot = el('div', { id: 'pa-kpis-slot' });
+      const filtroSlot = el('div', { id: 'pa-filtro-slot' });
+      const gridSlot = el('div', { id: 'pa-grid-slot' });
+      const cronoSlot = el('div', { id: 'pa-crono-slot', style: 'margin-top:2rem' });
+      conteudo.append(kpisSlot, filtroSlot, gridSlot, cronoSlot);
+      // Filtro + grid sao sincronos
+      filtroSlot.append(renderFiltroProduto());
+      gridSlot.append(renderGridCerebros(_snapshot.cerebros));
+      // KPIs + cronologico vem das RPCs (assincrono)
+      carregarPainelAutomacao();
     }
   } else {
     conteudo.append(renderAbaIntegracoes(_snapshot.integracoes_catalogo));
@@ -192,9 +202,15 @@ function renderAbaAtiva(conteudo) {
 // ============================================================
 let _painelCache = null;
 let _painelViewMode = 'lista'; // 'lista' | 'calendario'
+let _filtroProduto = 'todos';   // V4: filtro por produto
+let _expandRodou = false;       // V4: top 5 + ver outros
+let _expandProximos = false;
 
-async function carregarPainelAutomacao(slot) {
-  slot.innerHTML = '<div style="padding:1rem;color:#94A3B8;font-size:.875rem">Carregando visao transversal...</div>';
+async function carregarPainelAutomacao() {
+  const kpisSlot = document.getElementById('pa-kpis-slot');
+  const cronoSlot = document.getElementById('pa-crono-slot');
+  if (!kpisSlot || !cronoSlot) return;
+  kpisSlot.innerHTML = '<div style="padding:1rem;color:#94A3B8;font-size:.875rem">Carregando KPIs...</div>';
   try {
     const sb = getSupabase();
     const [kpis, recentes, proximos, alertas] = await Promise.all([
@@ -204,19 +220,66 @@ async function carregarPainelAutomacao(slot) {
       sb.rpc('painel_automacao_alertas', { p_dias: 7 }).then(r => r.data || []),
     ]);
     _painelCache = { kpis, recentes, proximos, alertas };
-    renderPainelConteudo(slot);
+    renderPainelKpisESlots();
   } catch (e) {
-    slot.innerHTML = `<div style="padding:1rem;color:#EF4444;font-size:.875rem">Erro carregando painel: ${e.message}</div>`;
+    kpisSlot.innerHTML = `<div style="padding:1rem;color:#EF4444;font-size:.875rem">Erro carregando painel: ${e.message}</div>`;
   }
 }
 
-function renderPainelConteudo(slot) {
-  slot.innerHTML = '';
+function renderPainelKpisESlots() {
+  const kpisSlot = document.getElementById('pa-kpis-slot');
+  const cronoSlot = document.getElementById('pa-crono-slot');
+  if (!kpisSlot || !cronoSlot || !_painelCache) return;
   const { kpis, recentes, proximos, alertas } = _painelCache;
-  slot.append(renderPainelKpis(kpis));
-  if (alertas.length > 0) slot.append(renderPainelAlertas(alertas));
-  slot.append(renderPainelTabs());
-  slot.append(renderPainelTabContent(recentes, proximos));
+  // KPIs + alertas no topo
+  kpisSlot.innerHTML = '';
+  kpisSlot.append(renderPainelKpis(kpis));
+  if (alertas.length > 0) kpisSlot.append(renderPainelAlertas(alertas));
+  // Cronologico no fim
+  cronoSlot.innerHTML = '';
+  cronoSlot.append(el('h2', { class: 'pc-section-title', style: 'margin-top:1rem' }, '📅 Quando roda'));
+  cronoSlot.append(el('p', { class: 'pc-sub' }, 'Cronograma das automações. Use o filtro acima pra focar num produto.'));
+  cronoSlot.append(renderPainelTabs());
+  cronoSlot.append(renderPainelTabContent(filtrarPorProduto(recentes, 'produto_nome'), filtrarPorProduto(proximos, 'produto_nome')));
+}
+
+function filtrarPorProduto(lista, campo) {
+  if (_filtroProduto === 'todos') return lista;
+  return lista.filter(r => {
+    const v = r[campo] || '';
+    if (_filtroProduto === 'motor_central') return r.origem === 'motor_central';
+    return v === _filtroProduto;
+  });
+}
+
+function renderFiltroProduto() {
+  const wrap = el('div', { style: 'display:flex;flex-wrap:wrap;gap:.4rem;padding:.5rem 0 1rem;align-items:center' });
+  wrap.append(el('span', { style: 'font-size:.75rem;color:#94A3B8;margin-right:.4rem' }, 'Filtrar:'));
+  const produtos = ['todos', ...(_snapshot.cerebros || []).map(c => c.produto_nome)];
+  for (const p of produtos) {
+    const ativo = _filtroProduto === p;
+    const chip = el('button', {
+      style: `padding:.3rem .7rem;border-radius:999px;font-size:.75rem;cursor:pointer;border:1px solid ${ativo ? '#3B82F6' : '#1E293B'};background:${ativo ? '#3B82F6' : '#0F172A'};color:${ativo ? '#fff' : '#94A3B8'};font-weight:${ativo ? 600 : 400}`,
+      onclick: () => { _filtroProduto = p; reRenderFiltrado(); },
+    }, p === 'todos' ? 'Todos' : p);
+    wrap.append(chip);
+  }
+  return wrap;
+}
+
+function reRenderFiltrado() {
+  // Re-renderiza filtro (pra atualizar chip ativo) + grid + cronologico
+  const filtroSlot = document.getElementById('pa-filtro-slot');
+  const gridSlot = document.getElementById('pa-grid-slot');
+  if (filtroSlot) { filtroSlot.innerHTML = ''; filtroSlot.append(renderFiltroProduto()); }
+  if (gridSlot) {
+    gridSlot.innerHTML = '';
+    const cers = _filtroProduto === 'todos'
+      ? _snapshot.cerebros
+      : _snapshot.cerebros.filter(c => c.produto_nome === _filtroProduto);
+    gridSlot.append(renderGridCerebros(cers));
+  }
+  renderPainelKpisESlots();
 }
 
 function renderPainelKpis(k) {
@@ -292,13 +355,15 @@ function _fmtRelativo(iso) {
 
 function renderPainelListaCronograma(recentes, proximos) {
   const wrap = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:1rem;padding:.5rem 0 1.5rem' });
+  const TOP_N = 5;
   // RODOU 24H
   const rodouCol = el('div');
   rodouCol.append(el('h3', { style: 'font-size:.875rem;margin:0 0 .5rem;color:#E2E8F0' }, `✓ Rodou nas últimas 24h (${recentes.length})`));
   if (recentes.length === 0) rodouCol.append(el('div', { style: 'padding:1rem;color:#64748B;font-size:.8125rem' }, 'Nada nas últimas 24h.'));
   else {
     const list = el('div', { style: 'display:flex;flex-direction:column;gap:.35rem' });
-    for (const r of recentes) {
+    const visiveis = _expandRodou ? recentes : recentes.slice(0, TOP_N);
+    for (const r of visiveis) {
       const cor = r.ultimo_status_run === 'falha' ? '#EF4444' : (r.ultimo_status_run === 'ok' ? '#22C55E' : '#94A3B8');
       list.append(el('div', { style: `background:#0F172A;border:1px solid #1E293B;border-left:3px solid ${cor};border-radius:5px;padding:.55rem .7rem;display:flex;justify-content:space-between;gap:.4rem;font-size:.8125rem` }, [
         el('div', { style: 'min-width:0;flex:1' }, [
@@ -312,6 +377,12 @@ function renderPainelListaCronograma(recentes, proximos) {
       ]));
     }
     rodouCol.append(list);
+    if (recentes.length > TOP_N) {
+      rodouCol.append(el('button', {
+        style: 'margin-top:.5rem;background:transparent;border:1px dashed #3B82F6;color:#3B82F6;padding:.4rem .8rem;border-radius:4px;font-size:.75rem;cursor:pointer;width:100%',
+        onclick: () => { _expandRodou = !_expandRodou; renderPainelKpisESlots(); },
+      }, _expandRodou ? '— Mostrar só top 5' : `+ Ver os outros ${recentes.length - TOP_N}`));
+    }
   }
   // VAI RODAR
   const vaiCol = el('div');
@@ -319,19 +390,29 @@ function renderPainelListaCronograma(recentes, proximos) {
   if (proximos.length === 0) vaiCol.append(el('div', { style: 'padding:1rem;color:#64748B;font-size:.8125rem' }, 'Nenhum cron ativo.'));
   else {
     const list = el('div', { style: 'display:flex;flex-direction:column;gap:.35rem' });
-    for (const p of proximos) {
-      const cor = p.origem === 'relatorio' ? '#A78BFA' : '#3B82F6';
+    const visiveis = _expandProximos ? proximos : proximos.slice(0, TOP_N);
+    for (const p of visiveis) {
+      const cor = p.origem === 'motor_central' ? '#A78BFA' : '#3B82F6';
+      const labelOrigem = p.origem === 'motor_central'
+        ? `⚙ Motor central ${p.produto_nome || ''}`
+        : `🧠 ${p.produto_nome || '—'}`;
       list.append(el('div', { style: `background:#0F172A;border:1px solid #1E293B;border-left:3px solid ${cor};border-radius:5px;padding:.55rem .7rem;display:flex;justify-content:space-between;gap:.4rem;font-size:.8125rem` }, [
         el('div', { style: 'min-width:0;flex:1' }, [
           el('div', { style: 'font-weight:600' }, p.nome),
           el('div', { style: 'color:#94A3B8;font-size:.7rem;margin-top:.1rem' },
-            `${p.origem === 'relatorio' ? '📊 Relatório' : `🧠 ${p.produto_nome || '—'}`} · ${p.cron_descricao || p.cron_expr || '—'}`),
+            `${labelOrigem} · ${p.cron_descricao || p.cron_expr || '—'}`),
         ]),
         el('div', { style: 'text-align:right;font-size:.7rem;color:#94A3B8' },
           p.ultima_execucao ? `última ${_fmtRelativo(p.ultima_execucao)}` : 'sem rodar'),
       ]));
     }
     vaiCol.append(list);
+    if (proximos.length > TOP_N) {
+      vaiCol.append(el('button', {
+        style: 'margin-top:.5rem;background:transparent;border:1px dashed #3B82F6;color:#3B82F6;padding:.4rem .8rem;border-radius:4px;font-size:.75rem;cursor:pointer;width:100%',
+        onclick: () => { _expandProximos = !_expandProximos; renderPainelKpisESlots(); },
+      }, _expandProximos ? '— Mostrar só top 5' : `+ Ver os outros ${proximos.length - TOP_N}`));
+    }
   }
   wrap.append(rodouCol, vaiCol);
   if (window.matchMedia('(max-width: 768px)').matches) wrap.style.gridTemplateColumns = '1fr';
@@ -388,10 +469,13 @@ function renderPainelCalendario(proximos) {
     if (itens.length === 0) col.append(el('div', { style: 'font-size:.7rem;color:#64748B;font-style:italic' }, '—'));
     else {
       for (const it of itens) {
-        const cor = it.origem === 'relatorio' ? '#A78BFA' : '#3B82F6';
-        col.append(el('div', { style: `background:rgba(255,255,255,0.03);border-left:2px solid ${cor};padding:.3rem .4rem;border-radius:3px;font-size:.65rem;margin-bottom:.2rem`, title: it.nome }, [
+        const cor = it.origem === 'motor_central' ? '#A78BFA' : '#3B82F6';
+        const sub = it.origem === 'motor_central'
+          ? `${it.nome} ⚙`
+          : `${it.nome}${_filtroProduto === 'todos' && it.produto_nome ? ` · ${it.produto_nome}` : ''}`;
+        col.append(el('div', { style: `background:rgba(255,255,255,0.03);border-left:2px solid ${cor};padding:.3rem .4rem;border-radius:3px;font-size:.65rem;margin-bottom:.2rem`, title: it.nome + (it.origem === 'motor_central' ? ` (${it.produto_nome})` : '') }, [
           el('div', { style: 'font-weight:600;color:#E2E8F0' }, it.horaBrt || '—'),
-          el('div', { style: 'color:#94A3B8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, it.nome),
+          el('div', { style: 'color:#94A3B8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, sub),
         ]));
       }
     }
@@ -430,9 +514,13 @@ function renderResumoGlobal(r) {
 }
 
 function renderGridCerebros(cerebros) {
+  const total = (cerebros || []).length;
+  const titulo = _filtroProduto === 'todos'
+    ? `🧠 ${total} Cérebros`
+    : `🧠 ${cerebros[0]?.produto_nome || _filtroProduto}`;
   const box = el('div', { class: 'pc-grid-section' }, [
-    el('h2', { class: 'pc-section-title' }, '10 Cérebros Produto'),
-    el('p', { class: 'pc-sub' }, 'Clique em um cérebro pra abrir o plano de automação por categoria.'),
+    el('h2', { class: 'pc-section-title' }, titulo),
+    el('p', { class: 'pc-sub' }, 'Clique pra abrir o plano de automação por categoria.'),
   ]);
   const grid = el('div', { class: 'pc-grid' });
   for (const c of (cerebros || [])) grid.append(cardCerebro(c));
