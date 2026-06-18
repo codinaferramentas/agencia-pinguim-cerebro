@@ -172,22 +172,20 @@ function renderAbaAtiva(conteudo) {
   if (_abaAtiva === 'cerebros') {
     if (_cerebroAberto) renderTelaCerebro(conteudo, _cerebroAberto);
     else {
-      // V4 (2026-06-18 final) — feedback do Andre pra reuniao.
+      // V5 (2026-06-18 noite) — Matriz Produto x Frequencia (estilo Databricks).
       // Ordem visual:
-      //   1) KPIs (topo - resumo rapido)
+      //   1) KPIs (topo - resumo rapido, com tooltip)
       //   2) Alertas (se houver)
-      //   3) Filtro por produto (chips)
-      //   4) Cards dos 10 cerebros (FOCO PRINCIPAL)
-      //   5) Tabs cronologico/calendario (fim - secundario)
+      //   3) Cards dos 10 cerebros
+      //   4) Matriz Produto x Frequencia (FOCO PRINCIPAL — substitui tabs cronologico)
+      //   5) Filtro por produto (embaixo, conforme Andre pediu)
       const kpisSlot = el('div', { id: 'pa-kpis-slot' });
-      const filtroSlot = el('div', { id: 'pa-filtro-slot' });
       const gridSlot = el('div', { id: 'pa-grid-slot' });
-      const cronoSlot = el('div', { id: 'pa-crono-slot', style: 'margin-top:2rem' });
-      conteudo.append(kpisSlot, filtroSlot, gridSlot, cronoSlot);
-      // Filtro + grid sao sincronos
-      filtroSlot.append(renderFiltroProduto());
+      const matrizSlot = el('div', { id: 'pa-matriz-slot', style: 'margin-top:1.5rem' });
+      const filtroSlot = el('div', { id: 'pa-filtro-slot', style: 'margin-top:1rem' });
+      conteudo.append(kpisSlot, gridSlot, matrizSlot, filtroSlot);
       gridSlot.append(renderGridCerebros(_snapshot.cerebros));
-      // KPIs + cronologico vem das RPCs (assincrono)
+      filtroSlot.append(renderFiltroProduto());
       carregarPainelAutomacao();
     }
   } else {
@@ -201,25 +199,22 @@ function renderAbaAtiva(conteudo) {
 // Substitui a antiga aba 'painel-automacao' que estava em arquivo separado.
 // ============================================================
 let _painelCache = null;
-let _painelViewMode = 'lista'; // 'lista' | 'calendario'
-let _filtroProduto = 'todos';   // V4: filtro por produto
-let _expandRodou = false;       // V4: top 5 + ver outros
-let _expandProximos = false;
+let _filtroProduto = 'todos';   // chip embaixo da matriz
 
 async function carregarPainelAutomacao() {
   const kpisSlot = document.getElementById('pa-kpis-slot');
-  const cronoSlot = document.getElementById('pa-crono-slot');
-  if (!kpisSlot || !cronoSlot) return;
+  const matrizSlot = document.getElementById('pa-matriz-slot');
+  if (!kpisSlot || !matrizSlot) return;
   kpisSlot.innerHTML = '<div style="padding:1rem;color:#94A3B8;font-size:.875rem">Carregando KPIs...</div>';
+  matrizSlot.innerHTML = '<div style="padding:1rem;color:#94A3B8;font-size:.875rem">Carregando matriz...</div>';
   try {
     const sb = getSupabase();
-    const [kpis, recentes, proximos, alertas] = await Promise.all([
+    const [kpis, alertas, matriz] = await Promise.all([
       sb.rpc('painel_automacao_kpis').then(r => r.data?.[0] || {}),
-      sb.rpc('painel_automacao_execucoes_recentes', { p_horas: 24 }).then(r => r.data || []),
-      sb.rpc('painel_automacao_proximos_crons').then(r => r.data || []),
       sb.rpc('painel_automacao_alertas', { p_dias: 7 }).then(r => r.data || []),
+      sb.rpc('painel_automacao_matriz').then(r => r.data || []),
     ]);
-    _painelCache = { kpis, recentes, proximos, alertas };
+    _painelCache = { kpis, alertas, matriz };
     renderPainelKpisESlots();
   } catch (e) {
     kpisSlot.innerHTML = `<div style="padding:1rem;color:#EF4444;font-size:.875rem">Erro carregando painel: ${e.message}</div>`;
@@ -228,28 +223,19 @@ async function carregarPainelAutomacao() {
 
 function renderPainelKpisESlots() {
   const kpisSlot = document.getElementById('pa-kpis-slot');
-  const cronoSlot = document.getElementById('pa-crono-slot');
-  if (!kpisSlot || !cronoSlot || !_painelCache) return;
-  const { kpis, recentes, proximos, alertas } = _painelCache;
-  // KPIs + alertas no topo
+  const matrizSlot = document.getElementById('pa-matriz-slot');
+  if (!kpisSlot || !matrizSlot || !_painelCache) return;
+  const { kpis, alertas, matriz } = _painelCache;
   kpisSlot.innerHTML = '';
   kpisSlot.append(renderPainelKpis(kpis));
   if (alertas.length > 0) kpisSlot.append(renderPainelAlertas(alertas));
-  // Cronologico no fim
-  cronoSlot.innerHTML = '';
-  cronoSlot.append(el('h2', { class: 'pc-section-title', style: 'margin-top:1rem' }, '📅 Quando roda'));
-  cronoSlot.append(el('p', { class: 'pc-sub' }, 'Cronograma das automações. Use o filtro acima pra focar num produto.'));
-  cronoSlot.append(renderPainelTabs());
-  cronoSlot.append(renderPainelTabContent(filtrarPorProduto(recentes, 'produto_nome'), filtrarPorProduto(proximos, 'produto_nome')));
+  matrizSlot.innerHTML = '';
+  matrizSlot.append(renderMatrizFrequencia(filtrarMatriz(matriz)));
 }
 
-function filtrarPorProduto(lista, campo) {
-  if (_filtroProduto === 'todos') return lista;
-  return lista.filter(r => {
-    const v = r[campo] || '';
-    if (_filtroProduto === 'motor_central') return r.origem === 'motor_central';
-    return v === _filtroProduto;
-  });
+function filtrarMatriz(linhas) {
+  if (_filtroProduto === 'todos') return linhas;
+  return linhas.filter(l => l.produto_nome === _filtroProduto);
 }
 
 function renderFiltroProduto() {
@@ -268,7 +254,7 @@ function renderFiltroProduto() {
 }
 
 function reRenderFiltrado() {
-  // Re-renderiza filtro (pra atualizar chip ativo) + grid + cronologico
+  // Re-renderiza filtro (pra atualizar chip ativo) + grid + matriz
   const filtroSlot = document.getElementById('pa-filtro-slot');
   const gridSlot = document.getElementById('pa-grid-slot');
   if (filtroSlot) { filtroSlot.innerHTML = ''; filtroSlot.append(renderFiltroProduto()); }
@@ -282,17 +268,205 @@ function reRenderFiltrado() {
   renderPainelKpisESlots();
 }
 
+// ============================================================
+// V5 (2026-06-18 noite) — MATRIZ Produto x Frequencia
+// Estilo Databricks Matrix View. Substitui tabs cronologico/calendario.
+// ============================================================
+//
+// Colunas derivadas do cron_expr:
+//   - Diario (0 H * * *)
+//   - Seg (0 H * * 1)
+//   - Ter (0 H * * 2) ...
+//   - Tempo-real (trigger_tipo=webhook OU evento_auto)
+//   - Manual (trigger_tipo=manual)
+//
+// Celulas: emoji da categoria + asterisco se motor_unico=true.
+// Hover: tooltip com categoria + horario + ultima execucao + status.
+// Click na linha (produto): abre drill-down do cerebro.
+
+const FREQ_COLS = [
+  { key: 'diario',    label: 'Diário',     icon: '🌅' },
+  { key: 'seg',       label: 'Seg',        icon: '📍' },
+  { key: 'ter',       label: 'Ter',        icon: '📍' },
+  { key: 'qua',       label: 'Qua',        icon: '📍' },
+  { key: 'qui',       label: 'Qui',        icon: '📍' },
+  { key: 'sex',       label: 'Sex',        icon: '📍' },
+  { key: 'sab',       label: 'Sáb',        icon: '📍' },
+  { key: 'dom',       label: 'Dom',        icon: '📍' },
+  { key: 'tempo_real',label: 'Tempo real', icon: '⚡' },
+  { key: 'manual',    label: 'Manual',     icon: '✋' },
+];
+
+function _freqDeLinha(l) {
+  // Retorna a chave de coluna onde essa linha cai
+  if (l.trigger_tipo === 'manual') return 'manual';
+  if (l.trigger_tipo === 'webhook' || l.trigger_tipo === 'evento_auto' || l.trigger_tipo === 'evento_avisar') return 'tempo_real';
+  if (!l.schedule_cron) return null;
+  const parts = l.schedule_cron.trim().split(/\s+/);
+  if (parts.length < 5) return null;
+  const dow = parts[4];
+  if (dow === '*') return 'diario';
+  // Pode ter multiplos (ex: '1,3' = seg+qua). Pega o primeiro como representativo.
+  const map = { 0: 'dom', 1: 'seg', 2: 'ter', 3: 'qua', 4: 'qui', 5: 'sex', 6: 'sab', 7: 'dom' };
+  const first = parseInt(dow.split(',')[0].split('-')[0], 10);
+  if (isNaN(first)) return null;
+  return map[first % 7];
+}
+
+function _horaBrt(cron) {
+  if (!cron) return null;
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length < 5) return null;
+  const minUtc = parts[0], hourUtc = parts[1];
+  if (!/^\d+$/.test(minUtc) || !/^\d+$/.test(hourUtc)) return null;
+  const h = (parseInt(hourUtc,10) - 3 + 24) % 24;
+  return `${String(h).padStart(2,'0')}:${minUtc.padStart(2,'0')} BRT`;
+}
+
+function renderMatrizFrequencia(linhas) {
+  const wrap = el('div');
+  wrap.append(el('h2', { class: 'pc-section-title' }, '📊 Matriz Produto × Frequência'));
+  wrap.append(el('p', { class: 'pc-sub' }, 'Linha = produto, coluna = quando roda. Bata o olho e veja o quê roda diário/semanal/tempo-real. Hover na célula pra detalhe. Clique na linha pra abrir o cérebro.'));
+
+  if (linhas.length === 0) {
+    wrap.append(el('div', { style: 'padding:2rem;color:#64748B;text-align:center' }, 'Nada rodando ainda.'));
+    return wrap;
+  }
+
+  // Agrupa por (produto, frequencia) -> [categorias]
+  const porProduto = new Map();
+  for (const l of linhas) {
+    if (!porProduto.has(l.produto_nome)) {
+      porProduto.set(l.produto_nome, { cerebro_id: l.cerebro_id, produto_emoji: l.produto_emoji, celulas: {} });
+    }
+    const freq = _freqDeLinha(l);
+    if (!freq) continue;
+    const entry = porProduto.get(l.produto_nome);
+    if (!entry.celulas[freq]) entry.celulas[freq] = [];
+    entry.celulas[freq].push(l);
+  }
+
+  // Detecta colunas com pelo menos 1 item (esconde colunas vazias pra nao poluir)
+  const colsUsadas = new Set();
+  for (const [, entry] of porProduto) {
+    for (const k of Object.keys(entry.celulas)) colsUsadas.add(k);
+  }
+  const cols = FREQ_COLS.filter(c => colsUsadas.has(c.key));
+
+  // Container da tabela com scroll horizontal
+  const tableWrap = el('div', { style: 'overflow-x:auto;border:1px solid #1E293B;border-radius:6px;background:#0F172A' });
+  const table = el('table', { style: 'width:100%;border-collapse:collapse;font-size:.8125rem' });
+
+  // Header
+  const thead = el('thead');
+  const trHead = el('tr', { style: 'background:#1E293B' });
+  trHead.append(el('th', { style: 'padding:.7rem .85rem;text-align:left;color:#E2E8F0;font-weight:600;position:sticky;left:0;background:#1E293B;z-index:2;min-width:170px' }, 'Cérebro'));
+  for (const c of cols) {
+    trHead.append(el('th', { style: 'padding:.7rem .5rem;text-align:center;color:#94A3B8;font-weight:600;min-width:78px' }, [
+      el('div', { style: 'font-size:1rem' }, c.icon),
+      el('div', { style: 'font-size:.7rem;margin-top:.1rem' }, c.label),
+    ]));
+  }
+  thead.append(trHead);
+  table.append(thead);
+
+  // Body
+  const tbody = el('tbody');
+  const produtosOrdenados = [...porProduto.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [nome, entry] of produtosOrdenados) {
+    const tr = el('tr', {
+      style: 'border-top:1px solid #1E293B;cursor:pointer;transition:background .15s',
+      onmouseover: function() { this.style.background = 'rgba(59,130,246,0.06)'; },
+      onmouseout: function() { this.style.background = ''; },
+      onclick: () => abrirCerebro(entry.cerebro_id),
+    });
+    tr.append(el('td', { style: 'padding:.7rem .85rem;color:#E2E8F0;font-weight:600;position:sticky;left:0;background:#0F172A;z-index:1' }, [
+      el('span', { style: 'margin-right:.4rem' }, entry.produto_emoji || '🧠'),
+      nome,
+    ]));
+    for (const c of cols) {
+      const cats = entry.celulas[c.key] || [];
+      const td = el('td', { style: 'padding:.5rem;text-align:center;vertical-align:middle' });
+      if (cats.length === 0) {
+        td.append(el('span', { style: 'color:#334155;font-size:.65rem' }, '—'));
+      } else {
+        const cellInner = el('div', { style: 'display:flex;justify-content:center;gap:.2rem;flex-wrap:wrap' });
+        for (const cat of cats) {
+          const corBorda = cat.ultimo_status_run === 'falha' ? '#EF4444'
+                         : cat.ultimo_status_run === 'ok' ? '#22C55E' : '#475569';
+          const tip = [
+            `${cat.categoria_emoji} ${cat.categoria_nome}`,
+            cat.motor_unico ? '⚙ Motor central (1 cron distribui pros 10)' : null,
+            cat.schedule_descricao ? `🕐 ${cat.schedule_descricao}` : null,
+            _horaBrt(cat.schedule_cron) ? `Horário: ${_horaBrt(cat.schedule_cron)}` : null,
+            cat.ultima_execucao ? `Última: ${new Date(cat.ultima_execucao).toLocaleString('pt-BR')} (${cat.ultimo_status_run || '—'})` : 'Nunca rodou',
+          ].filter(Boolean).join('\n');
+          const emojiBox = el('span', {
+            style: `display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:6px;background:#1E293B;border:2px solid ${corBorda};font-size:1.05rem;position:relative`,
+            title: tip,
+          }, cat.categoria_emoji || '📦');
+          if (cat.motor_unico) {
+            emojiBox.append(el('span', {
+              style: 'position:absolute;top:-4px;right:-4px;background:#A78BFA;color:#fff;width:14px;height:14px;border-radius:50%;font-size:.6rem;display:flex;align-items:center;justify-content:center;font-weight:700;line-height:1',
+              title: 'Motor central — 1 cron único distribui pros 10 cérebros',
+            }, '*'));
+          }
+          cellInner.append(emojiBox);
+        }
+        td.append(cellInner);
+      }
+      tr.append(td);
+    }
+    tbody.append(tr);
+  }
+  table.append(tbody);
+  tableWrap.append(table);
+  wrap.append(tableWrap);
+
+  // Legenda
+  const legenda = el('div', { style: 'display:flex;gap:1.2rem;flex-wrap:wrap;padding:.6rem 0;font-size:.7rem;color:#94A3B8;margin-top:.5rem' });
+  legenda.append(el('span', {}, '🟢 borda verde = última execução OK'));
+  legenda.append(el('span', {}, '🔴 borda vermelha = falhou'));
+  legenda.append(el('span', {}, '⚪ borda cinza = ainda não rodou'));
+  legenda.append(el('span', {}, [
+    el('span', { style: 'background:#A78BFA;color:#fff;width:14px;height:14px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;margin-right:.3rem' }, '*'),
+    'motor central (1 cron único distribui pros 10)',
+  ]));
+  wrap.append(legenda);
+
+  return wrap;
+}
+
 function renderPainelKpis(k) {
   const cards = [
-    { num: k.total_executou_24h || 0, label: 'rodaram nas últimas 24h', cor: '#22C55E', emoji: '✓' },
-    { num: k.total_rodando || 0, label: 'automatizadas (rodando)', cor: '#3B82F6', emoji: '🟢', sub: `de ${k.total_categorias_aplicaveis || 0} categorias` },
-    { num: k.total_manuais || 0, label: 'manuais (você controla)', cor: '#F59E0B', emoji: '✋' },
-    { num: k.total_falhou_24h || 0, label: 'falharam nas últimas 24h', cor: (k.total_falhou_24h || 0) > 0 ? '#EF4444' : '#94A3B8', emoji: '✗' },
-    { num: k.total_defasadas_7d || 0, label: 'defasadas (sem update >7d)', cor: (k.total_defasadas_7d || 0) > 0 ? '#F59E0B' : '#94A3B8', emoji: '⚠' },
+    {
+      num: k.total_executou_24h || 0, label: 'rodaram nas últimas 24h', cor: '#22C55E', emoji: '✓',
+      tip: 'Crons que executaram pelo menos 1 vez nas últimas 24h (independente de sucesso ou falha).',
+    },
+    {
+      num: k.total_rodando || 0, label: 'automatizadas (rodando)', cor: '#3B82F6', emoji: '🟢',
+      sub: `de ${k.total_categorias_aplicaveis || 0} categorias`,
+      tip: 'Categorias de cérebros com status "rodando" — ou seja, têm cron ativo, webhook, ou processamento por evento.',
+    },
+    {
+      num: k.total_manuais || 0, label: 'manuais (você controla)', cor: '#F59E0B', emoji: '✋',
+      tip: 'Categorias que você precisa rodar à mão (ex: subir aula no Drive). Não tem cron.',
+    },
+    {
+      num: k.total_falhou_24h || 0, label: 'falharam nas últimas 24h', cor: (k.total_falhou_24h || 0) > 0 ? '#EF4444' : '#94A3B8', emoji: '✗',
+      tip: 'Crons que rodaram nas últimas 24h e retornaram erro. Olhe o card da categoria no cérebro pra ver o motivo.',
+    },
+    {
+      num: k.total_defasadas_7d || 0, label: 'defasadas (sem update >7d)', cor: (k.total_defasadas_7d || 0) > 0 ? '#F59E0B' : '#94A3B8', emoji: '⚠',
+      tip: 'Categorias marcadas "rodando" mas que NUNCA rodaram, ou cuja última execução foi há mais de 7 dias. Geralmente: configurou mas o cron ainda não disparou pela primeira vez.',
+    },
   ];
   const wrap = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.6rem;padding:1rem 0' });
   for (const c of cards) {
-    wrap.append(el('div', { style: `background:#0F172A;border:1px solid #1E293B;border-left:3px solid ${c.cor};border-radius:6px;padding:.8rem` }, [
+    wrap.append(el('div', {
+      style: `background:#0F172A;border:1px solid #1E293B;border-left:3px solid ${c.cor};border-radius:6px;padding:.8rem;cursor:help`,
+      title: c.tip,
+    }, [
       el('div', { style: `font-size:1.5rem;font-weight:700;color:${c.cor};line-height:1` }, `${c.emoji} ${c.num}`),
       el('div', { style: 'font-size:.75rem;color:#94A3B8;margin-top:.35rem' }, c.label),
       c.sub ? el('div', { style: 'font-size:.65rem;color:#64748B;margin-top:.1rem' }, c.sub) : null,
@@ -325,164 +499,6 @@ function renderPainelAlertas(alertas) {
     if (lista.length > 5) box.append(el('div', { style: 'font-size:.7rem;color:#64748B;padding-left:.4rem' }, `+ ${lista.length - 5} outros…`));
   }
   return box;
-}
-
-function renderPainelTabs() {
-  const tabs = el('div', { style: 'display:flex;gap:.25rem;border-bottom:1px solid #1E293B;margin-bottom:.5rem' });
-  const tab = (id, label) => el('button', {
-    style: `padding:.5rem .85rem;background:transparent;border:none;border-bottom:2px solid ${_painelViewMode === id ? '#3B82F6' : 'transparent'};color:${_painelViewMode === id ? '#fff' : '#94A3B8'};cursor:pointer;font-size:.8125rem;font-weight:${_painelViewMode === id ? 600 : 400}`,
-    onclick: () => { _painelViewMode = id; renderPainelConteudo(document.getElementById('pa-painel-slot')); },
-  }, label);
-  tabs.append(tab('lista', '📋 Hoje + Próximos'), tab('calendario', '📅 Calendário semanal'));
-  return tabs;
-}
-
-function renderPainelTabContent(recentes, proximos) {
-  if (_painelViewMode === 'calendario') return renderPainelCalendario(proximos);
-  return renderPainelListaCronograma(recentes, proximos);
-}
-
-function _fmtRelativo(iso) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  const h = Math.floor((Date.now() - d.getTime()) / 3600000);
-  const dias = Math.floor(h / 24);
-  if (h < 1) return `há ${Math.max(1, Math.floor((Date.now() - d.getTime()) / 60000))}min`;
-  if (h < 24) return `há ${h}h`;
-  if (dias < 30) return `há ${dias}d`;
-  return `há ${Math.floor(dias/30)} meses`;
-}
-
-function renderPainelListaCronograma(recentes, proximos) {
-  const wrap = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:1rem;padding:.5rem 0 1.5rem' });
-  const TOP_N = 5;
-  // RODOU 24H
-  const rodouCol = el('div');
-  rodouCol.append(el('h3', { style: 'font-size:.875rem;margin:0 0 .5rem;color:#E2E8F0' }, `✓ Rodou nas últimas 24h (${recentes.length})`));
-  if (recentes.length === 0) rodouCol.append(el('div', { style: 'padding:1rem;color:#64748B;font-size:.8125rem' }, 'Nada nas últimas 24h.'));
-  else {
-    const list = el('div', { style: 'display:flex;flex-direction:column;gap:.35rem' });
-    const visiveis = _expandRodou ? recentes : recentes.slice(0, TOP_N);
-    for (const r of visiveis) {
-      const cor = r.ultimo_status_run === 'falha' ? '#EF4444' : (r.ultimo_status_run === 'ok' ? '#22C55E' : '#94A3B8');
-      list.append(el('div', { style: `background:#0F172A;border:1px solid #1E293B;border-left:3px solid ${cor};border-radius:5px;padding:.55rem .7rem;display:flex;justify-content:space-between;gap:.4rem;font-size:.8125rem` }, [
-        el('div', { style: 'min-width:0;flex:1' }, [
-          el('div', { style: 'font-weight:600' }, `${r.categoria_emoji || '📦'} ${r.categoria_nome || r.categoria_slug}`),
-          el('div', { style: 'color:#94A3B8;font-size:.7rem;margin-top:.1rem' }, `${r.produto_nome} · ${r.trigger_tipo}`),
-        ]),
-        el('div', { style: 'text-align:right;font-size:.7rem' }, [
-          el('div', { style: `color:${cor};font-weight:600` }, r.ultimo_status_run || '—'),
-          el('div', { style: 'color:#94A3B8' }, _fmtRelativo(r.ultima_execucao)),
-        ]),
-      ]));
-    }
-    rodouCol.append(list);
-    if (recentes.length > TOP_N) {
-      rodouCol.append(el('button', {
-        style: 'margin-top:.5rem;background:transparent;border:1px dashed #3B82F6;color:#3B82F6;padding:.4rem .8rem;border-radius:4px;font-size:.75rem;cursor:pointer;width:100%',
-        onclick: () => { _expandRodou = !_expandRodou; renderPainelKpisESlots(); },
-      }, _expandRodou ? '— Mostrar só top 5' : `+ Ver os outros ${recentes.length - TOP_N}`));
-    }
-  }
-  // VAI RODAR
-  const vaiCol = el('div');
-  vaiCol.append(el('h3', { style: 'font-size:.875rem;margin:0 0 .5rem;color:#E2E8F0' }, `⏰ Agendamentos ativos (${proximos.length})`));
-  if (proximos.length === 0) vaiCol.append(el('div', { style: 'padding:1rem;color:#64748B;font-size:.8125rem' }, 'Nenhum cron ativo.'));
-  else {
-    const list = el('div', { style: 'display:flex;flex-direction:column;gap:.35rem' });
-    const visiveis = _expandProximos ? proximos : proximos.slice(0, TOP_N);
-    for (const p of visiveis) {
-      const cor = p.origem === 'motor_central' ? '#A78BFA' : '#3B82F6';
-      const labelOrigem = p.origem === 'motor_central'
-        ? `⚙ Motor central ${p.produto_nome || ''}`
-        : `🧠 ${p.produto_nome || '—'}`;
-      list.append(el('div', { style: `background:#0F172A;border:1px solid #1E293B;border-left:3px solid ${cor};border-radius:5px;padding:.55rem .7rem;display:flex;justify-content:space-between;gap:.4rem;font-size:.8125rem` }, [
-        el('div', { style: 'min-width:0;flex:1' }, [
-          el('div', { style: 'font-weight:600' }, p.nome),
-          el('div', { style: 'color:#94A3B8;font-size:.7rem;margin-top:.1rem' },
-            `${labelOrigem} · ${p.cron_descricao || p.cron_expr || '—'}`),
-        ]),
-        el('div', { style: 'text-align:right;font-size:.7rem;color:#94A3B8' },
-          p.ultima_execucao ? `última ${_fmtRelativo(p.ultima_execucao)}` : 'sem rodar'),
-      ]));
-    }
-    vaiCol.append(list);
-    if (proximos.length > TOP_N) {
-      vaiCol.append(el('button', {
-        style: 'margin-top:.5rem;background:transparent;border:1px dashed #3B82F6;color:#3B82F6;padding:.4rem .8rem;border-radius:4px;font-size:.75rem;cursor:pointer;width:100%',
-        onclick: () => { _expandProximos = !_expandProximos; renderPainelKpisESlots(); },
-      }, _expandProximos ? '— Mostrar só top 5' : `+ Ver os outros ${proximos.length - TOP_N}`));
-    }
-  }
-  wrap.append(rodouCol, vaiCol);
-  if (window.matchMedia('(max-width: 768px)').matches) wrap.style.gridTemplateColumns = '1fr';
-  return wrap;
-}
-
-function _diasSemanaDeCron(cronExpr) {
-  if (!cronExpr) return new Set();
-  const parts = cronExpr.trim().split(/\s+/);
-  if (parts.length < 5) return new Set();
-  const dow = parts[4];
-  if (dow === '*') return new Set([0,1,2,3,4,5,6]);
-  const dias = new Set();
-  for (const tok of dow.split(',')) {
-    if (tok.includes('-')) { const [a,b] = tok.split('-').map(Number); for (let i=a;i<=b;i++) dias.add(i%7); }
-    else if (!isNaN(parseInt(tok,10))) dias.add(parseInt(tok,10) % 7);
-  }
-  return dias;
-}
-function _horaBrtDeCron(cronExpr) {
-  if (!cronExpr) return null;
-  const parts = cronExpr.trim().split(/\s+/);
-  if (parts.length < 5) return null;
-  const minUtc = parts[0], hourUtc = parts[1];
-  if (!/^\d+$/.test(minUtc) || !/^\d+$/.test(hourUtc)) return cronExpr.slice(0,12);
-  const h = (parseInt(hourUtc,10) - 3 + 24) % 24;
-  return `${String(h).padStart(2,'0')}:${minUtc.padStart(2,'0')}`;
-}
-
-function renderPainelCalendario(proximos) {
-  const wrap = el('div', { style: 'padding:.5rem 0 1.5rem' });
-  const hoje = new Date();
-  const dow = hoje.getDay();
-  const offsetSeg = dow === 0 ? -6 : 1 - dow;
-  const seg = new Date(hoje); seg.setDate(hoje.getDate() + offsetSeg); seg.setHours(0,0,0,0);
-  const dias = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(seg); d.setDate(seg.getDate() + i);
-    dias.push({ data: d, label: d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }), ehHoje: d.toDateString() === hoje.toDateString() });
-  }
-  const porDia = dias.map(() => []);
-  for (const p of proximos) {
-    const diasCron = _diasSemanaDeCron(p.cron_expr);
-    for (let i = 0; i < 7; i++) {
-      if (diasCron.has(dias[i].data.getDay())) porDia[i].push({ ...p, horaBrt: _horaBrtDeCron(p.cron_expr) });
-    }
-  }
-  const grid = el('div', { style: 'display:grid;grid-template-columns:repeat(7,1fr);gap:.35rem' });
-  for (let i = 0; i < 7; i++) {
-    const dia = dias[i];
-    const col = el('div', { style: `background:#0F172A;border:1px solid #1E293B;${dia.ehHoje ? 'border-top:3px solid #3B82F6;' : ''}border-radius:5px;padding:.45rem;min-height:180px` });
-    col.append(el('div', { style: `font-size:.7rem;font-weight:600;margin-bottom:.4rem;${dia.ehHoje ? 'color:#3B82F6' : 'color:#94A3B8'}` }, `${dia.label}${dia.ehHoje ? ' • hoje' : ''}`));
-    const itens = porDia[i].sort((a,b) => (a.horaBrt||'').localeCompare(b.horaBrt||''));
-    if (itens.length === 0) col.append(el('div', { style: 'font-size:.7rem;color:#64748B;font-style:italic' }, '—'));
-    else {
-      for (const it of itens) {
-        const cor = it.origem === 'motor_central' ? '#A78BFA' : '#3B82F6';
-        const sub = it.origem === 'motor_central'
-          ? `${it.nome} ⚙`
-          : `${it.nome}${_filtroProduto === 'todos' && it.produto_nome ? ` · ${it.produto_nome}` : ''}`;
-        col.append(el('div', { style: `background:rgba(255,255,255,0.03);border-left:2px solid ${cor};padding:.3rem .4rem;border-radius:3px;font-size:.65rem;margin-bottom:.2rem`, title: it.nome + (it.origem === 'motor_central' ? ` (${it.produto_nome})` : '') }, [
-          el('div', { style: 'font-weight:600;color:#E2E8F0' }, it.horaBrt || '—'),
-          el('div', { style: 'color:#94A3B8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, sub),
-        ]));
-      }
-    }
-    grid.append(col);
-  }
-  wrap.append(grid);
-  return wrap;
 }
 
 // ============================================================
@@ -539,10 +555,10 @@ function cardCerebro(c) {
       el('div', { class: 'pc-card-titulo' }, c.produto_nome || c.produto_slug),
     ]),
     el('div', { class: 'pc-card-counts' }, [
-      mini('🟢', pc.rodando || 0, '#22C55E', 'Rodando'),
-      mini('🟡', pc.em_construcao || 0, '#F59E0B', 'Em construção'),
-      mini('🔵', pc.planejada || 0, '#3B82F6', 'Planejada'),
-      mini('⚫', pc.sem_coleta || 0, '#94A3B8', 'Sem coleta'),
+      mini('🟢', pc.rodando || 0, '#22C55E', 'Rodando: categorias com automação ativa (cron, webhook ou evento) já configurada e funcionando.'),
+      mini('🟡', pc.em_construcao || 0, '#F59E0B', 'Em construção: categorias decididas na reunião e em implementação.'),
+      mini('🔵', pc.planejada || 0, '#3B82F6', 'Planejada: categorias acordadas na reunião, ainda não começaram a ser implementadas.'),
+      mini('⚫', pc.sem_coleta || 0, '#94A3B8', 'Sem coleta: categorias pendentes de discussão ou que dependem de pré-requisito externo (ex: comercial fazer call).'),
     ]),
     el('div', { class: 'pc-card-cta' }, 'Abrir plano →'),
   ]);
