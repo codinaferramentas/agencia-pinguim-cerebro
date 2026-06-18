@@ -101,6 +101,11 @@ let _filtroStatus = 'todos'; // 'todos' | 'sem_coleta' | 'planejada' | 'em_const
 export async function renderPlanoCerebros() {
   const container = document.getElementById('page-plano-cerebros');
   if (!container) return;
+  // V3 fix (2026-06-18): zera estado de navegacao toda vez que entra na aba.
+  // Antes ficava preso no ultimo cerebro aberto quando o usuario navegava p/ outra aba e voltava.
+  _cerebroAberto = null;
+  _filtroStatus = 'todos';
+  _mostrarNaoAplicaveis = false;
   container.innerHTML = '';
   injetarEstilos();
 

@@ -18,7 +18,7 @@ import { renderFunis } from './funis.js?v=20260428p';
 import { renderOficina } from './oficina.js?v=20260512a';
 import { renderAgendamentos } from './agendamentos.js?v=20260513b';
 import { renderPainelAutomacao } from './painel-automacao.js?v=20260618a';
-import { renderPlanoCerebros } from './plano-cerebros.js?v=20260618c';
+import { renderPlanoCerebros } from './plano-cerebros.js?v=20260618d';
 import { renderClintMapeamento } from './clint-mapeamento.js?v=20260504a';
 import { renderReescritorPagina } from './reescritor-pagina.js?v=20260605a';
 
