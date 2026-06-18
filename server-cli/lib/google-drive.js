@@ -124,6 +124,43 @@ async function listarPastas({ parent_id, cliente_id, pageSize = 100 } = {}) {
   };
 }
 
+// ============================================================
+// criarPasta — V3 (2026-06-18) cria pasta nova no Drive
+// Se parent_id ausente, cria na raiz do MyDrive.
+// Retorna {id, nome, link, parent_id}
+// ============================================================
+async function criarPasta({ nome, parent_id, cliente_id } = {}) {
+  if (!nome || !nome.trim()) throw new Error('nome obrigatorio');
+  const access_token = await oauth.obterAccessTokenAtivo({ cliente_id });
+
+  const metadata = {
+    name: nome.trim(),
+    mimeType: 'application/vnd.google-apps.folder',
+    parents: parent_id ? [parent_id] : undefined,
+  };
+
+  const resp = await fetch('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id,name,webViewLink,parents', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${access_token}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify(metadata),
+  });
+  const json = await resp.json();
+  if (!resp.ok) {
+    const msg = json.error?.message || 'erro desconhecido';
+    throw new Error(`Drive API ${resp.status}: ${msg}`);
+  }
+  return {
+    id: json.id,
+    nome: json.name,
+    link: json.webViewLink,
+    parent_id: (json.parents || [])[0] || null,
+  };
+}
+
 // Mapa amigavel de mimeTypes mais comuns
 const MIME_LABELS = {
   'application/vnd.google-apps.document':     'Doc',
@@ -146,6 +183,7 @@ function rotuloMime(mime) {
 module.exports = {
   buscarArquivos,
   listarPastas,
+  criarPasta,
   rotuloMime,
   MIME_LABELS,
 };

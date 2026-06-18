@@ -1379,6 +1379,26 @@ app.post('/api/drive/listar-pastas', async (req, res) => {
 });
 
 // ============================================================
+// V3 (2026-06-18) — POST /api/drive/criar-pasta
+// Body: { nome, parent_id?, cliente_id? }
+// Resposta: { id, nome, link, parent_id }
+// ============================================================
+app.post('/api/drive/criar-pasta', async (req, res) => {
+  try {
+    const { nome, parent_id, cliente_id } = req.body || {};
+    if (!nome || !nome.trim()) return res.status(400).json({ ok: false, error: 'nome obrigatorio' });
+    const t0 = Date.now();
+    const r = await googleDrive.criarPasta({ nome, parent_id, cliente_id });
+    const dur_ms = Date.now() - t0;
+    console.log(`[drive-criar-pasta] ${dur_ms}ms | "${nome}" parent=${parent_id || 'root'} | id=${r.id}`);
+    res.json({ ok: true, ...r, latencia_ms: dur_ms });
+  } catch (e) {
+    console.error('[drive-criar-pasta] erro:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ============================================================
 // V2.12 Fase 2 — POST /api/drive/ler
 // Body: { fileId, cliente_id?, tipo?: 'auto'|'doc'|'planilha'|'pdf'|'texto', aba?, range?, limite_linhas? }
 // Resposta varia por tipo:
