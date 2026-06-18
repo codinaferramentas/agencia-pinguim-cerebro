@@ -136,12 +136,17 @@ async function detectarTodos({ on_log = () => {} } = {}) {
   // Recalcular status ANTES (futuro -> pre_aviso -> atrasado)
   await rodarSQL(`SELECT pinguim.proximas_edicoes_recalcular_status();`);
 
-  // Produtos elegiveis: os 10 da matriz
+  // Produtos elegiveis: SO os que tem motor de paginas_venda RODANDO.
+  // Se nao tem motor, a pagina no banco eh semente da carga inicial e nao
+  // deve gerar alerta de proxima edicao (Andre cravou 2026-06-18).
   const produtos = await rodarSQL(`
     SELECT p.id AS produto_id, p.nome AS produto_nome, c.id AS cerebro_id
       FROM pinguim.produtos p
       JOIN pinguim.cerebros c ON c.produto_id = p.id
-     WHERE p.nome IN ('Lo-fi Desafio','Elo','Proalt','Lyra','Orion','Taurus',
+      JOIN pinguim.cerebro_plano_categoria cpc ON cpc.cerebro_id = c.id
+     WHERE cpc.categoria_slug = 'paginas_venda'
+       AND cpc.status_automacao = 'rodando'
+       AND p.nome IN ('Lo-fi Desafio','Elo','Proalt','Lyra','Orion','Taurus',
                       'Low Ticket Desafio','Mentoria Express','365 Roteiros validados','Analise de Perfil')
      ORDER BY p.nome;
   `);
