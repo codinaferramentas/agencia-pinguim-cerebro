@@ -553,6 +553,18 @@ function cardCategoria(p, integracoes, cerebro_id) {
     }, '▶ Adicionar aula via YouTube'));
   }
 
+  // Botao extra: pesquisas tem webhook YA Forms — Andre cola URL no YA Forms
+  // e respostas chegam em tempo real, vetorizadas automaticamente
+  const aceitaPesquisa = (p.categoria_tipos_fonte || []).includes('resposta_pesquisa')
+    || p.categoria_slug === 'pesquisas';
+  if (aceitaPesquisa) {
+    acoes.push(el('button', {
+      class: 'pc-btn-secondary',
+      onclick: () => abrirModalWebhookPesquisa(p, cerebro_id),
+      title: 'Mostra a URL do webhook YA Forms (cola lá pra respostas entrarem em tempo real)',
+    }, '📋 URL webhook YA Forms'));
+  }
+
   acoes.push(el('button', {
     class: 'pc-btn-secondary',
     onclick: () => abrirModalEditar(p, integracoes, cerebro_id),
@@ -852,6 +864,137 @@ async function processarAulaYoutube(plano, cerebro_id) {
     btn.disabled = false;
     btn.textContent = '▶ Processar';
     btn.style.opacity = '';
+  }
+}
+
+// ============================================================
+// MODAL — URL do webhook YA Forms pra pesquisas
+// Mostra URL pronta, botao copiar, e ativa automacao no banco
+// quando o usuario confirma que colou no YA Forms.
+// ============================================================
+function abrirModalWebhookPesquisa(plano, cerebro_id) {
+  const det = _detalheCache.get(cerebro_id);
+  const produtoSlug = det?.cerebro?.produto_slug;
+  if (!produtoSlug) {
+    alert('Nao consegui descobrir o slug do produto. Recarrega a pagina.');
+    return;
+  }
+
+  const url = `${SB_URL}/functions/v1/webhook-cerebro?produto=${encodeURIComponent(produtoSlug)}&categoria=${encodeURIComponent(plano.categoria_slug)}`;
+  const jaAtivo = plano.status_automacao === 'rodando' && plano.trigger_tipo === 'webhook';
+
+  const modal = document.getElementById('pc-modal');
+  modal.innerHTML = '';
+  modal.classList.remove('pc-hidden');
+
+  const inner = el('div', { class: 'pc-modal-inner', style: 'max-width:600px' });
+  modal.append(inner);
+
+  inner.append(
+    el('div', { class: 'pc-modal-head' }, [
+      el('h2', null, '📋 URL do webhook YA Forms'),
+      el('button', { class: 'pc-close', onclick: fecharModal }, '×'),
+    ]),
+    el('p', { class: 'pc-modal-sub' },
+      `Cola essa URL no campo "webhook" do formulario YA Forms do ${det.cerebro.produto_nome}. Cada resposta nova vai virar uma fonte vetorizada no cerebro em tempo real.`),
+  );
+
+  const body = el('div', { class: 'pc-modal-body' });
+  inner.append(body);
+
+  body.append(
+    el('label', { style: 'display:block;font-weight:600;margin-bottom:6px;font-size:.875rem' }, 'URL do webhook'),
+    el('div', { style: 'display:flex;gap:.5rem;align-items:stretch' }, [
+      el('input', {
+        id: 'pc-fld-webhook-url',
+        type: 'text',
+        readonly: 'readonly',
+        value: url,
+        style: 'flex:1;padding:10px 12px;border:1px solid #CBD5E1;border-radius:6px;font-size:13px;font-family:monospace;background:#F8FAFC;color:#1E293B',
+      }),
+      el('button', {
+        id: 'pc-btn-copiar-webhook',
+        class: 'pc-btn-primary',
+        style: 'white-space:nowrap',
+        onclick: async (e) => {
+          try {
+            await navigator.clipboard.writeText(url);
+            e.currentTarget.textContent = '✓ Copiado';
+            e.currentTarget.style.background = '#22C55E';
+            setTimeout(() => {
+              e.currentTarget.textContent = '📋 Copiar';
+              e.currentTarget.style.background = '';
+            }, 1800);
+          } catch {
+            // fallback: seleciona o input
+            document.getElementById('pc-fld-webhook-url').select();
+            alert('Pressiona Ctrl+C pra copiar');
+          }
+        },
+      }, '📋 Copiar'),
+    ]),
+    el('div', { style: 'margin-top:1rem;padding:.75rem;background:#FEF3C7;border:1px solid #F59E0B;border-radius:6px;font-size:.8125rem;color:#92400E;line-height:1.5' }, [
+      el('strong', null, '⚠ Importante: '),
+      'Cada produto tem perguntas diferentes. O webhook eh generico — ele aceita qualquer estrutura. ',
+      'A IA vai extrair os campos (nome, idade, dor, nicho, etc.) automaticamente quando a resposta chegar.',
+    ]),
+    jaAtivo
+      ? el('div', { style: 'margin-top:1rem;padding:.75rem;background:rgba(34,197,94,0.1);border:1px solid #22C55E;border-radius:6px;font-size:.8125rem;color:#15803D' },
+          '✓ Esta categoria ja esta ativa como webhook. Pode colar a URL no YA Forms — respostas vao entrar em tempo real.')
+      : el('div', { style: 'margin-top:1rem;padding:.75rem;background:rgba(59,130,246,0.08);border:1px solid #3B82F6;border-radius:6px;font-size:.8125rem;color:#1E40AF;line-height:1.5' }, [
+          el('strong', null, '🚀 Quer ativar agora? '),
+          'Clica no botao abaixo. A categoria vai pra status "rodando" + trigger "webhook". Quando o YA Forms enviar a primeira resposta, voce ja recebe vetorizado.',
+        ]),
+  );
+
+  const acoes = [];
+  if (!jaAtivo) {
+    acoes.push(el('button', {
+      class: 'pc-btn-primary',
+      onclick: () => ativarWebhookPesquisa(plano.plano_id, cerebro_id),
+      style: 'background:#22C55E;border-color:#22C55E',
+    }, '🚀 Ativar webhook (status=rodando)'));
+  }
+  acoes.push(el('button', { class: 'pc-btn-secondary', onclick: fecharModal }, 'Fechar'));
+  inner.append(el('div', { class: 'pc-modal-foot' }, acoes));
+}
+
+async function ativarWebhookPesquisa(plano_id, cerebro_id) {
+  const det = _detalheCache.get(cerebro_id);
+  if (!det) return;
+  const p = det.plano.find(x => x.plano_id === plano_id);
+  if (!p) return;
+
+  const statusAntes = p.status_automacao;
+  const triggerAntes = p.trigger_tipo;
+  const schedAntes = p.schedule_descricao;
+
+  // Otimistic
+  p.status_automacao = 'rodando';
+  p.trigger_tipo = 'webhook';
+  p.schedule_descricao = 'tempo real (webhook YA Forms)';
+  fecharModal();
+  atualizarParcialDoCerebro(det, cerebro_id);
+
+  try {
+    const r = await callEdge('tool-cerebro-plano-categoria', {
+      method: 'POST',
+      body: {
+        acao: 'editar',
+        plano_id,
+        status_automacao: 'rodando',
+        trigger_tipo: 'webhook',
+        schedule_descricao: 'tempo real (webhook YA Forms)',
+      },
+    });
+    if (!r.ok) throw new Error(r.erro);
+    callEdge('tool-plano-cerebros-snapshot').then(s => { if (s.ok) _snapshot = s; });
+  } catch (e) {
+    p.status_automacao = statusAntes;
+    p.trigger_tipo = triggerAntes;
+    p.schedule_descricao = schedAntes;
+    atualizarParcialDoCerebro(det, cerebro_id);
+    alert('Erro ao ativar webhook: ' + e.message);
   }
 }
 
