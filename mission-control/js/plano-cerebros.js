@@ -284,14 +284,15 @@ function reRenderFiltrado() {
 // Hover: tooltip com categoria + horario + ultima execucao + status.
 // Click na linha (produto): abre drill-down do cerebro.
 
-// 6 cadencias x 2 modos (A/M) = 12 sub-colunas potenciais.
-// Colunas com 0 itens sao escondidas pra nao poluir.
+// 6 cadencias x 2 modos (A/M) = 12 sub-colunas SEMPRE visiveis.
+// Possibilidade futura: bate o olho e ve "tenho espaco pra adicionar fonte aqui".
+// Ordem: do mais imediato (tempo real) pro menos definido (sem cadencia).
 const CADENCIAS = [
+  { key: 'tempo_real',   label: 'Tempo real',   icon: '⚡' },
   { key: 'diario',       label: 'Diário',       icon: '🌅' },
   { key: 'semanal',      label: 'Semanal',      icon: '📅' },
   { key: 'quinzenal',    label: 'Quinzenal',    icon: '📆' },
   { key: 'mensal',       label: 'Mensal',       icon: '🗓' },
-  { key: 'tempo_real',   label: 'Tempo real',   icon: '⚡' },
   { key: 'sem_cadencia', label: 'Sem cadência', icon: '∞' },
 ];
 const MODOS = [
@@ -341,16 +342,13 @@ function renderMatrizFrequencia(linhas) {
     entry.celulas[key].push(l);
   }
 
-  // Descobre quais (cadencia, modo) tem pelo menos 1 item
-  const usados = new Set();
-  for (const [, entry] of porProduto) for (const k of Object.keys(entry.celulas)) usados.add(k);
-
-  // Constroi colunas: pra cada cadencia usada, pra cada modo, se tem item, vira coluna
+  // SEMPRE mostra todas as 6 cadencias x 2 modos = 12 sub-colunas.
+  // Andre cravou: matriz nao eh estado atual, eh possibilidade.
+  // Reuniao bate o olho e diz "tenho fonte quinzenal manual? nao tenho, mas posso ter".
   const cols = [];
   for (const c of CADENCIAS) {
     for (const m of MODOS) {
-      const key = `${c.key}__${m.key}`;
-      if (usados.has(key)) cols.push({ key, cadencia: c, modo: m });
+      cols.push({ key: `${c.key}__${m.key}`, cadencia: c, modo: m });
     }
   }
 
@@ -361,7 +359,7 @@ function renderMatrizFrequencia(linhas) {
   // Header nivel 1: cadencias (com colspan)
   const thead = el('thead');
   const trCad = el('tr', { style: 'background:#1E293B' });
-  trCad.append(el('th', { rowspan: 2, style: 'padding:.7rem .85rem;text-align:left;color:#E2E8F0;font-weight:600;position:sticky;left:0;background:#1E293B;z-index:2;min-width:170px;border-right:1px solid #334155' }, 'Cérebro'));
+  trCad.append(el('th', { rowspan: 2, style: 'padding:.6rem .6rem;text-align:left;color:#E2E8F0;font-weight:600;position:sticky;left:0;background:#1E293B;z-index:2;width:130px;min-width:130px;max-width:130px;border-right:1px solid #334155;font-size:.75rem' }, 'Cérebro'));
   // Agrupa cols por cadencia pra rowspan
   let i = 0;
   while (i < cols.length) {
@@ -369,7 +367,7 @@ function renderMatrizFrequencia(linhas) {
     let span = 1;
     while (i + span < cols.length && cols[i + span].cadencia.key === cadKey) span++;
     const cad = cols[i].cadencia;
-    trCad.append(el('th', { colspan: span, style: 'padding:.5rem .3rem;text-align:center;color:#E2E8F0;font-weight:600;border-left:1px solid #334155;background:#1E293B' }, [
+    trCad.append(el('th', { colspan: span, style: 'padding:.5rem .3rem;text-align:center;color:#E2E8F0;font-weight:600;border-left:2px solid #334155;background:#1E293B' }, [
       el('div', { style: 'font-size:.95rem' }, cad.icon),
       el('div', { style: 'font-size:.7rem;margin-top:.1rem' }, cad.label),
     ]));
@@ -377,11 +375,14 @@ function renderMatrizFrequencia(linhas) {
   }
   thead.append(trCad);
 
-  // Header nivel 2: A/M
+  // Header nivel 2: A/M. Borda mais grossa entre cadencias diferentes pra dar respiro visual.
   const trMod = el('tr', { style: 'background:#152033' });
-  for (const c of cols) {
+  for (let idx = 0; idx < cols.length; idx++) {
+    const c = cols[idx];
+    const prev = idx > 0 ? cols[idx - 1] : null;
+    const trocouCadencia = !prev || prev.cadencia.key !== c.cadencia.key;
     trMod.append(el('th', {
-      style: `padding:.35rem .4rem;text-align:center;color:${c.modo.cor};font-weight:700;font-size:.75rem;min-width:55px;border-left:1px solid #334155`,
+      style: `padding:.35rem .3rem;text-align:center;color:${c.modo.cor};font-weight:700;font-size:.7rem;min-width:42px;border-left:${trocouCadencia ? '2px solid #334155' : '1px solid #1E293B'}`,
       title: c.modo.tip,
     }, c.modo.label));
   }
@@ -398,13 +399,19 @@ function renderMatrizFrequencia(linhas) {
       onmouseout: function() { this.style.background = ''; },
       onclick: () => abrirCerebro(entry.cerebro_id),
     });
-    tr.append(el('td', { style: 'padding:.7rem .85rem;color:#E2E8F0;font-weight:600;position:sticky;left:0;background:#0F172A;z-index:1;border-right:1px solid #334155' }, [
-      el('span', { style: 'margin-right:.4rem' }, entry.produto_emoji || '🧠'),
+    tr.append(el('td', {
+      style: 'padding:.5rem .55rem;color:#E2E8F0;font-weight:600;position:sticky;left:0;background:#0F172A;z-index:1;border-right:1px solid #334155;width:130px;min-width:130px;max-width:130px;font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',
+      title: nome,
+    }, [
+      el('span', { style: 'margin-right:.3rem' }, entry.produto_emoji || '🧠'),
       nome,
     ]));
-    for (const c of cols) {
+    for (let idx = 0; idx < cols.length; idx++) {
+      const c = cols[idx];
+      const prev = idx > 0 ? cols[idx - 1] : null;
+      const trocouCadencia = !prev || prev.cadencia.key !== c.cadencia.key;
       const cats = entry.celulas[c.key] || [];
-      const td = el('td', { style: 'padding:.5rem .3rem;text-align:center;vertical-align:middle;border-left:1px solid #334155' });
+      const td = el('td', { style: `padding:.4rem .25rem;text-align:center;vertical-align:middle;border-left:${trocouCadencia ? '2px solid #334155' : '1px solid #1E293B'}` });
       if (cats.length === 0) {
         td.append(el('span', { style: 'color:#334155;font-size:.65rem' }, '—'));
       } else {
