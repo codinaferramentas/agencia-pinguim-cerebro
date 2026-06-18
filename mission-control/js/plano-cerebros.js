@@ -378,23 +378,37 @@ function _dowToLabel(cron) {
 function renderMatrizFrequencia(linhas) {
   const wrap = el('div');
   wrap.append(el('h2', { class: 'pc-section-title' }, '📊 Matriz Produto × Cadência × Modo'));
-  wrap.append(el('p', { class: 'pc-sub' }, 'Linhas = produtos. Colunas agrupam Cadência (Diário/Semanal/...) × Modo (A=automático, M=manual). Hover na célula pra detalhe. Clique na linha pra abrir o cérebro.'));
+  wrap.append(el('p', { class: 'pc-sub' }, 'Linhas = produtos. Colunas: Cadência × Modo (A/M) pra motores rodando + coluna GAP no fim com o que falta fazer. Hover na célula pra detalhe. Clique na linha pra abrir o cérebro.'));
 
   if (linhas.length === 0) {
     wrap.append(el('div', { style: 'padding:2rem;color:#64748B;text-align:center' }, 'Nada rodando ainda.'));
     return wrap;
   }
 
-  // Agrupa por (produto, cadencia-modo) -> [categorias]
+  // Agrupa por produto. Cada linha pode ser RODANDO (vai pra celula cadencia x modo)
+  // ou GAP (em_construcao / planejada / sem_coleta — vai pra coluna GAP especial).
   const porProduto = new Map();
   for (const l of linhas) {
     if (!porProduto.has(l.produto_nome)) {
-      porProduto.set(l.produto_nome, { cerebro_id: l.cerebro_id, produto_emoji: l.produto_emoji, celulas: {} });
+      porProduto.set(l.produto_nome, {
+        cerebro_id: l.cerebro_id,
+        produto_emoji: l.produto_emoji,
+        celulas: {},
+        gaps: [],
+        countRod: 0,
+        countGap: 0,
+      });
     }
-    const key = `${l.cadencia}__${l.modo_disparo}`;
     const entry = porProduto.get(l.produto_nome);
-    if (!entry.celulas[key]) entry.celulas[key] = [];
-    entry.celulas[key].push(l);
+    if (l.status_automacao === 'rodando') {
+      const key = `${l.cadencia}__${l.modo_disparo}`;
+      if (!entry.celulas[key]) entry.celulas[key] = [];
+      entry.celulas[key].push(l);
+      entry.countRod++;
+    } else {
+      entry.gaps.push(l);
+      entry.countGap++;
+    }
   }
 
   // SEMPRE mostra todas as 6 cadencias x 2 modos = 12 sub-colunas.
@@ -428,6 +442,16 @@ function renderMatrizFrequencia(linhas) {
     ]));
     i += span;
   }
+  // Header nivel 1 — coluna GAP no fim
+  trCad.append(el('th', {
+    rowspan: 2,
+    style: 'padding:.5rem .6rem;text-align:center;color:#F59E0B;font-weight:700;border-left:3px solid #F59E0B;background:#1E293B;min-width:120px',
+    title: 'Categorias que ainda precisam ser configuradas (em_construcao, planejada ou sem_coleta)',
+  }, [
+    el('div', { style: 'font-size:.95rem' }, '🕳'),
+    el('div', { style: 'font-size:.7rem;margin-top:.1rem' }, 'GAP'),
+    el('div', { style: 'font-size:.6rem;color:#94A3B8;margin-top:.15rem;font-weight:400' }, 'a fazer'),
+  ]));
   thead.append(trCad);
 
   // Header nivel 2: A/M. Borda mais grossa entre cadencias diferentes pra dar respiro visual.
@@ -441,6 +465,7 @@ function renderMatrizFrequencia(linhas) {
       title: c.modo.tip,
     }, c.modo.label));
   }
+  // (coluna GAP ja tem rowspan=2, nao precisa th aqui)
   thead.append(trMod);
   table.append(thead);
 
@@ -459,12 +484,19 @@ function renderMatrizFrequencia(linhas) {
       style: 'padding:.5rem .55rem;color:#E2E8F0;font-weight:600;position:sticky;left:0;background:#0F172A;z-index:1;border-right:1px solid #334155;width:130px;min-width:130px;max-width:130px;font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',
       title: alertaEdicao ? `${nome} · ⚠ próxima edição ${alertaEdicao.data_evento}` : nome,
     }, [
-      el('span', { style: 'margin-right:.3rem' }, entry.produto_emoji || '🧠'),
-      nome,
-      alertaEdicao ? el('span', {
-        style: `margin-left:.3rem;color:${alertaEdicao.status === 'atrasado' ? '#EF4444' : '#F59E0B'}`,
-        title: alertaEdicao.status === 'atrasado' ? `atrasada ${Math.abs(alertaEdicao.dias_para_evento)}d` : `em ${alertaEdicao.dias_para_evento}d`,
-      }, '⚠') : null,
+      el('div', { style: 'display:flex;align-items:center;gap:.3rem;line-height:1.1' }, [
+        el('span', {}, entry.produto_emoji || '🧠'),
+        el('span', { style: 'overflow:hidden;text-overflow:ellipsis' }, nome),
+        alertaEdicao ? el('span', {
+          style: `color:${alertaEdicao.status === 'atrasado' ? '#EF4444' : '#F59E0B'}`,
+          title: alertaEdicao.status === 'atrasado' ? `atrasada ${Math.abs(alertaEdicao.dias_para_evento)}d` : `em ${alertaEdicao.dias_para_evento}d`,
+        }, '⚠') : null,
+      ]),
+      el('div', { style: 'font-size:.65rem;color:#94A3B8;font-weight:400;margin-top:.15rem' }, [
+        el('span', { style: 'color:#22C55E' }, `${entry.countRod} rod`),
+        ' · ',
+        el('span', { style: entry.countGap > 0 ? 'color:#F59E0B' : 'color:#475569' }, `${entry.countGap} gap`),
+      ]),
     ]));
     for (let idx = 0; idx < cols.length; idx++) {
       const c = cols[idx];
@@ -504,6 +536,28 @@ function renderMatrizFrequencia(linhas) {
       }
       tr.append(td);
     }
+    // Coluna GAP no fim — categorias em_construcao / planejada / sem_coleta
+    const tdGap = el('td', { style: 'padding:.4rem .35rem;text-align:center;vertical-align:middle;border-left:3px solid #F59E0B;background:rgba(245,158,11,0.04)' });
+    if (entry.gaps.length === 0) {
+      tdGap.append(el('span', { style: 'color:#22C55E;font-size:.65rem' }, '✓ completo'));
+    } else {
+      const cellInner = el('div', { style: 'display:flex;justify-content:center;gap:.2rem;flex-wrap:wrap' });
+      for (const gap of entry.gaps) {
+        const corStatus = gap.status_automacao === 'em_construcao' ? '#F59E0B'
+                       : gap.status_automacao === 'planejada' ? '#3B82F6'
+                       : '#64748B'; // sem_coleta
+        const labelStatus = gap.status_automacao === 'em_construcao' ? 'em construção'
+                         : gap.status_automacao === 'planejada' ? 'planejada'
+                         : 'sem coleta';
+        const tip = `${gap.categoria_emoji} ${gap.categoria_nome}\nStatus: ${labelStatus}\nClique no cérebro pra configurar.`;
+        cellInner.append(el('span', {
+          style: `display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:6px;background:#0F172A;border:2px dashed ${corStatus};font-size:.95rem;opacity:.75`,
+          title: tip,
+        }, gap.categoria_emoji || '📦'));
+      }
+      tdGap.append(cellInner);
+    }
+    tr.append(tdGap);
     tbody.append(tr);
   }
   table.append(tbody);
@@ -514,9 +568,8 @@ function renderMatrizFrequencia(linhas) {
   const legenda = el('div', { style: 'display:flex;gap:1.2rem;flex-wrap:wrap;padding:.6rem 0;font-size:.7rem;color:#94A3B8;margin-top:.5rem' });
   legenda.append(el('span', { style: 'color:#22C55E;font-weight:700' }, 'A = Automático (roda sozinho)'));
   legenda.append(el('span', { style: 'color:#F59E0B;font-weight:700' }, 'M = Manual (você precisa rodar)'));
-  legenda.append(el('span', {}, '🟢 borda verde = última execução OK'));
-  legenda.append(el('span', {}, '🔴 borda vermelha = falhou'));
-  legenda.append(el('span', {}, '⚪ borda cinza = ainda não rodou'));
+  legenda.append(el('span', {}, 'borda SÓLIDA verde/vermelha/cinza = motor rodando (ok/falha/nunca)'));
+  legenda.append(el('span', {}, 'borda TRACEJADA amarela/azul/cinza = GAP (em_construção/planejada/sem_coleta)'));
   legenda.append(el('span', {}, [
     el('span', { style: 'background:#A78BFA;color:#fff;width:14px;height:14px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;margin-right:.3rem' }, '*'),
     'motor central (1 cron único distribui pros 10)',
