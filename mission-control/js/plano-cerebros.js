@@ -144,8 +144,8 @@ function fecharModal2() {
 
 function renderHeader() {
   const header = el('div', { class: 'pc-header' });
-  header.append(el('h1', { class: 'pc-title' }, '📡 Plano de Cérebros'));
-  header.append(el('p', { class: 'pc-sub' }, 'Plano de automação por categoria de fonte. Decida na reunião qual atacar primeiro.'));
+  header.append(el('h1', { class: 'pc-title' }, '🎛 Automação de Cérebros'));
+  header.append(el('p', { class: 'pc-sub' }, 'Visão transversal das automações + drill-down por cérebro. Tudo num lugar.'));
   const tabs = el('div', { class: 'pc-tabs' });
   tabs.append(
     el('button', { class: 'pc-tab' + (_abaAtiva === 'cerebros' ? ' pc-tab-ativa' : ''), onclick: () => trocarAba('cerebros') }, '🧠 Cérebros'),
@@ -172,12 +172,233 @@ function renderAbaAtiva(conteudo) {
   if (_abaAtiva === 'cerebros') {
     if (_cerebroAberto) renderTelaCerebro(conteudo, _cerebroAberto);
     else {
-      conteudo.append(renderResumoGlobal(_snapshot.resumo));
+      // V3 (2026-06-18) — fusao com Painel de Automacao.
+      // Ordem visual: KPIs + Alertas (topo) -> Tabs cronologico/calendario (meio) -> Grid 10 cerebros (fim).
+      // Resumo simples antigo (4 cards) substituido pelos KPIs ricos do schema-023.
+      const painelSlot = el('div', { id: 'pa-painel-slot' });
+      conteudo.append(painelSlot);
       conteudo.append(renderGridCerebros(_snapshot.cerebros));
+      carregarPainelAutomacao(painelSlot); // assincrono, popula depois sem bloquear grid
     }
   } else {
     conteudo.append(renderAbaIntegracoes(_snapshot.integracoes_catalogo));
   }
+}
+
+// ============================================================
+// V3 (2026-06-18) — Painel transversal de automacao (fundido aqui)
+// Le 4 RPCs do schema-023 em paralelo + renderiza KPIs + alertas + tabs.
+// Substitui a antiga aba 'painel-automacao' que estava em arquivo separado.
+// ============================================================
+let _painelCache = null;
+let _painelViewMode = 'lista'; // 'lista' | 'calendario'
+
+async function carregarPainelAutomacao(slot) {
+  slot.innerHTML = '<div style="padding:1rem;color:#94A3B8;font-size:.875rem">Carregando visao transversal...</div>';
+  try {
+    const sb = getSupabase();
+    const [kpis, recentes, proximos, alertas] = await Promise.all([
+      sb.rpc('painel_automacao_kpis').then(r => r.data?.[0] || {}),
+      sb.rpc('painel_automacao_execucoes_recentes', { p_horas: 24 }).then(r => r.data || []),
+      sb.rpc('painel_automacao_proximos_crons').then(r => r.data || []),
+      sb.rpc('painel_automacao_alertas', { p_dias: 7 }).then(r => r.data || []),
+    ]);
+    _painelCache = { kpis, recentes, proximos, alertas };
+    renderPainelConteudo(slot);
+  } catch (e) {
+    slot.innerHTML = `<div style="padding:1rem;color:#EF4444;font-size:.875rem">Erro carregando painel: ${e.message}</div>`;
+  }
+}
+
+function renderPainelConteudo(slot) {
+  slot.innerHTML = '';
+  const { kpis, recentes, proximos, alertas } = _painelCache;
+  slot.append(renderPainelKpis(kpis));
+  if (alertas.length > 0) slot.append(renderPainelAlertas(alertas));
+  slot.append(renderPainelTabs());
+  slot.append(renderPainelTabContent(recentes, proximos));
+}
+
+function renderPainelKpis(k) {
+  const cards = [
+    { num: k.total_executou_24h || 0, label: 'rodaram nas últimas 24h', cor: '#22C55E', emoji: '✓' },
+    { num: k.total_rodando || 0, label: 'automatizadas (rodando)', cor: '#3B82F6', emoji: '🟢', sub: `de ${k.total_categorias_aplicaveis || 0} categorias` },
+    { num: k.total_manuais || 0, label: 'manuais (você controla)', cor: '#F59E0B', emoji: '✋' },
+    { num: k.total_falhou_24h || 0, label: 'falharam nas últimas 24h', cor: (k.total_falhou_24h || 0) > 0 ? '#EF4444' : '#94A3B8', emoji: '✗' },
+    { num: k.total_defasadas_7d || 0, label: 'defasadas (sem update >7d)', cor: (k.total_defasadas_7d || 0) > 0 ? '#F59E0B' : '#94A3B8', emoji: '⚠' },
+  ];
+  const wrap = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.6rem;padding:1rem 0' });
+  for (const c of cards) {
+    wrap.append(el('div', { style: `background:#0F172A;border:1px solid #1E293B;border-left:3px solid ${c.cor};border-radius:6px;padding:.8rem` }, [
+      el('div', { style: `font-size:1.5rem;font-weight:700;color:${c.cor};line-height:1` }, `${c.emoji} ${c.num}`),
+      el('div', { style: 'font-size:.75rem;color:#94A3B8;margin-top:.35rem' }, c.label),
+      c.sub ? el('div', { style: 'font-size:.65rem;color:#64748B;margin-top:.1rem' }, c.sub) : null,
+    ]));
+  }
+  return wrap;
+}
+
+function renderPainelAlertas(alertas) {
+  const titulos = {
+    cron_falhou: { label: '❌ Falhou no último run', cor: '#EF4444' },
+    rodando_defasada: { label: '⚠ Rodando mas defasada >7d', cor: '#F59E0B' },
+    manual_sem_update: { label: '✋ Manual sem update', cor: '#A78BFA' },
+  };
+  const porTipo = new Map();
+  for (const a of alertas) {
+    if (!porTipo.has(a.tipo_alerta)) porTipo.set(a.tipo_alerta, []);
+    porTipo.get(a.tipo_alerta).push(a);
+  }
+  const box = el('div', { style: 'background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:.85rem;margin-bottom:1rem' });
+  box.append(el('div', { style: 'font-weight:600;margin-bottom:.5rem;color:#EF4444;font-size:.875rem' }, '🔔 Atenção'));
+  for (const [tipo, lista] of porTipo) {
+    const meta = titulos[tipo] || { label: tipo, cor: '#64748B' };
+    box.append(el('div', { style: `font-size:.8125rem;color:${meta.cor};font-weight:600;margin:.4rem 0 .2rem` },
+      `${meta.label} (${lista.length})`));
+    for (const a of lista.slice(0, 5)) {
+      box.append(el('div', { style: 'font-size:.75rem;padding:.15rem .4rem;color:#94A3B8' },
+        `• ${a.produto_nome} — ${a.categoria_emoji || ''} ${a.categoria_nome || a.categoria_slug} — ${a.dias_desde_ultima || '?'} dias`));
+    }
+    if (lista.length > 5) box.append(el('div', { style: 'font-size:.7rem;color:#64748B;padding-left:.4rem' }, `+ ${lista.length - 5} outros…`));
+  }
+  return box;
+}
+
+function renderPainelTabs() {
+  const tabs = el('div', { style: 'display:flex;gap:.25rem;border-bottom:1px solid #1E293B;margin-bottom:.5rem' });
+  const tab = (id, label) => el('button', {
+    style: `padding:.5rem .85rem;background:transparent;border:none;border-bottom:2px solid ${_painelViewMode === id ? '#3B82F6' : 'transparent'};color:${_painelViewMode === id ? '#fff' : '#94A3B8'};cursor:pointer;font-size:.8125rem;font-weight:${_painelViewMode === id ? 600 : 400}`,
+    onclick: () => { _painelViewMode = id; renderPainelConteudo(document.getElementById('pa-painel-slot')); },
+  }, label);
+  tabs.append(tab('lista', '📋 Hoje + Próximos'), tab('calendario', '📅 Calendário semanal'));
+  return tabs;
+}
+
+function renderPainelTabContent(recentes, proximos) {
+  if (_painelViewMode === 'calendario') return renderPainelCalendario(proximos);
+  return renderPainelListaCronograma(recentes, proximos);
+}
+
+function _fmtRelativo(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const h = Math.floor((Date.now() - d.getTime()) / 3600000);
+  const dias = Math.floor(h / 24);
+  if (h < 1) return `há ${Math.max(1, Math.floor((Date.now() - d.getTime()) / 60000))}min`;
+  if (h < 24) return `há ${h}h`;
+  if (dias < 30) return `há ${dias}d`;
+  return `há ${Math.floor(dias/30)} meses`;
+}
+
+function renderPainelListaCronograma(recentes, proximos) {
+  const wrap = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:1rem;padding:.5rem 0 1.5rem' });
+  // RODOU 24H
+  const rodouCol = el('div');
+  rodouCol.append(el('h3', { style: 'font-size:.875rem;margin:0 0 .5rem;color:#E2E8F0' }, `✓ Rodou nas últimas 24h (${recentes.length})`));
+  if (recentes.length === 0) rodouCol.append(el('div', { style: 'padding:1rem;color:#64748B;font-size:.8125rem' }, 'Nada nas últimas 24h.'));
+  else {
+    const list = el('div', { style: 'display:flex;flex-direction:column;gap:.35rem' });
+    for (const r of recentes) {
+      const cor = r.ultimo_status_run === 'falha' ? '#EF4444' : (r.ultimo_status_run === 'ok' ? '#22C55E' : '#94A3B8');
+      list.append(el('div', { style: `background:#0F172A;border:1px solid #1E293B;border-left:3px solid ${cor};border-radius:5px;padding:.55rem .7rem;display:flex;justify-content:space-between;gap:.4rem;font-size:.8125rem` }, [
+        el('div', { style: 'min-width:0;flex:1' }, [
+          el('div', { style: 'font-weight:600' }, `${r.categoria_emoji || '📦'} ${r.categoria_nome || r.categoria_slug}`),
+          el('div', { style: 'color:#94A3B8;font-size:.7rem;margin-top:.1rem' }, `${r.produto_nome} · ${r.trigger_tipo}`),
+        ]),
+        el('div', { style: 'text-align:right;font-size:.7rem' }, [
+          el('div', { style: `color:${cor};font-weight:600` }, r.ultimo_status_run || '—'),
+          el('div', { style: 'color:#94A3B8' }, _fmtRelativo(r.ultima_execucao)),
+        ]),
+      ]));
+    }
+    rodouCol.append(list);
+  }
+  // VAI RODAR
+  const vaiCol = el('div');
+  vaiCol.append(el('h3', { style: 'font-size:.875rem;margin:0 0 .5rem;color:#E2E8F0' }, `⏰ Agendamentos ativos (${proximos.length})`));
+  if (proximos.length === 0) vaiCol.append(el('div', { style: 'padding:1rem;color:#64748B;font-size:.8125rem' }, 'Nenhum cron ativo.'));
+  else {
+    const list = el('div', { style: 'display:flex;flex-direction:column;gap:.35rem' });
+    for (const p of proximos) {
+      const cor = p.origem === 'relatorio' ? '#A78BFA' : '#3B82F6';
+      list.append(el('div', { style: `background:#0F172A;border:1px solid #1E293B;border-left:3px solid ${cor};border-radius:5px;padding:.55rem .7rem;display:flex;justify-content:space-between;gap:.4rem;font-size:.8125rem` }, [
+        el('div', { style: 'min-width:0;flex:1' }, [
+          el('div', { style: 'font-weight:600' }, p.nome),
+          el('div', { style: 'color:#94A3B8;font-size:.7rem;margin-top:.1rem' },
+            `${p.origem === 'relatorio' ? '📊 Relatório' : `🧠 ${p.produto_nome || '—'}`} · ${p.cron_descricao || p.cron_expr || '—'}`),
+        ]),
+        el('div', { style: 'text-align:right;font-size:.7rem;color:#94A3B8' },
+          p.ultima_execucao ? `última ${_fmtRelativo(p.ultima_execucao)}` : 'sem rodar'),
+      ]));
+    }
+    vaiCol.append(list);
+  }
+  wrap.append(rodouCol, vaiCol);
+  if (window.matchMedia('(max-width: 768px)').matches) wrap.style.gridTemplateColumns = '1fr';
+  return wrap;
+}
+
+function _diasSemanaDeCron(cronExpr) {
+  if (!cronExpr) return new Set();
+  const parts = cronExpr.trim().split(/\s+/);
+  if (parts.length < 5) return new Set();
+  const dow = parts[4];
+  if (dow === '*') return new Set([0,1,2,3,4,5,6]);
+  const dias = new Set();
+  for (const tok of dow.split(',')) {
+    if (tok.includes('-')) { const [a,b] = tok.split('-').map(Number); for (let i=a;i<=b;i++) dias.add(i%7); }
+    else if (!isNaN(parseInt(tok,10))) dias.add(parseInt(tok,10) % 7);
+  }
+  return dias;
+}
+function _horaBrtDeCron(cronExpr) {
+  if (!cronExpr) return null;
+  const parts = cronExpr.trim().split(/\s+/);
+  if (parts.length < 5) return null;
+  const minUtc = parts[0], hourUtc = parts[1];
+  if (!/^\d+$/.test(minUtc) || !/^\d+$/.test(hourUtc)) return cronExpr.slice(0,12);
+  const h = (parseInt(hourUtc,10) - 3 + 24) % 24;
+  return `${String(h).padStart(2,'0')}:${minUtc.padStart(2,'0')}`;
+}
+
+function renderPainelCalendario(proximos) {
+  const wrap = el('div', { style: 'padding:.5rem 0 1.5rem' });
+  const hoje = new Date();
+  const dow = hoje.getDay();
+  const offsetSeg = dow === 0 ? -6 : 1 - dow;
+  const seg = new Date(hoje); seg.setDate(hoje.getDate() + offsetSeg); seg.setHours(0,0,0,0);
+  const dias = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(seg); d.setDate(seg.getDate() + i);
+    dias.push({ data: d, label: d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }), ehHoje: d.toDateString() === hoje.toDateString() });
+  }
+  const porDia = dias.map(() => []);
+  for (const p of proximos) {
+    const diasCron = _diasSemanaDeCron(p.cron_expr);
+    for (let i = 0; i < 7; i++) {
+      if (diasCron.has(dias[i].data.getDay())) porDia[i].push({ ...p, horaBrt: _horaBrtDeCron(p.cron_expr) });
+    }
+  }
+  const grid = el('div', { style: 'display:grid;grid-template-columns:repeat(7,1fr);gap:.35rem' });
+  for (let i = 0; i < 7; i++) {
+    const dia = dias[i];
+    const col = el('div', { style: `background:#0F172A;border:1px solid #1E293B;${dia.ehHoje ? 'border-top:3px solid #3B82F6;' : ''}border-radius:5px;padding:.45rem;min-height:180px` });
+    col.append(el('div', { style: `font-size:.7rem;font-weight:600;margin-bottom:.4rem;${dia.ehHoje ? 'color:#3B82F6' : 'color:#94A3B8'}` }, `${dia.label}${dia.ehHoje ? ' • hoje' : ''}`));
+    const itens = porDia[i].sort((a,b) => (a.horaBrt||'').localeCompare(b.horaBrt||''));
+    if (itens.length === 0) col.append(el('div', { style: 'font-size:.7rem;color:#64748B;font-style:italic' }, '—'));
+    else {
+      for (const it of itens) {
+        const cor = it.origem === 'relatorio' ? '#A78BFA' : '#3B82F6';
+        col.append(el('div', { style: `background:rgba(255,255,255,0.03);border-left:2px solid ${cor};padding:.3rem .4rem;border-radius:3px;font-size:.65rem;margin-bottom:.2rem`, title: it.nome }, [
+          el('div', { style: 'font-weight:600;color:#E2E8F0' }, it.horaBrt || '—'),
+          el('div', { style: 'color:#94A3B8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, it.nome),
+        ]));
+      }
+    }
+    grid.append(col);
+  }
+  wrap.append(grid);
+  return wrap;
 }
 
 // ============================================================
