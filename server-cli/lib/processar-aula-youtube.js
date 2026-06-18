@@ -149,6 +149,35 @@ async function processarAulaYoutube({ cerebro_id, categoria_slug = 'transcricoes
   const vet = await vetorizarFonte(fonte.id);
   on_log({ etapa: 'fim', fonte_id: fonte.id, vetorizado: vet.ok, chunks: vet.chunks });
 
+  // 8) Promove o card no plano: sempre atualiza ultima_execucao + status_run,
+  //    e se categoria estava em status "ainda nao rodou" (sem_coleta/planejada/em_construcao),
+  //    promove pra "rodando" (manual). Nao mexe em nao_aplicavel/pausada/falhou.
+  try {
+    await db.rodarSQL(`
+      UPDATE pinguim.cerebro_plano_categoria
+         SET ultima_execucao = now(),
+             ultimo_status_run = 'ok',
+             status_automacao = CASE
+               WHEN status_automacao IN ('sem_coleta','planejada','em_construcao') THEN 'rodando'
+               ELSE status_automacao
+             END,
+             trigger_tipo = CASE
+               WHEN trigger_tipo = 'manual' OR status_automacao IN ('sem_coleta','planejada','em_construcao')
+                 THEN 'manual'
+               ELSE trigger_tipo
+             END,
+             schedule_descricao = COALESCE(schedule_descricao, 'manual (cola URL no botão "Adicionar aula via YouTube")'),
+             ferramenta = COALESCE(ferramenta, 'Apify pintostudio/youtube-transcript-scraper + YouTube Data API'),
+             atualizado_em = now()
+       WHERE cerebro_id = '${cerebro_id}'::uuid
+         AND categoria_slug = ${_esc(categoria_slug)};
+    `);
+    on_log({ etapa: 'plano_atualizado' });
+  } catch (e) {
+    // Falha do update do plano NAO bloqueia: fonte ja foi salva e vetorizada
+    on_log({ etapa: 'plano_atualizado_falhou', erro: e.message });
+  }
+
   return {
     ok: true,
     fonte_id: fonte.id,
