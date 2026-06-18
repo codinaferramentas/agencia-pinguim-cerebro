@@ -339,11 +339,14 @@ function atualizarParcialDoCerebro(detalhe, cerebro_id) {
           : `Clica pra ver as ${pc.nao_aplicavel} categoria${pc.nao_aplicavel === 1 ? '' : 's'} marcada${pc.nao_aplicavel === 1 ? '' : 's'} como "não se aplica" e reativar quando quiser`,
         onclick: () => {
           _mostrarNaoAplicaveis = !_mostrarNaoAplicaveis;
+          // Filtro exclusivo: ao ativar, mostra SO as nao_aplicaveis.
+          // Ao desativar, volta pra "Todas" (so as aplicaveis).
+          _filtroStatus = _mostrarNaoAplicaveis ? 'nao_aplicavel' : 'todos';
           const det = _detalheCache.get(_cerebroAberto);
           if (det) atualizarParcialDoCerebro(det, _cerebroAberto);
         },
       }, ativo
-          ? `👁 Mostrando ${pc.nao_aplicavel} não-aplicáveis · clica pra esconder`
+          ? `👁 Mostrando SO as ${pc.nao_aplicavel} não-aplicáveis · clica pra voltar`
           : `🚫 ${pc.nao_aplicavel} marcada${pc.nao_aplicavel === 1 ? '' : 's'} como "não se aplica" · 👁 ver e reativar`));
     }
   }
