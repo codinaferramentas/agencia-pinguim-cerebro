@@ -248,32 +248,33 @@ function renderPainelKpisESlots() {
 }
 
 // V8 (2026-06-18 noite) — Banner topo de edicoes pendentes
+// V9 fix visual (Andre): fundo do CARD vermelho/amarelo solido, texto branco
 function renderBannerEdicoes(alertas) {
   const atrasadas = alertas.filter(a => a.status === 'atrasado');
   const preAvisos = alertas.filter(a => a.status === 'pre_aviso');
-  const cor = atrasadas.length > 0 ? '#EF4444' : '#F59E0B';
-  const bg = atrasadas.length > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)';
+  const corPrincipal = atrasadas.length > 0 ? '#EF4444' : '#F59E0B';
+  const bgSuave = atrasadas.length > 0 ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)';
 
-  const wrap = el('div', { style: `background:${bg};border:1px solid ${cor};border-radius:8px;padding:1rem;margin-bottom:1rem` });
+  const wrap = el('div', { style: `background:${bgSuave};border:1px solid ${corPrincipal};border-radius:8px;padding:1rem;margin-bottom:1rem` });
   const titulo = atrasadas.length > 0
     ? `🔴 ${atrasadas.length} edição(ões) atrasada(s) — sobe a aula!`
     : `⚠ ${preAvisos.length} edição(ões) chegando — prepara as aulas`;
-  wrap.append(el('div', { style: `font-weight:700;color:${cor};font-size:.95rem;margin-bottom:.4rem` }, titulo));
+  wrap.append(el('div', { style: `font-weight:700;color:${corPrincipal};font-size:.95rem;margin-bottom:.55rem` }, titulo));
 
-  const lista = el('div', { style: 'display:flex;flex-direction:column;gap:.3rem' });
+  const lista = el('div', { style: 'display:flex;flex-direction:column;gap:.4rem' });
   for (const a of alertas) {
-    const corLinha = a.status === 'atrasado' ? '#EF4444' : '#F59E0B';
+    const bgCard = a.status === 'atrasado' ? '#DC2626' : '#D97706';
     const txt = a.status === 'atrasado'
       ? `atrasada há ${Math.abs(a.dias_para_evento)} dia(s)`
       : `em ${a.dias_para_evento} dia(s)`;
-    const linha = el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.45rem .6rem;background:#0F172A;border-left:3px solid ' + corLinha + ';border-radius:4px;font-size:.8125rem' });
-    linha.append(el('div', {}, [
+    const linha = el('div', { style: `display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.55rem .75rem;background:${bgCard};border-radius:5px;font-size:.8125rem;color:#fff` });
+    linha.append(el('div', { style: 'color:#fff' }, [
       el('span', { style: 'margin-right:.4rem' }, a.produto_emoji || '🧠'),
-      el('strong', { style: `color:${corLinha}` }, a.produto_nome),
-      el('span', { style: 'color:#94A3B8;margin-left:.5rem' }, `· evento ${a.data_evento} · ${txt}`),
+      el('strong', { style: 'color:#fff' }, a.produto_nome),
+      el('span', { style: 'color:rgba(255,255,255,0.85);margin-left:.5rem' }, `· evento ${a.data_evento} · ${txt}`),
     ]));
     const btnIgnore = el('button', {
-      style: 'background:transparent;border:1px solid #334155;color:#94A3B8;padding:.25rem .55rem;border-radius:3px;font-size:.7rem;cursor:pointer',
+      style: 'background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:#fff;padding:.3rem .65rem;border-radius:3px;font-size:.7rem;cursor:pointer;font-weight:600',
       onclick: async (e) => {
         e.stopPropagation();
         await getSupabase().rpc('proxima_edicao_marcar_resolvida', { p_edicao_id: a.edicao_id, p_por: 'manual' });
