@@ -2429,6 +2429,25 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
       console.log(`[whatsapp-webhook] ignorando evento ${evento}`);
       return;
     }
+
+    // V3 (2026-06-18) — captura de GRUPO monitorado (Cancelamento Coletivo etc).
+    // Roda ANTES da whitelist porque 429 alunos do grupo nao estao na lista.
+    // Handler so salva se o grupo estiver cadastrado em whatsapp_grupos_monitorados.
+    try {
+      const chatIdGrupo = payload?.data?.key?.remoteJid;
+      if (chatIdGrupo && chatIdGrupo.endsWith('@g.us')) {
+        const handler = require('./lib/whatsapp-grupo-handler');
+        const r = await handler.processarWebhookEvolution(payload);
+        if (r.acao === 'salvo') console.log(`[wa-grupo] salvo ${r.tipo} | msg=${r.msg_id?.slice(0,8)}`);
+        else if (r.acao === 'erro') console.warn(`[wa-grupo] erro: ${r.motivo}`);
+        // ignorado/duplicado nao loga (silencioso)
+        return; // mensagens de grupo NAO seguem pro fluxo 1-a-1
+      }
+    } catch (e) {
+      console.error('[wa-grupo] erro:', e.message);
+      // segue pro fluxo 1-a-1 mesmo assim
+    }
+
     const parsed = evolution.parseMensagemRecebida(payload);
     if (!parsed) { console.log('[whatsapp-webhook] payload invalido'); return; }
 
@@ -4668,6 +4687,17 @@ app.listen(PORT, () => {
       console.log('  [scheduler-depoimentos] ATIVO (1x/dia 4h BRT, raspa Discord #depoimentos)');
     } catch (e) {
       console.warn(`  [scheduler-depoimentos] falha ao iniciar: ${e.message}`);
+    }
+  }
+
+  // V3 (2026-06-18) — scheduler consolidacao semanal de grupos WhatsApp (domingo 4h BRT)
+  if (process.env.SCHEDULER_WA_CONSOLIDACAO_ENABLED !== '0') {
+    try {
+      const schedWa = require('./lib/scheduler-consolidacao-whatsapp');
+      schedWa.iniciar();
+      console.log('  [scheduler-wa-consolidacao] ATIVO (domingo 4h BRT, consolida grupos monitorados)');
+    } catch (e) {
+      console.warn(`  [scheduler-wa-consolidacao] falha ao iniciar: ${e.message}`);
     }
   }
 });
