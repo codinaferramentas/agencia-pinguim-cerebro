@@ -17,6 +17,7 @@ import { renderFinOps } from './finops.js?v=20260501e';
 import { renderFunis } from './funis.js?v=20260428p';
 import { renderOficina } from './oficina.js?v=20260512a';
 import { renderAgendamentos } from './agendamentos.js?v=20260513b';
+import { renderPainelAutomacao } from './painel-automacao.js?v=20260618a';
 import { renderPlanoCerebros } from './plano-cerebros.js?v=20260618a';
 import { renderClintMapeamento } from './clint-mapeamento.js?v=20260504a';
 import { renderReescritorPagina } from './reescritor-pagina.js?v=20260605a';
@@ -91,6 +92,7 @@ async function navegar(pageSlug, { forcarRender = true } = {}) {
       case 'seguranca': await renderSeguranca(); break;
       case 'finops':    await renderFinOps(); break;
       case 'oficina':   await renderOficina(); break;
+      case 'painel-automacao': await renderPainelAutomacao(); break;
       case 'plano-cerebros': await renderPlanoCerebros(); break;
       case 'agendamentos': await renderAgendamentos(); break;
       case 'clint-mapeamento': await renderClintMapeamento(); break;
