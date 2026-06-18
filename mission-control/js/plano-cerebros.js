@@ -209,13 +209,23 @@ async function carregarPainelAutomacao() {
   matrizSlot.innerHTML = '<div style="padding:1rem;color:#94A3B8;font-size:.875rem">Carregando matriz...</div>';
   try {
     const sb = getSupabase();
-    const [kpis, alertas, matriz] = await Promise.all([
+    const [kpis, alertas, matriz, alertasEdicoes] = await Promise.all([
       sb.rpc('painel_automacao_kpis').then(r => r.data?.[0] || {}),
       sb.rpc('painel_automacao_alertas', { p_dias: 7 }).then(r => r.data || []),
       sb.rpc('painel_automacao_matriz').then(r => r.data || []),
+      sb.rpc('painel_alertas_edicoes').then(r => r.data || []),
     ]);
-    _painelCache = { kpis, alertas, matriz };
+    _painelCache = { kpis, alertas, matriz, alertasEdicoes };
     renderPainelKpisESlots();
+    // Reset do grid pra mostrar badge de edicao nos cards
+    const gridSlot = document.getElementById('pa-grid-slot');
+    if (gridSlot) {
+      gridSlot.innerHTML = '';
+      const cers = _filtroProduto === 'todos'
+        ? _snapshot.cerebros
+        : _snapshot.cerebros.filter(c => c.produto_nome === _filtroProduto);
+      gridSlot.append(renderGridCerebros(cers));
+    }
   } catch (e) {
     kpisSlot.innerHTML = `<div style="padding:1rem;color:#EF4444;font-size:.875rem">Erro carregando painel: ${e.message}</div>`;
   }
@@ -225,12 +235,56 @@ function renderPainelKpisESlots() {
   const kpisSlot = document.getElementById('pa-kpis-slot');
   const matrizSlot = document.getElementById('pa-matriz-slot');
   if (!kpisSlot || !matrizSlot || !_painelCache) return;
-  const { kpis, alertas, matriz } = _painelCache;
+  const { kpis, alertas, matriz, alertasEdicoes } = _painelCache;
   kpisSlot.innerHTML = '';
+  // Banner de edicoes pendentes vem PRIMEIRO (mais visivel)
+  if (alertasEdicoes && alertasEdicoes.length > 0) {
+    kpisSlot.append(renderBannerEdicoes(alertasEdicoes));
+  }
   kpisSlot.append(renderPainelKpis(kpis));
   if (alertas.length > 0) kpisSlot.append(renderPainelAlertas(alertas));
   matrizSlot.innerHTML = '';
   matrizSlot.append(renderMatrizFrequencia(filtrarMatriz(matriz)));
+}
+
+// V8 (2026-06-18 noite) — Banner topo de edicoes pendentes
+function renderBannerEdicoes(alertas) {
+  const atrasadas = alertas.filter(a => a.status === 'atrasado');
+  const preAvisos = alertas.filter(a => a.status === 'pre_aviso');
+  const cor = atrasadas.length > 0 ? '#EF4444' : '#F59E0B';
+  const bg = atrasadas.length > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)';
+
+  const wrap = el('div', { style: `background:${bg};border:1px solid ${cor};border-radius:8px;padding:1rem;margin-bottom:1rem` });
+  const titulo = atrasadas.length > 0
+    ? `🔴 ${atrasadas.length} edição(ões) atrasada(s) — sobe a aula!`
+    : `⚠ ${preAvisos.length} edição(ões) chegando — prepara as aulas`;
+  wrap.append(el('div', { style: `font-weight:700;color:${cor};font-size:.95rem;margin-bottom:.4rem` }, titulo));
+
+  const lista = el('div', { style: 'display:flex;flex-direction:column;gap:.3rem' });
+  for (const a of alertas) {
+    const corLinha = a.status === 'atrasado' ? '#EF4444' : '#F59E0B';
+    const txt = a.status === 'atrasado'
+      ? `atrasada há ${Math.abs(a.dias_para_evento)} dia(s)`
+      : `em ${a.dias_para_evento} dia(s)`;
+    const linha = el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.45rem .6rem;background:#0F172A;border-left:3px solid ' + corLinha + ';border-radius:4px;font-size:.8125rem' });
+    linha.append(el('div', {}, [
+      el('span', { style: 'margin-right:.4rem' }, a.produto_emoji || '🧠'),
+      el('strong', { style: `color:${corLinha}` }, a.produto_nome),
+      el('span', { style: 'color:#94A3B8;margin-left:.5rem' }, `· evento ${a.data_evento} · ${txt}`),
+    ]));
+    const btnIgnore = el('button', {
+      style: 'background:transparent;border:1px solid #334155;color:#94A3B8;padding:.25rem .55rem;border-radius:3px;font-size:.7rem;cursor:pointer',
+      onclick: async (e) => {
+        e.stopPropagation();
+        await getSupabase().rpc('proxima_edicao_marcar_resolvida', { p_edicao_id: a.edicao_id, p_por: 'manual' });
+        carregarPainelAutomacao();
+      },
+    }, '✓ Já cuidei');
+    linha.append(btnIgnore);
+    lista.append(linha);
+  }
+  wrap.append(lista);
+  return wrap;
 }
 
 function filtrarMatriz(linhas) {
@@ -399,12 +453,17 @@ function renderMatrizFrequencia(linhas) {
       onmouseout: function() { this.style.background = ''; },
       onclick: () => abrirCerebro(entry.cerebro_id),
     });
+    const alertaEdicao = _painelCache?.alertasEdicoes?.find(a => a.produto_nome === nome);
     tr.append(el('td', {
       style: 'padding:.5rem .55rem;color:#E2E8F0;font-weight:600;position:sticky;left:0;background:#0F172A;z-index:1;border-right:1px solid #334155;width:130px;min-width:130px;max-width:130px;font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',
-      title: nome,
+      title: alertaEdicao ? `${nome} · ⚠ próxima edição ${alertaEdicao.data_evento}` : nome,
     }, [
       el('span', { style: 'margin-right:.3rem' }, entry.produto_emoji || '🧠'),
       nome,
+      alertaEdicao ? el('span', {
+        style: `margin-left:.3rem;color:${alertaEdicao.status === 'atrasado' ? '#EF4444' : '#F59E0B'}`,
+        title: alertaEdicao.status === 'atrasado' ? `atrasada ${Math.abs(alertaEdicao.dias_para_evento)}d` : `em ${alertaEdicao.dias_para_evento}d`,
+      }, '⚠') : null,
     ]));
     for (let idx = 0; idx < cols.length; idx++) {
       const c = cols[idx];
@@ -575,13 +634,19 @@ function renderGridCerebros(cerebros) {
 
 function cardCerebro(c) {
   const pc = c.plano_counts || {};
+  const alertaEdicao = _painelCache?.alertasEdicoes?.find(a => a.produto_nome === c.produto_nome);
   return el('div', {
     class: 'pc-card',
+    style: alertaEdicao ? `border:1px solid ${alertaEdicao.status === 'atrasado' ? '#EF4444' : '#F59E0B'}` : '',
     onclick: () => abrirCerebro(c.cerebro_id),
   }, [
     el('div', { class: 'pc-card-head' }, [
       el('div', { class: 'pc-emoji' }, c.produto_emoji || '🧠'),
       el('div', { class: 'pc-card-titulo' }, c.produto_nome || c.produto_slug),
+      alertaEdicao ? el('span', {
+        style: `margin-left:auto;background:${alertaEdicao.status === 'atrasado' ? '#EF4444' : '#F59E0B'};color:#fff;padding:.15rem .4rem;border-radius:3px;font-size:.6rem;font-weight:700;white-space:nowrap`,
+        title: `Próxima edição ${alertaEdicao.data_evento} — ${alertaEdicao.status === 'atrasado' ? `atrasada ${Math.abs(alertaEdicao.dias_para_evento)}d` : `em ${alertaEdicao.dias_para_evento}d`}`,
+      }, alertaEdicao.status === 'atrasado' ? '⚠ ATRASADO' : '⏰ PROX') : null,
     ]),
     el('div', { class: 'pc-card-counts' }, [
       mini('🟢', pc.rodando || 0, '#22C55E', 'Rodando: categorias com automação ativa (cron, webhook ou evento) já configurada e funcionando.'),

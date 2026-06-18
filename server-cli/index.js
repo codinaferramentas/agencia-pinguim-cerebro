@@ -4700,6 +4700,17 @@ app.listen(PORT, () => {
       console.warn(`  [scheduler-wa-consolidacao] falha ao iniciar: ${e.message}`);
     }
   }
+
+  // V5 (2026-06-18 noite) — detector de proxima edicao + alertas (5h BRT diario)
+  if (process.env.SCHEDULER_PROXIMA_EDICAO_ENABLED !== '0') {
+    try {
+      const schedPE = require('./lib/scheduler-proxima-edicao');
+      schedPE.iniciar();
+      console.log('  [scheduler-proxima-edicao] ATIVO (5h BRT diario, detecta data + dispara alertas WhatsApp)');
+    } catch (e) {
+      console.warn(`  [scheduler-proxima-edicao] falha ao iniciar: ${e.message}`);
+    }
+  }
 });
 
 // Shutdown gracioso — fecha bot Discord antes de sair (evita reconexao spam quando reiniciar)
