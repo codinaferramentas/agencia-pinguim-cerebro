@@ -118,22 +118,16 @@ async function ingerirChatPastaDrive({
       const estatisticas = _estatisticasChatWhatsapp(texto);
       on_log({ etapa: 'estatisticas', ...estatisticas });
 
-      // 4. Salva em cerebro_fontes
-      const fonteRow = await db.rodarSQL(`
-        INSERT INTO pinguim.cerebro_fontes
-          (cerebro_id, tipo, titulo, origem, url, conteudo_md, criado_em)
-        VALUES (
-          '${cerebro_id}'::uuid,
-          '${tipo_fonte}',
-          ${esc(arq.name)},
-          'google_drive',
-          ${esc(arq.webViewLink || '')},
-          ${esc(texto)},
-          now()
-        )
-        RETURNING id;
-      `);
-      const fonteId = fonteRow[0].id;
+      // 4. Salva em cerebro_fontes via REST (payload grande quebra Management API SQL inline)
+      const novo = await db.inserirFonteRest({
+        cerebro_id,
+        tipo: tipo_fonte,
+        titulo: arq.name,
+        origem: 'google_drive',
+        url: arq.webViewLink || '',
+        conteudo_md: texto,
+      });
+      const fonteId = novo.id;
 
       // 5. Marca em fontes_processadas
       await db.rodarSQL(`
@@ -145,7 +139,7 @@ async function ingerirChatPastaDrive({
           ${esc(arq.id)},
           'google_drive',
           '${fonteId}'::uuid,
-          ${esc(JSON.stringify({ name: arq.name, mime: arq.mimeType, bytes: det.bytes, chars: texto.length, perfis_count: perfis.length, ...estatisticas }))}::jsonb
+          ${esc(JSON.stringify({ name: arq.name, mime: arq.mimeType, bytes: det.bytes, chars: texto.length, ...estatisticas }))}::jsonb
         )
         ON CONFLICT DO NOTHING;
       `);
