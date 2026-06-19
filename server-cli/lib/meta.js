@@ -165,9 +165,11 @@ async function listarCampanhas({ ad_account_id, status, limit = 50 } = {}) {
 }
 
 // Insights de campanha (impressões, cliques, gasto, ROAS, etc)
-async function insightsCampanha({ campaign_id, date_preset = 'last_7d', time_range, level = 'campaign', breakdowns } = {}) {
+// V4 (2026-06-19): aceita fields_extra pra incluir metricas de video/hook
+async function insightsCampanha({ campaign_id, date_preset = 'last_7d', time_range, level = 'campaign', breakdowns, fields_extra } = {}) {
   if (!campaign_id) throw new Error('campaign_id obrigatório');
-  const fields = 'campaign_name,impressions,reach,clicks,ctr,cpm,cpc,spend,actions,action_values,frequency,unique_clicks';
+  let fields = 'campaign_name,impressions,reach,clicks,ctr,cpm,cpc,spend,actions,action_values,frequency,unique_clicks';
+  if (fields_extra) fields += ',' + (Array.isArray(fields_extra) ? fields_extra.join(',') : fields_extra);
   const params = { fields, level };
   if (time_range) {
     params.time_range = typeof time_range === 'string' ? time_range : JSON.stringify(time_range);
@@ -202,11 +204,23 @@ async function listarAds({ parent_id, limit = 50 } = {}) {
 }
 
 // Detalhe de criativo (texto, imagem, vídeo, link)
+// V4: pega tambem instagram_permalink_url e asset_feed_spec (variacoes)
 async function detalheCriativo({ creative_id } = {}) {
   if (!creative_id) throw new Error('creative_id obrigatório');
-  const fields = 'id,name,title,body,object_story_spec,thumbnail_url,image_url,video_id,link_url,call_to_action_type,effective_object_story_id';
+  const fields = 'id,name,title,body,object_story_spec,thumbnail_url,image_url,video_id,link_url,call_to_action_type,effective_object_story_id,instagram_permalink_url,asset_feed_spec';
   return await metaFetch({
     endpoint: `/${creative_id}`,
+    params: { fields },
+  });
+}
+
+// V4 (2026-06-19): detalhe de video (URL fonte, duracao, miniatura HD)
+// Usado pra agente saber qual MP4 baixar/regravar/fazer variacao
+async function detalheVideo({ video_id } = {}) {
+  if (!video_id) throw new Error('video_id obrigatório');
+  const fields = 'id,title,description,length,permalink_url,source,picture,thumbnails{uri,width,height,is_preferred},created_time';
+  return await metaFetch({
+    endpoint: `/${video_id}`,
     params: { fields },
   });
 }
@@ -248,6 +262,7 @@ module.exports = {
   listarAdsets,
   listarAds,
   detalheCriativo,
+  detalheVideo,
   // pages
   listarPages,
   postsPage,

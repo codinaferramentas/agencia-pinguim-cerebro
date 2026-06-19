@@ -1,16 +1,26 @@
 // ============================================================
-// processar-anuncios-meta.js — V3 (2026-06-17)
+// processar-anuncios-meta.js — V4 (2026-06-19)
 // ============================================================
 // Lê campanhas/anúncios da Meta filtrando por keyword no nome
 // (ex: "DCL", "Lofi" pra Lo-fi Desafio). Janela 90 dias.
 //
 // Pega top 20% em CPA mais baixo (vendedores) + top 20% em maior
-// investimento (escalados). Pra cada anúncio: extrai copy + thumbnail
-// + KPIs e salva como cerebro_fonte tipo 'anuncio_meta' no cérebro
-// do produto.
+// investimento (escalados). Pra cada anúncio: extrai TUDO que
+// agente precisa pra dizer "regrava esse" / "faz variacao":
+//   - IDs canonicos (ad_id, campaign_id, creative_id, video_id)
+//   - Copy completa + headline + CTA + link destino
+//   - Video URL + duracao + thumbnail HD (se eh video)
+//   - Image URL HD (se eh static)
+//   - Instagram permalink (se veio de post IG)
+//   - Objective da campanha (Sales/Leads/Traffic/etc)
+//   - Hook metrics: video_p25/p50/p75/p100, tempo medio assistido
+//   - Breakdown demografico (idade x genero, regiao) do top que converteu
+//   - Performance 90 dias (spend, CTR, CPA, etc)
 //
-// Reusável: passa keyword + cerebro_id + criterios e processa.
-// Pra próximo produto (ProAlt, Elo, etc): só muda keyword.
+// Salva como cerebro_fonte tipo 'anuncio_meta'. Vetoriza.
+//
+// REGRA UNIVERSAL (Andre 2026-06-19): este motor vale igual pra
+// TODOS os produtos. Pra novo produto: so muda keywords.
 // ============================================================
 
 const db = require('./db');
@@ -77,15 +87,19 @@ async function processarAnunciosMeta({ cerebro_id, keywords, janela_dias = JANEL
       const ads = (adsRes && adsRes.data) || [];
       for (const ad of ads) {
         try {
-          // Busca insights do anúncio (level=ad)
-          const insRes = await meta.insightsCampanha({ campaign_id: ad.id, time_range, level: 'ad' });
+          // V4: pede hook metrics no insights (video_p25/p50/p75/p100 + tempo medio)
+          const insRes = await meta.insightsCampanha({
+            campaign_id: ad.id,
+            time_range,
+            level: 'ad',
+            fields_extra: 'video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,video_avg_time_watched_actions',
+          });
           const ins = (insRes && insRes.data && insRes.data[0]) || null;
           if (!ins || !ins.spend) continue;
 
           const spend = parseFloat(ins.spend) || 0;
-          if (spend < MIN_SPEND_USD) continue; // descarta anúncios com gasto irrelevante
+          if (spend < MIN_SPEND_USD) continue;
 
-          // CPA = spend / conversions (purchase ou onsite_conversion.purchase)
           const purchases = _extrairConversoes(ins.actions);
           const cpa = purchases > 0 ? spend / purchases : null;
 
@@ -94,7 +108,9 @@ async function processarAnunciosMeta({ cerebro_id, keywords, janela_dias = JANEL
             ad_name: ad.name,
             campaign_id: camp.id,
             campaign_name: camp.name,
+            campaign_objective: camp.objective || null,
             ad_account_name: camp.ad_account_name,
+            ad_account_id: camp.ad_account_id,
             creative_id: ad.creative?.id || null,
             spend,
             impressions: parseInt(ins.impressions, 10) || 0,
@@ -105,6 +121,12 @@ async function processarAnunciosMeta({ cerebro_id, keywords, janela_dias = JANEL
             purchases,
             cpa,
             created_time: ad.created_time,
+            // V4: hook metrics (so existem se for video)
+            hook_p25:  _somarActionValues(ins.video_p25_watched_actions),
+            hook_p50:  _somarActionValues(ins.video_p50_watched_actions),
+            hook_p75:  _somarActionValues(ins.video_p75_watched_actions),
+            hook_p100: _somarActionValues(ins.video_p100_watched_actions),
+            video_avg_time: _somarActionValues(ins.video_avg_time_watched_actions),
           });
         } catch (e) {
           on_log({ etapa: 'erro_insights', ad_id: ad.id, erro: e.message });
@@ -162,8 +184,35 @@ async function processarAnunciosMeta({ cerebro_id, keywords, janela_dias = JANEL
         }
       }
 
+      // V4: se eh video, busca URL fonte + duracao + miniatura HD
+      let videoData = null;
+      const videoId = creativeData?.video_id || creativeData?.object_story_spec?.video_data?.video_id;
+      if (videoId) {
+        try {
+          videoData = await meta.detalheVideo({ video_id: videoId });
+        } catch (e) {
+          on_log({ etapa: 'erro_video', ad_id: a.ad_id, video_id: videoId, erro: e.message });
+        }
+      }
+
+      // V4: breakdown demografico (idade x genero) — so chama pra top 10 escalados pra economizar quota
+      let breakdownDemo = null;
+      if (a.spend > MIN_SPEND_USD * 5) {
+        try {
+          const bdRes = await meta.insightsCampanha({
+            campaign_id: a.ad_id,
+            time_range,
+            level: 'ad',
+            breakdowns: 'age,gender',
+          });
+          breakdownDemo = (bdRes && bdRes.data) || null;
+        } catch (e) {
+          on_log({ etapa: 'erro_breakdown', ad_id: a.ad_id, erro: e.message });
+        }
+      }
+
       const titulo = `${a.campaign_name} — ${a.ad_name}`.slice(0, 200);
-      const conteudoMd = _montarMd({ a, creativeData });
+      const conteudoMd = _montarMd({ a, creativeData, videoData, breakdownDemo });
 
       if (jaExiste && jaExiste[0]) {
         // Atualiza
@@ -194,7 +243,15 @@ async function processarAnunciosMeta({ cerebro_id, keywords, janela_dias = JANEL
             ${_esc(a.ad_id)},
             'meta_ads',
             '${fonte.id}'::uuid,
-            ${_esc(JSON.stringify({ motivo: a.motivo, spend: a.spend, cpa: a.cpa, ctr: a.ctr, purchases: a.purchases, campaign_id: a.campaign_id }))}::jsonb
+            ${_esc(JSON.stringify({
+              motivo: a.motivo, spend: a.spend, cpa: a.cpa, ctr: a.ctr, purchases: a.purchases,
+              campaign_id: a.campaign_id, campaign_objective: a.campaign_objective,
+              creative_id: a.creative_id, video_id: videoId || null,
+              video_url: videoData?.source || null, video_permalink: videoData?.permalink_url || null,
+              image_url: creativeData?.image_url || null,
+              instagram_permalink: creativeData?.instagram_permalink_url || null,
+              hook_p25: a.hook_p25, hook_p75: a.hook_p75, hook_avg_time: a.video_avg_time,
+            }))}::jsonb
           ) ON CONFLICT DO NOTHING;
         `);
         await vetorizarFonte(fonte.id, { silencioso: true });
@@ -237,15 +294,27 @@ function _dataIsoNDiasAtras(n) {
   return d.toISOString().slice(0, 10);
 }
 
-function _montarMd({ a, creativeData }) {
+function _montarMd({ a, creativeData, videoData, breakdownDemo }) {
   const linhas = [];
   linhas.push(`# Anúncio Meta — ${a.ad_name}`);
   linhas.push('');
+
+  // IDs canonicos (NO TOPO pra agente pegar facil) — V4
+  linhas.push('## 🆔 Identificadores');
+  linhas.push(`- **ad_id**: \`${a.ad_id}\``);
+  linhas.push(`- **campaign_id**: \`${a.campaign_id}\``);
+  if (a.creative_id) linhas.push(`- **creative_id**: \`${a.creative_id}\``);
+  if (videoData?.id) linhas.push(`- **video_id**: \`${videoData.id}\``);
+  linhas.push(`- **ad_account_id**: \`${a.ad_account_id}\``);
+  linhas.push(`- **Abrir no Ads Manager**: https://business.facebook.com/adsmanager/manage/ads?selected_ad_ids=${a.ad_id}`);
+  linhas.push('');
+
   linhas.push('## Por que foi selecionado');
   for (const m of a.motivo) {
     linhas.push(`- ${m === 'top_cpa_baixo' ? '🎯 Top 20% em CPA mais baixo (vende muito)' : '💰 Top 20% em investimento (escalado pelo time)'}`);
   }
   linhas.push('');
+
   linhas.push('## Performance (últimos 90 dias)');
   linhas.push(`- **Gasto**: $${a.spend.toFixed(2)}`);
   linhas.push(`- **Compras**: ${a.purchases}`);
@@ -256,8 +325,25 @@ function _montarMd({ a, creativeData }) {
   linhas.push(`- **CPM**: $${a.cpm.toFixed(2)}`);
   linhas.push(`- **CPC**: $${a.cpc.toFixed(2)}`);
   linhas.push('');
+
+  // V4: hook metrics — quem assistiu ate onde
+  if (a.hook_p25 > 0 || a.hook_p75 > 0) {
+    linhas.push('## 🎬 Hook do vídeo (quanto segura)');
+    if (a.hook_p25 > 0)  linhas.push(`- **Viram 25%**: ${a.hook_p25.toLocaleString('pt-BR')} pessoas`);
+    if (a.hook_p50 > 0)  linhas.push(`- **Viram 50%**: ${a.hook_p50.toLocaleString('pt-BR')} pessoas`);
+    if (a.hook_p75 > 0)  linhas.push(`- **Viram 75%**: ${a.hook_p75.toLocaleString('pt-BR')} pessoas`);
+    if (a.hook_p100 > 0) linhas.push(`- **Viram 100%**: ${a.hook_p100.toLocaleString('pt-BR')} pessoas`);
+    if (a.video_avg_time > 0) linhas.push(`- **Tempo médio assistido**: ${a.video_avg_time.toFixed(1)}s`);
+    if (a.hook_p25 > 0) {
+      const retencao = a.hook_p75 / a.hook_p25;
+      linhas.push(`- **Retenção 25→75**: ${(retencao * 100).toFixed(1)}% (>50% = roteiro segura bem)`);
+    }
+    linhas.push('');
+  }
+
   linhas.push('## Contexto');
   linhas.push(`- **Campanha**: ${a.campaign_name}`);
+  if (a.campaign_objective) linhas.push(`- **Objetivo**: ${a.campaign_objective}`);
   linhas.push(`- **Conta**: ${a.ad_account_name}`);
   linhas.push(`- **Criado em**: ${a.created_time}`);
   linhas.push('');
@@ -274,10 +360,42 @@ function _montarMd({ a, creativeData }) {
     if (body) linhas.push(`### Copy do anúncio\n${body}\n`);
     if (cta) linhas.push(`### Call-to-Action\n${cta}\n`);
     if (link) linhas.push(`### Link de destino\n${link}\n`);
-    if (creativeData.thumbnail_url) linhas.push(`### Thumbnail\n![thumb](${creativeData.thumbnail_url})\n`);
+    if (creativeData.image_url) linhas.push(`### Imagem HD\n![img](${creativeData.image_url})\n`);
+    else if (creativeData.thumbnail_url) linhas.push(`### Thumbnail\n![thumb](${creativeData.thumbnail_url})\n`);
+    if (creativeData.instagram_permalink_url) linhas.push(`### 📱 Post original Instagram\n${creativeData.instagram_permalink_url}\n`);
+  }
+
+  // V4: video data
+  if (videoData) {
+    linhas.push('## 🎥 Vídeo (pra agente regravar/baixar)');
+    if (videoData.length) linhas.push(`- **Duração**: ${videoData.length}s`);
+    if (videoData.permalink_url) linhas.push(`- **Link público FB**: ${videoData.permalink_url}`);
+    if (videoData.source) linhas.push(`- **URL fonte (MP4)**: ${videoData.source}`);
+    if (videoData.picture) linhas.push(`- **Thumbnail HD**: ${videoData.picture}`);
+    linhas.push('');
+  }
+
+  // V4: breakdown demografico
+  if (breakdownDemo && breakdownDemo.length > 0) {
+    linhas.push('## 👥 Quem comprou (top 5 segmentos)');
+    const ordenado = [...breakdownDemo]
+      .map(d => ({ ...d, purchases: _extrairConversoes(d.actions), spend: parseFloat(d.spend) || 0 }))
+      .filter(d => d.purchases > 0)
+      .sort((a, b) => b.purchases - a.purchases)
+      .slice(0, 5);
+    for (const seg of ordenado) {
+      linhas.push(`- **${seg.age} · ${seg.gender}**: ${seg.purchases} compras · $${seg.spend.toFixed(2)} gasto`);
+    }
+    linhas.push('');
   }
 
   return linhas.join('\n');
+}
+
+// V4: soma actions/value de campos do tipo video_p25_watched_actions:[{action_type, value}]
+function _somarActionValues(arr) {
+  if (!Array.isArray(arr)) return 0;
+  return arr.reduce((s, x) => s + (parseFloat(x.value) || 0), 0);
 }
 
 function _esc(s) {
