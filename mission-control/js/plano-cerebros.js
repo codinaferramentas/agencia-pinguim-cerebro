@@ -1408,7 +1408,7 @@ function abrirModalWebhookPesquisa(plano, cerebro_id) {
   inner.append(body);
 
   body.append(
-    el('label', { style: 'display:block;font-weight:600;margin-bottom:6px;font-size:.875rem' }, 'URL do webhook'),
+    el('label', { style: 'display:block;font-weight:600;margin-bottom:6px;font-size:.875rem' }, 'URL do webhook (cola no YA Forms)'),
     el('div', { style: 'display:flex;gap:.5rem;align-items:stretch' }, [
       el('input', {
         id: 'pc-fld-webhook-url',
@@ -1431,26 +1431,43 @@ function abrirModalWebhookPesquisa(plano, cerebro_id) {
               e.currentTarget.style.background = '';
             }, 1800);
           } catch {
-            // fallback: seleciona o input
             document.getElementById('pc-fld-webhook-url').select();
             alert('Pressiona Ctrl+C pra copiar');
           }
         },
       }, '📋 Copiar'),
     ]),
-    el('div', { style: 'margin-top:1rem;padding:.75rem;background:#FEF3C7;border:1px solid #F59E0B;border-radius:6px;font-size:.8125rem;color:#92400E;line-height:1.5' }, [
-      el('strong', null, '⚠ Importante: '),
-      'Cada produto tem perguntas diferentes. O webhook eh generico — ele aceita qualquer estrutura. ',
-      'A IA vai extrair os campos (nome, idade, dor, nicho, etc.) automaticamente quando a resposta chegar.',
+    el('div', { style: 'margin-top:.75rem;padding:.6rem .75rem;background:#FEF3C7;border:1px solid #F59E0B;border-radius:6px;font-size:.75rem;color:#92400E;line-height:1.5' }, [
+      el('strong', null, '⚠ '),
+      'Cada produto tem perguntas diferentes. O webhook eh generico — IA extrai campos (nome, idade, dor, nicho, etc) automaticamente.',
     ]),
+
+    // V10 (2026-06-19) — N origens por categoria (ProAlt vai ter 2 pesquisas, etc)
+    el('div', { style: 'margin-top:1.5rem' }, [
+      el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem' }, [
+        el('label', { style: 'font-weight:600;font-size:.875rem' }, '📋 Pesquisas cadastradas pra este produto'),
+        el('button', {
+          class: 'pc-btn-secondary',
+          style: 'font-size:.75rem;padding:.3rem .6rem',
+          onclick: () => abrirAdicionarOrigem(plano, cerebro_id),
+        }, '+ Adicionar pesquisa'),
+      ]),
+      el('div', { id: 'pc-origens-lista' }, '⏳ Carregando origens...'),
+      el('div', { style: 'margin-top:.5rem;font-size:.7rem;color:#64748B;line-height:1.4' },
+        'Dê um nome pra cada pesquisa (ex: "Pesquisa de entrada", "Pesquisa mensal de dores"). Cada uma fica vetorizada separadamente no cerebro.'),
+    ]),
+
     jaAtivo
-      ? el('div', { style: 'margin-top:1rem;padding:.75rem;background:rgba(34,197,94,0.1);border:1px solid #22C55E;border-radius:6px;font-size:.8125rem;color:#15803D' },
-          '✓ Esta categoria ja esta ativa como webhook. Pode colar a URL no YA Forms — respostas vao entrar em tempo real.')
-      : el('div', { style: 'margin-top:1rem;padding:.75rem;background:rgba(59,130,246,0.08);border:1px solid #3B82F6;border-radius:6px;font-size:.8125rem;color:#1E40AF;line-height:1.5' }, [
-          el('strong', null, '🚀 Quer ativar agora? '),
-          'Clica no botao abaixo. A categoria vai pra status "ativo" + trigger "webhook". Quando o YA Forms enviar a primeira resposta, voce ja recebe vetorizado.',
+      ? el('div', { style: 'margin-top:1rem;padding:.65rem .8rem;background:rgba(34,197,94,0.1);border:1px solid #22C55E;border-radius:6px;font-size:.75rem;color:#15803D' },
+          '✓ Categoria ativa. Respostas entrando em tempo real.')
+      : el('div', { style: 'margin-top:1rem;padding:.65rem .8rem;background:rgba(59,130,246,0.08);border:1px solid #3B82F6;border-radius:6px;font-size:.75rem;color:#1E40AF;line-height:1.5' }, [
+          el('strong', null, '🚀 '),
+          'Clica em "Ativar webhook" abaixo, depois cadastra suas pesquisas com nomes.',
         ]),
   );
+
+  // Carrega lista de origens assincrono
+  carregarOrigensCategoria(plano.plano_id, cerebro_id);
 
   const acoes = [];
   if (!jaAtivo) {
@@ -1462,6 +1479,105 @@ function abrirModalWebhookPesquisa(plano, cerebro_id) {
   }
   acoes.push(el('button', { class: 'pc-btn-secondary', onclick: fecharModal }, 'Fechar'));
   inner.append(el('div', { class: 'pc-modal-foot' }, acoes));
+}
+
+// ============================================================
+// V10 (2026-06-19) — N origens por categoria
+// Lista de pesquisas/origens cadastradas no plano. Permite + e remover.
+// ============================================================
+async function carregarOrigensCategoria(plano_id, cerebro_id) {
+  const slot = document.getElementById('pc-origens-lista');
+  if (!slot) return;
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb.rpc('categoria_origens_listar', { p_plano_id: plano_id });
+    if (error) throw error;
+    slot.innerHTML = '';
+    const origens = data || [];
+    if (origens.length === 0) {
+      slot.append(el('div', { style: 'padding:.75rem;background:#0F172A;border:1px dashed #334155;border-radius:5px;font-size:.8125rem;color:#94A3B8;text-align:center' },
+        'Nenhuma pesquisa cadastrada. Clica em "+ Adicionar pesquisa" pra começar.'));
+      return;
+    }
+    for (const o of origens) {
+      const card = el('div', {
+        style: 'display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.55rem .7rem;background:#0F172A;border:1px solid #1E293B;border-radius:5px;margin-bottom:.3rem;font-size:.8125rem',
+      }, [
+        el('div', { style: 'flex:1;min-width:0' }, [
+          el('div', { style: 'font-weight:600;color:#E2E8F0' }, o.label),
+          el('div', { style: 'font-size:.65rem;color:#64748B;margin-top:.1rem' },
+            `${o.origem_tipo} · ${o.qtd_fontes_geradas} respostas`),
+        ]),
+        el('button', {
+          style: 'background:transparent;border:1px solid #334155;color:#94A3B8;padding:.25rem .5rem;border-radius:3px;font-size:.7rem;cursor:pointer',
+          onclick: async () => {
+            if (!await confirmarPcModal('Remover essa origem?', `"${o.label}" será removida (respostas já recebidas continuam no cérebro).`)) return;
+            await sb.rpc('categoria_origem_remover', { p_id: o.id });
+            carregarOrigensCategoria(plano_id, cerebro_id);
+          },
+        }, '✕'),
+      ]);
+      slot.append(card);
+    }
+  } catch (e) {
+    slot.innerHTML = `<div style="color:#EF4444;font-size:.8125rem">Erro carregando origens: ${e.message}</div>`;
+  }
+}
+
+function abrirAdicionarOrigem(plano, cerebro_id) {
+  const modal2 = document.getElementById('pc-modal-2');
+  if (!modal2) return alert('Modal secundário não disponível');
+  modal2.innerHTML = '';
+  modal2.classList.remove('pc-hidden');
+
+  const inner = el('div', { class: 'pc-modal-inner', style: 'max-width:480px' });
+  modal2.append(inner);
+
+  inner.append(
+    el('div', { class: 'pc-modal-head' }, [
+      el('h2', null, '+ Nova pesquisa'),
+      el('button', { class: 'pc-close', onclick: () => { modal2.classList.add('pc-hidden'); modal2.innerHTML = ''; } }, '×'),
+    ]),
+    el('p', { class: 'pc-modal-sub' }, 'Dê um nome descritivo (ex: "Pesquisa de entrada", "Pesquisa mensal de dores").'),
+  );
+
+  const body = el('div', { class: 'pc-modal-body' });
+  inner.append(body);
+
+  body.append(
+    el('label', { style: 'display:block;font-weight:600;margin-bottom:6px;font-size:.875rem' }, 'Nome da pesquisa'),
+    el('input', {
+      id: 'pc-fld-origem-label',
+      type: 'text',
+      placeholder: 'Ex: Pesquisa de entrada',
+      style: 'width:100%;padding:10px 12px;border:1px solid #CBD5E1;border-radius:6px;font-size:14px;background:#F8FAFC;color:#1E293B',
+    }),
+    el('div', { style: 'margin-top:.75rem;padding:.6rem;background:rgba(59,130,246,0.06);border:1px solid #3B82F6;border-radius:5px;font-size:.7rem;color:#94A3B8' },
+      'A URL do webhook a colar no YA Forms continua sendo a mesma do produto. Esse nome é só pra você organizar internamente.'),
+  );
+
+  inner.append(el('div', { class: 'pc-modal-foot' }, [
+    el('button', { class: 'pc-btn-secondary', onclick: () => { modal2.classList.add('pc-hidden'); modal2.innerHTML = ''; } }, 'Cancelar'),
+    el('button', {
+      class: 'pc-btn-primary',
+      onclick: async () => {
+        const label = document.getElementById('pc-fld-origem-label').value.trim();
+        if (!label) { alert('Coloca um nome'); return; }
+        try {
+          await getSupabase().rpc('categoria_origem_adicionar', {
+            p_plano_id: plano.plano_id,
+            p_label: label,
+            p_origem_tipo: 'webhook_yaforms',
+            p_origem_valor: null,
+          });
+          modal2.classList.add('pc-hidden'); modal2.innerHTML = '';
+          carregarOrigensCategoria(plano.plano_id, cerebro_id);
+        } catch (e) {
+          alert('Erro: ' + e.message);
+        }
+      },
+    }, 'Adicionar'),
+  ]));
 }
 
 async function ativarWebhookPesquisa(plano_id, cerebro_id) {
