@@ -53,14 +53,22 @@ async function processarAnunciosMeta({ cerebro_id, keywords, janela_dias = JANEL
   on_log({ etapa: 'ad_accounts', total: accounts.length });
 
   // 2. Pra cada ad account: lista campanhas e filtra por keyword
+  // V4 (2026-06-19): match com word boundary pra evitar falso positivo.
+  // "Elo" so casa com [Elo], (Elo), -Elo-, "Elo ", " Elo", inicio/fim de string.
+  // NAO casa com MODELOS, ESTRELO, ESCOLHEU, etc.
+  const keywordRegexes = keywordsLower.map(k => {
+    // Escapa caracteres especiais regex
+    const escaped = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i');
+  });
   const campanhasMatch = [];
   for (const acc of accounts) {
     try {
       const campsRes = await meta.listarCampanhas({ ad_account_id: acc.id, limit: 100 });
       const camps = (campsRes && campsRes.data) || [];
       for (const c of camps) {
-        const nameLower = (c.name || '').toLowerCase();
-        if (keywordsLower.some(k => nameLower.includes(k))) {
+        const name = c.name || '';
+        if (keywordRegexes.some(re => re.test(name))) {
           campanhasMatch.push({ ...c, ad_account_id: acc.id, ad_account_name: acc.name });
         }
       }
