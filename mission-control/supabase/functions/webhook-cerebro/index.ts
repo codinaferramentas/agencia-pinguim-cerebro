@@ -129,6 +129,29 @@ serve(async (req) => {
 
     const conteudoMd = payloadParaMarkdown(payload);
 
+    // V10 (2026-06-19): classifica por origem se tiver multiplas cadastradas
+    // Cada origem pode ter origem_extras.perguntas_chave[] — se conteudoMd
+    // contem alguma delas, marca origem_id/origem_label na metadata.
+    let origemMatch: any = null;
+    try {
+      const { data: origens } = await sb
+        .from('cerebro_plano_categoria_origens')
+        .select('id, label, origem_extras')
+        .eq('plano_id', (catList[0] as any).plano_id)
+        .eq('ativo', true);
+      if (origens && origens.length > 0) {
+        for (const o of origens as any[]) {
+          const chaves: string[] = o.origem_extras?.perguntas_chave || [];
+          if (chaves.length > 0 && chaves.some(k => conteudoMd.includes(k))) {
+            origemMatch = o;
+            break;
+          }
+        }
+        // Se nada bateu mas so tem 1 origem cadastrada, atribui automaticamente
+        if (!origemMatch && origens.length === 1) origemMatch = origens[0];
+      }
+    } catch (_) { /* tolerante */ }
+
     // 5. Salva como cerebro_fonte (so passa daqui se nao for duplicata)
     const { data: fonte, error: errF } = await sb
       .from('cerebro_fontes')
@@ -139,11 +162,35 @@ serve(async (req) => {
         origem: fonte_externa,
         url: null,
         conteudo_md: conteudoMd,
+        metadata: origemMatch ? {
+          origem_id: origemMatch.id,
+          origem_label: origemMatch.label,
+          classificador: 'webhook_v10',
+        } : null,
       })
       .select('id')
       .single();
     if (errF) throw new Error('insert cerebro_fontes: ' + errF.message);
     const cerebro_fonte_id = (fonte as any).id;
+
+    // Atualiza contador da origem
+    if (origemMatch) {
+      try {
+        const { data: cur } = await sb
+          .from('cerebro_plano_categoria_origens')
+          .select('qtd_fontes_geradas')
+          .eq('id', origemMatch.id)
+          .single();
+        await sb
+          .from('cerebro_plano_categoria_origens')
+          .update({
+            qtd_fontes_geradas: ((cur as any)?.qtd_fontes_geradas || 0) + 1,
+            ultima_execucao: new Date().toISOString(),
+            ultimo_status_run: 'ok',
+          })
+          .eq('id', origemMatch.id);
+      } catch (_) { /* tolerante */ }
+    }
 
     // 6. Marca em fontes_processadas (idempotencia formal)
     const finalFonteExternaId = fonteExternaId || `${Date.now()}-${cerebro_fonte_id.slice(0,8)}`;
@@ -153,7 +200,10 @@ serve(async (req) => {
       fonte_externa_id: finalFonteExternaId,
       fonte_origem: fonte_externa,
       cerebro_fonte_id,
-      metadata: { titulo, fonte_externa, payload_keys: Object.keys(payload || {}) },
+      metadata: {
+        titulo, fonte_externa, payload_keys: Object.keys(payload || {}),
+        origem_id: origemMatch?.id, origem_label: origemMatch?.label,
+      },
     });
 
     // 6. Atualiza categoria: ultima_execucao + promove status se em construcao
