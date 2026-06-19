@@ -134,7 +134,9 @@ export async function renderPlanoCerebros() {
 
   // V3 (2026-06-18) modal secundario (sobreposto) — usado pelo browser de pasta Drive
   // sem fechar o modal de Editar Plano que tá embaixo
-  const modal2 = el('div', { id: 'pc-modal-2', class: 'pc-modal-bg pc-hidden', style: 'z-index:1050' });
+  // V10 fix (2026-06-19): z-index 10001 garante que modal2 fica NA FRENTE do
+  // modal principal (que tem z-index 9999 via CSS class).
+  const modal2 = el('div', { id: 'pc-modal-2', class: 'pc-modal-bg pc-hidden', style: 'z-index:10001 !important' });
   container.append(modal2);
   modal2.addEventListener('click', (e) => { if (e.target.id === 'pc-modal-2') fecharModal2(); });
 }
@@ -990,6 +992,12 @@ function cardCategoria(p, integracoes, cerebro_id) {
     ])
   )));
 
+  // V10 (2026-06-19) — N origens por categoria (pesquisas etc).
+  // Mostra slot que carrega async pra cada categoria.
+  const slotOrigensId = `pc-cat-origens-${p.plano_id}`;
+  card.append(el('div', { id: slotOrigensId, style: 'margin-top:.4rem' }));
+  carregarOrigensSlotCard(p.plano_id, slotOrigensId);
+
   // Notas (se tiver)
   if (p.notas) {
     card.append(el('div', { class: 'pc-cat-notas' }, '📝 ' + p.notas));
@@ -1485,6 +1493,33 @@ function abrirModalWebhookPesquisa(plano, cerebro_id) {
 // V10 (2026-06-19) — N origens por categoria
 // Lista de pesquisas/origens cadastradas no plano. Permite + e remover.
 // ============================================================
+
+// Carrega slot inline DENTRO do card da categoria (visivel sem abrir modal)
+// Mostra so se tem 1+ origens cadastradas. Lista compacta.
+async function carregarOrigensSlotCard(plano_id, slot_id) {
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb.rpc('categoria_origens_listar', { p_plano_id: plano_id });
+    if (error) return;
+    const slot = document.getElementById(slot_id);
+    if (!slot) return;
+    const origens = (data || []).filter(o => o.ativo !== false);
+    if (origens.length === 0) return;  // sem origens, nem mostra
+    slot.innerHTML = '';
+    const wrap = el('div', {
+      style: 'padding:.5rem .65rem;background:rgba(34,197,94,0.04);border:1px solid rgba(34,197,94,0.25);border-radius:5px;font-size:.7rem;color:#94A3B8',
+    });
+    wrap.append(el('div', { style: 'font-weight:600;color:#22C55E;margin-bottom:.25rem' },
+      `📋 ${origens.length} origem${origens.length > 1 ? 's' : ''} cadastrada${origens.length > 1 ? 's' : ''}:`));
+    for (const o of origens) {
+      wrap.append(el('div', { style: 'padding:.1rem 0;color:#CBD5E1' }, `• ${o.label}`));
+    }
+    slot.append(wrap);
+  } catch (e) {
+    /* silencioso — se RPC nao existir ainda, nao mostra */
+  }
+}
+
 async function carregarOrigensCategoria(plano_id, cerebro_id) {
   const slot = document.getElementById('pc-origens-lista');
   if (!slot) return;
@@ -1559,10 +1594,14 @@ function abrirAdicionarOrigem(plano, cerebro_id) {
   inner.append(el('div', { class: 'pc-modal-foot' }, [
     el('button', { class: 'pc-btn-secondary', onclick: () => { modal2.classList.add('pc-hidden'); modal2.innerHTML = ''; } }, 'Cancelar'),
     el('button', {
+      id: 'pc-btn-adicionar-origem',
       class: 'pc-btn-primary',
-      onclick: async () => {
+      onclick: async (ev) => {
+        const btn = ev.currentTarget;
         const label = document.getElementById('pc-fld-origem-label').value.trim();
         if (!label) { alert('Coloca um nome'); return; }
+        btn.disabled = true;
+        btn.textContent = '⏳ Salvando...';
         try {
           await getSupabase().rpc('categoria_origem_adicionar', {
             p_plano_id: plano.plano_id,
@@ -1570,9 +1609,18 @@ function abrirAdicionarOrigem(plano, cerebro_id) {
             p_origem_tipo: 'webhook_yaforms',
             p_origem_valor: null,
           });
-          modal2.classList.add('pc-hidden'); modal2.innerHTML = '';
-          carregarOrigensCategoria(plano.plano_id, cerebro_id);
+          btn.textContent = '✓ Salvo';
+          btn.style.background = '#22C55E';
+          btn.style.borderColor = '#22C55E';
+          // Recarrega a lista do modal principal IMEDIATAMENTE pra Andre ver que entrou
+          await carregarOrigensCategoria(plano.plano_id, cerebro_id);
+          // Espera 600ms pra dar tempo de ver o feedback e fecha
+          setTimeout(() => {
+            modal2.classList.add('pc-hidden'); modal2.innerHTML = '';
+          }, 600);
         } catch (e) {
+          btn.disabled = false;
+          btn.textContent = 'Adicionar';
           alert('Erro: ' + e.message);
         }
       },
@@ -2222,6 +2270,8 @@ function injetarEstilos() {
 
     /* Modal */
     .pc-modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: flex-start; justify-content: center; z-index: 9999; overflow-y: auto; padding: 40px 16px; }
+    /* V10 (2026-06-19): modal-2 fica NA FRENTE do principal sempre */
+    #pc-modal-2 { z-index: 10001 !important; background: rgba(0,0,0,0.85); }
     .pc-hidden { display: none !important; }
     .pc-modal-inner { background: #0F172A; border: 1px solid #334155; border-radius: 14px; padding: 20px; width: 100%; }
     .pc-modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; padding-bottom: 12px; border-bottom: 1px solid #334155; }
