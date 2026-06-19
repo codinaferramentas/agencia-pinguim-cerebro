@@ -77,9 +77,12 @@ serve(async (req) => {
     const porCerebro: Record<string, any> = {};
     for (const row of (agreg || []) as any[]) {
       if (!porCerebro[row.cerebro_id]) {
-        porCerebro[row.cerebro_id] = { sem_coleta: 0, planejada: 0, em_construcao: 0, rodando: 0, pausada: 0, falhou: 0 };
+        porCerebro[row.cerebro_id] = { sem_coleta: 0, planejada: 0, em_construcao: 0, rodando: 0, pausada: 0, falhou: 0, nao_aplicavel: 0 };
       }
-      porCerebro[row.cerebro_id][row.status_automacao] = (porCerebro[row.cerebro_id][row.status_automacao] || 0) + 1;
+      // V9 (2026-06-19): 'rodando' renomeado pra 'ativo' no banco (schema-030).
+      // Cards na UI leem pc.rodando — mapeamos 'ativo' pro mesmo bucket.
+      const statusKey = row.status_automacao === 'ativo' ? 'rodando' : row.status_automacao;
+      porCerebro[row.cerebro_id][statusKey] = (porCerebro[row.cerebro_id][statusKey] || 0) + 1;
     }
     // Anexa nos cerebros + garante plano se nunca foi gerado
     const cerebrosOut: any[] = [];
