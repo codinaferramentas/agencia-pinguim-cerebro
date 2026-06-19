@@ -1046,8 +1046,8 @@ function cardCategoria(p, integracoes, cerebro_id) {
     }, meta.proximoLabel));
   }
 
-  // Botao extra: aulas ao vivo aceitam URL de YouTube manualmente (1 video por vez)
-  if (p.categoria_slug === 'transcricoes_aula_ao_vivo') {
+  // Botao extra: aulas (curso) e aulas ao vivo aceitam URL de YouTube manualmente (1 video por vez)
+  if (p.categoria_slug === 'transcricoes_aula_ao_vivo' || p.categoria_slug === 'aulas') {
     acoes.push(el('button', {
       class: 'pc-btn-secondary',
       onclick: () => abrirModalAulaYoutube(p, cerebro_id),
