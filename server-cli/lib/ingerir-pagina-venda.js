@@ -23,6 +23,8 @@ async function ingerirPaginaVenda({
   categoria_slug,
   url_alvo,
   cliente_id,
+  tipo_fonte = 'pagina_venda',
+  pular_auto_discovery = false,
   on_log = () => {},
 }) {
   if (!cerebro_id) throw new Error('cerebro_id obrigatorio');
@@ -43,7 +45,8 @@ async function ingerirPaginaVenda({
   on_log({ etapa: 'inicio', url_alvo });
 
   // 1. Descobre URLs candidatas (raiz + /v1, /v2, /v3 se existirem)
-  const urls = await _descobrirUrls(url_alvo, on_log);
+  //    Se pular_auto_discovery=true, usa so a URL exata (caso material_apoio)
+  const urls = pular_auto_discovery ? [url_alvo] : await _descobrirUrls(url_alvo, on_log);
   on_log({ etapa: 'descobriu_urls', total: urls.length, urls });
 
   // 2. Pra cada URL: chama edge function, calcula md5, processa se nova
@@ -91,7 +94,7 @@ async function ingerirPaginaVenda({
           (cerebro_id, tipo, titulo, origem, url, conteudo_md, criado_em)
         VALUES (
           '${cerebro_id}'::uuid,
-          'pagina_venda',
+          '${tipo_fonte}',
           ${esc((briefing.titulo || url).slice(0, 200))},
           'web_apify',
           ${esc(url)},
