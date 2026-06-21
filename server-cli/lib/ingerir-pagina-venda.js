@@ -136,6 +136,11 @@ async function ingerirPaginaVenda({
   }
 
   on_log({ etapa: 'fim', novos: novos_ok, falhas, ja_processados });
+
+  // Marca o plano. Mesmo com 0 novos a execucao aconteceu — painel para de mentir "nunca rodou".
+  const statusRun = falhas > 0 && novos_ok === 0 ? 'falha' : 'ok';
+  await db.marcarPlanoExecutado({ cerebro_id, categoria_slug, status: statusRun });
+
   return { total_urls: urls.length, novos: novos_ok, falhas, ja_processados, detalhes };
 }
 

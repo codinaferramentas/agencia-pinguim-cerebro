@@ -639,8 +639,13 @@ function renderPainelAlertas(alertas) {
     box.append(el('div', { style: `font-size:.8125rem;color:${meta.cor};font-weight:600;margin:.4rem 0 .2rem` },
       `${meta.label} (${lista.length})`));
     for (const a of lista.slice(0, 5)) {
+      const dias = a.dias_desde_ultima;
+      const sufixo = (dias === null || dias === undefined) ? 'nunca rodou'
+                   : dias === 0 ? 'hoje'
+                   : dias === 1 ? 'há 1 dia'
+                   : `há ${dias} dias`;
       box.append(el('div', { style: 'font-size:.75rem;padding:.15rem .4rem;color:#94A3B8' },
-        `• ${a.produto_nome} — ${a.categoria_emoji || ''} ${a.categoria_nome || a.categoria_slug} — ${a.dias_desde_ultima || '?'} dias`));
+        `• ${a.produto_nome} — ${a.categoria_emoji || ''} ${a.categoria_nome || a.categoria_slug} — ${sufixo}`));
     }
     if (lista.length > 5) box.append(el('div', { style: 'font-size:.7rem;color:#64748B;padding-left:.4rem' }, `+ ${lista.length - 5} outros…`));
   }

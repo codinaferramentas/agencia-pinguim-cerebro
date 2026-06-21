@@ -201,6 +201,11 @@ async function ingerirPastaDrive({
   }
 
   on_log({ etapa: 'fim', novos_ok, falhas });
+
+  // Marca o plano (Andre 2026-06-20).
+  const statusRun = falhas > 0 && novos_ok === 0 ? 'falha' : 'ok';
+  await db.marcarPlanoExecutado({ cerebro_id, categoria_slug, status: statusRun });
+
   return {
     total_listados: arquivos.length,
     midias_encontradas: midias.length,

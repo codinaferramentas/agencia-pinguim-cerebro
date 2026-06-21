@@ -79,6 +79,7 @@ async function processarAnunciosMeta({ cerebro_id, keywords, janela_dias = JANEL
   on_log({ etapa: 'campanhas_match', total: campanhasMatch.length });
 
   if (campanhasMatch.length === 0) {
+    await db.marcarPlanoExecutado({ cerebro_id, categoria_slug: 'anuncios_meta', status: 'sem_match' });
     return { listados: 0, top_vendedores: 0, top_escalados: 0, salvos: 0, falhas: 0 };
   }
 
@@ -147,6 +148,7 @@ async function processarAnunciosMeta({ cerebro_id, keywords, janela_dias = JANEL
   on_log({ etapa: 'anuncios_com_metricas', total: anunciosComMetricas.length });
 
   if (anunciosComMetricas.length === 0) {
+    await db.marcarPlanoExecutado({ cerebro_id, categoria_slug: 'anuncios_meta', status: 'sem_match' });
     return { listados: campanhasMatch.length, top_vendedores: 0, top_escalados: 0, salvos: 0, falhas: 0 };
   }
 
@@ -271,6 +273,11 @@ async function processarAnunciosMeta({ cerebro_id, keywords, janela_dias = JANEL
       falhas++;
     }
   }
+
+  // Marca o plano como executado (Andre 2026-06-20). Ate' quando salvos=0 a
+  // execucao ocorreu — painel deve mostrar "rodou ontem, 0 matches" e nao "nunca".
+  const statusRun = falhas > 0 && salvos === 0 ? 'falha' : (salvos === 0 ? 'sem_match' : 'ok');
+  await db.marcarPlanoExecutado({ cerebro_id, categoria_slug: 'anuncios_meta', status: statusRun });
 
   return {
     listados: campanhasMatch.length,

@@ -83,6 +83,83 @@ async function inserirFonteRest({ cerebro_id, tipo, titulo, origem, url, conteud
 }
 
 // ============================================================
+// marcarPlanoExecutado — registra ultima_execucao + status no plano
+// Andre 2026-06-20: o painel de defasagem mostrava "999 dias" (nunca rodou) pra
+// categorias que rodaram via libs que bypassam o jobs-worker (scheduler-depoimentos,
+// chamadas diretas). Solucao: toda lib que insere cerebro_fonte da categoria
+// chama esta funcao no fim. Idempotente, nunca lanca (best-effort).
+// ============================================================
+async function marcarPlanoExecutado({ cerebro_id, categoria_slug, status = 'ok' }) {
+  if (!cerebro_id || !categoria_slug) return { ok: false, motivo: 'faltam args' };
+  try {
+    const safeStatus = String(status).replace(/'/g, "''").slice(0, 50);
+    await rodarSQL(`
+      UPDATE pinguim.cerebro_plano_categoria
+         SET ultima_execucao = now(),
+             ultimo_status_run = '${safeStatus}',
+             atualizado_em = now()
+       WHERE cerebro_id = '${cerebro_id}'::uuid
+         AND categoria_slug = '${categoria_slug.replace(/'/g, "''")}';
+    `);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e.message };
+  }
+}
+
+// ============================================================
+// parseJSONSeguro + fetchComRetry — Andre 2026-06-18
+// Internet caiu 7h59 BRT e o fetch da Supabase Mgmt API voltou
+// HTML (captive portal / DNS) em vez de JSON. JSON.parse explodia
+// com "Unexpected token '<'" e o Highlights ficava marcado como
+// falhou sem motivo claro. Fix: detecta HTML antes de parsear +
+// retry exponencial (1s, 4s, 16s) em erro de rede/HTML.
+// ============================================================
+async function parseJSONSeguro(r, contexto = 'supabase') {
+  const ct = (r.headers.get('content-type') || '').toLowerCase();
+  const body = await r.text();
+  if (body.trim().startsWith('<') || ct.includes('text/html')) {
+    const snippet = body.slice(0, 120).replace(/\s+/g, ' ');
+    const err = new Error(`${contexto} indisponivel: respondeu HTML em vez de JSON (HTTP ${r.status}). Trecho: "${snippet}". Provavel queda de internet/DNS/proxy.`);
+    err.codigo = 'RESPOSTA_HTML';
+    throw err;
+  }
+  try {
+    return JSON.parse(body);
+  } catch (e) {
+    const err = new Error(`${contexto} body invalido (HTTP ${r.status}): ${body.slice(0, 200)}`);
+    err.codigo = 'JSON_INVALIDO';
+    throw err;
+  }
+}
+
+function ehErroTransiente(e) {
+  if (!e) return false;
+  if (e.codigo === 'RESPOSTA_HTML') return true;
+  const msg = String(e.message || '').toLowerCase();
+  return /fetch failed|econn|etimedout|enotfound|network|socket hang up|getaddrinfo/.test(msg);
+}
+
+async function fetchComRetry(url, opts, contexto = 'supabase') {
+  const delays = [1000, 4000, 16000];
+  let ultimoErro;
+  for (let tentativa = 0; tentativa <= delays.length; tentativa++) {
+    try {
+      return await fetch(url, opts);
+    } catch (e) {
+      ultimoErro = e;
+      if (!ehErroTransiente(e) || tentativa === delays.length) {
+        throw e;
+      }
+      const delay = delays[tentativa];
+      console.warn(`[${contexto}] fetch falhou (tentativa ${tentativa + 1}/${delays.length + 1}): ${e.message}. Retry em ${delay}ms.`);
+      await new Promise(res => setTimeout(res, delay));
+    }
+  }
+  throw ultimoErro;
+}
+
+// ============================================================
 // rodarSQL — POST direto na Management API
 // ============================================================
 async function rodarSQL(sql) {
@@ -91,22 +168,41 @@ async function rodarSQL(sql) {
   if (!projectRef || !accessToken) {
     throw new Error('SUPABASE_PROJECT_REF/SUPABASE_ACCESS_TOKEN nao definidos em .env.local');
   }
-  const r = await fetch(
-    `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ query: sql }),
+  const delays = [1000, 4000, 16000];
+  for (let tentativa = 0; tentativa <= delays.length; tentativa++) {
+    let r;
+    try {
+      r = await fetchComRetry(
+        `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ query: sql }),
+        },
+        'supabase-mgmt'
+      );
+    } catch (e) {
+      throw e;
     }
-  );
-  const data = await r.json();
-  if (data && data.message && /^Failed/.test(data.message)) {
-    throw new Error(`SQL error: ${data.message.slice(0, 500)}`);
+    try {
+      const data = await parseJSONSeguro(r, 'supabase-mgmt');
+      if (data && data.message && /^Failed/.test(data.message)) {
+        throw new Error(`SQL error: ${data.message.slice(0, 500)}`);
+      }
+      return data;
+    } catch (e) {
+      if (ehErroTransiente(e) && tentativa < delays.length) {
+        const delay = delays[tentativa];
+        console.warn(`[supabase-mgmt] parse falhou (tentativa ${tentativa + 1}/${delays.length + 1}): ${e.message}. Retry em ${delay}ms.`);
+        await new Promise(res => setTimeout(res, delay));
+        continue;
+      }
+      throw e;
+    }
   }
-  return data;
 }
 
 // Escapa string SQL ('foo' -> 'foo' sem aspas simples internas)
@@ -658,6 +754,9 @@ module.exports = {
   CLIENTE_ID_FALLBACK,
   AGENTE_ID_PINGUIM,
   rodarSQL,
+  parseJSONSeguro,
+  fetchComRetry,
+  ehErroTransiente,
   esc,
   resolverClienteId, // V2.13 — exportado pra outros módulos resolverem identidade do sócio
   // threads/conversas
@@ -689,4 +788,6 @@ module.exports = {
   turnoTeveAcaoDestrutiva,
   // V3 (2026-06-16) — REST API pra payload grande (transcricoes)
   inserirFonteRest,
+  // Andre 2026-06-20 — atualizar plano apos ingerir, pra painel nao mentir
+  marcarPlanoExecutado,
 };

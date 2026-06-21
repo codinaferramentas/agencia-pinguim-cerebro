@@ -203,6 +203,9 @@ async function _processarUma({ msg, on_log }) {
   const vet = await vetorizarFonte(fonte.id);
   on_log({ etapa: 'salvou', cerebro_fonte_id: fonte.id, vetorizado: vet.ok, chunks: vet.chunks });
 
+  // 9) Atualiza ultima_execucao do plano. Sem isso o painel mente "nunca rodou".
+  await db.marcarPlanoExecutado({ cerebro_id, categoria_slug: 'depoimentos' });
+
   return { processado: true, custo_usd: custoVision };
 }
 
