@@ -1,0 +1,225 @@
+{
+  "versao": "v1.0",
+  "atualizado_em": "2026-06-22",
+  "starter_prompts": [
+    {
+      "id": "starter-criativo",
+      "label": "Analisar criativo Meta",
+      "prompt": "Pega a URL do criativo Meta ID 6512389456 e me devolve análise: hook, prova, oferta, taxa hook-25-50-75-100, sugestão de 2 variações.",
+      "output_esperado": "Análise dividida em hook + prova + oferta, com taxas de retenção por quarto e 2 variações sugeridas",
+      "categoria": "Analisar"
+    },
+    {
+      "id": "starter-lead",
+      "label": "Responder lead em pipeline",
+      "prompt": "Telefone 31988460539 — me devolve histórico completo: Hotmart, boleto Principia, conversa Clint, conexões Meta.",
+      "output_esperado": "Histórico cross-fonte: Joana, ProAlt R$1.796, último contato 12 dias, próximo passo sugerido",
+      "categoria": "Operar"
+    },
+    {
+      "id": "starter-clonar",
+      "label": "Clonar página de venda",
+      "prompt": "Roda o clonador de página de venda na URL https://desafio.lofi.com.br/ e traz briefing 15 campos. Me diz o que tá fraco.",
+      "output_esperado": "Briefing estruturado: persona, dor, oferta, garantia, prova social + checklist do que falta",
+      "categoria": "Analisar"
+    },
+    {
+      "id": "starter-relatorio",
+      "label": "Relatório do dia",
+      "prompt": "Resume o que rolou hoje: novas vendas Hotmart, leads no funil Elo, anúncios no ar, reuniões na agenda. Cards curtos.",
+      "output_esperado": "5-7 cards com KPI do dia: vendas, leads, criativos, reuniões, urgências",
+      "categoria": "Operar"
+    },
+    {
+      "id": "starter-resumir",
+      "label": "Resumir reunião",
+      "prompt": "Pega a transcrição da última reunião com Pedro e Misha e resume em 5 tópicos com decisões + responsável + prazo.",
+      "output_esperado": "Bullets com decisão, responsável e prazo de cada tópico",
+      "categoria": "Resolver"
+    },
+    {
+      "id": "starter-copy-zap",
+      "label": "Copy de WhatsApp",
+      "prompt": "Escreve 3 variações de WhatsApp pro Elo, voz Pedro Aredez, mirando aluno do Desafio LoFi que comprou Order Bump mas não engajou.",
+      "output_esperado": "3 mensagens curtas (até 4 linhas cada), tom Pedro Aredez, com CTA claro",
+      "categoria": "Vender"
+    }
+  ],
+  "categorias_prompts": [
+    {
+      "id": "vender",
+      "label": "Vender",
+      "descricao": "Copy, oferta, hooks, garantia, escada de valor"
+    },
+    {
+      "id": "analisar",
+      "label": "Analisar",
+      "descricao": "Criativo, página, funil, persona, criativos escalados"
+    },
+    {
+      "id": "criar",
+      "label": "Criar",
+      "descricao": "Página, email, anúncio, VSL, briefing, persona"
+    },
+    {
+      "id": "resolver",
+      "label": "Resolver",
+      "descricao": "Advisory, diagnóstico, decisão, dilema estratégico"
+    },
+    {
+      "id": "operar",
+      "label": "Operar",
+      "descricao": "Drive, Gmail, Calendar, Discord, pessoas, vendas"
+    }
+  ],
+  "prompts": [
+    { "id": "p1",  "categoria": "operar",   "label": "Consultar pessoa por telefone", "prompt": "Telefone 31988460539 — me devolve histórico completo: Hotmart, boleto Principia, conversa Clint, conexões Meta.", "output_esperado": "Joana, comprou ProAlt boleto Principia R$1.796 em 22/05, conversa Clint último 12 dias atrás, sem anúncio Meta direcionado", "usa": "tool-consultar-pessoa", "uso": 0 },
+    { "id": "p2",  "categoria": "operar",   "label": "Consultar aluno por email",     "prompt": "Email natalia@xpto.com — ela é aluna de qual produto? Comprou order bump? Tá ativa?", "output_esperado": "Produto, valor, ativa/inativa, order bumps", "usa": "tool-consultar-pessoa", "uso": 0 },
+    { "id": "p3",  "categoria": "operar",   "label": "Listar compradores ProAlt",     "prompt": "Lista os últimos 20 compradores do ProAlt com nome, telefone, data, valor, tag estatística.", "output_esperado": "Tabela cronológica com nome, telefone, data, valor e tag", "usa": "tool-consultar-hotmart", "uso": 0 },
+    { "id": "p4",  "categoria": "operar",   "label": "Pipeline parado",                "prompt": "Quem tá em pipeline de venda do Elo mas não responde há 7 dias? Traz nome, telefone, última mensagem.", "output_esperado": "Lista de leads com gap >7 dias e última mensagem", "usa": "tool-buscar-pipeline", "uso": 0 },
+    { "id": "p5",  "categoria": "operar",   "label": "Triagem de email",               "prompt": "Triagem dos emails que chegaram hoje na conta do Codina — classifica por urgência e me diz quais respondo manhã.", "output_esperado": "Email classificado em urgente/importante/normal/spam com sugestão de resposta", "usa": "tool-acao-gmail", "uso": 0 },
+    { "id": "p6",  "categoria": "operar",   "label": "Arquivos novos no Drive",        "prompt": "Lista os arquivos novos na pasta Drive 'Cérebros/Elo/Aulas' nas últimas 48h.", "output_esperado": "Lista de arquivos com nome, tipo, data e link", "usa": "google-proxy", "uso": 0 },
+    { "id": "p7",  "categoria": "operar",   "label": "Subir aula no cérebro",          "prompt": "Sobe esse MP4 da aula ao vivo de ontem do Lo-fi pra pasta certa do Drive e ingere no cérebro Elo (transcreve com Whisper).", "output_esperado": "MP4 no Drive certo + transcrição Whisper + ingest no cérebro Elo", "usa": "ingest-pacote", "uso": 0 },
+    { "id": "p8",  "categoria": "operar",   "label": "Reuniões da semana",             "prompt": "Quais reuniões eu tenho amanhã na agenda? Lista por horário com link da call.", "output_esperado": "Lista cronológica com horário, título, participantes e link", "usa": "google-proxy", "uso": 0 },
+    { "id": "p9",  "categoria": "operar",   "label": "Discord — buscar thread",        "prompt": "Procura no Discord do Lo-fi a thread sobre 'depoimento aluno' e me traz os 10 últimos posts com nome e link.", "output_esperado": "10 posts com autor, data, conteúdo e link direto", "usa": "tool-postar-discord", "uso": 0 },
+    { "id": "p10", "categoria": "operar",   "label": "Criar evento + convidados",      "prompt": "Cria evento na minha agenda dia 30/06 às 14h, título 'Briefing pró ProAlt julho', convida Pedro e Misha.", "output_esperado": "Evento criado, com convite enviado e link da meet", "usa": "google-proxy", "uso": 0 },
+    { "id": "p11", "categoria": "vender",   "label": "Headline + sub + CTA",           "prompt": "Escreve a primeira dobra da página de venda do próximo Desafio LoFi, usando above-the-fold e voz Pedro Aredez.", "output_esperado": "Headline + sub + CTA + 1 sinal de prova", "usa": "skill:above-the-fold", "uso": 0 },
+    { "id": "p12", "categoria": "vender",   "label": "Bullets de fascinação",          "prompt": "Monta 10 bullets de fascinação pra página do ProAlt, mirando aluno que comprou Elo mas não engajou.", "output_esperado": "10 bullets de curiosidade no estilo Schwartz", "usa": "skill:bullets-fascinacao", "uso": 0 },
+    { "id": "p13", "categoria": "vender",   "label": "Email aquecimento",              "prompt": "Cria email de aquecimento pra lista quente, 2 dias antes do desafio abrir, voz Micha lo-fi, framework brunson-hook-story-offer.", "output_esperado": "Email com assunto + corpo + CTA, voz Micha", "usa": "skill:brunson-hook-story-offer", "uso": 0 },
+    { "id": "p14", "categoria": "vender",   "label": "3 hooks pra anúncio",            "prompt": "Escreve 3 variações de hook pra anúncio Meta do Elo: 1 contrarian, 1 número específico, 1 pain point.", "output_esperado": "3 hooks de 1.7-3s cada, prontos pra gravar", "usa": "skill:hook-*", "uso": 0 },
+    { "id": "p15", "categoria": "vender",   "label": "Página low-ticket completa",     "prompt": "Roda anatomia-pagina-low-ticket pro Desafio LoFi R$47, da headline ao P.S., enxuto.", "output_esperado": "Página completa com 12 dobras, sem floreio", "usa": "skill:anatomia-pagina-low-ticket", "uso": 0 },
+    { "id": "p16", "categoria": "vender",   "label": "Oferta Grand Slam",              "prompt": "Monta a oferta Grand Slam do Taurus com hormozi-grand-slam-offer: bônus, garantia, ancoragem.", "output_esperado": "Stack de oferta com valor percebido > preço", "usa": "skill:hormozi-grand-slam-offer", "uso": 0 },
+    { "id": "p17", "categoria": "vender",   "label": "VSL Jon Benson",                 "prompt": "Escreve uma VSL de 18 minutos pro ProAlt seguindo jon-benson-vsl, persona Natália, mecanismo único 'protocolo de alta performance'.", "output_esperado": "Roteiro VSL 18min com call-out + problema + agitação + solução + mecanismo + prova + oferta + close", "usa": "skill:jon-benson-vsl", "uso": 0 },
+    { "id": "p18", "categoria": "vender",   "label": "FAQ vendedora",                  "prompt": "Faz a FAQ vendedora da página do Elo cobrindo 8 objeções reais de quem comprou e travou.", "output_esperado": "FAQ com 8 perguntas-objeção e respostas que viram motivos pra comprar", "usa": "skill:faq-vendedora", "uso": 0 },
+    { "id": "p19", "categoria": "vender",   "label": "Sequência pós-compra",           "prompt": "Sequência de 5 emails pós-compra do Elo, voz Luiz mestre, focada em ativar onboarding antes do GS semanal.", "output_esperado": "5 emails (D0/D1/D3/D5/D7) com objetivo de ativação", "usa": "squad:copy", "uso": 0 },
+    { "id": "p20", "categoria": "vender",   "label": "Copy WhatsApp 3 variações",      "prompt": "Escreve 3 variações de WhatsApp pro Elo, voz Pedro Aredez, mirando aluno do Desafio LoFi que comprou Order Bump mas não engajou.", "output_esperado": "3 mensagens curtas até 4 linhas cada com CTA", "usa": "skill:copy-pinguim", "uso": 0 },
+    { "id": "p21", "categoria": "analisar", "label": "Análise de criativo Meta",       "prompt": "Pega o criativo Meta ID 6512389456 e me devolve análise: hook, prova, oferta, taxas hook-25-50-75-100, sugestão de 2 variações.", "output_esperado": "Análise estrutural + retenção por quarto + 2 variações", "usa": "tool-analise-criativos", "uso": 0 },
+    { "id": "p22", "categoria": "analisar", "label": "Clonar página + briefing",       "prompt": "Roda o clonador de página de venda na URL https://desafio.lofi.com.br/, traz briefing 15 campos e me diz o que tá fraco.", "output_esperado": "Briefing 15 campos + diagnóstico de fraquezas", "usa": "tool-clonar-pagina-venda", "uso": 0 },
+    { "id": "p23", "categoria": "analisar", "label": "Comparar duas páginas",          "prompt": "Compara a página de venda atual do ProAlt com a anterior — o que mudou, o que melhorou, o que piorou.", "output_esperado": "Diff dobra-a-dobra com hipótese do impacto", "usa": "tool-clonar-pagina-venda", "uso": 0 },
+    { "id": "p24", "categoria": "analisar", "label": "Funil Elo últimos 30d",          "prompt": "Analisa o funil Elo dos últimos 30 dias: CPL, taxa de conversão por etapa, onde tá o ralo.", "output_esperado": "Tabela funil com CPL/taxa/volume por etapa + ralo identificado", "usa": "squad:data", "uso": 0 },
+    { "id": "p25", "categoria": "analisar", "label": "Comentários YouTube",            "prompt": "Olha os 50 comentários mais relevantes do vídeo YouTube ID xyz123 e identifica 5 objeções recorrentes.", "output_esperado": "5 objeções com frequência + 2 trechos literais por objeção", "usa": "tool-transcrever-youtube", "uso": 0 },
+    { "id": "p26", "categoria": "analisar", "label": "Auditoria Bencivenga",           "prompt": "Roda análise crítica na FAQ do Elo com bencivenga-persuasion: o que falta em desire/belief/exclusivity/urgency?", "output_esperado": "Score por dimensão + reescrita das partes fracas", "usa": "skill:bencivenga-persuasion", "uso": 0 },
+    { "id": "p27", "categoria": "analisar", "label": "Análise Apify perfil IG",        "prompt": "Analisa o perfil Instagram @desafiolofi via Apify: posts recentes, engajamento, tom de voz, gaps.", "output_esperado": "Análise do perfil com posts, engajamento e tom", "usa": "tool-analise-perfil-ig", "uso": 0 },
+    { "id": "p28", "categoria": "analisar", "label": "Criativos escalados do mês",     "prompt": "Quais criativos escalaram esse mês na conta Meta do Pinguim? Lista com gasto, ROAS e tempo de vida.", "output_esperado": "Top 10 criativos com gasto, ROAS, dias ativos", "usa": "tool-meta-listar-campanhas", "uso": 0 },
+    { "id": "p29", "categoria": "criar",    "label": "Briefing rico",                  "prompt": "Roda briefing-cliente — quero criar uma página nova de Order Bump R$97 pro Elo. Faz as perguntas que precisar e monta o briefing.", "output_esperado": "Briefing 8 campos (Cérebro+Persona+Funil+Skill+Clones)", "usa": "skill:briefing-cliente", "uso": 0 },
+    { "id": "p30", "categoria": "criar",    "label": "Persona 11 blocos",              "prompt": "Gera persona 11 blocos pra produto novo high-ticket que ainda não cadastrei, mirando ex-aluno do Elo que faturou R$30k+.", "output_esperado": "Dossiê 11 blocos com voz autêntica do segmento", "usa": "skill:gerar-persona-11-blocos", "uso": 0 },
+    { "id": "p31", "categoria": "criar",    "label": "Order Bump R$97",                "prompt": "Cria página nova de Order Bump R$97 pro Elo, persona Natália adaptada, com gatilho de aceitação rápida.", "output_esperado": "Página curta de bump com headline, 3 bullets, garantia, CTA", "usa": "squad:copy", "uso": 0 },
+    { "id": "p32", "categoria": "criar",    "label": "Voice of Customer",              "prompt": "Extrai voice of customer dos 30 últimos depoimentos do ProAlt — vocabulário, frases literais, dores, desejos.", "output_esperado": "Lista de frases literais + vocabulário recorrente + dores top 5", "usa": "skill:voice-of-customer", "uso": 0 },
+    { "id": "p33", "categoria": "criar",    "label": "Sequência email lançamento",     "prompt": "Sequência de 7 emails pra aquecimento do próximo Desafio LoFi, voz Micha, fechando com CTA pra inscrever.", "output_esperado": "7 emails (D-7 a D-1) com cada um cumprindo função no funil", "usa": "squad:copy", "uso": 0 },
+    { "id": "p34", "categoria": "criar",    "label": "Plano de oferta completo",       "prompt": "Plano de oferta do próximo desafio Lo-fi: pitch, ancoragem, bônus em stack, garantia tripla, escassez real.", "output_esperado": "Plano com pitch + stack + garantia + escassez justificada", "usa": "skill:hormozi-grand-slam-offer", "uso": 0 },
+    { "id": "p35", "categoria": "criar",    "label": "Mecanismo único",                "prompt": "Mecanismo único do Taurus: a gente vende 'sistema de alta performance' — me ajuda a nomeá-lo, defendê-lo e visualizá-lo.", "output_esperado": "Nome + defesa em 1 parágrafo + descrição visual", "usa": "skill:mecanismo-unico", "uso": 0 },
+    { "id": "p36", "categoria": "resolver", "label": "Advisory completo",              "prompt": "Diagnóstico estratégico: vale matar o ProAlt e jogar tudo no Elo? Roda advisory-completo com Board Chair consolidando.", "output_esperado": "4 conselheiros opinam + Board Chair consolida em recomendação", "usa": "squad:advisory-board", "uso": 0 },
+    { "id": "p37", "categoria": "resolver", "label": "Cenários 3 lentes",              "prompt": "Monta cenários otimista/central/pessimista pro faturamento ProAlt nos próximos 90 dias com base no histórico.", "output_esperado": "3 cenários com premissas, probabilidades e número final", "usa": "skill:cenarios-3-otimista-central-pessimista", "uso": 0 },
+    { "id": "p38", "categoria": "resolver", "label": "Inversion mental model",         "prompt": "Diagnóstico estratégico do dilema 'lançamento perpétuo vs sazonal' pro Desafio LoFi — roda inversion-mental-model do Munger.", "output_esperado": "Como esse plano falha? 5 modos de falha + mitigações", "usa": "skill:inversion-mental-model", "uso": 0 },
+    { "id": "p39", "categoria": "resolver", "label": "Checklist pré-decisão",          "prompt": "Checklist pré-decisão antes de eu fechar contrato de R$200k com a agência de tráfego nova — roda as 7 perguntas.", "output_esperado": "7 perguntas respondidas com base no contexto + recomendação", "usa": "skill:checklist-pre-decisao", "uso": 0 },
+    { "id": "p40", "categoria": "resolver", "label": "Diagnóstico Thiel",              "prompt": "Roda monopolio-vs-competicao do Thiel pro nosso posicionamento atual do Elo no mercado de mentoria de IA pra empresário.", "output_esperado": "Diagnóstico de rota monopólio ou commoditização + jogada concreta", "usa": "skill:monopolio-vs-competicao", "uso": 0 },
+    { "id": "p41", "categoria": "resolver", "label": "Escada de valor",                "prompt": "Escada de valor da Pinguim: lista tripwire → core → continuity → high-ticket com preço e produto de cada degrau, identifica buraco.", "output_esperado": "Tabela com 4 degraus + buracos identificados", "usa": "skill:escada-de-valor", "uso": 0 },
+    { "id": "p42", "categoria": "resolver", "label": "Quadro de decisão",              "prompt": "Roda escrever-quadro-decisao pra eu decidir entre 'investir R$50k em SEO pro blog' vs 'investir R$50k em tráfego pago direto'.", "output_esperado": "Tabela markdown com perdas/ganhos de cada opção + recomendação", "usa": "skill:escrever-quadro-decisao", "uso": 0 },
+    { "id": "p43", "categoria": "criar",    "label": "Above the fold curto",           "prompt": "Roda above-the-fold pra meu próximo produto X com mecanismo Y e prova Z. Faz a primeira dobra.", "output_esperado": "Headline + sub + CTA + 1 sinal de prova", "usa": "skill:above-the-fold", "uso": 0 },
+    { "id": "p44", "categoria": "operar",   "label": "Email pro Luiz",                 "prompt": "Manda email pro Luiz com assunto 'aulas Elo Mod 4' pedindo o link da playlist YouTube.", "output_esperado": "Email enviado com preview antes", "usa": "tool-acao-gmail", "uso": 0 },
+    { "id": "p45", "categoria": "operar",   "label": "Boleto Principia",               "prompt": "Joana, telefone começando com 3197, pagou boleto Principia mês passado — me confirma o produto e o valor.", "output_esperado": "Joana, ProAlt, R$1.796, pago 22/05", "usa": "tool-consultar-pessoa", "uso": 0 },
+    { "id": "p46", "categoria": "operar",   "label": "Contextualizar leads do dia",    "prompt": "Pega os 10 leads novos do Desafio LoFi de hoje e roda contextualizar_lead em cada um (compras prévias + persona + origem).", "output_esperado": "10 leads enriquecidos com histórico + tag + persona dominante", "usa": "skill:contextualizar-lead", "uso": 0 },
+    { "id": "p47", "categoria": "analisar", "label": "Fonte do Cérebro Elo",           "prompt": "Procura no cérebro do Elo onde tá o argumento de retenção e me devolve o trecho literal.", "output_esperado": "Trecho literal com fonte (aula/módulo) citada", "usa": "skill:buscar-cerebro", "uso": 0 },
+    { "id": "p48", "categoria": "analisar", "label": "Diff Elo vs ProAlt",             "prompt": "Qual a diferença de funil entre Elo e ProAlt? Compara os dois cérebros lado a lado.", "output_esperado": "Tabela comparativa funil/preço/persona/proposta", "usa": "skill:buscar-cerebro", "uso": 0 },
+    { "id": "p49", "categoria": "criar",    "label": "Stop slop reescreve",            "prompt": "Stop slop de aiify nesse texto que o Claude entregou — me marca onde tá soando IA e reescreve em voz Pedro.", "output_esperado": "Texto com marcações + reescrita na voz pedida", "usa": "skill:stop-slop-de-aiify", "uso": 0 },
+    { "id": "p50", "categoria": "vender",   "label": "Aprender com feedback",          "prompt": "Esse email que mandei semana passada bombou (45% abertura). Roda aprender-com-feedback no agente de copy e registra o padrão.", "output_esperado": "APRENDIZADOS.md atualizado com padrão que funcionou", "usa": "skill:aprender-com-feedback", "uso": 0 }
+  ],
+  "cerebros": [
+    { "slug": "pinguim", "status": "ativo",     "nome": "Pinguim (global)",          "o_que_e": "Cérebro global da agência — organograma, sócios, cultura, métricas, decisões históricas. Cross-produto." },
+    { "slug": "elo",     "status": "ativo",     "nome": "Elo",                       "o_que_e": "Programa Elo. Front-end Desafio LoFi → Elo. Ticket médio. 21 aulas transcritas (Mod 1+2+3+5+Protocolos)." },
+    { "slug": "proalt",  "status": "ativo",     "nome": "ProAlt",                    "o_que_e": "Programa ProAlt (alta performance). Front-end Desafio LT → ProAlt. Ticket alto. Pitch deck + 4 módulos + 5 protocolos documentados." },
+    { "slug": "lira",    "status": "esqueleto", "nome": "Lira",                      "o_que_e": "High ticket R$6.750, 6 meses. Aguardando material — cérebro vazio." },
+    { "slug": "orion",   "status": "esqueleto", "nome": "Orion",                     "o_que_e": "Mastermind +R$1M/ano. Aguardando material — cérebro vazio." },
+    { "slug": "taurus",  "status": "esqueleto", "nome": "Taurus",                    "o_que_e": "High ticket R$36.000, 1 ano. Aguardando material — cérebro vazio. Slug no banco = 'tuarus' (typo histórico)." }
+  ],
+  "personas": [
+    { "slug": "natalia-proalt", "nome": "Natália (ProAlt)", "status": "ativa",      "o_que_e": "Persona oficial do ProAlt. Documentada localmente + na tabela pinguim.personas." },
+    { "slug": "elo",            "nome": "Persona Elo",       "status": "a-puxar",   "o_que_e": "Vive em pinguim.personas. Estrategista existe mas dossiê 11 blocos precisa ser puxado do banco." },
+    { "slug": "lira",           "nome": "Persona Lira",       "status": "a-criar",   "o_que_e": "Falta documentar." },
+    { "slug": "orion",          "nome": "Persona Orion",      "status": "a-criar",   "o_que_e": "Falta documentar." },
+    { "slug": "taurus",         "nome": "Persona Taurus",     "status": "a-criar",   "o_que_e": "Falta documentar." }
+  ],
+  "squads": [
+    { "slug": "advisory-board",    "n_agentes": 11, "dominio": "People & Psychology",     "maturidade": "maduro",    "pitch": "Conselheiros (Dalio/Munger/Thiel/Naval + Board Chair) pra dilemas estratégicos de negócio.", "destaques": [{ "nome": "Board Chair", "o_que_faz": "Consolida 4 lentes em recomendação única" }, { "nome": "Munger", "o_que_faz": "Inversion mental model — como esse plano falha?" }, { "nome": "Naval", "o_que_faz": "Alavancagem sem permissão (capital, código, mídia)" }] },
+    { "slug": "copy",              "n_agentes": 25, "dominio": "Content & Marketing",     "maturidade": "maduro",    "pitch": "25 clones dos mestres de copy (Halbert, Schwartz, Bencivenga, Kennedy, Hormozi) pra qualquer peça de venda.", "destaques": [{ "nome": "Alex Hormozi", "o_que_faz": "Grand Slam Offer + Value Equation" }, { "nome": "Gary Halbert", "o_que_faz": "Carta de venda longa (Boron Letters)" }, { "nome": "Ry Schwartz", "o_que_faz": "Email mastery framework" }] },
+    { "slug": "storytelling",      "n_agentes": 13, "dominio": "Content & Marketing",     "maturidade": "maduro",    "pitch": "13 narradores (Campbell, Duarte, Snyder, Klaff) pra estruturar narrativa em VSL, evento, página, pitch.", "destaques": [{ "nome": "Joseph Campbell", "o_que_faz": "Jornada do herói em 12 etapas" }, { "nome": "Blake Snyder", "o_que_faz": "Save the Cat 15 beats" }, { "nome": "Nancy Duarte", "o_que_faz": "What is vs What could be (Resonate)" }] },
+    { "slug": "traffic-masters",   "n_agentes": 16, "dominio": "Content & Marketing",     "maturidade": "maduro",    "pitch": "16 clones de tráfego pago — estratégia, criativo, mensuração e escala em Meta/Google/TikTok.", "destaques": [{ "nome": "Trafego Chief", "o_que_faz": "Orquestrador da estratégia de tráfego" }, { "nome": "Analista de criativos", "o_que_faz": "Análise + variação de criativos escalados" }, { "nome": "Estrategista Meta", "o_que_faz": "Estrutura de conta + bidding + escala" }] },
+    { "slug": "hormozi",           "n_agentes": 2,  "dominio": "Content & Marketing",     "maturidade": "maduro",    "pitch": "2 clones Hormozi pra construir oferta irrecusável (Grand Slam Offer + $100M Leads).", "destaques": [{ "nome": "Alex Hormozi", "o_que_faz": "Grand Slam Offer + Value Equation" }, { "nome": "$100M Leads", "o_que_faz": "Framework de aquisição $100M Leads" }] },
+    { "slug": "produto-elo",       "n_agentes": null, "dominio": "Marketing por Produto",   "maturidade": "maduro",  "pitch": "Marketing específico do Elo — LoFi, 5 módulos, 4 protocolos, comunidade, Sirius, GS semanal.", "destaques": [{ "nome": "Estrategista Elo", "o_que_faz": "Estratégia do funil Elo ponta a ponta" }, { "nome": "Copy Elo", "o_que_faz": "Copy específica do produto" }, { "nome": "Tráfego Elo", "o_que_faz": "Tráfego pago + orgânico Elo" }] },
+    { "slug": "produto-proalt",    "n_agentes": null, "dominio": "Marketing por Produto",   "maturidade": "maduro",  "pitch": "Marketing específico do ProAlt — R$1.497, 1 ano, low ticket alongado.", "destaques": [{ "nome": "Estrategista ProAlt", "o_que_faz": "Estratégia do funil ProAlt" }, { "nome": "Copy ProAlt", "o_que_faz": "Copy específica" }, { "nome": "Tráfego ProAlt", "o_que_faz": "Tráfego perpétuo" }] },
+    { "slug": "deep-research",     "n_agentes": 11, "dominio": "Data & Analytics",        "maturidade": "maduro",    "pitch": "11 metodologistas orquestrados pra responder pergunta dura com evidência (não opinião).", "destaques": [{ "nome": "Dr Orchestrator", "o_que_faz": "Porta de entrada — decide quem entra na pesquisa" }, { "nome": "Itamar Gilad", "o_que_faz": "Framework GIST — traduz pesquisa em aposta" }, { "nome": "Nicole Forsgren", "o_que_faz": "DORA / métrica de performance de time" }] },
+    { "slug": "lancamento-pago",   "n_agentes": 7,  "dominio": "Marketing por Produto",   "maturidade": "maduro",    "pitch": "Squad de desafio pago R$19-69 que aquece, vende e converte em 7-14 dias (Elo/ProAlt).", "destaques": [{ "nome": "Estrategista Lançamento", "o_que_faz": "Datas, lotes, ROAS, order bumps" }, { "nome": "Copy Lançamento", "o_que_faz": "Página, emails, WhatsApp, upsell" }, { "nome": "Roteirista Aulas", "o_que_faz": "Aula de valor + aula de pitch" }] },
+    { "slug": "low-ticket",        "n_agentes": 7,  "dominio": "Marketing por Produto",   "maturidade": "maduro",    "pitch": "Squad de produto perpétuo R$27-97 — página 12 dobras, bump, upsell, downsell. 24/7 com tráfego pago.", "destaques": [{ "nome": "Estrategista LT", "o_que_faz": "4 módulos ProAlt aplicados (Fundamento+Página+Sistema+Tráfego)" }, { "nome": "Copy LT", "o_que_faz": "Página 12 dobras + bump + upsell + downsell" }, { "nome": "Página LT", "o_que_faz": "Infra WordPress + Elementor + Hotmart + Pixel" }] },
+
+    { "slug": "legal",             "n_agentes": 15, "dominio": "Business Operations",     "maturidade": "funcional", "pitch": "Conselho jurídico pra fechar contrato, abrir sociedade, blindar LGPD, planejar tributo, demitir sem susto.", "destaques": [{ "nome": "societarista", "o_que_faz": "Direito societário BR — sociedade, acordo, alteração" }, { "nome": "trabalhista", "o_que_faz": "Contratação, demissão, PJ vs CLT, passivo" }, { "nome": "lgpd-specialist", "o_que_faz": "Política privacidade, termo consentimento, blindagem dado" }] },
+    { "slug": "contabilidade",     "n_agentes": 14, "dominio": "Business Operations",     "maturidade": "funcional", "pitch": "Squad contábil que abre, mantém e fecha CNPJ — MEI, Simples, IRPF, fiscal, trabalhista.", "destaques": [{ "nome": "mei-specialist", "o_que_faz": "MEI ponta a ponta (DAS, DASN, enquadramento)" }, { "nome": "simples-specialist", "o_que_faz": "Simples Nacional, regime de 90% das agências BR" }, { "nome": "irpf-assistant", "o_que_faz": "IRPF anual dos sócios" }] },
+    { "slug": "design",            "n_agentes": 9,  "dominio": "Design & UX",             "maturidade": "funcional", "pitch": "Branding, design system, foto e vídeo — Marty Neumeier, Brad Frost, Peter McKinnon.", "destaques": [{ "nome": "Marty Neumeier", "o_que_faz": "Estratégia de marca e posicionamento Zag" }, { "nome": "Brad Frost", "o_que_faz": "Design system atômico — componentes padronizados" }, { "nome": "Peter McKinnon", "o_que_faz": "Foto e vídeo pra criativo (referência pro Pedro Aredez)" }] },
+    { "slug": "data",              "n_agentes": 7,  "dominio": "Data & Analytics",        "maturidade": "funcional", "pitch": "Ler funil, achar alavanca de growth, medir comunidade e segurar cliente — analytics num lugar só.", "destaques": [{ "nome": "Sean Ellis", "o_que_faz": "Growth hacking — experimento de aquisição/ativação" }, { "nome": "Peter Fader", "o_que_faz": "Customer centricity + CLV por coorte" }, { "nome": "Avinash Kaushik", "o_que_faz": "Web analytics — métrica de vaidade vs movimento" }] },
+    { "slug": "translate",         "n_agentes": 10, "dominio": "Communication",           "maturidade": "funcional", "pitch": "Adapta copy gringa (Hormozi/Halbert) pro PT-BR sem perder a porrada — método teórico aplicado.", "destaques": [{ "nome": "Lawrence Venuti", "o_que_faz": "Foreignization vs domestication na adaptação" }, { "nome": "Eugene Nida", "o_que_faz": "Equivalência dinâmica — traduz o efeito da headline" }, { "nome": "Hans Vermeer", "o_que_faz": "Skopos — traduz em função do objetivo (vender)" }] },
+    { "slug": "cybersecurity",     "n_agentes": 15, "dominio": "Technical",               "maturidade": "funcional", "pitch": "Blinda stack Pinguim (Supabase, Vercel, Drive, cofre) contra vazamento e invasão.", "destaques": [{ "nome": "jim-manico", "o_que_faz": "OWASP + secure coding pra Edge Functions" }, { "nome": "georgia-weidman", "o_que_faz": "Pentest da superfície pública" }, { "nome": "cyber-chief", "o_que_faz": "Orquestrador — recebe pedido e delega especialista" }] },
+    { "slug": "hr",                "n_agentes": 8,  "dominio": "People & Psychology",     "maturidade": "funcional", "pitch": "Recrutamento, classificação de talento, comportamento e analytics de pessoas pra escalar sem virar zoo.", "destaques": [{ "nome": "performance-recruiter", "o_que_faz": "Recrutamento focado em performance" }, { "nome": "talent-classifier", "o_que_faz": "Classifica candidato pra decidir onde rende" }, { "nome": "behavior-detector", "o_que_faz": "Padrão comportamental — fit cultural + risco" }] },
+    { "slug": "finops",            "n_agentes": 5,  "dominio": "Business Operations",     "maturidade": "funcional", "pitch": "Segura custo de cloud e API antes de virar buraco no caixa.", "destaques": [{ "nome": "corey-quinn", "o_que_faz": "Caça desperdício em fatura cloud" }, { "nome": "eli-mansoor", "o_que_faz": "Otimização de cloud com playbook" }, { "nome": "jr-storment", "o_que_faz": "FinOps Foundation — engenharia + financeiro + produto na mesma planilha" }] },
+    { "slug": "mmos",              "n_agentes": 9,  "dominio": "People & Psychology",     "maturidade": "funcional", "pitch": "Pipeline que transforma pesquisa em modelos mentais aplicáveis a decisão e leitura de cliente.", "destaques": [{ "nome": "Daniel (Behavioral Analyst)", "o_que_faz": "Padrão de comportamento do cliente/mercado" }, { "nome": "Barbara (Cognitive Architect)", "o_que_faz": "Arquitetura mental do problema" }, { "nome": "Identity Analyst", "o_que_faz": "Quem o cliente acha que é — gatilho de posicionamento" }] },
+    { "slug": "innerlens",         "n_agentes": 4,  "dominio": "People & Psychology",     "maturidade": "funcional", "pitch": "Leitura psicológica — quebra conversa em fragmentos, devolve perfil revisado pra usar com cliente.", "destaques": [{ "nome": "psychologist", "o_que_faz": "Análise psicológica — padrão, gatilho, perfil" }, { "nome": "fragment-extractor", "o_que_faz": "Quebra texto cru em fragmentos analisáveis" }, { "nome": "innerlens-orchestrator", "o_que_faz": "Coordena extração + análise + validação numa entrega" }] },
+    { "slug": "hybrid-ops-squad",  "n_agentes": 9,  "dominio": "Business Operations",     "maturidade": "funcional", "pitch": "Desenha, documenta e implanta processos híbridos humano+IA — do BPMN ao ClickUp rodando.", "destaques": [{ "nome": "workflow-designer", "o_que_faz": "Desenha passo a passo híbrido humano/IA" }, { "nome": "process-architect", "o_que_faz": "Arquiteta o processo antes de ferramenta entrar" }, { "nome": "clickup-engineer", "o_que_faz": "Materializa o processo no ClickUp" }] },
+    { "slug": "creator-os",        "n_agentes": 5,  "dominio": "Content & Marketing",     "maturidade": "funcional", "pitch": "Sistema operacional do criador: orquestra pauta, blog, funil pra publicar todo dia sem refém de inspiração.", "destaques": [{ "nome": "content-orchestrator", "o_que_faz": "Conecta os 4 e transforma ideia em pipeline editorial" }, { "nome": "content-pm", "o_que_faz": "Gestor de pauta — calendário cheio" }, { "nome": "blog-writer", "o_que_faz": "Redator de blog pra SEO + canal próprio" }] },
+    { "slug": "squad-creator-pro", "n_agentes": 4,  "dominio": "Meta & Frameworks",       "maturidade": "funcional", "pitch": "Squad meta que CRIA squads e agentes — chief triagem + clone de mente + automação + estratégia.", "destaques": [{ "nome": "squad-chief", "o_que_faz": "Triagem e roteamento — cria novos squads e agentes" }, { "nome": "alan-nicolas", "o_que_faz": "Mind cloning — clona voz/mente de referência" }, { "nome": "pedro-valerio", "o_que_faz": "Processo e automação — método vira fluxo repetível" }] },
+    { "slug": "agencia-pinguim",   "n_agentes": 18, "dominio": "Agencia Pinguim",         "maturidade": "funcional", "pitch": "Núcleo operacional da Pinguim — 1 Chief + 17 especialistas internos cobrindo venda/CS/copy/tráfego/back-office.", "destaques": [{ "nome": "Chief", "o_que_faz": "Orquestrador único — recebe a dor, monta squad e delega" }, { "nome": "Comercial", "o_que_faz": "Vendas, upsell, pipeline" }, { "nome": "CS", "o_que_faz": "Customer success + onboarding pós-venda" }] },
+    { "slug": "high-ticket",       "n_agentes": 3,  "dominio": "Marketing por Produto",   "maturidade": "funcional", "pitch": "Apoio às mentorias Lira/Taurus/Orion — qualificação de leads, fechamento humano-assistido, pós-venda.", "destaques": [{ "nome": "closer", "o_que_faz": "Analisa leads + argumentos + objeções pro time de vendas" }, { "nome": "cs-mentorias", "o_que_faz": "Onboarding, satisfação, prevenção de churn, cases" }, { "nome": "suporte-mentorados", "o_que_faz": "Dúvidas operacionais dos alunos ativos" }] },
+
+    { "slug": "spy",               "n_agentes": 2,  "dominio": "Data & Analytics",        "maturidade": "funcional", "pitch": "Inteligência competitiva — olhos e ouvidos pra ler concorrente antes de ele te ler.", "destaques": [{ "nome": "Research Head", "o_que_faz": "Coordena o que investigar e como cruzar achados" }, { "nome": "Spy", "o_que_faz": "Executor — vai a campo coletar sinal cru" }] },
+    { "slug": "db-sage",           "n_agentes": 2,  "dominio": "Technical",               "maturidade": "funcional", "pitch": "Consultoria especializada de banco de dados — schema, query, ativação sem virar DBA.", "destaques": [{ "nome": "DB Sage", "o_que_faz": "Database expert principal — o cara que você chama" }, { "nome": "Activation Protocol", "o_que_faz": "Padroniza como ligar o DB Sage no fluxo" }] },
+    { "slug": "tools",             "n_agentes": 7,  "dominio": "Meta & Frameworks",       "maturidade": "funcional", "pitch": "Meta-agentes que outros agentes invocam pra extrair, criar, validar, revisar e gerenciar.", "destaques": [{ "nome": "tools-orchestrator", "o_que_faz": "Coordena os outros meta-agentes do squad" }, { "nome": "tools-extractor", "o_que_faz": "Extrai frameworks de fontes brutas pra virar tool" }, { "nome": "tools-creator", "o_que_faz": "Cria a ferramenta nova a partir do framework extraído" }] }
+  ],
+  "agentes_avulsos": [
+    { "slug": "book-summary-orchestrator", "nome": "Book Summary Orchestrator", "pitch": "Resume livros pra alimentar marketing — pipeline multi-fase com quality gates." },
+    { "slug": "compound",                  "nome": "Compound",                  "pitch": "Compound learning — mantém CLAUDE.md vivo, acumulando aprendizado entre sessões." },
+    { "slug": "creative-director",         "nome": "Creative Director",         "pitch": "Direção criativa de campanhas — fecha rumo de conteúdo antes do time executar." },
+    { "slug": "monitor",                   "nome": "Monitor",                   "pitch": "Analytics + saúde técnica do servidor — vigia a operação." },
+    { "slug": "lens-orchestrator",         "nome": "Lens Orchestrator",         "pitch": "Aplica 12 lentes de análise em qualquer assunto — leitura multidimensional." },
+    { "slug": "ralph",                     "nome": "Ralph",                     "pitch": "Dev autônomo com compound learning — executa tarefas técnicas acumulando aprendizado." }
+  ],
+  "agentes_pessoais": [
+    { "slug": "codina",  "nome": "Codina",            "pitch": "Agente pessoal do André Codina — sócio Dolphin, parceiro de dev do Pinguim." },
+    { "slug": "luiz",    "nome": "Luiz Cota",         "pitch": "Agente pessoal do Luiz — sócio fundador estratégico Pinguim." },
+    { "slug": "micha",   "nome": "Micha Menezes",     "pitch": "Agente pessoal do Micha — sócio Pinguim, lo-fi/Reels/audiência." },
+    { "slug": "pedro",   "nome": "Pedro Aredes",      "pitch": "Agente pessoal do Pedro — sócio Pinguim, tráfego/escala." },
+    { "slug": "pinguim", "nome": "Atendente Pinguim", "pitch": "Roteador único do Pinguim OS — recebe pedido, decide categoria, delega pro pipeline criativo." }
+  ],
+  "skills_categorias": [
+    { "categoria": "Meta/Operacional", "skills": ["buscar-cerebro","buscar-clone","buscar-persona","buscar-funil","buscar-skill","aprender-com-feedback","seguir-anatomia","briefing-cliente","verificar-adequacao","formatar-resposta-chat","copy-editing","portuguesar-br","stop-slop-de-aiify","tom-de-marca"] },
+    { "categoria": "Copywriting — mestres", "skills": ["schwartz-5-stages","halbert-a-pile","bencivenga-persuasion","brunson-hook-story-offer","stefan-georgi-rmbc","todd-brown-e5","jon-benson-vsl"] },
+    { "categoria": "Página de venda / CRO", "skills": ["above-the-fold","anatomia-pagina-low-ticket","anatomia-pagina-high-ticket","anatomia-pagina-vendas-longa","bullets-fascinacao","faq-vendedora","garantia-tripla","prova-social-mosaico"] },
+    { "categoria": "Oferta / precificação", "skills": ["hormozi-grand-slam-offer","hormozi-value-equation","kennedy-godfather-offer","mecanismo-unico","escada-de-valor","stack-de-bonus","risk-reversal-garantia"] },
+    { "categoria": "Hook / conteúdo", "skills": ["hook-contrarian","hook-curiosidade","hook-numero-especifico","hook-pain-point","hook-resultado-rapido"] },
+    { "categoria": "Storytelling", "skills": ["heros-journey","nancy-duarte-resonate","save-the-cat-15-beats","klaff-pitch-frame"] },
+    { "categoria": "Persona", "skills": ["gerar-persona-11-blocos","voice-of-customer"] },
+    { "categoria": "Advisory / decisão", "skills": ["advisory-completo","cenarios-3-otimista-central-pessimista","checklist-pre-decisao","diagnostico-estrategico","escrever-quadro-decisao","inversion-mental-model","leverage-sem-permissao","monopolio-vs-competicao"] }
+  ],
+  "anti_exemplos": [
+    { "titulo": "Não consolide agentes",             "anti": "Cria um agente novo pra atender Elo, mas combina com o ProAlt num só.", "por_que": "1 função = 1 agente. Consolidar quebra o roteador. (regra cravada)" },
+    { "titulo": "Não peça análise sem ID",            "anti": "Analisa esse criativo Meta sem ID nenhum, só pelo print.",                "por_que": "Sem IDs canônicos (ad/campaign/creative/video) o agente vira decorativo. Manda IDs ou URL Apify." },
+    { "titulo": "Não peça memória de sessão",         "anti": "Decora esse contexto na sua memória pra próxima conversa lembrar.",     "por_que": "Sem memória persistente entre sessões. Use APRENDIZADOS.md, cérebro ou MC." },
+    { "titulo": "Termo 'MVP' proibido",               "anti": "Roda um MVP rápido pra testar a ideia.",                                  "por_que": "Termo banido. Use 'v1 completa' ou 'redução de escopo ordenado'." },
+    { "titulo": "Não suba arquivo sem confirmar pasta", "anti": "Sobe esse arquivo do Drive sem confirmar a pasta de destino.",           "por_que": "Slug Taurus = 'tuarus' no banco. Lo-fi = 'desafio-de-conte-do-lo-fi'. Confirme antes de duplicar." },
+    { "titulo": "Não invente número",                 "anti": "Manda o Claude inventar a métrica que falta na planilha.",                "por_que": "Honestidade radical. Sem dado, diz 'não tenho'. Não chuta." },
+    { "titulo": "Agente sem categoria não nasce",     "anti": "Cria um agente novo do zero sem categoria, sem quando_acionar.",           "por_que": "Todo agente novo nasce com os 3 campos (categoria, quando_acionar, status_publicacao)." },
+    { "titulo": "Token OpenAI é só runtime",          "anti": "Usa OPENAI_API_KEY pra rodar testes internos meus.",                       "por_que": "Token cofre = só runtime produção. Smoke test/judge LLM o Claude faz, custo zero." },
+    { "titulo": "Não dispare massa sem skill",        "anti": "Manda WhatsApp em massa pra base toda do Lo-fi com mensagem genérica.",  "por_que": "Sem skill cadastrada + sem persona + sem origem rastreada. Vira spam alucinado." },
+    { "titulo": "Cérebros vazios não respondem",      "anti": "Pega o cérebro do Taurus e me explica os módulos.",                      "por_que": "Taurus está vazio no MC ('aguardando material'). Lira e Orion também." }
+  ],
+  "stats": {
+    "squads_total": 27,
+    "squads_maduros": 10,
+    "squads_funcionais": 14,
+    "squads_pequenos": 3,
+    "agentes_avulsos": 6,
+    "agentes_pessoais": 5,
+    "skills": 56,
+    "cerebros_ativos": 3,
+    "cerebros_esqueleto": 3,
+    "personas_documentadas": 1,
+    "prompts": 50,
+    "anti_exemplos": 10
+  }
+}

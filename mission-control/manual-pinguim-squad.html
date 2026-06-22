@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual do Pinguim Squad</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FAFAF7;
+    --surface: #FFFFFF;
+    --text: #111111;
+    --muted: #6B6B6B;
+    --line: rgba(17,17,17,0.06);
+    --accent: #E85D1F;
+    --accent-soft: #FFF4ED;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  body { padding: 32px 24px 80px; }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+
+  /* Header */
+  header { margin-bottom: 32px; }
+  h1 { font-size: 2.25rem; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-size: 0.9375rem; }
+  .meta-line { display: flex; gap: 16px; align-items: center; margin-top: 12px; font-size: 0.75rem; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; font-weight: 500; }
+
+  /* Search */
+  .search-wrap { position: relative; margin-bottom: 32px; }
+  .search-input { width: 100%; padding: 16px 20px 16px 48px; font-size: 1rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); font-family: inherit; transition: border-color 150ms ease; color: var(--text); }
+  .search-input:focus { outline: none; border-color: var(--accent); }
+  .search-icon { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+  .search-hint { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 0.6875rem; color: var(--muted); background: var(--bg); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); font-family: 'JetBrains Mono', monospace; }
+
+  /* Starter prompts grid */
+  .starters { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 48px; }
+  .starter { cursor: pointer; padding: 20px; background: var(--surface); border-radius: var(--radius); border: 1px solid var(--line); transition: border-color 150ms ease, transform 150ms ease; position: relative; }
+  .starter:hover { border-color: rgba(17,17,17,0.12); transform: translateY(-1px); }
+  .starter:active { transform: translateY(0); }
+  .starter .eyebrow { font-size: 0.6875rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 8px; }
+  .starter .label { font-size: 0.9375rem; font-weight: 600; margin-bottom: 8px; }
+  .starter .preview { font-size: 0.8125rem; color: var(--muted); line-height: 1.5; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--line); margin-bottom: 24px; }
+  .tab { padding: 10px 16px; font-size: 0.875rem; font-weight: 500; color: var(--muted); cursor: pointer; background: none; border: none; font-family: inherit; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 150ms ease, border-color 150ms ease; }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .tab:hover { color: var(--text); }
+  .tab-count { display: inline-block; margin-left: 6px; font-size: 0.75rem; color: var(--muted); font-weight: 400; }
+
+  /* Filter chips */
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; }
+  .chip { padding: 6px 12px; font-size: 0.8125rem; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; cursor: pointer; color: var(--text); font-family: inherit; transition: all 150ms ease; }
+  .chip:hover { border-color: rgba(17,17,17,0.15); }
+  .chip.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+  /* Section header */
+  .section-h { display: flex; align-items: baseline; gap: 12px; margin-top: 32px; margin-bottom: 16px; }
+  .section-h h2 { font-size: 1.375rem; font-weight: 600; letter-spacing: -0.01em; }
+  .section-h .desc { font-size: 0.875rem; color: var(--muted); }
+
+  /* Prompt card */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; position: relative; cursor: pointer; transition: border-color 150ms ease, transform 150ms ease; }
+  .card:hover { border-color: rgba(17,17,17,0.12); }
+  .card.copied { border-color: var(--accent); }
+  .card .eyebrow { font-size: 0.6875rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 10px; }
+  .card .label { font-size: 0.9375rem; font-weight: 600; margin-bottom: 12px; }
+  .card pre { font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; line-height: 1.55; color: var(--text); background: var(--bg); padding: 12px 14px; border-radius: 8px; margin-bottom: 12px; white-space: pre-wrap; word-wrap: break-word; max-height: 160px; overflow: hidden; position: relative; }
+  .card pre::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 24px; background: linear-gradient(to bottom, transparent, var(--bg)); pointer-events: none; }
+  .card .preview-out { font-size: 0.8125rem; color: var(--muted); line-height: 1.5; margin-bottom: 12px; padding-left: 12px; border-left: 2px solid var(--line); }
+  .card .preview-out strong { color: var(--text); font-weight: 500; }
+  .card footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 0.75rem; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+  .card .copy-state { display: inline-flex; align-items: center; gap: 6px; opacity: 0; transition: opacity 180ms ease, transform 180ms ease; transform: translateX(-4px); color: var(--accent); font-weight: 500; }
+  .card.copied .copy-state { opacity: 1; transform: translateX(0); }
+
+  /* Squad / cerebro / skill cards (mais densos) */
+  .item-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; transition: border-color 150ms ease; }
+  .item-card:hover { border-color: rgba(17,17,17,0.12); }
+  .item-card .eyebrow { font-size: 0.6875rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 8px; }
+  .item-card .name { font-size: 1rem; font-weight: 600; margin-bottom: 6px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .item-card .meta { font-size: 0.75rem; color: var(--muted); font-family: 'JetBrains Mono', monospace; font-weight: 400; }
+  .item-card .pitch { font-size: 0.875rem; color: var(--muted); line-height: 1.55; margin-bottom: 12px; }
+  .item-card .destaques { font-size: 0.8125rem; color: var(--text); }
+  .item-card .destaques li { margin-bottom: 4px; list-style: none; padding-left: 16px; position: relative; }
+  .item-card .destaques li::before { content: '·'; position: absolute; left: 4px; color: var(--accent); font-weight: 700; }
+  .item-card .destaques li strong { font-weight: 600; }
+  .item-card .destaques li span { color: var(--muted); }
+
+  .maturity-badge { display: inline-block; font-size: 0.625rem; padding: 2px 8px; border-radius: 999px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; font-family: 'JetBrains Mono', monospace; }
+  .maturity-maduro { background: var(--accent-soft); color: var(--accent); }
+  .maturity-funcional { background: rgba(17,17,17,0.05); color: var(--muted); }
+
+  /* Anti-exemplos */
+  .anti-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+  .anti-card .titulo { font-weight: 600; font-size: 0.9375rem; margin-bottom: 8px; }
+  .anti-card .anti { font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; background: var(--bg); padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; color: var(--text); }
+  .anti-card .por_que { font-size: 0.8125rem; color: var(--muted); line-height: 1.5; }
+
+  /* Empty state */
+  .empty { padding: 48px 24px; text-align: center; color: var(--muted); font-size: 0.875rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+  .empty strong { color: var(--text); display: block; margin-bottom: 6px; }
+
+  /* Footer */
+  .footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 0.75rem; color: var(--muted); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  .footer a { color: var(--muted); text-decoration: none; border-bottom: 1px dotted var(--line); }
+  .footer a:hover { color: var(--text); }
+
+  /* Section view toggle */
+  .hidden { display: none !important; }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    body { padding: 16px 12px 64px; }
+    h1 { font-size: 1.75rem; }
+    .grid, .starters { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Manual do Pinguim Squad</h1>
+    <p class="subtitle">Copia, cola no Claude Code, funciona.</p>
+    <div class="meta-line">
+      <span id="meta-versao">v1.0</span>
+      <span>·</span>
+      <span id="meta-atualizado">atualizado em 22/06/2026</span>
+    </div>
+  </header>
+
+  <!-- Search -->
+  <div class="search-wrap">
+    <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <input id="search" class="search-input" type="text" placeholder="Buscar cérebro, squad, skill ou exemplo de prompt..." autofocus>
+    <span class="search-hint">Cmd + K</span>
+  </div>
+
+  <!-- Starters -->
+  <div id="starters-section">
+    <div class="starters" id="starters"></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" data-tab="pedir">O que pedir <span class="tab-count" id="c-pedir"></span></button>
+    <button class="tab" data-tab="tenho">O que tenho <span class="tab-count" id="c-tenho"></span></button>
+    <button class="tab" data-tab="nao">O que NÃO pedir <span class="tab-count" id="c-nao"></span></button>
+  </div>
+
+  <!-- Tab: O que pedir -->
+  <div id="tab-pedir" class="tab-content">
+    <div class="chips" id="chips-categorias"></div>
+    <div id="prompts-container"></div>
+  </div>
+
+  <!-- Tab: O que tenho -->
+  <div id="tab-tenho" class="tab-content hidden">
+    <div class="chips" id="chips-tenho">
+      <button class="chip active" data-filter="squads">Squads</button>
+      <button class="chip" data-filter="cerebros">Cérebros</button>
+      <button class="chip" data-filter="skills">Skills</button>
+      <button class="chip" data-filter="avulsos">Agentes avulsos</button>
+      <button class="chip" data-filter="pessoais">Agentes pessoais</button>
+      <button class="chip" data-filter="personas">Personas</button>
+    </div>
+    <div id="tenho-container"></div>
+  </div>
+
+  <!-- Tab: O que NÃO pedir -->
+  <div id="tab-nao" class="tab-content hidden">
+    <div class="grid" id="anti-container"></div>
+  </div>
+
+  <footer class="footer">
+    <span>Pinguim Squad — sistema operacional da Agência Pinguim</span>
+    <a href="#" id="link-inventario">Ver inventário técnico</a>
+  </footer>
+
+</div>
+
+<script>
+let DATA = null;
+let activeCategoria = 'todas';
+let activeTab = 'pedir';
+let activeTenho = 'squads';
+let searchQuery = '';
+let recentlyCopied = JSON.parse(localStorage.getItem('pinguim-recent') || '[]');
+
+async function load() {
+  const res = await fetch('data/manual.json');
+  DATA = await res.json();
+  render();
+}
+
+function render() {
+  document.getElementById('meta-versao').textContent = DATA.versao;
+  document.getElementById('meta-atualizado').textContent = `atualizado em ${DATA.atualizado_em}`;
+  document.getElementById('c-pedir').textContent = `(${DATA.prompts.length})`;
+  document.getElementById('c-tenho').textContent = `(${DATA.squads.length + DATA.cerebros.length + 56})`;
+  document.getElementById('c-nao').textContent = `(${DATA.anti_exemplos.length})`;
+
+  renderStarters();
+  renderChipsCategorias();
+  renderPrompts();
+  renderTenho();
+  renderAnti();
+}
+
+function renderStarters() {
+  const el = document.getElementById('starters');
+  el.innerHTML = DATA.starter_prompts.map(s => `
+    <div class="starter" data-prompt="${escapeAttr(s.prompt)}" data-id="${s.id}">
+      <div class="eyebrow">${s.categoria}</div>
+      <div class="label">${s.label}</div>
+      <div class="preview">${s.output_esperado}</div>
+    </div>
+  `).join('');
+  el.querySelectorAll('.starter').forEach(c => c.addEventListener('click', e => copyCard(e.currentTarget, c.dataset.prompt)));
+}
+
+function renderChipsCategorias() {
+  const el = document.getElementById('chips-categorias');
+  const todas = `<button class="chip ${activeCategoria==='todas'?'active':''}" data-cat="todas">Todas <span style="opacity:.5">(${DATA.prompts.length})</span></button>`;
+  const chips = DATA.categorias_prompts.map(c => {
+    const n = DATA.prompts.filter(p => p.categoria === c.id).length;
+    return `<button class="chip ${activeCategoria===c.id?'active':''}" data-cat="${c.id}">${c.label} <span style="opacity:.5">(${n})</span></button>`;
+  }).join('');
+  el.innerHTML = todas + chips;
+  el.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
+    activeCategoria = b.dataset.cat;
+    renderChipsCategorias();
+    renderPrompts();
+  }));
+}
+
+function renderPrompts() {
+  const el = document.getElementById('prompts-container');
+  let prompts = DATA.prompts;
+  if (activeCategoria !== 'todas') prompts = prompts.filter(p => p.categoria === activeCategoria);
+  if (searchQuery) prompts = prompts.filter(p => matchesSearch(p, searchQuery));
+
+  if (prompts.length === 0) {
+    el.innerHTML = `<div class="empty"><strong>Nada encontrado.</strong>Tenta outra palavra ou clica em "Todas" pra ver o catálogo completo.</div>`;
+    return;
+  }
+
+  el.innerHTML = `<div class="grid">${prompts.map(p => `
+    <article class="card" data-prompt="${escapeAttr(p.prompt)}" data-id="${p.id}">
+      <div class="eyebrow">PROMPT · ${getCategoriaLabel(p.categoria).toUpperCase()}</div>
+      <div class="label">${p.label}</div>
+      <pre>${escapeHtml(p.prompt)}</pre>
+      <div class="preview-out"><strong>Vai te devolver:</strong> ${p.output_esperado}</div>
+      <footer>
+        <span>${p.usa || ''}</span>
+        <span class="copy-state">✓ copiado</span>
+      </footer>
+    </article>
+  `).join('')}</div>`;
+
+  el.querySelectorAll('.card').forEach(c => c.addEventListener('click', e => copyCard(e.currentTarget, c.dataset.prompt)));
+}
+
+function renderTenho() {
+  const el = document.getElementById('tenho-container');
+  if (activeTenho === 'squads') {
+    const squads = DATA.squads.filter(s => !searchQuery || matchesSearchSquad(s, searchQuery));
+    el.innerHTML = `<div class="grid">${squads.map(s => `
+      <div class="item-card">
+        <div class="eyebrow">SQUAD · ${s.dominio.toUpperCase()}</div>
+        <div class="name">${s.slug} <span class="maturity-badge maturity-${s.maturidade}">${s.maturidade}</span> <span class="meta">${s.n_agentes || '—'} agentes</span></div>
+        <div class="pitch">${s.pitch}</div>
+        <ul class="destaques">${(s.destaques||[]).map(d => `<li><strong>${d.nome}</strong> <span>— ${d.o_que_faz}</span></li>`).join('')}</ul>
+      </div>
+    `).join('')}</div>`;
+  } else if (activeTenho === 'cerebros') {
+    const cerebros = DATA.cerebros.filter(c => !searchQuery || matchesSearchObj(c, searchQuery));
+    el.innerHTML = `<div class="grid">${cerebros.map(c => `
+      <div class="item-card">
+        <div class="eyebrow">CÉREBRO · ${c.status.toUpperCase()}</div>
+        <div class="name">${c.nome} <span class="meta">slug: ${c.slug}</span></div>
+        <div class="pitch">${c.o_que_e}</div>
+      </div>
+    `).join('')}</div>`;
+  } else if (activeTenho === 'skills') {
+    el.innerHTML = DATA.skills_categorias.map(cat => `
+      <div class="section-h"><h2>${cat.categoria}</h2><span class="desc">${cat.skills.length} skills</span></div>
+      <div class="grid">${cat.skills.filter(sk => !searchQuery || sk.includes(searchQuery.toLowerCase())).map(sk => `
+        <div class="item-card">
+          <div class="eyebrow">SKILL</div>
+          <div class="name">${sk}</div>
+          <div class="pitch">cerebro/skills/${sk}/SKILL.md</div>
+        </div>
+      `).join('')}</div>
+    `).join('');
+  } else if (activeTenho === 'avulsos') {
+    const list = DATA.agentes_avulsos.filter(a => !searchQuery || matchesSearchObj(a, searchQuery));
+    el.innerHTML = `<div class="grid">${list.map(a => `
+      <div class="item-card">
+        <div class="eyebrow">AGENTE AVULSO</div>
+        <div class="name">${a.nome} <span class="meta">${a.slug}</span></div>
+        <div class="pitch">${a.pitch}</div>
+      </div>
+    `).join('')}</div>`;
+  } else if (activeTenho === 'pessoais') {
+    const list = DATA.agentes_pessoais.filter(a => !searchQuery || matchesSearchObj(a, searchQuery));
+    el.innerHTML = `<div class="grid">${list.map(a => `
+      <div class="item-card">
+        <div class="eyebrow">AGENTE PESSOAL</div>
+        <div class="name">${a.nome} <span class="meta">${a.slug}</span></div>
+        <div class="pitch">${a.pitch}</div>
+      </div>
+    `).join('')}</div>`;
+  } else if (activeTenho === 'personas') {
+    const list = DATA.personas.filter(p => !searchQuery || matchesSearchObj(p, searchQuery));
+    el.innerHTML = `<div class="grid">${list.map(p => `
+      <div class="item-card">
+        <div class="eyebrow">PERSONA · ${p.status.toUpperCase()}</div>
+        <div class="name">${p.nome} <span class="meta">${p.slug}</span></div>
+        <div class="pitch">${p.o_que_e}</div>
+      </div>
+    `).join('')}</div>`;
+  }
+}
+
+function renderAnti() {
+  const el = document.getElementById('anti-container');
+  el.innerHTML = DATA.anti_exemplos.map(a => `
+    <div class="anti-card">
+      <div class="titulo">${a.titulo}</div>
+      <div class="anti">${escapeHtml(a.anti)}</div>
+      <div class="por_que">${a.por_que}</div>
+    </div>
+  `).join('');
+}
+
+function copyCard(el, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    el.classList.add('copied');
+    setTimeout(() => el.classList.remove('copied'), 1400);
+    // recently used
+    const id = el.dataset.id;
+    if (id) {
+      recentlyCopied = [id, ...recentlyCopied.filter(x => x !== id)].slice(0, 6);
+      localStorage.setItem('pinguim-recent', JSON.stringify(recentlyCopied));
+    }
+  }).catch(() => {});
+}
+
+function matchesSearch(p, q) {
+  const ql = q.toLowerCase();
+  return p.label.toLowerCase().includes(ql) || p.prompt.toLowerCase().includes(ql) || p.output_esperado.toLowerCase().includes(ql) || (p.usa||'').toLowerCase().includes(ql) || p.categoria.includes(ql);
+}
+function matchesSearchSquad(s, q) {
+  const ql = q.toLowerCase();
+  const destStr = (s.destaques||[]).map(d => d.nome + ' ' + d.o_que_faz).join(' ').toLowerCase();
+  return s.slug.includes(ql) || s.pitch.toLowerCase().includes(ql) || s.dominio.toLowerCase().includes(ql) || destStr.includes(ql);
+}
+function matchesSearchObj(o, q) {
+  const ql = q.toLowerCase();
+  return JSON.stringify(o).toLowerCase().includes(ql);
+}
+function getCategoriaLabel(id) {
+  const c = DATA.categorias_prompts.find(x => x.id === id);
+  return c ? c.label : id;
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeAttr(s) { return escapeHtml(s).replace(/\n/g, '\\n'); }
+
+// Tab switching
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  activeTab = t.dataset.tab;
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+  document.getElementById('tab-' + activeTab).classList.remove('hidden');
+  // Starters só aparecem na aba "pedir"
+  document.getElementById('starters-section').classList.toggle('hidden', activeTab !== 'pedir');
+}));
+
+// Filter chips na aba "tenho"
+document.querySelectorAll('#chips-tenho .chip').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#chips-tenho .chip').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  activeTenho = b.dataset.filter;
+  renderTenho();
+}));
+
+// Search
+document.getElementById('search').addEventListener('input', e => {
+  searchQuery = e.target.value.trim();
+  renderPrompts();
+  renderTenho();
+});
+
+// Cmd+K shortcut
+window.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault();
+    document.getElementById('search').focus();
+    document.getElementById('search').select();
+  }
+  if (e.key === 'Escape') {
+    document.getElementById('search').value = '';
+    searchQuery = '';
+    renderPrompts();
+    renderTenho();
+    document.getElementById('search').blur();
+  }
+});
+
+load();
+</script>
+</body>
+</html>
