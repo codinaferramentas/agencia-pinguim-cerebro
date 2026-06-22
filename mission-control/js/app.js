@@ -20,6 +20,7 @@ import { renderAgendamentos } from './agendamentos.js?v=20260513b';
 import { renderPlanoCerebros } from './plano-cerebros.js?v=20260622a';
 import { renderClintMapeamento } from './clint-mapeamento.js?v=20260504a';
 import { renderReescritorPagina } from './reescritor-pagina.js?v=20260605a';
+import { renderPlaybook } from './playbook.js?v=20260622a';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
@@ -95,6 +96,7 @@ async function navegar(pageSlug, { forcarRender = true } = {}) {
       case 'agendamentos': await renderAgendamentos(); break;
       case 'clint-mapeamento': await renderClintMapeamento(); break;
       case 'reescritor': await renderReescritorPagina(); break;
+      case 'playbook':  await renderPlaybook(); break;
       default:
         if (STUB_PAGES.includes(pageSlug)) renderStub(pageSlug);
     }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Manual do Pinguim Squad</title>
+<title>Playbook do Pinguim Squad</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -113,11 +113,53 @@
   /* Section view toggle */
   .hidden { display: none !important; }
 
+  /* Install steps */
+  .install-intro { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 24px; margin-bottom: 32px; font-size: 0.9375rem; line-height: 1.6; }
+  .install-intro strong { color: var(--accent); }
+  .steps { list-style: none; counter-reset: step; padding: 0; margin: 0 0 32px 0; }
+  .step { display: flex; gap: 20px; padding: 24px 0; border-bottom: 1px solid var(--line); }
+  .step:last-child { border-bottom: none; }
+  .step-num { flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.9375rem; }
+  .step-body { flex: 1; min-width: 0; }
+  .step-body h3 { font-size: 1.0625rem; font-weight: 600; margin-bottom: 8px; letter-spacing: -0.01em; }
+  .step-body p { font-size: 0.9375rem; line-height: 1.6; color: var(--text); margin-bottom: 12px; }
+  .step-body p:last-child { margin-bottom: 0; }
+  .step-body code { font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; background: var(--bg); padding: 2px 6px; border-radius: 4px; }
+  .step-body kbd { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; background: var(--surface); border: 1px solid var(--line); padding: 2px 6px; border-radius: 4px; }
+  .step-meta { font-size: 0.8125rem; color: var(--muted); margin-top: 8px; }
+  .step-cta { display: inline-block; margin-top: 4px; padding: 10px 16px; background: var(--text); color: var(--bg); border-radius: 8px; font-size: 0.875rem; font-weight: 500; text-decoration: none; transition: opacity 150ms ease; }
+  .step-cta:hover { opacity: 0.85; }
+  .step-bullets { padding-left: 20px; margin: 12px 0; }
+  .step-bullets li { font-size: 0.9375rem; line-height: 1.6; margin-bottom: 6px; }
+  .step-bullets code { font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; background: var(--bg); padding: 2px 6px; border-radius: 4px; }
+  .step-code { font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; background: var(--bg); padding: 12px 14px; border-radius: 8px; margin: 8px 0; white-space: pre-wrap; word-wrap: break-word; line-height: 1.55; }
+  .step-downloads { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
+  .step-download { display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); text-decoration: none; color: var(--text); transition: border-color 150ms ease, transform 150ms ease; position: relative; min-width: 220px; }
+  .step-download:hover:not([data-disabled="true"]) { border-color: var(--accent); transform: translateY(-1px); }
+  .step-download[data-disabled="true"] { opacity: 0.6; cursor: not-allowed; }
+  .step-download .dl-icon { font-size: 1.5rem; }
+  .step-download .dl-text small { font-family: 'JetBrains Mono', monospace; color: var(--muted); font-size: 0.75rem; }
+  .step-download .dl-soon { position: absolute; top: 8px; right: 10px; font-size: 0.625rem; background: var(--accent-soft); color: var(--accent); padding: 2px 8px; border-radius: 999px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; font-family: 'JetBrains Mono', monospace; }
+
+  /* Install FAQ */
+  .install-faq { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; }
+  .install-faq h3 { font-size: 1.0625rem; font-weight: 600; margin-bottom: 16px; letter-spacing: -0.01em; }
+  .install-faq details { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .install-faq details:last-child { border-bottom: none; }
+  .install-faq summary { font-size: 0.9375rem; font-weight: 500; cursor: pointer; padding-right: 20px; position: relative; }
+  .install-faq summary:hover { color: var(--accent); }
+  .install-faq summary::-webkit-details-marker { display: none; }
+  .install-faq summary::after { content: '+'; position: absolute; right: 0; top: -2px; font-size: 1.25rem; font-weight: 400; color: var(--muted); transition: transform 150ms ease; }
+  .install-faq details[open] summary::after { transform: rotate(45deg); }
+  .install-faq details p { font-size: 0.875rem; line-height: 1.6; color: var(--muted); margin-top: 10px; }
+
   /* Responsive */
   @media (max-width: 640px) {
     body { padding: 16px 12px 64px; }
     h1 { font-size: 1.75rem; }
     .grid, .starters { grid-template-columns: 1fr; }
+    .step { flex-direction: column; gap: 12px; }
+    .step-downloads { flex-direction: column; }
   }
 </style>
 </head>
@@ -125,8 +167,8 @@
 <div class="wrap">
 
   <header>
-    <h1>Manual do Pinguim Squad</h1>
-    <p class="subtitle">Copia, cola no Claude Code, funciona.</p>
+    <h1>Playbook do Pinguim Squad</h1>
+    <p class="subtitle">Instala. Abre Claude Code. Copia. Cola. Funciona.</p>
     <div class="meta-line">
       <span id="meta-versao">v1.0</span>
       <span>·</span>
@@ -142,19 +184,119 @@
   </div>
 
   <!-- Starters -->
-  <div id="starters-section">
+  <div id="starters-section" class="hidden">
     <div class="starters" id="starters"></div>
   </div>
 
   <!-- Tabs -->
   <div class="tabs">
-    <button class="tab active" data-tab="pedir">O que pedir <span class="tab-count" id="c-pedir"></span></button>
+    <button class="tab active" data-tab="instalar">Como instalar</button>
+    <button class="tab" data-tab="pedir">O que pedir <span class="tab-count" id="c-pedir"></span></button>
     <button class="tab" data-tab="tenho">O que tenho <span class="tab-count" id="c-tenho"></span></button>
     <button class="tab" data-tab="nao">O que NÃO pedir <span class="tab-count" id="c-nao"></span></button>
   </div>
 
+  <!-- Tab: Como instalar (default) -->
+  <div id="tab-instalar" class="tab-content">
+    <div class="install-intro">
+      <p>Em <strong>~5 minutos</strong> você instala o Pinguim Squad no seu Claude Code e começa a pedir tudo que tá nas outras abas. Tudo cloud-first — você nunca depende da máquina do André pra trabalhar.</p>
+    </div>
+
+    <ol class="steps">
+      <li class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Instale o Claude Code</h3>
+          <p>Se você ainda não tem, baixa o app oficial da Anthropic. É grátis pra abrir, mas pra usar com o Pinguim Squad você precisa de assinatura Max (Andre tem a conta compartilhada — confirma com ele).</p>
+          <a class="step-cta" href="https://claude.com/download" target="_blank" rel="noopener">Baixar Claude Code →</a>
+          <p class="step-meta">Disponível pra Windows, Mac e Linux. ~150MB.</p>
+        </div>
+      </li>
+
+      <li class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Baixe o instalador do Pinguim Squad</h3>
+          <p>Clica no arquivo certo pro seu sistema. Vai baixar um arquivo de ~5KB. <strong>Não abre direto</strong> — siga o passo 3.</p>
+          <div class="step-downloads">
+            <a class="step-download" href="#" data-disabled="true" title="Em construção — disponível em 1-2 dias">
+              <span class="dl-icon">🪟</span>
+              <span class="dl-text"><strong>Windows</strong><br><small>pinguim-instalar.bat</small></span>
+              <span class="dl-soon">em breve</span>
+            </a>
+            <a class="step-download" href="#" data-disabled="true" title="Em construção — disponível em 1-2 dias">
+              <span class="dl-icon">🍎</span>
+              <span class="dl-text"><strong>Mac</strong><br><small>pinguim-instalar.command</small></span>
+              <span class="dl-soon">em breve</span>
+            </a>
+          </div>
+          <p class="step-meta">Não precisa instalar Node, npm, terminal — o arquivo cuida de tudo.</p>
+        </div>
+      </li>
+
+      <li class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Clica 2x no arquivo</h3>
+          <p>Vai abrir uma janela preta (terminal) por uns 2 minutos. <strong>Não fecha a janela</strong> — espera ela completar sozinha. Ela vai:</p>
+          <ul class="step-bullets">
+            <li>Criar uma pasta <code>~/.claude/skills/</code> na sua máquina</li>
+            <li>Copiar as 56 skills do Pinguim Squad pra dentro dela</li>
+            <li>Configurar a conexão segura com o banco do Mission Control</li>
+            <li>Avisar quando terminar com a mensagem <strong>"Pronto pra usar! Abra o Claude Code."</strong></li>
+          </ul>
+          <p class="step-meta">Reversível — pra desinstalar, basta deletar a pasta <code>~/.claude/skills/pinguim/</code></p>
+        </div>
+      </li>
+
+      <li class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h3>Abre o Claude Code e pede a primeira coisa</h3>
+          <p>Abre o Claude Code. Em qualquer pasta. Digita um pedido — pode começar com um dos starter prompts no topo desta página (ali em cima, antes das abas).</p>
+          <p>Exemplo pra primeiro teste:</p>
+          <pre class="step-code">Telefone 31988460539 — me devolve histórico completo: Hotmart, boleto Principia, conversa Clint, conexões Meta.</pre>
+          <p>Se ele te devolver o histórico da Joana (ProAlt, boleto Principia, R$1.796), funcionou. Se não, me chama no zap.</p>
+        </div>
+      </li>
+
+      <li class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <h3>Quando tiver dúvida do que pedir, volta aqui</h3>
+          <p>Esta página é seu cardápio. Quando travar, clica em "<strong>O que pedir</strong>" lá em cima e copia o prompt que faz mais sentido. Atualizações de cérebros/personas/skills aparecem aqui em tempo real — você nunca precisa reinstalar nada.</p>
+          <p class="step-meta">Atalhos: <kbd>Cmd</kbd> + <kbd>K</kbd> abre a busca de qualquer lugar.</p>
+        </div>
+      </li>
+    </ol>
+
+    <div class="install-faq">
+      <h3>Dúvidas comuns</h3>
+      <details>
+        <summary>É seguro? Vai expor minhas senhas?</summary>
+        <p>Sim, é seguro. O Pinguim Squad nunca pega senha sua direto — tudo passa pelo cofre criptografado do Supabase. Você nunca vê chave nenhuma, nunca precisa configurar token. O instalador só conecta sua máquina com o Mission Control de leitura.</p>
+      </details>
+      <details>
+        <summary>Se eu mexer no Mission Control, os outros sócios veem?</summary>
+        <p>Sim, na hora. Não tem cache, não tem espera. Cada pedido lê do banco no momento.</p>
+      </details>
+      <details>
+        <summary>E se eu não souber programar?</summary>
+        <p>Não precisa. O Claude Code é como conversar no WhatsApp — você digita em português, ele entende. As skills do Pinguim já trazem o conhecimento dos cérebros, personas e clones. Você só pede.</p>
+      </details>
+      <details>
+        <summary>Funciona offline?</summary>
+        <p>Não. Precisa de internet pra falar com o Mission Control e o Claude.</p>
+      </details>
+      <details>
+        <summary>Quanto custa?</summary>
+        <p>A assinatura do Claude Code (Max) é compartilhada entre os 4 sócios. Você não paga separado. Custo de API por uso fica em ~R$15-30/sócio/mês dependendo do volume.</p>
+      </details>
+    </div>
+  </div>
+
   <!-- Tab: O que pedir -->
-  <div id="tab-pedir" class="tab-content">
+  <div id="tab-pedir" class="tab-content hidden">
     <div class="chips" id="chips-categorias"></div>
     <div id="prompts-container"></div>
   </div>
@@ -187,13 +329,13 @@
 <script>
 let DATA = null;
 let activeCategoria = 'todas';
-let activeTab = 'pedir';
+let activeTab = 'instalar';
 let activeTenho = 'squads';
 let searchQuery = '';
 let recentlyCopied = JSON.parse(localStorage.getItem('pinguim-recent') || '[]');
 
 async function load() {
-  const res = await fetch('data/manual.json');
+  const res = await fetch('data/playbook.json');
   DATA = await res.json();
   render();
 }
