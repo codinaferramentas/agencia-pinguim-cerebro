@@ -262,21 +262,19 @@
       <li class="step">
         <div class="step-num">2</div>
         <div class="step-body">
-          <h3>Baixe o instalador do Pinguim Squad</h3>
-          <p>Clica no arquivo certo pro seu sistema operacional. Vai baixar um arquivo de ~5KB que já vem configurado pro sócio que você selecionou no passo 1. <strong>Não abre direto</strong> — siga o passo 3.</p>
-          <div class="step-downloads">
-            <a class="step-download" href="#" data-disabled="true" title="Em construção — disponível em 1-2 dias">
+          <h3>Baixe o instalador</h3>
+          <p>Escolhe o sistema operacional da sua máquina. O arquivo já vai configurado pro sócio que você selecionou no passo 1. <strong>Não abre direto</strong> — siga o passo 3.</p>
+          <div class="step-downloads" id="step-downloads">
+            <a class="step-download" id="dl-windows" href="#" data-disabled="true" title="Selecione seu nome no passo 1 primeiro">
               <span class="dl-icon">🪟</span>
-              <span class="dl-text"><strong>Windows</strong><br><small>pinguim-instalar.bat</small></span>
-              <span class="dl-soon">em breve</span>
+              <span class="dl-text"><strong>Windows</strong><br><small id="dl-win-file">selecione sócio primeiro</small></span>
             </a>
-            <a class="step-download" href="#" data-disabled="true" title="Em construção — disponível em 1-2 dias">
+            <a class="step-download" id="dl-mac" href="#" data-disabled="true" title="Selecione seu nome no passo 1 primeiro">
               <span class="dl-icon">🍎</span>
-              <span class="dl-text"><strong>Mac</strong><br><small>pinguim-instalar.command</small></span>
-              <span class="dl-soon">em breve</span>
+              <span class="dl-text"><strong>Mac</strong><br><small id="dl-mac-file">selecione sócio primeiro</small></span>
             </a>
           </div>
-          <p class="step-meta">Não precisa instalar Node, npm, terminal — o arquivo cuida de tudo.</p>
+          <p class="step-meta">Não precisa instalar Node, npm, terminal — o arquivo cuida de tudo. Tamanho: ~140KB.</p>
         </div>
       </li>
 
@@ -634,6 +632,24 @@ function selecionarSocio(slug) {
     socioAlertaTitulo.textContent = msg.titulo;
     socioAlertaMsg.textContent = msg.msg;
     socioAlerta.classList.toggle('alerta-vazio', status === 'vazio');
+  }
+  // Habilita os 2 botoes de download com link especifico
+  const dlWin = document.getElementById('dl-windows');
+  const dlMac = document.getElementById('dl-mac');
+  const dlWinFile = document.getElementById('dl-win-file');
+  const dlMacFile = document.getElementById('dl-mac-file');
+  if (dlWin && dlMac) {
+    dlWin.href = 'downloads/instalador/instalar-' + slug + '.bat';
+    dlWin.setAttribute('download', 'instalar-' + slug + '.bat');
+    dlWin.removeAttribute('data-disabled');
+    dlWin.setAttribute('title', 'Baixar instalador Windows pro ' + slug);
+    dlWinFile.textContent = 'instalar-' + slug + '.bat';
+
+    dlMac.href = 'downloads/instalador/instalar-' + slug + '.command';
+    dlMac.setAttribute('download', 'instalar-' + slug + '.command');
+    dlMac.removeAttribute('data-disabled');
+    dlMac.setAttribute('title', 'Baixar instalador Mac pro ' + slug);
+    dlMacFile.textContent = 'instalar-' + slug + '.command';
   }
   localStorage.setItem('pinguim-socio', slug);
 }
