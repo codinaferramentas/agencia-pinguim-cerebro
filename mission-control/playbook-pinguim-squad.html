@@ -141,6 +141,24 @@
   .step-download .dl-text small { font-family: 'JetBrains Mono', monospace; color: var(--muted); font-size: 0.75rem; }
   .step-download .dl-soon { position: absolute; top: 8px; right: 10px; font-size: 0.625rem; background: var(--accent-soft); color: var(--accent); padding: 2px 8px; border-radius: 999px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; font-family: 'JetBrains Mono', monospace; }
 
+  /* Socio selector (passo 1) */
+  .socio-selector { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin: 16px 0; }
+  .socio-card { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; font-family: inherit; text-align: left; transition: border-color 150ms ease, transform 150ms ease; position: relative; }
+  .socio-card:hover { border-color: rgba(17,17,17,0.15); transform: translateY(-1px); }
+  .socio-card.selected { border-color: var(--accent); background: var(--accent-soft); }
+  .socio-card .socio-emoji { font-size: 1.5rem; }
+  .socio-card .socio-nome { font-size: 0.9375rem; font-weight: 600; color: var(--text); }
+  .socio-card .socio-meta { font-size: 0.75rem; font-family: 'JetBrains Mono', monospace; color: var(--muted); }
+  .socio-card .socio-badge { position: absolute; top: 10px; right: 10px; font-size: 0.625rem; padding: 2px 8px; border-radius: 999px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; font-family: 'JetBrains Mono', monospace; }
+  .socio-badge-completo { background: #E7F5EC; color: #1F7A3A; }
+  .socio-badge-parcial { background: var(--accent-soft); color: var(--accent); }
+  .socio-badge-vazio { background: rgba(17,17,17,0.05); color: var(--muted); }
+  .socio-alerta { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; font-size: 0.875rem; line-height: 1.55; margin-top: 12px; }
+  .socio-alerta strong { display: block; margin-bottom: 4px; color: var(--text); }
+  .socio-alerta span { color: var(--muted); }
+  .socio-alerta.alerta-vazio { border-left: 3px solid var(--accent); padding-left: 14px; }
+  .socio-alerta.alerta-vazio strong { color: var(--accent); }
+
   /* Install FAQ */
   .install-faq { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; }
   .install-faq h3 { font-size: 1.0625rem; font-weight: 600; margin-bottom: 16px; letter-spacing: -0.01em; }
@@ -199,17 +217,45 @@
   <!-- Tab: Como instalar (default) -->
   <div id="tab-instalar" class="tab-content">
     <div class="install-intro">
-      <p>Em <strong>~5 minutos</strong> você instala o Pinguim Squad no seu Claude Code e começa a pedir tudo que tá nas outras abas. Tudo cloud-first — você nunca depende da máquina do André pra trabalhar.</p>
+      <p>Em <strong>~3 minutos</strong> você instala o Pinguim Squad no seu Claude Code. Como você já tem Claude Code rodando, são só 4 passos. Tudo cloud-first — seu cérebro pessoal mora no Mission Control, você nunca depende da máquina do André pra trabalhar.</p>
     </div>
 
     <ol class="steps">
       <li class="step">
         <div class="step-num">1</div>
         <div class="step-body">
-          <h3>Instale o Claude Code</h3>
-          <p>Se você ainda não tem, baixa o app oficial da Anthropic. É grátis pra abrir, mas pra usar com o Pinguim Squad você precisa de assinatura Max (Andre tem a conta compartilhada — confirma com ele).</p>
-          <a class="step-cta" href="https://claude.com/download" target="_blank" rel="noopener">Baixar Claude Code →</a>
-          <p class="step-meta">Disponível pra Windows, Mac e Linux. ~150MB.</p>
+          <h3>Quem é você?</h3>
+          <p>Cada sócio tem um <strong>cérebro pessoal</strong> próprio — voz, jeito de escrever, preferências. Quando você instala, o Pinguim Squad carrega o SEU cérebro pra te entender melhor. Selecione abaixo quem está instalando:</p>
+          <div class="socio-selector" id="socio-selector">
+            <button class="socio-card" data-socio="codina" data-status="parcial">
+              <span class="socio-emoji">🐬</span>
+              <span class="socio-nome">André Codina</span>
+              <span class="socio-meta">codina</span>
+              <span class="socio-badge socio-badge-parcial">parcial</span>
+            </button>
+            <button class="socio-card" data-socio="pedro" data-status="vazio">
+              <span class="socio-emoji">🔷</span>
+              <span class="socio-nome">Pedro Aredes</span>
+              <span class="socio-meta">pedro</span>
+              <span class="socio-badge socio-badge-vazio">vazio</span>
+            </button>
+            <button class="socio-card" data-socio="luiz" data-status="vazio">
+              <span class="socio-emoji">🟠</span>
+              <span class="socio-nome">Luiz Cota</span>
+              <span class="socio-meta">luiz</span>
+              <span class="socio-badge socio-badge-vazio">vazio</span>
+            </button>
+            <button class="socio-card" data-socio="micha" data-status="vazio">
+              <span class="socio-emoji">🟢</span>
+              <span class="socio-nome">Micha Menezes</span>
+              <span class="socio-meta">micha</span>
+              <span class="socio-badge socio-badge-vazio">vazio</span>
+            </button>
+          </div>
+          <div class="socio-alerta" id="socio-alerta">
+            <strong id="socio-alerta-titulo">Selecione seu nome acima.</strong>
+            <span id="socio-alerta-msg">Quando você selecionar, o instalador vai carregar o cérebro pessoal correto na sua máquina.</span>
+          </div>
         </div>
       </li>
 
@@ -217,7 +263,7 @@
         <div class="step-num">2</div>
         <div class="step-body">
           <h3>Baixe o instalador do Pinguim Squad</h3>
-          <p>Clica no arquivo certo pro seu sistema. Vai baixar um arquivo de ~5KB. <strong>Não abre direto</strong> — siga o passo 3.</p>
+          <p>Clica no arquivo certo pro seu sistema operacional. Vai baixar um arquivo de ~5KB que já vem configurado pro sócio que você selecionou no passo 1. <strong>Não abre direto</strong> — siga o passo 3.</p>
           <div class="step-downloads">
             <a class="step-download" href="#" data-disabled="true" title="Em construção — disponível em 1-2 dias">
               <span class="dl-icon">🪟</span>
@@ -240,9 +286,10 @@
           <h3>Clica 2x no arquivo</h3>
           <p>Vai abrir uma janela preta (terminal) por uns 2 minutos. <strong>Não fecha a janela</strong> — espera ela completar sozinha. Ela vai:</p>
           <ul class="step-bullets">
-            <li>Criar uma pasta <code>~/.claude/skills/</code> na sua máquina</li>
+            <li>Criar a pasta <code>~/.claude/skills/pinguim/</code> na sua máquina</li>
             <li>Copiar as 56 skills do Pinguim Squad pra dentro dela</li>
-            <li>Configurar a conexão segura com o banco do Mission Control</li>
+            <li>Carregar seu cérebro pessoal (IDENTITY + SOUL + AGENTS + TOOLS) como contexto base do Claude</li>
+            <li>Configurar a conexão segura com o Mission Control</li>
             <li>Avisar quando terminar com a mensagem <strong>"Pronto pra usar! Abra o Claude Code."</strong></li>
           </ul>
           <p class="step-meta">Reversível — pra desinstalar, basta deletar a pasta <code>~/.claude/skills/pinguim/</code></p>
@@ -253,19 +300,10 @@
         <div class="step-num">4</div>
         <div class="step-body">
           <h3>Abre o Claude Code e pede a primeira coisa</h3>
-          <p>Abre o Claude Code. Em qualquer pasta. Digita um pedido — pode começar com um dos starter prompts no topo desta página (ali em cima, antes das abas).</p>
-          <p>Exemplo pra primeiro teste:</p>
-          <pre class="step-code">Telefone 31988460539 — me devolve histórico completo: Hotmart, boleto Principia, conversa Clint, conexões Meta.</pre>
-          <p>Se ele te devolver o histórico da Joana (ProAlt, boleto Principia, R$1.796), funcionou. Se não, me chama no zap.</p>
-        </div>
-      </li>
-
-      <li class="step">
-        <div class="step-num">5</div>
-        <div class="step-body">
-          <h3>Quando tiver dúvida do que pedir, volta aqui</h3>
-          <p>Esta página é seu cardápio. Quando travar, clica em "<strong>O que pedir</strong>" lá em cima e copia o prompt que faz mais sentido. Atualizações de cérebros/personas/skills aparecem aqui em tempo real — você nunca precisa reinstalar nada.</p>
-          <p class="step-meta">Atalhos: <kbd>Cmd</kbd> + <kbd>K</kbd> abre a busca de qualquer lugar.</p>
+          <p>Abre o Claude Code. Em qualquer pasta. Digita um pedido — pode começar com um dos exemplos da aba <strong>"O que pedir"</strong> aqui em cima.</p>
+          <p>Pra confirmar que ele te reconheceu como sócio certo, pede:</p>
+          <pre class="step-code">Quem sou eu? Lê meu cérebro pessoal e me diz como você vai me ajudar.</pre>
+          <p>Ele vai responder usando seu nome, seu jeito e suas preferências (que estão no seu IDENTITY/SOUL).</p>
         </div>
       </li>
     </ol>
@@ -273,12 +311,20 @@
     <div class="install-faq">
       <h3>Dúvidas comuns</h3>
       <details>
+        <summary>Meu cérebro pessoal aparece como "vazio" — o que faço?</summary>
+        <p>Significa que a estrutura existe (IDENTITY/SOUL/AGENTS/TOOLS) mas ainda não tem seu jeito de falar, suas preferências, seu tom autêntico. O Claude vai funcionar mesmo assim — mas vai ser genérico. <strong>Pra ficar bom:</strong> assim que você usar pela primeira vez, o Claude vai te perguntar coisas pra preencher seu perfil. Você responde, ele monta um arquivo, você manda pro Codina por zap, e ele cola no Mission Control. A partir daí, qualquer pedido seu vai sair na SUA voz.</p>
+      </details>
+      <details>
         <summary>É seguro? Vai expor minhas senhas?</summary>
         <p>Sim, é seguro. O Pinguim Squad nunca pega senha sua direto — tudo passa pelo cofre criptografado do Supabase. Você nunca vê chave nenhuma, nunca precisa configurar token. O instalador só conecta sua máquina com o Mission Control de leitura.</p>
       </details>
       <details>
         <summary>Se eu mexer no Mission Control, os outros sócios veem?</summary>
         <p>Sim, na hora. Não tem cache, não tem espera. Cada pedido lê do banco no momento.</p>
+      </details>
+      <details>
+        <summary>Por que eu preciso de um cérebro pessoal? Não basta o Pinguim?</summary>
+        <p>Pinguim é o atendente geral. Seu cérebro pessoal é seu <strong>jeito de falar</strong>: vocabulário, frases prontas, o que você gosta e não gosta de ler, exemplos do seu negócio. Quando você pede uma copy, o Pinguim sabe MONTAR. Seu cérebro pessoal afina pra sair COMO se fosse VOCÊ falando. Sem isso, vira genérico.</p>
       </details>
       <details>
         <summary>E se eu não souber programar?</summary>
@@ -555,6 +601,50 @@ window.addEventListener('keydown', e => {
     document.getElementById('search').blur();
   }
 });
+
+// Socio selector — passo 1
+const SOCIO_MENSAGENS = {
+  codina: {
+    parcial: { titulo: 'Codina selecionado. Seu cérebro está parcialmente preenchido.', msg: 'Você tem IDENTITY/SOUL/AGENTS/TOOLS, mas o jeito autêntico de falar ainda pode ser enriquecido com uso. O Claude já te reconhece como André Codina, sócio da Dolphin, parceiro de dev do Pinguim.' }
+  },
+  pedro: {
+    vazio: { titulo: 'Pedro selecionado. Atenção: seu cérebro pessoal está VAZIO.', msg: 'A estrutura existe (IDENTITY/SOUL/AGENTS/TOOLS) mas o conteúdo é genérico — sem seu jeito de falar, suas preferências, exemplos do seu negócio. Você pode instalar mesmo assim e usar. Quando começar, o Claude vai te perguntar coisas pra preencher. Você responde, monta um arquivo, manda pro Codina por zap, ele cola no Mission Control. A partir daí, vai sair na SUA voz.' }
+  },
+  luiz: {
+    vazio: { titulo: 'Luiz selecionado. Atenção: seu cérebro pessoal está VAZIO.', msg: 'Mesma coisa do Pedro — estrutura pronta, conteúdo genérico. Pode instalar e usar. Quando o Claude te perguntar, responde com seu jeito de falar e suas preferências. Codina cola no Mission Control depois.' }
+  },
+  micha: {
+    vazio: { titulo: 'Micha selecionado. Atenção: seu cérebro pessoal está VAZIO.', msg: 'Estrutura pronta, conteúdo genérico. Pode instalar e usar — o Claude vai funcionar como atendente competente, mas sem soar como você. Quando começar, ele vai te perguntar coisas pra montar seu jeito de falar. Responde, manda pro Codina, ele cola no MC.' }
+  }
+};
+
+const socioCards = document.querySelectorAll('.socio-card');
+const socioAlerta = document.getElementById('socio-alerta');
+const socioAlertaTitulo = document.getElementById('socio-alerta-titulo');
+const socioAlertaMsg = document.getElementById('socio-alerta-msg');
+
+function selecionarSocio(slug) {
+  const card = document.querySelector('.socio-card[data-socio="' + slug + '"]');
+  if (!card) return;
+  socioCards.forEach(c => c.classList.remove('selected'));
+  card.classList.add('selected');
+  const status = card.dataset.status;
+  const msg = (SOCIO_MENSAGENS[slug] || {})[status];
+  if (msg) {
+    socioAlertaTitulo.textContent = msg.titulo;
+    socioAlertaMsg.textContent = msg.msg;
+    socioAlerta.classList.toggle('alerta-vazio', status === 'vazio');
+  }
+  localStorage.setItem('pinguim-socio', slug);
+}
+
+socioCards.forEach(c => c.addEventListener('click', () => selecionarSocio(c.dataset.socio)));
+
+// Restaura seleção anterior
+const socioSalvo = localStorage.getItem('pinguim-socio');
+if (socioSalvo && document.querySelector('.socio-card[data-socio="' + socioSalvo + '"]')) {
+  selecionarSocio(socioSalvo);
+}
 
 load();
 </script>
