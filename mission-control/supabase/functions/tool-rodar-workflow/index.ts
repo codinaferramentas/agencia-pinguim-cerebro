@@ -31,7 +31,7 @@ serve(async (req) => {
   let body: any;
   try { body = await req.json(); } catch { return jsonRespTool({ ok: false, erro: 'JSON invalido' }, 400); }
 
-  const { workflow_slug, periodo_dias = 7, url_pagina, especialistas_escolhidos, cliente_id } = body;
+  const { workflow_slug, periodo_dias = 7, url_pagina, especialistas_escolhidos, cliente_id, campaign_ids, top_criativos, data_inicio, data_fim, modelo_estatistico_slug } = body;
   if (!workflow_slug) return jsonRespTool({ ok: false, erro: 'workflow_slug obrigatorio' }, 400);
 
   const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -47,6 +47,19 @@ serve(async (req) => {
   if (!wf) return jsonRespTool({ ok: false, erro: 'workflow nao encontrado' }, 404);
   if (wf.status !== 'liberado') return jsonRespTool({ ok: false, erro: 'workflow nao liberado' }, 400);
 
+  // Busca artefato do modelo estatistico (se escolhido) — congela snapshot pra auditoria
+  let modeloSnapshot: any = null;
+  if (modelo_estatistico_slug) {
+    const produtoWf = (wf.config?.produto_slug) || 'desafio-lofi';
+    const { data: m } = await sb.from('modelos_estatisticos')
+      .select('id, slug, tipo, titulo, descricao, output_jsonb, stats_jsonb, versao')
+      .eq('produto', produtoWf)
+      .eq('slug', modelo_estatistico_slug)
+      .eq('ativo', true)
+      .single();
+    if (m) modeloSnapshot = m;
+  }
+
   // Cria rodada com status rodando
   const { data: rodada, error: errIns } = await sb.from('workflow_rodadas').insert({
     workflow_id: wf.id,
@@ -54,12 +67,14 @@ serve(async (req) => {
     periodo_dias,
     url_pagina,
     especialistas_escolhidos: especialistas_escolhidos || {},
+    modelo_estatistico_slug: modelo_estatistico_slug || null,
+    modelo_estatistico_snapshot: modeloSnapshot,
     status: 'rodando',
   }).select('id').single();
   if (errIns) return jsonRespTool({ ok: false, erro: errIns.message }, 500);
 
   // Dispara workflow em background (não await)
-  executarWorkflow(rodada.id, wf, { periodo_dias, url_pagina, especialistas_escolhidos })
+  executarWorkflow(rodada.id, wf, { periodo_dias, url_pagina, especialistas_escolhidos, campaign_ids, top_criativos, data_inicio, data_fim, modelo_estatistico_slug, modelo_estatistico_snapshot: modeloSnapshot })
     .catch(async (e) => {
       console.error('[workflow] erro fatal:', e?.message);
       await sb.from('workflow_rodadas')

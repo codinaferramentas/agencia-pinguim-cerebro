@@ -1051,6 +1051,10 @@ async function chamarOpenAI(input: LLMCallInput, modelo: string, consumidor: str
   if (input.tools && input.tools.length > 0) {
     body.tools = input.tools;
     body.tool_choice = 'auto';
+    // parallel_tool_calls: false reduz stale-context shortcut em multi-turn.
+    // GPT-4o tende a "pular" tool quando o histórico parece autoritativo —
+    // desligar parallel forca 1 tool por turno, dando ao LLM mais sinal pra escolher certo.
+    body.parallel_tool_calls = false;
   }
 
   // Retry automatico em 5xx (servidor OpenAI overloaded) e 429 (rate limit)

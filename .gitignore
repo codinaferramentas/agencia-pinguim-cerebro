@@ -1,4 +1,6 @@
 .tmp-transcripts/
+.tmp-relatorios/
+.tmp-sql/
 .env
 .env.local
 node_modules/
@@ -12,3 +14,4 @@ node_modules/
 
 # Claude Code — configuração local (permissões pessoais)
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
