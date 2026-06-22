@@ -173,6 +173,7 @@ async function processarAnunciosMeta({ cerebro_id, keywords, janela_dias = JANEL
 
   // 7. Pra cada escolhido: extrai criativo (copy + thumb) + salva + vetoriza
   let salvos = 0, falhas = 0;
+  let primeiroErroSalvar = null;
   for (const a of escolhidos) {
     try {
       // Idempotência: se já tem essa fonte (mesmo ad_id), atualiza em vez de duplicar
@@ -270,6 +271,7 @@ async function processarAnunciosMeta({ cerebro_id, keywords, janela_dias = JANEL
       salvos++;
     } catch (e) {
       on_log({ etapa: 'falha', ad_id: a.ad_id, erro: e.message });
+      if (!primeiroErroSalvar) primeiroErroSalvar = e.message;
       falhas++;
     }
   }
@@ -277,7 +279,12 @@ async function processarAnunciosMeta({ cerebro_id, keywords, janela_dias = JANEL
   // Marca o plano como executado (Andre 2026-06-20). Ate' quando salvos=0 a
   // execucao ocorreu — painel deve mostrar "rodou ontem, 0 matches" e nao "nunca".
   const statusRun = falhas > 0 && salvos === 0 ? 'falha' : (salvos === 0 ? 'sem_match' : 'ok');
-  await db.marcarPlanoExecutado({ cerebro_id, categoria_slug: 'anuncios_meta', status: statusRun });
+  await db.marcarPlanoExecutado({
+    cerebro_id,
+    categoria_slug: 'anuncios_meta',
+    status: statusRun,
+    erro_msg: statusRun === 'falha' ? primeiroErroSalvar : null,
+  });
 
   return {
     listados: campanhasMatch.length,

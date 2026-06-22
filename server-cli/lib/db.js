@@ -85,23 +85,85 @@ async function inserirFonteRest({ cerebro_id, tipo, titulo, origem, url, conteud
 // ============================================================
 // marcarPlanoExecutado — registra ultima_execucao + status no plano
 // Andre 2026-06-20: o painel de defasagem mostrava "999 dias" (nunca rodou) pra
-// categorias que rodaram via libs que bypassam o jobs-worker (scheduler-depoimentos,
-// chamadas diretas). Solucao: toda lib que insere cerebro_fonte da categoria
-// chama esta funcao no fim. Idempotente, nunca lanca (best-effort).
+// categorias que rodaram via libs que bypassam o jobs-worker. Solucao: toda lib
+// chama esta funcao no fim. Idempotente, nunca lanca.
+//
+// Andre 2026-06-22: agora aceita erro_msg + erro_classe pra alimentar painel
+// com motivo de falha (em vez de so "falha (1)"). Em sucesso, zera tentativas
+// e agenda proxima conforme cadencia. Em falha, incrementa contador e agenda
+// retry com backoff: tentativa 1->60s, 2->5min, 3->15min, 4+->desiste.
 // ============================================================
-async function marcarPlanoExecutado({ cerebro_id, categoria_slug, status = 'ok' }) {
+function classificarErro(msg) {
+  if (!msg) return 'desconhecido';
+  const m = String(msg).toLowerCase();
+  if (/timeout|timed out|etimedout|deadline/.test(m)) return 'timeout';
+  if (/econnreset|enotfound|econnrefused|fetch failed|network/.test(m)) return 'rede';
+  if (/http 5\d\d|status 5\d\d|503|502|504|500/.test(m)) return 'servidor_indisponivel';
+  if (/http 429|rate limit|too many requests/.test(m)) return 'rate_limit';
+  if (/http 4\d\d|status 4\d\d|401|403|404/.test(m)) return 'requisicao_invalida';
+  if (/apify|actor.*failed/.test(m)) return 'apify_falhou';
+  if (/conteudo.*curto|too short|empty|vazio/.test(m)) return 'conteudo_vazio';
+  if (/parser|html|markdown/.test(m)) return 'parse_falhou';
+  if (/sql|database|connection|relation/.test(m)) return 'banco';
+  return 'desconhecido';
+}
+
+const CLASSES_RETRY = new Set(['timeout', 'rede', 'servidor_indisponivel', 'rate_limit', 'apify_falhou']);
+const BACKOFF_SEGUNDOS = [60, 300, 900]; // 1min, 5min, 15min
+const MAX_TENTATIVAS = 3;
+
+async function marcarPlanoExecutado({ cerebro_id, categoria_slug, status = 'ok', erro_msg = null, erro_classe = null }) {
   if (!cerebro_id || !categoria_slug) return { ok: false, motivo: 'faltam args' };
   try {
     const safeStatus = String(status).replace(/'/g, "''").slice(0, 50);
+    const sucesso = safeStatus === 'ok' || safeStatus === 'sem_match';
+
+    if (sucesso) {
+      await rodarSQL(`
+        UPDATE pinguim.cerebro_plano_categoria
+           SET ultima_execucao = now(),
+               ultimo_status_run = '${safeStatus}',
+               ultimo_erro_msg = NULL,
+               ultimo_erro_classe = NULL,
+               tentativas_seguidas = 0,
+               proxima_tentativa_em = NULL,
+               atualizado_em = now()
+         WHERE cerebro_id = '${cerebro_id}'::uuid
+           AND categoria_slug = '${categoria_slug.replace(/'/g, "''")}';
+      `);
+      return { ok: true, sucesso: true };
+    }
+
+    // Falha — classifica, incrementa contador, agenda retry se aplicavel
+    const classe = erro_classe || classificarErro(erro_msg);
+    const safeErroMsg = erro_msg ? String(erro_msg).replace(/'/g, "''").slice(0, 500) : null;
+    const safeErroClasse = String(classe).replace(/'/g, "''").slice(0, 50);
+
+    const atual = await rodarSQL(`
+      SELECT tentativas_seguidas
+        FROM pinguim.cerebro_plano_categoria
+       WHERE cerebro_id = '${cerebro_id}'::uuid
+         AND categoria_slug = '${categoria_slug.replace(/'/g, "''")}';
+    `);
+    const tentAtual = (atual && atual[0]) ? (atual[0].tentativas_seguidas || 0) : 0;
+    const novaTent = tentAtual + 1;
+    const podeRetry = CLASSES_RETRY.has(classe) && novaTent <= MAX_TENTATIVAS;
+    const backoff = podeRetry ? BACKOFF_SEGUNDOS[Math.min(novaTent - 1, BACKOFF_SEGUNDOS.length - 1)] : null;
+    const proximaSql = backoff ? `now() + interval '${backoff} seconds'` : 'NULL';
+
     await rodarSQL(`
       UPDATE pinguim.cerebro_plano_categoria
          SET ultima_execucao = now(),
              ultimo_status_run = '${safeStatus}',
+             ultimo_erro_msg = ${safeErroMsg ? `'${safeErroMsg}'` : 'NULL'},
+             ultimo_erro_classe = '${safeErroClasse}',
+             tentativas_seguidas = ${novaTent},
+             proxima_tentativa_em = ${proximaSql},
              atualizado_em = now()
        WHERE cerebro_id = '${cerebro_id}'::uuid
          AND categoria_slug = '${categoria_slug.replace(/'/g, "''")}';
     `);
-    return { ok: true };
+    return { ok: true, sucesso: false, classe, tentativas: novaTent, proxima_em_segundos: backoff };
   } catch (e) {
     return { ok: false, erro: e.message };
   }
@@ -790,4 +852,6 @@ module.exports = {
   inserirFonteRest,
   // Andre 2026-06-20 — atualizar plano apos ingerir, pra painel nao mentir
   marcarPlanoExecutado,
+  // Andre 2026-06-22 — classificador de erro para retry inteligente
+  classificarErro,
 };

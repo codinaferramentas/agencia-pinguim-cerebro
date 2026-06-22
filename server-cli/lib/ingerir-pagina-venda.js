@@ -141,8 +141,12 @@ async function ingerirPaginaVenda({
   on_log({ etapa: 'fim', novos: novos_ok, falhas, ja_processados });
 
   // Marca o plano. Mesmo com 0 novos a execucao aconteceu — painel para de mentir "nunca rodou".
+  // Andre 2026-06-22: agora passa erro_msg do primeiro detalhe com falha pra UI explicar o motivo.
   const statusRun = falhas > 0 && novos_ok === 0 ? 'falha' : 'ok';
-  await db.marcarPlanoExecutado({ cerebro_id, categoria_slug, status: statusRun });
+  const primeiroErro = (statusRun === 'falha')
+    ? (detalhes.find(d => !d.ok && d.erro) || {}).erro
+    : null;
+  await db.marcarPlanoExecutado({ cerebro_id, categoria_slug, status: statusRun, erro_msg: primeiroErro });
 
   return { total_urls: urls.length, novos: novos_ok, falhas, ja_processados, detalhes };
 }

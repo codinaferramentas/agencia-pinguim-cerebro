@@ -379,10 +379,40 @@ function _dowToLabel(cron) {
   return dias[dow.split(',')[0]] || null;
 }
 
+// Andre 2026-06-22: controle de colunas — esconder cadencias sem produto.
+// Persistido em localStorage pra nao perder a preferencia entre cargas.
+const LS_MATRIZ_VISTA = 'pc_matriz_modo_visualizacao'; // 'completo' | 'compacto'
+function _carregarModoMatriz() {
+  try { return localStorage.getItem(LS_MATRIZ_VISTA) || 'compacto'; } catch { return 'compacto'; }
+}
+function _salvarModoMatriz(v) {
+  try { localStorage.setItem(LS_MATRIZ_VISTA, v); } catch {}
+}
+
 function renderMatrizFrequencia(linhas) {
   const wrap = el('div');
   wrap.append(el('h2', { class: 'pc-section-title' }, '📊 Matriz Produto × Cadência × Modo'));
-  wrap.append(el('p', { class: 'pc-sub' }, 'Linhas = produtos. Colunas: Cadência × Modo (A/M) pra motores ativos + coluna GAP no fim com o que falta fazer. Hover na célula pra detalhe. Clique na linha pra abrir o cérebro.'));
+
+  // Toolbar com toggle de visualizacao
+  const modoVista = _carregarModoMatriz(); // 'completo' | 'compacto'
+  const sub = el('p', { class: 'pc-sub', style: 'display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap' });
+  sub.append(el('span', {}, 'Linhas = produtos. Colunas: Cadência × Modo (A/M). Coluna GAP no fim mostra o que ainda falta configurar.'));
+  const btnVista = el('button', {
+    style: `font-size:.7rem;padding:.3rem .6rem;border-radius:4px;border:1px solid #334155;background:#0F172A;color:#E2E8F0;cursor:pointer;white-space:nowrap`,
+    title: modoVista === 'compacto'
+      ? 'Hoje só mostra cadências que tem produto. Clica pra mostrar todas (planeje fontes futuras).'
+      : 'Hoje mostra todas as cadências. Clica pra esconder as vazias (ganha largura no nome do produto).',
+    onclick: () => {
+      _salvarModoMatriz(modoVista === 'compacto' ? 'completo' : 'compacto');
+      const matrizSlot = document.getElementById('pa-matriz-slot');
+      if (matrizSlot && _painelCache) {
+        matrizSlot.innerHTML = '';
+        matrizSlot.append(renderMatrizFrequencia(filtrarMatriz(_painelCache.matriz)));
+      }
+    },
+  }, modoVista === 'compacto' ? '👁 Mostrar todas as cadências' : '🔍 Mostrar só cadências com produto');
+  sub.append(btnVista);
+  wrap.append(sub);
 
   if (linhas.length === 0) {
     wrap.append(el('div', { style: 'padding:2rem;color:#64748B;text-align:center' }, 'Nenhum motor ativo ainda.'));
@@ -415,15 +445,32 @@ function renderMatrizFrequencia(linhas) {
     }
   }
 
-  // SEMPRE mostra todas as 6 cadencias x 2 modos = 12 sub-colunas.
-  // Andre cravou: matriz nao eh estado atual, eh possibilidade.
-  // Reuniao bate o olho e diz "tenho fonte quinzenal manual? nao tenho, mas posso ter".
+  // Decide quais cadencias mostrar
+  // modo compacto: so cadencias que tem pelo menos 1 produto com motor ativo
+  // modo completo: todas as 6 (Andre revisa "tenho espaco pra adicionar fonte aqui")
+  let cadenciasVisiveis = CADENCIAS;
+  if (modoVista === 'compacto') {
+    const cadenciasComProduto = new Set();
+    for (const entry of porProduto.values()) {
+      for (const k of Object.keys(entry.celulas)) {
+        const cad = k.split('__')[0];
+        cadenciasComProduto.add(cad);
+      }
+    }
+    cadenciasVisiveis = CADENCIAS.filter(c => cadenciasComProduto.has(c.key));
+    // Se nao tem nenhuma cadencia visivel, volta a mostrar todas (caso degenerado)
+    if (cadenciasVisiveis.length === 0) cadenciasVisiveis = CADENCIAS;
+  }
+
   const cols = [];
-  for (const c of CADENCIAS) {
+  for (const c of cadenciasVisiveis) {
     for (const m of MODOS) {
       cols.push({ key: `${c.key}__${m.key}`, cadencia: c, modo: m });
     }
   }
+
+  // Em modo compacto, ganha largura no nome do produto
+  const larguraColCerebro = modoVista === 'compacto' && cadenciasVisiveis.length <= 3 ? 200 : 130;
 
   // Tabela com 2 niveis de header (cadencia agrupando A/M)
   const tableWrap = el('div', { style: 'overflow-x:auto;border:1px solid #1E293B;border-radius:6px;background:#0F172A' });
@@ -432,7 +479,7 @@ function renderMatrizFrequencia(linhas) {
   // Header nivel 1: cadencias (com colspan)
   const thead = el('thead');
   const trCad = el('tr', { style: 'background:#1E293B' });
-  trCad.append(el('th', { rowspan: 2, style: 'padding:.6rem .6rem;text-align:left;color:#E2E8F0;font-weight:600;position:sticky;left:0;background:#1E293B;z-index:2;width:130px;min-width:130px;max-width:130px;border-right:1px solid #334155;font-size:.75rem' }, 'Cérebro'));
+  trCad.append(el('th', { rowspan: 2, style: `padding:.6rem .6rem;text-align:left;color:#E2E8F0;font-weight:600;position:sticky;left:0;background:#1E293B;z-index:2;width:${larguraColCerebro}px;min-width:${larguraColCerebro}px;max-width:${larguraColCerebro}px;border-right:1px solid #334155;font-size:.75rem` }, 'Cérebro'));
   // Agrupa cols por cadencia pra rowspan
   let i = 0;
   while (i < cols.length) {
@@ -485,7 +532,7 @@ function renderMatrizFrequencia(linhas) {
     });
     const alertaEdicao = _painelCache?.alertasEdicoes?.find(a => a.produto_nome === nome);
     tr.append(el('td', {
-      style: 'padding:.5rem .55rem;color:#E2E8F0;font-weight:600;position:sticky;left:0;background:#0F172A;z-index:1;border-right:1px solid #334155;width:130px;min-width:130px;max-width:130px;font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',
+      style: `padding:.5rem .55rem;color:#E2E8F0;font-weight:600;position:sticky;left:0;background:#0F172A;z-index:1;border-right:1px solid #334155;width:${larguraColCerebro}px;min-width:${larguraColCerebro}px;max-width:${larguraColCerebro}px;font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis`,
       title: alertaEdicao ? `${nome} · ⚠ próxima edição ${alertaEdicao.data_evento}` : nome,
     }, [
       el('div', { style: 'display:flex;align-items:center;gap:.3rem;line-height:1.1' }, [
@@ -621,9 +668,39 @@ function renderPainelKpis(k) {
   return wrap;
 }
 
+// Humaniza a classe de erro do motor de retry (db.js classificarErro)
+function _humanizarErroClasse(classe) {
+  const mapa = {
+    timeout: 'demorou demais (timeout)',
+    rede: 'rede caiu / DNS',
+    servidor_indisponivel: 'site / API fora do ar (5xx)',
+    rate_limit: 'limite de requisições',
+    requisicao_invalida: 'URL / parâmetro errado (4xx)',
+    apify_falhou: 'Apify retornou erro',
+    conteudo_vazio: 'página retornou nada ou < 200 chars',
+    parse_falhou: 'parser HTML quebrou',
+    banco: 'erro de banco',
+    desconhecido: 'motivo não classificado',
+  };
+  return mapa[classe] || classe || 'motivo desconhecido';
+}
+
+function _formatarTempoRelativoFuturo(iso) {
+  if (!iso) return null;
+  const futuro = new Date(iso).getTime();
+  const agora = Date.now();
+  const diff = Math.max(0, futuro - agora);
+  const min = Math.round(diff / 60000);
+  if (min < 1) return 'em instantes';
+  if (min < 60) return `em ${min}min`;
+  const h = Math.round(min / 60);
+  return `em ${h}h`;
+}
+
 function renderPainelAlertas(alertas) {
   const titulos = {
-    cron_falhou: { label: '❌ Falhou no último run', cor: '#EF4444' },
+    cron_falhou: { label: '❌ Falhou (motor desistiu — precisa olhar)', cor: '#EF4444' },
+    retry_em_andamento: { label: '🔄 Tentando sozinho', cor: '#F59E0B' },
     rodando_defasada: { label: '⚠ Ativa mas defasada >7d', cor: '#F59E0B' },
     manual_sem_update: { label: '✋ Manual sem update', cor: '#A78BFA' },
   };
@@ -644,8 +721,37 @@ function renderPainelAlertas(alertas) {
                    : dias === 0 ? 'hoje'
                    : dias === 1 ? 'há 1 dia'
                    : `há ${dias} dias`;
-      box.append(el('div', { style: 'font-size:.75rem;padding:.15rem .4rem;color:#94A3B8' },
-        `• ${a.produto_nome} — ${a.categoria_emoji || ''} ${a.categoria_nome || a.categoria_slug} — ${sufixo}`));
+
+      // Linha principal
+      const linha = el('div', { style: 'font-size:.75rem;padding:.15rem .4rem;color:#94A3B8' },
+        `• ${a.produto_nome} — ${a.categoria_emoji || ''} ${a.categoria_nome || a.categoria_slug} — ${sufixo}`);
+      box.append(linha);
+
+      // Andre 2026-06-22: detalhe do erro (motivo + tentativas)
+      if (tipo === 'cron_falhou' && a.ultimo_erro_classe) {
+        const motivoHum = _humanizarErroClasse(a.ultimo_erro_classe);
+        const tent = a.tentativas_seguidas || 0;
+        const detalhe = tent >= 3
+          ? `${motivoHum} (motor tentou ${tent}x e desistiu — precisa investigar)`
+          : motivoHum;
+        const detLinha = el('div', {
+          style: 'font-size:.7rem;padding:.05rem 1.4rem;color:#FCA5A5',
+          title: a.ultimo_erro_msg || '',
+        }, `   └ ${detalhe}`);
+        box.append(detLinha);
+      }
+      if (tipo === 'retry_em_andamento') {
+        const motivoHum = _humanizarErroClasse(a.ultimo_erro_classe);
+        const tent = a.tentativas_seguidas || 0;
+        const quando = _formatarTempoRelativoFuturo(a.proxima_tentativa_em);
+        const detalhe = quando
+          ? `tentativa ${tent}/3 (${motivoHum}) — próxima ${quando}`
+          : `tentativa ${tent}/3 (${motivoHum})`;
+        box.append(el('div', {
+          style: 'font-size:.7rem;padding:.05rem 1.4rem;color:#FCD34D',
+          title: a.ultimo_erro_msg || '',
+        }, `   └ ${detalhe}`));
+      }
     }
     if (lista.length > 5) box.append(el('div', { style: 'font-size:.7rem;color:#64748B;padding-left:.4rem' }, `+ ${lista.length - 5} outros…`));
   }

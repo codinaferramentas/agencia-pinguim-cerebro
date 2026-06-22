@@ -60,6 +60,43 @@ async function _executarCiclo() {
   _stats.ultimo_ciclo_em = new Date().toISOString();
   _stats.disparados_no_ultimo = 0;
 
+  // ── Frente 1: retries pendentes ───────────────────────────────
+  // Andre 2026-06-22: categorias com falha transitoria agendam retry com backoff.
+  // Roda antes do cron normal — se a hora bater, evitamos disparo duplo via _deveDispararAgora.
+  const retries = await db.rodarSQL(`
+    SELECT cpc.id as plano_id, cpc.cerebro_id, cpc.categoria_slug,
+           cpc.tentativas_seguidas, cpc.ultimo_erro_classe, cpc.proxima_tentativa_em,
+           cat.nome as categoria_nome
+      FROM pinguim.cerebro_plano_categoria cpc
+      LEFT JOIN pinguim.cerebro_categorias_catalogo cat ON cat.slug = cpc.categoria_slug
+     WHERE cpc.proxima_tentativa_em IS NOT NULL
+       AND cpc.proxima_tentativa_em <= now()
+       AND cpc.tentativas_seguidas <= 3
+       AND cpc.status_automacao IN ('ativo','rodando','em_construcao')
+     ORDER BY cpc.proxima_tentativa_em ASC
+     LIMIT 50
+  `);
+
+  if (retries && retries.length > 0) {
+    console.log(`[scheduler-cron] ciclo ${_stats.ciclos}: ${retries.length} retry(s) vencido(s)`);
+    for (const r of retries) {
+      try {
+        console.log(`  RETRY ${r.categoria_nome || r.categoria_slug} (tent ${r.tentativas_seguidas}/3, classe=${r.ultimo_erro_classe}) — enfileirando`);
+        await db.rodarSQL(`SELECT pinguim.enfileirar_job_ingestao_categoria('${r.cerebro_id}'::uuid, '${r.categoria_slug}', 'retry')`);
+        // Limpa proxima_tentativa_em pra nao reenfileirar enquanto o job nao roda
+        await db.rodarSQL(`
+          UPDATE pinguim.cerebro_plano_categoria
+             SET proxima_tentativa_em = NULL
+           WHERE id = '${r.plano_id}'
+        `);
+        _stats.disparados_no_ultimo++;
+      } catch (e) {
+        console.error(`  [scheduler-retry] erro categoria=${r.categoria_slug}: ${e.message}`);
+      }
+    }
+  }
+
+  // ── Frente 2: cron normal ─────────────────────────────────────
   const rows = await db.rodarSQL(`
     SELECT vp.plano_id, vp.cerebro_id, vp.categoria_slug, vp.categoria_nome,
            vp.schedule_cron, vp.ultima_execucao

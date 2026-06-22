@@ -253,13 +253,21 @@ async function _processarUmJob() {
         console.log(`[jobs-worker] INGESTAO OK job=${job.id} | novos=${resultado.novos} falhas=${resultado.falhas} ja_processados=${resultado.ja_processados} | ${(dur/1000).toFixed(1)}s`);
         return true;
       } catch (e) {
-        const motivo = `ingestao categoria falhou: ${e.message || String(e)}`;
+        // Andre 2026-06-22: crash do handler (antes mesmo de marcarPlanoExecutado rodar).
+        // Aciona o helper pra registrar classe do erro + agendar retry com backoff
+        // (se a classe permitir: timeout/rede/servidor/rate_limit/apify_falhou).
+        const erroMsg = e.message || String(e);
+        const motivo = `ingestao categoria falhou: ${erroMsg}`;
         console.error(`[jobs-worker] ERRO ingestao job=${job.id}: ${motivo}`);
-        await db.rodarSQL(`
-          UPDATE pinguim.cerebro_plano_categoria
-             SET ultima_execucao = now(), ultimo_status_run = 'falha', atualizado_em = now()
-           WHERE id = '${p.plano_id}'
-        `);
+        const r = await db.marcarPlanoExecutado({
+          cerebro_id: p.cerebro_id,
+          categoria_slug: p.categoria_slug,
+          status: 'falha',
+          erro_msg: erroMsg,
+        });
+        if (r && r.proxima_em_segundos) {
+          console.log(`[jobs-worker] RETRY agendado em ${r.proxima_em_segundos}s (tentativa ${r.tentativas}/3, classe=${r.classe})`);
+        }
         await jobs.falharJob({ job_id: job.id, motivo: motivo.slice(0, 500) });
         return true;
       }

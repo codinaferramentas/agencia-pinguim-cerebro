@@ -48,6 +48,7 @@ async function ingerirPaginaWeb({
     html = await r.text();
   } catch (e) {
     on_log({ etapa: 'falha_fetch', erro: e.message });
+    await db.marcarPlanoExecutado({ cerebro_id, categoria_slug, status: 'falha', erro_msg: e.message });
     return { total_urls: 1, novos: 0, falhas: 1, ja_processados: 0, detalhes: [{ url: url_alvo, ok: false, erro: e.message }] };
   }
   on_log({ etapa: 'baixou_html', bytes: html.length });
@@ -58,6 +59,7 @@ async function ingerirPaginaWeb({
 
   if (markdown.length < 200) {
     on_log({ etapa: 'conteudo_curto', motivo: 'menos de 200 chars apos parse' });
+    await db.marcarPlanoExecutado({ cerebro_id, categoria_slug, status: 'falha', erro_msg: 'conteudo muito curto apos parse (<200 chars)' });
     return { total_urls: 1, novos: 0, falhas: 1, ja_processados: 0, detalhes: [{ url: url_alvo, ok: false, erro: 'conteudo muito curto' }] };
   }
 
@@ -93,6 +95,7 @@ async function ingerirPaginaWeb({
     on_log({ etapa: 'salvou', cerebro_fonte_id: fonteId });
   } catch (e) {
     on_log({ etapa: 'falha_insert', erro: e.message });
+    await db.marcarPlanoExecutado({ cerebro_id, categoria_slug, status: 'falha', erro_msg: e.message });
     return { total_urls: 1, novos: 0, falhas: 1, ja_processados: 0, detalhes: [{ url: url_alvo, ok: false, erro: e.message }] };
   }
 
