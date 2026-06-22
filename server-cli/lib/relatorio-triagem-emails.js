@@ -647,10 +647,22 @@ async function gerarRelatorioTriagemEmails({
   const t0 = Date.now();
 
   // 1) Sócio
+  // Andre 2026-06-02: bug pegado — getSocioAtual() lê .env.local da MÁQUINA,
+  // ignorando o cliente_id passado. Em cron multi-sócio (Codina dispara cron
+  // do Luiz na sua máquina), nome saía "Codina" no relatório do Luiz. Fix:
+  // resolver direto pelo cid recebido em pinguim.socios.
   const cid = await db.resolverClienteId(cliente_id);
   let socioInfo;
-  try { socioInfo = await socio.getSocioAtual(); }
-  catch (e) { socioInfo = { cliente_id: cid, slug: 'desconhecido', nome: 'Sócio', empresa: '?' }; }
+  try {
+    const cidEsc = cid.replace(/'/g, "''");
+    const r = await db.rodarSQL(`SELECT cliente_id, slug, nome, email, empresa FROM pinguim.socios WHERE cliente_id = '${cidEsc}' AND ativo = true LIMIT 1;`);
+    socioInfo = (Array.isArray(r) && r[0])
+      ? r[0]
+      : await socio.getSocioAtual();
+  } catch (e) {
+    try { socioInfo = await socio.getSocioAtual(); }
+    catch (_) { socioInfo = { cliente_id: cid, slug: 'desconhecido', nome: 'Sócio', empresa: '?' }; }
+  }
 
   // 2) Dia alvo (default: ontem BRT)
   const agora = new Date();

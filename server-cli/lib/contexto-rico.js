@@ -281,6 +281,54 @@ async function blocoOficina(cliente_id) {
 }
 
 // ============================================================
+// blocoContasGoogle — V2.14.7 (multi-conta por socio)
+// Injeta no contexto a lista de contas Google conectadas do socio,
+// pra agente saber se precisa desambiguar quando socio fala "meu email"
+// / "minha agenda" / "meu drive" sem qualificar.
+//
+// SO injeta se socio tem >=1 conta na tabela nova (conexoes_google).
+// Se 0 contas, agente cai no fluxo legacy (cofre_chaves antigo) — bloco
+// sumido nao confunde.
+// ============================================================
+async function blocoContasGoogle(cliente_id) {
+  try {
+    if (!cliente_id) return null;
+    const oauth = require('./oauth-google');
+    const contas = await oauth.listarContasDoSocio(cliente_id);
+    if (!Array.isArray(contas) || contas.length === 0) return null;
+
+    const padrao = contas.find(c => c.is_padrao) || contas[0];
+    const linhas = contas.map(c => {
+      const marks = [];
+      marks.push(c.is_padrao ? '⭐ padrão' : 'não-padrão');
+      marks.push(c.incluir_em_relatorio ? '📊 sai em relatório' : '🚫 fora do relatório');
+      return `- "${c.label}" → ${c.email_google || '(email não capturado)'} (${marks.join(' · ')})`;
+    }).join('\n');
+
+    let regra;
+    if (contas.length === 1) {
+      regra = `Só 1 conta conectada — use ela direto, sem mencionar.`;
+    } else {
+      regra = `Multi-conta. Regra de desambiguação:
+  1. Sócio falou label específico ("minha agenda **Pinguim**", "no email **Pessoal**") → casa por label, usa direto.
+  2. Sócio falou genérico ("meu email", "minha agenda") + tem padrão → usa o padrão ("${padrao.label}") e MENCIONA de leve no fim ("usei sua conta ${padrao.label} — quer ver da outra? avisa.").
+  3. Sócio falou genérico SEM padrão definido → PERGUNTA antes: "Você tem N contas (${contas.map(c=>c.label).join(', ')}). Qual quer ver?"
+  4. Sócio diz "deixa X como padrão" → você responde "vai pelo painel marcar X como padrão" (a UI mais explícita).
+
+Quando precisar passar pra tool (drive/gmail/calendar), use o label do sócio como parâmetro \`label\` do wrapper.`;
+    }
+
+    return `[CONTAS GOOGLE CONECTADAS]
+${linhas}
+
+${regra}`;
+  } catch (e) {
+    console.warn(`[contexto-rico] erro carregando contas google: ${e.message}`);
+    return null;
+  }
+}
+
+// ============================================================
 // montarContexto — função principal
 // Monta TODOS os blocos que vão ANTES do prompt do usuário.
 // Retorna string única pronta pra concatenar.
@@ -295,7 +343,7 @@ async function montarContexto({ thread_id, canal = 'chat-web', cliente_id = null
   // V2.14.5 — passa cliente_id pra identidade + aprendizados resolverem multi-sócio
   // V2.14 D — contexto_extra (Discord) entrega papel (sócio/funcionário) + nome
   const ehFuncionario = contexto_extra && contexto_extra.papel === 'funcionario';
-  const [identidade, entregaveis, historico, drive, aprendizados, jobsPendentes, oficinaBloco] = await Promise.all([
+  const [identidade, entregaveis, historico, drive, aprendizados, jobsPendentes, oficinaBloco, contasGoogle] = await Promise.all([
     blocoIdentidadeSocio(cliente_id, contexto_extra).catch(() => '[IDENTIDADE DO SÓCIO]\n(erro)'),
     // Funcionário NÃO tem entregáveis pessoais — pula
     ehFuncionario ? Promise.resolve(null) : blocoEntregaveisRecentes(cliente_id).catch(() => '[ENTREGÁVEIS RECENTES]\n(erro consultando)'),
@@ -307,10 +355,13 @@ async function montarContexto({ thread_id, canal = 'chat-web', cliente_id = null
     ehFuncionario ? Promise.resolve(null) : blocoJobsPendentes(cliente_id).catch(() => null),
     // V2.15 Oficina — catálogo de relatórios prontos + tickets pendentes
     ehFuncionario ? Promise.resolve(null) : blocoOficina(cliente_id).catch(() => null),
+    // V2.14.7 — contas Google conectadas (pra agente desambiguar multi-conta)
+    ehFuncionario ? Promise.resolve(null) : blocoContasGoogle(cliente_id).catch(() => null),
   ]);
 
   blocos.push(identidade);
   if (aprendizados) blocos.push(aprendizados); // só inclui se há aprendizados
+  if (contasGoogle) blocos.push(contasGoogle); // V2.14.7 — só inclui se sócio tem >=1 conta na tabela nova
   if (entregaveis) blocos.push(entregaveis);   // funcionário não tem
   if (jobsPendentes) blocos.push(jobsPendentes); // V2.15 — só inclui se ha jobs ativos
   if (oficinaBloco) blocos.push(oficinaBloco); // V2.15 — catálogo + tickets oficina
@@ -323,4 +374,4 @@ async function montarContexto({ thread_id, canal = 'chat-web', cliente_id = null
   return blocos.join('\n\n');
 }
 
-module.exports = { montarContexto, blocoIdentidadeSocio, blocoEntregaveisRecentes, blocoHistorico, blocoContextoDrive, blocoAprendizados, blocoCanal, blocoJobsPendentes, blocoOficina };
+module.exports = { montarContexto, blocoIdentidadeSocio, blocoEntregaveisRecentes, blocoHistorico, blocoContextoDrive, blocoAprendizados, blocoCanal, blocoJobsPendentes, blocoOficina, blocoContasGoogle };
