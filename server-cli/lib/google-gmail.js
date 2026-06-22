@@ -42,8 +42,8 @@ function formatarDataBR(dataRFC) {
 // ============================================================
 // Helper: chama Gmail API com Bearer token, parseia JSON, trata erros
 // ============================================================
-async function gmailFetch({ method = 'GET', endpoint, body, cliente_id }) {
-  const access_token = await oauth.obterAccessTokenAtivo({ cliente_id });
+async function gmailFetch({ method = 'GET', endpoint, body, cliente_id, label, conexao_id }) {
+  const access_token = await oauth.obterAccessTokenAtivo({ cliente_id, label, conexao_id });
 
   const url = endpoint.startsWith('http') ? endpoint : `https://gmail.googleapis.com${endpoint}`;
   const opts = {
@@ -79,6 +79,8 @@ async function gmailFetch({ method = 'GET', endpoint, body, cliente_id }) {
 //   - 'label:INBOX'         — caixa de entrada
 async function listarEmails({
   cliente_id,
+  label,
+  conexao_id,
   query = 'in:inbox',
   pageSize = 10,
   includeSpamTrash = false,
@@ -90,7 +92,7 @@ async function listarEmails({
   });
   const lista = await gmailFetch({
     endpoint: `/gmail/v1/users/me/messages?${params.toString()}`,
-    cliente_id,
+    cliente_id, label, conexao_id,
   });
 
   if (!lista.messages || lista.messages.length === 0) {
@@ -102,7 +104,7 @@ async function listarEmails({
   const detalhes = await Promise.all(
     lista.messages.map(m => gmailFetch({
       endpoint: `/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=To`,
-      cliente_id,
+      cliente_id, label, conexao_id,
     }))
   );
 
@@ -136,12 +138,12 @@ async function listarEmails({
 // ============================================================
 // LER — corpo completo de email específico (texto + html quando houver)
 // ============================================================
-async function lerEmail({ cliente_id, messageId } = {}) {
+async function lerEmail({ cliente_id, label, conexao_id, messageId } = {}) {
   if (!messageId) throw new Error('messageId obrigatório');
 
   const msg = await gmailFetch({
     endpoint: `/gmail/v1/users/me/messages/${messageId}?format=full`,
-    cliente_id,
+    cliente_id, label, conexao_id,
   });
 
   const headers = (msg.payload && msg.payload.headers) || [];

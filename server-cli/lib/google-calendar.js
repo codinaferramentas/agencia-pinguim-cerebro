@@ -97,8 +97,8 @@ function duracaoMin(startIso, endIso) {
 // ============================================================
 // Helper: chama Calendar API com Bearer token, parseia JSON, trata erros
 // ============================================================
-async function calendarFetch({ method = 'GET', endpoint, body, cliente_id }) {
-  const access_token = await oauth.obterAccessTokenAtivo({ cliente_id });
+async function calendarFetch({ method = 'GET', endpoint, body, cliente_id, label, conexao_id }) {
+  const access_token = await oauth.obterAccessTokenAtivo({ cliente_id, label, conexao_id });
 
   const url = endpoint.startsWith('http') ? endpoint : `https://www.googleapis.com${endpoint}`;
   const opts = {
@@ -127,10 +127,10 @@ async function calendarFetch({ method = 'GET', endpoint, body, cliente_id }) {
 // ============================================================
 // Útil pra módulo agenda saber se há calendário extra além do primary
 // (alguns sócios mantêm "Reuniões internas" separado, por exemplo).
-async function listarCalendarios({ cliente_id } = {}) {
+async function listarCalendarios({ cliente_id, label, conexao_id } = {}) {
   const r = await calendarFetch({
     endpoint: '/calendar/v3/users/me/calendarList?minAccessRole=reader',
-    cliente_id,
+    cliente_id, label, conexao_id,
   });
   const items = r.items || [];
   return items.map(c => ({
@@ -156,6 +156,8 @@ async function listarCalendarios({ cliente_id } = {}) {
 //   singleEvents: true (default — expande recorrências em ocorrências)
 async function listarEventos({
   cliente_id,
+  label,
+  conexao_id,
   calendarId = 'primary',
   timeMin = null,
   timeMax = null,
@@ -175,7 +177,7 @@ async function listarEventos({
 
   const r = await calendarFetch({
     endpoint: `/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
-    cliente_id,
+    cliente_id, label, conexao_id,
   });
 
   const items = r.items || [];
@@ -238,12 +240,12 @@ async function listarEventos({
 // ============================================================
 // LER EVENTO — detalhe completo de um evento específico
 // ============================================================
-async function lerEvento({ cliente_id, calendarId = 'primary', eventId } = {}) {
+async function lerEvento({ cliente_id, label, conexao_id, calendarId = 'primary', eventId } = {}) {
   if (!eventId) throw new Error('eventId obrigatório');
 
   const e = await calendarFetch({
     endpoint: `/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
-    cliente_id,
+    cliente_id, label, conexao_id,
   });
 
   const startIso = e.start?.dateTime || e.start?.date || null;
