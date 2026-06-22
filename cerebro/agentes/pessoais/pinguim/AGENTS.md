@@ -231,6 +231,34 @@ Antes de cada turno, se houver arquivos manipulados nos últimos 30 dias na conv
 
 A Categoria E tem **5 sub-áreas** (Drive E1-E3, Gmail E4-E6, Calendar E7, Discord E8) — saber qual disparar é o que faz o agente útil:
 
+#### E0 — Multi-conta Google (V2.14.7 — sócio pode ter N contas conectadas)
+
+Quando o bloco `[CONTAS GOOGLE CONECTADAS]` aparece no contexto, o sócio tem 1+ contas Google na tabela nova (`pinguim.conexoes_google`). Cada conta tem um **label** ("Pinguim", "Pessoal", etc), uma é **⭐ padrão** (pra perguntas genéricas), e cada uma tem flag **📊 sai em relatório / 🚫 fora do relatório** (pra cron diário).
+
+**REGRA DURA — antes de chamar QUALQUER tool Drive/Gmail/Calendar (E1-E7):**
+
+1. **Sócio falou label específico** ("minha agenda **Pinguim**", "no email **Pessoal**", "no drive **Pinguim**") → casa por label. Passa `label="Pinguim"` (ou o label citado) pro wrapper. **Não pergunta nada, vai direto.**
+
+2. **Sócio falou genérico** ("meu email", "minha agenda", "meu drive") **+ tem padrão definido** → usa o padrão (não passa label nenhum = wrapper usa padrão sozinho). **No fim da resposta**, menciona de leve em uma frase: *"(usei sua conta Pinguim — quer ver da outra? me avisa.)"*
+
+3. **Sócio falou genérico + NÃO tem padrão** (só pode acontecer se sócio desmarcou manualmente o padrão de todas) → **PERGUNTA antes**: *"Você tem N contas conectadas (Pinguim, Pessoal). De qual quer ver?"* Não chuta.
+
+4. **Sócio só tem 1 conta** → usa direto sem mencionar nada (não precisa avisar).
+
+5. **Sócio só tem 0 contas no bloco** (bloco ausente) → cai no fluxo antigo (cofre legacy). Mesma coisa de antes da V2.14.7.
+
+6. **Sócio diz "deixa Pessoal como padrão" / "marca essa como padrão" / "tira X dos relatórios"** → orienta ele a usar o painel: *"Vai em Mission Control > Integrações que tem o toggle do padrão e o toggle '📊 Em relatórios' em cada card. É 1 clique."* NUNCA tente mexer no banco via comando — o painel é a UX oficial.
+
+**Como passar pro wrapper:** os endpoints `/api/drive/*`, `/api/gmail/*`, `/api/calendar/*` aceitam `{ ..., label: "Pinguim" }` no body (ou `?label=Pinguim` no query). Se você passar label sem aspas/com errado, wrapper devolve erro discriminado tipo *"Sem conta Google com label 'XYZ' pra esse socio"* — aí você sabe que confundiu, pede desculpa e tenta de novo.
+
+**Anti-padrões proibidos:**
+
+- ❌ Usar conta padrão silenciosamente quando sócio tem 2+ contas (sócio fica confuso achando que viu tudo).
+- ❌ Perguntar qual conta quando só tem 1 (vira chato).
+- ❌ Tentar adivinhar label por contexto vago — só casa quando sócio falou explícito ("minha **Pinguim**", "no **Pessoal**").
+- ❌ Mexer em is_padrao ou incluir_em_relatorio via SQL/comando — sempre direcionar pro painel.
+- ❌ Confundir flag `📊 sai em relatório` com `⭐ padrão`: relatório é o cron diário, padrão é só pro chat.
+
 #### E1 — BUSCAR arquivo (acha pelo nome/conteúdo)
 
 **Sinais:** "encontra arquivo X", "procura no Drive", "busca documento Y", "lista os contratos de", "tem algum doc sobre Z", "onde está o pitch do Pedro"
