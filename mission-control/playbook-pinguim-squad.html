@@ -298,10 +298,11 @@
         <div class="step-num">4</div>
         <div class="step-body">
           <h3>Abre o Claude Code e pede a primeira coisa</h3>
-          <p>Abre o Claude Code. Em qualquer pasta. Digita um pedido — pode começar com um dos exemplos da aba <strong>"O que pedir"</strong> aqui em cima.</p>
+          <p>Abre o Claude Code. <strong>Em QUALQUER pasta</strong> — funciona em pasta nova, em projeto antigo, em pasta vazia. O Pinguim Squad mora no seu usuário (<code>~/.claude/skills/pinguim</code>), não no projeto. Então ele tá disponível em todo lugar que você abrir o Claude.</p>
           <p>Pra confirmar que ele te reconheceu como sócio certo, pede:</p>
           <pre class="step-code">Quem sou eu? Lê meu cérebro pessoal e me diz como você vai me ajudar.</pre>
           <p>Ele vai responder usando seu nome, seu jeito e suas preferências (que estão no seu IDENTITY/SOUL).</p>
+          <p class="step-meta">Importante: o Pinguim Squad <strong>AGREGA</strong> aos seus projetos, nunca substitui. Se você já tem skills/jeito próprio de fazer alguma coisa numa pasta, ele respeita e usa o seu. Ele entra quando você precisa do conhecimento da agência (cérebros, personas, dados do MC).</p>
         </div>
       </li>
     </ol>
@@ -311,6 +312,46 @@
       <details>
         <summary>Meu cérebro pessoal aparece como "vazio" — o que faço?</summary>
         <p>Significa que a estrutura existe (IDENTITY/SOUL/AGENTS/TOOLS) mas ainda não tem seu jeito de falar, suas preferências, seu tom autêntico. O Claude vai funcionar mesmo assim — mas vai ser genérico. <strong>Pra ficar bom:</strong> assim que você usar pela primeira vez, o Claude vai te perguntar coisas pra preencher seu perfil. Você responde, ele monta um arquivo, você manda pro Codina por zap, e ele cola no Mission Control. A partir daí, qualquer pedido seu vai sair na SUA voz.</p>
+      </details>
+      <details>
+        <summary>O Pinguim vai sobrescrever skills que já tenho na minha máquina?</summary>
+        <p><strong>NÃO.</strong> O Pinguim Squad <strong>AGREGA</strong>, nunca substitui. Se você já tem um jeito próprio de gerar gráfico, fazer transcrição, escrever copy etc, o Pinguim respeita e usa o seu. Quando você pede algo, ele pergunta primeiro: <em>"Você tem uma skill própria pra isso, ou uso a do Mission Control?"</em> — antes de assumir. O Pinguim entra quando você precisa do <strong>conhecimento da agência</strong> (cérebros, personas, dados Hotmart/Meta/Drive).</p>
+      </details>
+      <details>
+        <summary>Posso criar skill sozinho ou tenho que pedir pro Codina?</summary>
+        <p><strong>Pode criar sozinho.</strong> No Claude Code, pede: <em>"Cria uma skill chamada relatorio-tal que faz X, Y, Z"</em> — ele cria localmente em <code>~/.claude/skills/pinguim/</code>. Funciona só na sua máquina.</p>
+        <p><strong>Se ficar boa e quiser que os outros 3 sócios usem também:</strong> pede pro Claude <em>"exporta essa skill pro Mission Control"</em>. Ele manda o MD pro painel do Codina no MC. Codina revisa, aprova, e na manhã seguinte ela tá na máquina dos 4. Esse é o caminho pra evitar versões diferentes entre sócios.</p>
+      </details>
+      <details>
+        <summary>Qual a diferença entre skill e tool?</summary>
+        <p><strong>Skill</strong> = jeito de fazer algo (em arquivo MD). Exemplos: "como escrever copy estilo Hormozi", "anatomia de página low-ticket". <strong>Você (sócio) consegue criar skill sozinho</strong> pedindo pro Claude.</p>
+        <p><strong>Tool</strong> = caminho até um sistema externo (Hotmart, Meta, Drive, Discord). É código real (edge function no Mission Control). <strong>Só o Codina cria tool nova</strong> — porque precisa de desenvolvimento.</p>
+        <p>Se você pedir algo que precisa de uma tool que não existe (ex: "consulta meu CRM novo do RD Station"), o Pinguim te avisa pra acionar o Codina. Ele NÃO improvisa.</p>
+      </details>
+      <details>
+        <summary>Como peço relatório HTML, CSV, gráfico ou análise ad-hoc?</summary>
+        <p>Dá pra pedir direto, sem precisar de skill nova:</p>
+        <ul class="step-bullets">
+          <li><em>"Cria HTML analisando campanhas Meta dos últimos 30 dias"</em> — Pinguim usa <code>tool-meta-listar-campanhas</code> e monta HTML inline na resposta</li>
+          <li><em>"Me dá CSV com vendas Hotmart do mês"</em> — Pinguim usa <code>tool-consultar-hotmart</code> e devolve CSV pronto</li>
+          <li><em>"Faz gráfico de vendas por dia"</em> — Pinguim pergunta primeiro se você quer usar SEU jeito de fazer gráfico ou o padrão dele (HTML+Chart.js)</li>
+        </ul>
+        <p>Vira skill <strong>só quando</strong> você quer rodar isso toda semana automático (ex: relatório recorrente no WhatsApp via Evolution).</p>
+      </details>
+      <details>
+        <summary>Posso colar print, jogar MP4 ou PDF no Claude?</summary>
+        <p><strong>Print de tela:</strong> sim, Claude Code lê imagem nativamente. Cola e pede análise. Se quiser enriquecer com dados do banco, ele aciona <code>tool-analisar-imagem</code>.</p>
+        <p><strong>MP4 / áudio:</strong> Pinguim pergunta primeiro se você tem ferramenta local de transcrição. Se não, ele usa Whisper do MC via <code>tool-transcrever-audio</code>.</p>
+        <p><strong>PDF:</strong> Claude lê PDF até ~20 páginas direto. Documento maior, ele pede pra dividir ou usa tool específica.</p>
+      </details>
+      <details>
+        <summary>E se o Claude Code crashar no meio?</summary>
+        <p>A <strong>conversa atual se perde</strong> (memória de sessão), mas:</p>
+        <ul class="step-bullets">
+          <li>Pinguim Squad continua instalado — abre de novo e pronto</li>
+          <li>Tudo que você fez (criou skill local, salvou arquivo, postou Discord) <strong>continua lá</strong></li>
+          <li>Dica: pra coisa importante, pede <em>"salva o resumo do que fizemos no Discord do meu canal"</em> — fica registrado fora da conversa</li>
+        </ul>
       </details>
       <details>
         <summary>É seguro? Vai expor minhas senhas?</summary>
