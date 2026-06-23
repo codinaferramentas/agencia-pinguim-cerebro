@@ -26,6 +26,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { getChave } from '../_shared/cofre.ts';
 import { requireAuthTool, corsTool, jsonRespTool } from '../_shared/auth-tool.ts';
+import { variantesTelefoneBR, orTelefoneTermos, soDigitos } from '../_shared/telefone-br.ts';
 
 const ELO_URL = 'https://hqyyxtyvfjnkpjtcydgj.supabase.co';
 const ELO_REST = `${ELO_URL}/rest/v1`;
@@ -85,8 +86,12 @@ async function actBuscarUsuario(body: any) {
   const termo = String(body.termo || '').trim();
   if (!termo || termo.length < 2) return jsonRespTool({ ok: false, erro: 'termo obrigatorio (2+ chars)' }, 400);
 
-  const t = encodeURIComponent(termo);
-  const path = `/profiles?or=(email.ilike.*${t}*,nome.ilike.*${t}*,nome_completo.ilike.*${t}*,telefone.ilike.*${t}*,instagram.ilike.*${t}*)&select=id,nome,nome_completo,email,telefone,instagram,seguidores,role,plano,plan_status,vigencia_ate,ciclo_atual,semana_atual,elo_10k,avatar_url,created_at&limit=20`;
+  // Telefone com 8+ digitos vira busca por variantes BR (com/sem DDI, com/sem 9, com/sem +).
+  const digitos = soDigitos(termo);
+  const ehTelefone = digitos.length >= 8;
+  const telOr = ehTelefone ? orTelefoneTermos('telefone', variantesTelefoneBR(termo)) : `telefone.ilike.*${termo}*`;
+  const orInterno = `email.ilike.*${termo}*,nome.ilike.*${termo}*,nome_completo.ilike.*${termo}*,${telOr},instagram.ilike.*${termo}*`;
+  const path = `/profiles?or=(${encodeURIComponent(orInterno)})&select=id,nome,nome_completo,email,telefone,instagram,seguidores,role,plano,plan_status,vigencia_ate,ciclo_atual,semana_atual,elo_10k,avatar_url,created_at&limit=20`;
   const r = await eloREST('GET', path);
   if (!r.ok) return jsonRespTool({ ok: false, erro: 'buscar_usuario: ' + r.erro }, 500);
 

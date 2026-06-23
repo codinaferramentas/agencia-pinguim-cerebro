@@ -22,6 +22,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { getChave } from '../_shared/cofre.ts';
 import { requireAuthTool, corsTool, jsonRespTool } from '../_shared/auth-tool.ts';
+import { variantesTelefoneBR, orTelefoneTermos, soDigitos } from '../_shared/telefone-br.ts';
 
 const PROALT_URL = 'https://vdrlvflludyqkyhfoiwb.supabase.co';
 const PROALT_REST = `${PROALT_URL}/rest/v1`;
@@ -67,8 +68,14 @@ async function actBuscarUsuario(body: any) {
   const termo = String(body.termo || '').trim();
   if (!termo || termo.length < 2) return jsonRespTool({ ok: false, erro: 'termo obrigatorio (2+ chars)' }, 400);
 
-  const t = encodeURIComponent(termo);
-  const path = `/profiles?or=(email.ilike.*${t}*,full_name.ilike.*${t}*,phone.ilike.*${t}*)&select=user_id,full_name,email,phone,last_access_at,access_count,created_at&limit=20`;
+  // Se o termo parece telefone (8+ digitos), expande variantes BR
+  // pra cobrir formatos com/sem DDI 55, com/sem 9 do celular, com/sem +.
+  // Senao, usa o termo cru — pode ser email/nome.
+  const digitos = soDigitos(termo);
+  const ehTelefone = digitos.length >= 8;
+  const telOr = ehTelefone ? orTelefoneTermos('phone', variantesTelefoneBR(termo)) : `phone.ilike.*${termo}*`;
+  const orInterno = `email.ilike.*${termo}*,full_name.ilike.*${termo}*,${telOr}`;
+  const path = `/profiles?or=(${encodeURIComponent(orInterno)})&select=user_id,full_name,email,phone,last_access_at,access_count,created_at&limit=20`;
   const r = await proaltREST('GET', path);
   if (!r.ok) return jsonRespTool({ ok: false, erro: 'buscar_usuario: ' + r.erro }, 500);
 

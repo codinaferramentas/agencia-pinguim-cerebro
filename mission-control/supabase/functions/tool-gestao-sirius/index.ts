@@ -32,6 +32,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { getChave } from '../_shared/cofre.ts';
 import { requireAuthTool, corsTool, jsonRespTool } from '../_shared/auth-tool.ts';
+import { variantesTelefoneBR, orTelefoneTermos, soDigitos } from '../_shared/telefone-br.ts';
 
 const SIRIUS_URL = 'https://ryyingyyzgzsbnkugfpa.supabase.co';
 const SIRIUS_REST = `${SIRIUS_URL}/rest/v1`;
@@ -120,10 +121,13 @@ async function actBuscarUsuario(body: any) {
   const termo = String(body.termo || '').trim();
   if (!termo || termo.length < 2) return jsonRespTool({ ok: false, erro: 'termo obrigatorio (2+ chars)' }, 400);
 
-  // PostgREST OR — busca por email, nome OU telefone
-  // Escapa o termo pra evitar quebra do query string
-  const t = encodeURIComponent(termo);
-  const path = `/profiles?or=(email.ilike.*${t}*,nome.ilike.*${t}*,telefone.ilike.*${t}*)&select=user_id,email,nome,telefone,papel,plan_id,plan_status,plan_expires_at,cycle_start,last_payment_at,${FEATURE_KEYS.join(',')}&limit=20`;
+  // PostgREST OR — busca por email, nome OU telefone.
+  // Telefone com 8+ digitos expande variantes BR (com/sem DDI, com/sem 9, com/sem +).
+  const digitos = soDigitos(termo);
+  const ehTelefone = digitos.length >= 8;
+  const telOr = ehTelefone ? orTelefoneTermos('telefone', variantesTelefoneBR(termo)) : `telefone.ilike.*${termo}*`;
+  const orInterno = `email.ilike.*${termo}*,nome.ilike.*${termo}*,${telOr}`;
+  const path = `/profiles?or=(${encodeURIComponent(orInterno)})&select=user_id,email,nome,telefone,papel,plan_id,plan_status,plan_expires_at,cycle_start,last_payment_at,${FEATURE_KEYS.join(',')}&limit=20`;
   const r = await siriusREST('GET', path);
   if (!r.ok) return jsonRespTool({ ok: false, erro: 'buscar_usuario: ' + r.erro }, 500);
 
