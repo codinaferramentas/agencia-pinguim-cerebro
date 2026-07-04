@@ -22,6 +22,7 @@ import { renderClintMapeamento } from './clint-mapeamento.js?v=20260504a';
 import { renderReescritorPagina } from './reescritor-pagina.js?v=20260605a';
 import { renderPlaybook } from './playbook.js?v=20260622a';
 import { renderSkillsPropostas } from './skills-propostas.js?v=20260622a';
+import { renderMundoIA } from './mundo-ia.js?v=20260704a';
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
@@ -99,6 +100,7 @@ async function navegar(pageSlug, { forcarRender = true } = {}) {
       case 'reescritor': await renderReescritorPagina(); break;
       case 'playbook':  await renderPlaybook(); break;
       case 'skills-propostas': await renderSkillsPropostas(); break;
+      case 'mundo-ia':  await renderMundoIA(); break;
       default:
         if (STUB_PAGES.includes(pageSlug)) renderStub(pageSlug);
     }
