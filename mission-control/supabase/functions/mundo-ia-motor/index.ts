@@ -318,7 +318,8 @@ async function montarCopiaGrupo(dono: string, acionaveis: any[], apiKey: string)
 // mostraria código-fonte. O token aleatório torna o link "secreto".
 const MC_BASE_URL = 'https://mission-control-pink-three.vercel.app';
 function montarLinkRelatorio(execId: string, token: string): string {
-  return `${MC_BASE_URL}/relatorio.html?id=${execId}&t=${token}`;
+  // Sem .html: o Vercel usa cleanUrls (redireciona .html -> sem extensão).
+  return `${MC_BASE_URL}/relatorio?id=${execId}&t=${token}`;
 }
 
 async function enviarWhatsApp(numero: string, texto: string): Promise<boolean> {
