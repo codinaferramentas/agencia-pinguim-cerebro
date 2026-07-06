@@ -34,6 +34,7 @@ const fmtData = (s) => { try { return new Date(s).toLocaleString('pt-BR', { time
 const MAPA_SOCIO = {
   'contato@agenciapinguim.com': 'André',
   'andre@agenciapinguim.com': 'André',
+  'codinaandre@gmail.com': 'André',
   'luiz@agenciapinguim.com': 'Luiz',
   'micha@agenciapinguim.com': 'Micha',
   'pedro@agenciapinguim.com': 'Pedro',
@@ -218,6 +219,11 @@ async function carregarExecucoes(wrap) {
         el('div', { style: 'color:var(--muted);font-size:0.8125rem' },
           `${ex.total_posts} publicações · ${ex.total_acionaveis} acionáveis${ex.enviado_whatsapp ? ' · ✅ enviado no Zap' : ''}`),
       ]),
+      ex.link_publico ? btnMini('Abrir link', () => window.open(ex.link_publico, '_blank')) : null,
+      ex.link_publico ? btnMini('Copiar link', async () => {
+        await navigator.clipboard.writeText(ex.link_publico);
+        toast('Link copiado! Cole onde quiser.');
+      }) : null,
       btnMini('Abrir HTML', async () => {
         const { execucao } = await gestao('carregar_execucao', { id: ex.id });
         const w = window.open('', '_blank');

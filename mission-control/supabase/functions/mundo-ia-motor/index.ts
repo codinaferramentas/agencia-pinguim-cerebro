@@ -311,6 +311,14 @@ async function montarCopiaGrupo(dono: string, acionaveis: any[], apiKey: string)
   return j.choices?.[0]?.message?.content?.trim() || '';
 }
 
+// Gera o link clicável do relatório: URL da função mundo-ia-ver, que serve
+// o HTML como text/html DE VERDADE (o Storage público serviria como
+// text/plain e o celular mostraria código-fonte). O token aleatório torna
+// o link "secreto" (não-enumerável) — só quem recebeu a mensagem abre.
+function montarLinkRelatorio(execId: string, token: string): string {
+  return `${SUPABASE_URL}/functions/v1/mundo-ia-ver?id=${execId}&t=${token}`;
+}
+
 async function enviarWhatsApp(numero: string, texto: string): Promise<boolean> {
   // Lê credenciais Evolution direto do cofre (edge é service_role) e manda via
   // instância global do bot (EVOLUTION_INSTANCE_BOT). Mesmo padrão do server-cli.
@@ -372,14 +380,20 @@ async function faseEnvio(donoFiltro: string | null, dryRun: boolean): Promise<an
 
     let execId: string | null = null;
     if (!dryRun) {
+      // Token secreto do link — gravado junto, valida o acesso em mundo-ia-ver.
+      const linkToken = crypto.randomUUID().replace(/-/g, '');
       const { data: exec } = await client.from('mundo_ia_execucoes').insert({
         dono_socio: cfg.dono_socio, janela_inicio: janelaIni.toISOString(), janela_fim: janelaFim.toISOString(),
         html, resumo_grupo: resumoGrupo, total_posts: itens.length, total_acionaveis: acionaveis.length,
-        status: itens.length ? 'ok' : 'sem_novidade',
+        status: itens.length ? 'ok' : 'sem_novidade', link_token: linkToken,
       }).select('id').single();
       execId = exec?.id || null;
 
-      // WhatsApp: resumo curto + qtd acionáveis (o HTML fica no MC)
+      // Link clicável que abre e RENDERIZA no celular (via função mundo-ia-ver).
+      const linkPublico = execId ? montarLinkRelatorio(execId, linkToken) : null;
+      if (execId && linkPublico) await client.from('mundo_ia_execucoes').update({ link_publico: linkPublico }).eq('id', execId);
+
+      // WhatsApp: resumo curto + acionáveis + LINK do relatório completo.
       if (cfg.envia_whatsapp && cfg.whatsapp_destino) {
         const linhas = [
           `🌎 *Mundo IA* — ${new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`,
@@ -388,7 +402,12 @@ async function faseEnvio(donoFiltro: string | null, dryRun: boolean): Promise<an
         for (const i of acionaveis.slice(0, 5)) {
           linhas.push(`\n• [${i.cap.apelido || i.cap.handle}] ${i.sintese.resumo.slice(0, 140)}${i.sintese.prazo ? ` (⏰ ${i.sintese.prazo})` : ''}`);
         }
-        linhas.push(`\n📄 Relatório completo no Mission Control → aba 🌎 Mundo IA`);
+        if (!acionaveis.length && itens.length) {
+          linhas.push(`\nSem itens acionáveis hoje — mas tem novidade pra ver no relatório.`);
+        }
+        linhas.push(linkPublico
+          ? `\n📄 *Relatório completo:*\n${linkPublico}`
+          : `\n📄 Relatório completo no Mission Control → aba 🌎 Mundo IA`);
         const enviado = await enviarWhatsApp(cfg.whatsapp_destino, linhas.join('\n'));
         if (execId) await client.from('mundo_ia_execucoes').update({ enviado_whatsapp: enviado }).eq('id', execId);
       }

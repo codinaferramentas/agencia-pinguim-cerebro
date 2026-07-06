@@ -109,7 +109,7 @@ async function ultimasExecucoes(body: any) {
   if (!body.dono_socio) throw new Error('dono_socio obrigatorio');
   const limite = parseInt(String(body.limite || 15), 10);
   const { data, error } = await sb().from('mundo_ia_execucoes')
-    .select('id,gerado_em,janela_inicio,janela_fim,total_posts,total_acionaveis,status,enviado_whatsapp,resumo_grupo')
+    .select('id,gerado_em,janela_inicio,janela_fim,total_posts,total_acionaveis,status,enviado_whatsapp,resumo_grupo,link_publico')
     .eq('dono_socio', body.dono_socio).order('gerado_em', { ascending: false }).limit(limite);
   if (error) throw error;
   return { ok: true, execucoes: data || [] };
