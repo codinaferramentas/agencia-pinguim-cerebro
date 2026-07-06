@@ -311,12 +311,14 @@ async function montarCopiaGrupo(dono: string, acionaveis: any[], apiKey: string)
   return j.choices?.[0]?.message?.content?.trim() || '';
 }
 
-// Gera o link clicável do relatório: URL da função mundo-ia-ver, que serve
-// o HTML como text/html DE VERDADE (o Storage público serviria como
-// text/plain e o celular mostraria código-fonte). O token aleatório torna
-// o link "secreto" (não-enumerável) — só quem recebeu a mensagem abre.
+// Gera o link clicável do relatório. Aponta pra página PÚBLICA do Mission
+// Control no Vercel (/relatorio.html), que busca o HTML e o renderiza num
+// iframe. Precisa ser no Vercel porque o Supabase (Storage e Edge Functions)
+// blinda qualquer HTML com sandbox/text-plain (anti-XSS) — no celular
+// mostraria código-fonte. O token aleatório torna o link "secreto".
+const MC_BASE_URL = 'https://mission-control-pink-three.vercel.app';
 function montarLinkRelatorio(execId: string, token: string): string {
-  return `${SUPABASE_URL}/functions/v1/mundo-ia-ver?id=${execId}&t=${token}`;
+  return `${MC_BASE_URL}/relatorio.html?id=${execId}&t=${token}`;
 }
 
 async function enviarWhatsApp(numero: string, texto: string): Promise<boolean> {

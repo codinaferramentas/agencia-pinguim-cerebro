@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>🌎 Mundo IA — Relatório</title>
+  <link rel="icon" href="img/pinguim-icon.svg">
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #0B1120; }
+    #frame { border: 0; width: 100%; height: 100vh; display: block; }
+    .status {
+      color: #E8EEF7; font: 16px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 24px; text-align: center;
+    }
+    .status .box { max-width: 420px; }
+    .status h1 { font-size: 20px; margin: 0 0 8px; }
+    .status p { color: #93A3BC; margin: 0; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div id="root" class="status"><div class="box"><h1>🐧 Carregando relatório…</h1></div></div>
+
+  <!-- Config Supabase (anon key é pública, mesma do index.html) -->
+  <script>
+    window.__ENV__ = {
+      SUPABASE_URL: 'https://wmelierxzpjamiofeemh.supabase.co',
+      SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtZWxpZXJ4enBqYW1pb2ZlZW1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyMzY5MzQsImV4cCI6MjA4ODgxMjkzNH0.kbzLkX7yDmNfT_wJ00M4KKphTgyc0QXaVpaplO0i-jk',
+    };
+  </script>
+
+  <script>
+    // Página PÚBLICA (fora do auth-gate) — abre direto no celular a partir do
+    // link do WhatsApp. Busca o HTML na edge mundo-ia-ver (que valida o token)
+    // e renderiza num iframe isolado. Escapa da blindagem sandbox do Supabase
+    // porque o HTML é servido pela ORIGEM do Vercel, não pela edge.
+    (async () => {
+      const root = document.getElementById('root');
+      const p = new URLSearchParams(location.search);
+      const id = p.get('id') || '';
+      const t = p.get('t') || '';
+
+      const erro = (msg) => {
+        root.innerHTML = '<div class="box"><h1>🐧 ' + msg + '</h1>' +
+          '<p>Se precisar, abra o Mission Control → aba 🌎 Mundo IA.</p></div>';
+      };
+
+      if (!id || !t) { erro('Link inválido.'); return; }
+
+      // window.__ENV__ vem de env.js (mesma config do painel).
+      const ENV = (window.__ENV__ || {});
+      const SUPABASE_URL = ENV.SUPABASE_URL || '';
+      const ANON = ENV.SUPABASE_ANON_KEY || '';
+      if (!SUPABASE_URL) { erro('Configuração ausente.'); return; }
+
+      try {
+        const url = SUPABASE_URL + '/functions/v1/mundo-ia-ver?id=' +
+          encodeURIComponent(id) + '&t=' + encodeURIComponent(t);
+        const r = await fetch(url, {
+          headers: ANON ? { apikey: ANON, Authorization: 'Bearer ' + ANON } : {},
+        });
+        const html = await r.text();
+        if (!r.ok) { erro(r.status === 403 ? 'Link inválido ou expirado.' : 'Relatório não encontrado.'); return; }
+
+        // Renderiza o HTML num iframe isolado (srcdoc) — mesma origem Vercel,
+        // sem a sandbox do Supabase, então renderiza de verdade no celular.
+        const frame = document.createElement('iframe');
+        frame.id = 'frame';
+        frame.setAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox');
+        frame.srcdoc = html;
+        document.body.innerHTML = '';
+        document.body.appendChild(frame);
+      } catch (e) {
+        erro('Erro ao carregar. Tente pelo Mission Control.');
+      }
+    })();
+  </script>
+</body>
+</html>

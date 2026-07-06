@@ -39,8 +39,26 @@ serve(async (req) => {
   const id = url.searchParams.get('id') || '';
   const token = url.searchParams.get('t') || '';
 
+  // CORS liberado: a página pública /relatorio.html (Vercel) faz fetch aqui.
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, x-client-info, x-supabase-api-version',
+      },
+    });
+  }
+
   const htmlResp = (html: string, status = 200) =>
-    new Response(html, { status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, max-age=300' } });
+    new Response(html, {
+      status,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'private, max-age=300',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
 
   if (!id || !token) return htmlResp(paginaErro('Link inválido.'), 400);
 
