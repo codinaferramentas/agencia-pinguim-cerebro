@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>🎟️ Cadastro de Evento</title>
+  <link rel="icon" href="img/pinguim-icon.svg">
+  <style>
+    :root{
+      --pc:#E85C00; --pc-hover:#FB923C; --pc-on:#fff;
+      --s1:#000; --s2:#0A0A0A; --s3:#111; --s4:#171717;
+      --fg:#EDEDED; --fg-muted:#A1A1A1; --fg-dim:#666;
+      --border:#1F1F1F; --border-strong:#2E2E2E;
+      --ok:#22C55E; --warn:#F5A524; --danger:#EF4444;
+      --r:10px; --r-lg:16px;
+      --font:'Geist',-apple-system,'Segoe UI',Roboto,sans-serif;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:var(--s1);color:var(--fg);font-family:var(--font);-webkit-text-size-adjust:100%}
+    body{min-height:100vh}
+    button{font-family:inherit;cursor:pointer}
+    input,select{font-family:inherit}
+    /* topbar */
+    .top{position:sticky;top:0;z-index:20;background:var(--s2);border-bottom:1px solid var(--border);
+      display:flex;align-items:center;gap:12px;padding:12px 16px}
+    .top .brand{font-weight:700;font-size:15px}
+    .top .brand b{color:var(--pc)}
+    .top .sp{flex:1}
+    .pill{background:var(--s3);border:1px solid var(--border);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--fg-muted)}
+    .pill b{color:var(--fg)}
+    .top .lnk{color:var(--fg-dim);font-size:12px;background:none;border:none;text-decoration:underline}
+    /* layout */
+    .wrap{max-width:820px;margin:0 auto;padding:16px}
+    .card{background:var(--s2);border:1px solid var(--border);border-radius:var(--r-lg);padding:18px;margin-bottom:14px}
+    h1{font-size:19px;margin:0 0 4px}
+    h2{font-size:15px;margin:0 0 12px;color:var(--fg)}
+    .sub{color:var(--fg-muted);font-size:13px;margin:0 0 16px}
+    label{display:block;font-size:12px;color:var(--fg-muted);margin:0 0 5px;text-transform:uppercase;letter-spacing:.04em}
+    .inp{width:100%;background:var(--s1);border:1px solid var(--border-strong);border-radius:var(--r);
+      color:var(--fg);padding:11px 12px;font-size:15px;outline:none;transition:border-color .15s}
+    .inp:focus{border-color:var(--pc)}
+    .inp.err{border-color:var(--danger)}
+    .inp.ok{border-color:var(--ok)}
+    .inp.prefill{background:#0d1207;border-color:#2a3a12}
+    select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%23888' fill='none' stroke-width='1.5'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+    .row{display:grid;gap:12px;margin-bottom:12px}
+    .row.c2{grid-template-columns:1fr 1fr}
+    .row.c3{grid-template-columns:1fr 1fr 1fr}
+    @media(max-width:560px){.row.c2,.row.c3{grid-template-columns:1fr}}
+    .fielderr{color:var(--danger);font-size:11px;margin-top:4px;min-height:13px}
+    .btn{background:var(--pc);color:var(--pc-on);border:none;border-radius:var(--r);padding:13px 20px;font-size:15px;font-weight:600}
+    .btn:hover{background:var(--pc-hover)}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .btn.ghost{background:transparent;border:1px solid var(--border-strong);color:var(--fg)}
+    .btn.ghost:hover{background:var(--s3)}
+    .btn.wide{width:100%}
+    .btn.sm{padding:8px 14px;font-size:13px}
+    .btn.danger{background:transparent;border:1px solid var(--danger);color:var(--danger)}
+    .muted{color:var(--fg-muted);font-size:13px}
+    .dim{color:var(--fg-dim);font-size:12px}
+    /* busca */
+    .search-row{display:flex;gap:8px}
+    .search-row .inp{flex:1}
+    .res{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+    .res-item{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;
+      display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .12s}
+    .res-item:hover{border-color:var(--pc)}
+    .res-item .nm{font-weight:600;font-size:14px}
+    .res-item .mt{color:var(--fg-muted);font-size:12px;margin-top:2px}
+    .res-item .tag{margin-left:auto;font-size:11px;background:#2a1505;color:var(--pc);padding:3px 8px;border-radius:6px;white-space:nowrap}
+    /* pessoa block */
+    .pessoa{border:1px solid var(--border);border-radius:var(--r-lg);padding:14px;margin-bottom:12px;background:var(--s1)}
+    .pessoa-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+    .pessoa-head .t{font-weight:600;font-size:14px}
+    .star{color:var(--pc);font-size:16px}
+    .respflag{display:flex;align-items:center;gap:8px;background:var(--s3);border:1px solid var(--border);border-radius:var(--r);padding:9px 12px;margin-bottom:12px;cursor:pointer;font-size:13px}
+    .respflag input{width:18px;height:18px;accent-color:var(--pc)}
+    /* toast */
+    .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(120px);
+      background:var(--ok);color:#04140a;font-weight:700;padding:16px 26px;border-radius:14px;font-size:16px;
+      box-shadow:0 12px 40px rgba(0,0,0,.5);transition:transform .3s cubic-bezier(.2,1.2,.4,1);z-index:60;max-width:90vw;text-align:center}
+    .toast.show{transform:translateX(-50%) translateY(0)}
+    .toast.warn{background:var(--warn);color:#1a1200}
+    .toast.err{background:var(--danger);color:#fff}
+    /* aviso duplicata */
+    .aviso{background:#2a2205;border:1px solid #5c4a12;border-radius:var(--r);padding:10px 12px;font-size:13px;color:#f5d78a;margin-bottom:12px}
+    .hidden{display:none!important}
+    .center{text-align:center}
+    .gap{height:8px}
+    .divider{height:1px;background:var(--border);margin:16px 0}
+    .req::after{content:' *';color:var(--pc)}
+    #login-screen{max-width:440px;margin:8vh auto 0}
+    .logo{font-size:38px;text-align:center;margin-bottom:6px}
+    .steps{display:flex;gap:6px;margin:14px 0}
+    .step{flex:1;height:3px;background:var(--border);border-radius:3px}
+    .step.on{background:var(--pc)}
+  </style>
+</head>
+<body>
+  <!-- ============ LOGIN ============ -->
+  <div id="login-screen" class="wrap">
+    <div class="logo">🎟️</div>
+    <div class="card">
+      <h1 class="center">Cadastro de Evento</h1>
+      <p class="sub center">Identifique-se pra começar a atender.</p>
+      <div id="login-token-box">
+        <label>Token do evento</label>
+        <input id="login-token" class="inp" placeholder="cole o token que o André te passou" autocomplete="off">
+        <div class="gap"></div>
+      </div>
+      <label>Evento</label>
+      <select id="login-evento" class="inp"><option value="">— carregue o token primeiro —</option></select>
+      <div class="gap"></div>
+      <label>Quem é você (consultor)</label>
+      <select id="login-consultor" class="inp"><option value="">—</option></select>
+      <div id="novo-consultor-box" class="hidden">
+        <div class="gap"></div>
+        <div class="row c2" style="margin-bottom:0">
+          <div><label>Nome do consultor</label><input id="nc-nome" class="inp" placeholder="Seu nome"></div>
+          <div><label>WhatsApp</label><input id="nc-wpp" class="inp" placeholder="(11) 90000-0000" inputmode="tel"></div>
+        </div>
+        <div class="gap"></div>
+        <button id="nc-salvar" class="btn ghost sm">Salvar consultor</button>
+      </div>
+      <div class="gap"></div>
+      <button id="add-consultor-link" class="lnk" style="color:var(--fg-dim);background:none;border:none;text-decoration:underline;font-size:12px">+ meu nome não está na lista</button>
+      <div class="divider"></div>
+      <button id="login-entrar" class="btn wide" disabled>Entrar</button>
+      <div id="login-msg" class="fielderr center"></div>
+    </div>
+    <p class="dim center">Seus dados de acesso ficam salvos neste aparelho. Nada é enviado direto ao banco — tudo passa pela nossa fronteira segura.</p>
+  </div>
+
+  <!-- ============ APP ============ -->
+  <div id="app" class="hidden">
+    <div class="top">
+      <div class="brand">🎟️ <b>Eventos</b></div>
+      <span class="pill" id="pill-evento">—</span>
+      <div class="sp"></div>
+      <span class="pill">Atendendo: <b id="pill-consultor">—</b></span>
+      <button class="lnk" id="btn-sair">trocar</button>
+    </div>
+
+    <div class="wrap">
+      <!-- passo 1: origem + busca -->
+      <div class="card" id="card-inicio">
+        <h2>Nova aplicação</h2>
+        <p class="sub">Comprou pelo QR/Hotmart ou foi Pix na hora?</p>
+        <div class="row c2">
+          <button class="btn ghost" id="btn-hotmart">🔍 Buscar comprador (Hotmart)</button>
+          <button class="btn ghost" id="btn-pix">✍️ Pix / entrada manual</button>
+        </div>
+
+        <div id="busca-box" class="hidden">
+          <div class="divider"></div>
+          <label>Buscar por nome, e-mail, CPF ou telefone</label>
+          <div class="search-row">
+            <input id="busca-inp" class="inp" placeholder="digite qualquer pedaço…" autocomplete="off" autocapitalize="off" autocorrect="off">
+            <button class="btn sm" id="busca-btn">Buscar</button>
+          </div>
+          <div class="dim" style="margin-top:6px">Achou com dado torto? Busca por parte do nome, CPF sem pontos, telefone com ou sem DDD.</div>
+          <div id="busca-res" class="res"></div>
+          <div id="busca-vazio" class="hidden" style="margin-top:12px">
+            <div class="aviso">Não achei ninguém. A compra pode não ter caído ainda.</div>
+            <button class="btn sm" id="btn-nao-achei">Cadastrar manual agora →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- passo 2: formulário -->
+      <div class="card hidden" id="card-form">
+        <div id="aviso-dup"></div>
+        <h2 id="form-titulo">Dados da aplicação</h2>
+
+        <div id="pessoas-container"></div>
+
+        <button class="btn ghost sm hidden" id="btn-add-cadeira" style="margin-bottom:14px">+ adicionar sócio (2ª cadeira)</button>
+
+        <div class="divider"></div>
+        <h2>Dados da aplicação</h2>
+        <div class="row c2">
+          <div>
+            <label>Faturar em</label>
+            <select id="ap-faturar" class="inp"><option value="pf">Pessoa Física (CPF)</option><option value="pj">Pessoa Jurídica (CNPJ)</option></select>
+          </div>
+          <div><label>Nome da empresa</label><input id="ap-empresa" class="inp" placeholder="opcional"></div>
+        </div>
+        <div class="row c2 hidden" id="pj-box">
+          <div><label>CNPJ</label><input id="ap-cnpj" class="inp" inputmode="numeric"></div>
+          <div><label>Razão social</label><input id="ap-razao" class="inp"></div>
+        </div>
+        <div class="row c3">
+          <div><label>Valor pago (R$)</label><input id="ap-valor" class="inp" inputmode="decimal" placeholder="0,00"></div>
+          <div>
+            <label>Forma de pagamento</label>
+            <select id="ap-forma" class="inp">
+              <option value="">—</option>
+              <option value="hotmart_cartao">Hotmart cartão</option>
+              <option value="hotmart_boleto">Hotmart boleto</option>
+              <option value="pix">Pix</option>
+              <option value="transferencia">Transferência</option>
+            </select>
+          </div>
+          <div><label id="lbl-comprovante">Comprovante / ID</label><input id="ap-comprovante" class="inp" placeholder="id da transação"></div>
+        </div>
+        <div class="row">
+          <div><label>Observação (livre)</label><input id="ap-obs" class="inp" placeholder="ex: sócio entra semana que vem, 2ª parcela quinta…"></div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="row c2">
+          <button class="btn ghost" id="btn-cancelar">Cancelar</button>
+          <button class="btn" id="btn-salvar">✅ Salvar aplicação</button>
+        </div>
+        <div id="form-msg" class="fielderr center" style="margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+  (function(){
+    'use strict';
+    var EDGE = 'https://wmelierxzpjamiofeemh.supabase.co/functions/v1/evento-aplicacao';
+    var LS = 'evento_cadastro_v1';
+    var state = { token:'', evento:null, eventos:[], consultor:null, consultores:[], modo:null, prefill:null, pessoas:[], draftKey:null };
+
+    // ---------- persistência ----------
+    function saveSession(){ try{ localStorage.setItem(LS, JSON.stringify({token:state.token, evento:state.evento, consultor:state.consultor})); }catch(e){} }
+    function loadSession(){ try{ return JSON.parse(localStorage.getItem(LS)||'null'); }catch(e){ return null; } }
+
+    // ---------- edge call ----------
+    async function api(acao, extra){
+      var body = Object.assign({acao:acao}, extra||{});
+      var r = await fetch(EDGE, { method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+state.token},
+        body: JSON.stringify(body) });
+      var txt = await r.text(); var j;
+      try{ j = txt?JSON.parse(txt):{}; }catch(e){ j={erro:txt}; }
+      if(!r.ok) throw new Error(j.erro||('erro '+r.status));
+      return j;
+    }
+
+    // ---------- helpers ----------
+    var $ = function(id){ return document.getElementById(id); };
+    function toast(msg, tipo){ var t=$('toast'); t.textContent=msg; t.className='toast show'+(tipo?(' '+tipo):''); setTimeout(function(){ t.className='toast'+(tipo?(' '+tipo):''); }, tipo==='err'?4000:2600); }
+    function soDig(s){ return (s||'').replace(/\D/g,''); }
+    function cpfValido(cpf){ var c=soDig(cpf); if(c.length!==11||/^(\d)\1{10}$/.test(c))return false;
+      var s=0,i,d; for(i=0;i<9;i++)s+=+c[i]*(10-i); d=11-(s%11); if(d>=10)d=0; if(d!==+c[9])return false;
+      s=0; for(i=0;i<10;i++)s+=+c[i]*(11-i); d=11-(s%11); if(d>=10)d=0; return d===+c[10]; }
+    function maskCpf(v){ var c=soDig(v).slice(0,11); return c.replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1-$2'); }
+    function maskTel(v){ var c=soDig(v).slice(0,11); if(c.length<=10) return c.replace(/(\d{2})(\d)/,'($1) $2').replace(/(\d{4})(\d)/,'$1-$2'); return c.replace(/(\d{2})(\d)/,'($1) $2').replace(/(\d{5})(\d)/,'$1-$2'); }
+    function maskCep(v){ return soDig(v).slice(0,8).replace(/(\d{5})(\d)/,'$1-$2'); }
+    function parseValor(s){ s=(s||'').trim(); if(!s) return null;
+      // "1.234,56" -> 1234.56 ; "1500" -> 1500 ; "1500.00" (ponto decimal) -> 1500
+      if(s.indexOf(',')>=0){ s=s.replace(/\./g,'').replace(',','.'); }
+      var n=parseFloat(s); return isNaN(n)?null:n; }
+
+    // ================= LOGIN =================
+    var lToken=$('login-token'), lEvento=$('login-evento'), lConsultor=$('login-consultor'), lEntrar=$('login-entrar'), lMsg=$('login-msg');
+
+    async function carregarComToken(tok){
+      state.token = tok.trim();
+      lMsg.textContent='';
+      try{
+        var ev = await api('listar_eventos');
+        state.eventos = ev.eventos||[];
+        lEvento.innerHTML = '<option value="">— selecione —</option>' +
+          state.eventos.map(function(e){ return '<option value="'+e.id+'">'+esc(e.nome)+'</option>'; }).join('') +
+          '<option value="__novo__">+ criar novo evento</option>';
+        var co = await api('listar_consultores');
+        state.consultores = co.consultores||[];
+        lConsultor.innerHTML = '<option value="">—</option>' +
+          state.consultores.map(function(c){ return '<option value="'+c.nome+'|'+(c.whatsapp||'')+'">'+esc(c.nome)+'</option>'; }).join('');
+        saveSession();
+        validarLogin();
+      }catch(e){ lMsg.textContent = 'Token inválido ou sem conexão: '+e.message; }
+    }
+    function esc(s){ return String(s||'').replace(/[<>&"]/g,function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c];}); }
+
+    lToken.addEventListener('change', function(){ if(lToken.value.trim().length>10) carregarComToken(lToken.value); });
+    lToken.addEventListener('blur', function(){ if(lToken.value.trim().length>10) carregarComToken(lToken.value); });
+
+    lEvento.addEventListener('change', async function(){
+      if(lEvento.value==='__novo__'){
+        var nome = prompt('Nome do novo evento:'); if(!nome){ lEvento.value=''; return; }
+        var data = prompt('Data do evento (AAAA-MM-DD, opcional):')||null;
+        var prods = prompt('IDs de produto Hotmart separados por vírgula (ex: 8103827,2605400):')||'';
+        var pids = prods.split(',').map(function(x){return parseInt(x.trim(),10);}).filter(function(n){return !isNaN(n);});
+        try{ var r = await api('criar_evento',{slug: slugify(nome)+'-'+Date.now().toString(36), nome:nome, data_evento:data, product_ids:pids});
+          state.eventos.push(r.evento);
+          var opt=document.createElement('option'); opt.value=r.evento.id; opt.textContent=r.evento.nome;
+          lEvento.insertBefore(opt, lEvento.lastChild); lEvento.value=r.evento.id; toast('Evento criado');
+        }catch(e){ toast('Erro: '+e.message,'err'); lEvento.value=''; }
+      }
+      validarLogin();
+    });
+    function slugify(s){ return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,30); }
+    lConsultor.addEventListener('change', validarLogin);
+
+    $('add-consultor-link').addEventListener('click', function(){ $('novo-consultor-box').classList.toggle('hidden'); });
+    $('nc-salvar').addEventListener('click', async function(){
+      var nome=$('nc-nome').value.trim(); if(!nome){ toast('Digite o nome','warn'); return; }
+      try{ var r=await api('criar_consultor',{nome:nome, whatsapp:soDig($('nc-wpp').value)||null});
+        state.consultores.push(r.consultor);
+        var opt=document.createElement('option'); opt.value=r.consultor.nome+'|'+(r.consultor.whatsapp||'');
+        opt.textContent=r.consultor.nome; lConsultor.appendChild(opt); lConsultor.value=opt.value;
+        $('novo-consultor-box').classList.add('hidden'); toast('Consultor cadastrado'); validarLogin();
+      }catch(e){ toast('Erro: '+e.message,'err'); }
+    });
+
+    function validarLogin(){ lEntrar.disabled = !(state.token && lEvento.value && lEvento.value!=='__novo__' && lConsultor.value); }
+
+    lEntrar.addEventListener('click', function(){
+      state.evento = state.eventos.filter(function(e){return String(e.id)===String(lEvento.value);})[0];
+      if(!state.evento){ lMsg.textContent='Evento não encontrado — recarregue a página.'; return; }
+      var parts = lConsultor.value.split('|');
+      state.consultor = { nome:parts[0], whatsapp:parts[1]||'' };
+      saveSession();
+      entrarApp();
+    });
+
+    function entrarApp(){
+      $('login-screen').classList.add('hidden');
+      $('app').classList.remove('hidden');
+      $('pill-evento').textContent = state.evento.nome;
+      $('pill-consultor').textContent = state.consultor.nome;
+      resetFluxo();
+    }
+
+    $('btn-sair').addEventListener('click', function(){ location.reload(); });
+
+    // ================= FLUXO =================
+    function resetFluxo(){
+      state.modo=null; state.prefill=null; state.pessoas=[];
+      $('card-inicio').classList.remove('hidden');
+      $('busca-box').classList.add('hidden');
+      $('busca-res').innerHTML=''; $('busca-inp').value=''; $('busca-vazio').classList.add('hidden');
+      $('card-form').classList.add('hidden');
+    }
+
+    $('btn-hotmart').addEventListener('click', function(){ state.modo='hotmart'; $('busca-box').classList.remove('hidden'); $('busca-inp').focus(); });
+    $('btn-pix').addEventListener('click', function(){ state.modo='pix'; iniciarForm(null); });
+    $('btn-nao-achei').addEventListener('click', function(){ state.modo='manual'; iniciarForm(null); });
+
+    // busca
+    var buscaTimer;
+    $('busca-inp').addEventListener('input', function(){ clearTimeout(buscaTimer); buscaTimer=setTimeout(doBusca, 350); });
+    $('busca-btn').addEventListener('click', doBusca);
+    async function doBusca(){
+      var termo = $('busca-inp').value.trim(); if(termo.length<2){ $('busca-res').innerHTML=''; return; }
+      $('busca-res').innerHTML='<div class="muted">buscando…</div>'; $('busca-vazio').classList.add('hidden');
+      try{
+        var r = await api('buscar',{evento_id:state.evento.id, termo:termo});
+        if(!r.resultados.length){ $('busca-res').innerHTML=''; $('busca-vazio').classList.remove('hidden'); return; }
+        $('busca-res').innerHTML = r.resultados.map(function(p,i){
+          return '<div class="res-item" data-i="'+i+'"><div><div class="nm">'+esc(p.nome||'—')+'</div>'+
+            '<div class="mt">'+esc(p.email||'')+' · '+esc(p.telefone||'')+' · CPF '+esc(p.cpf||'—')+'</div></div>'+
+            '<span class="tag">'+esc(p.produto_nome||'')+'</span></div>';
+        }).join('');
+        window.__busca = r.resultados;
+        Array.prototype.forEach.call($('busca-res').querySelectorAll('.res-item'), function(el){
+          el.addEventListener('click', function(){ iniciarForm(window.__busca[+el.dataset.i]); });
+        });
+      }catch(e){ $('busca-res').innerHTML='<div class="fielderr">'+esc(e.message)+'</div>'; }
+    }
+
+    // ================= FORM =================
+    function novaPessoa(prefill, resp){
+      return { is_responsavel_financeiro: !!resp, origem_pessoa: prefill?'hotmart':'manual',
+        nome: prefill? (prefill.nome||''):'', cpf: prefill&&prefill.cpf_ok?'':'',
+        email_compra: prefill?(prefill.email||''):'', email_contato:'', telefone: prefill?(prefill.telefone||''):'',
+        whatsapp:'', cep:'', rua:'', numero:'', complemento:'', bairro:'', cidade:'', uf:'',
+        hotmart_transaction: prefill?(prefill.transaction_code||''):'', nome_guerra:'', data_nascimento:'',
+        _prefill: !!prefill, _prefillCpfMasked: prefill?prefill.cpf:'' };
+    }
+
+    function iniciarForm(prefill){
+      state.prefill = prefill;
+      state.pessoas = [ novaPessoa(prefill, true) ];
+      $('card-inicio').classList.add('hidden');
+      $('card-form').classList.remove('hidden');
+      $('aviso-dup').innerHTML='';
+      $('form-titulo').textContent = state.modo==='hotmart' ? 'Complete os dados do comprador' : 'Cadastro manual';
+      // pré-preenche forma de pagamento
+      if(state.modo==='pix'){ $('ap-forma').value='pix'; $('ap-empresa').value=''; }
+      else if(prefill){ $('ap-forma').value='hotmart_cartao'; }
+      renderPessoas();
+      $('card-form').scrollIntoView({behavior:'smooth'});
+    }
+
+    function renderPessoas(){
+      var c = $('pessoas-container');
+      // preserva foco/cursor do campo ativo através do re-render
+      var active = document.activeElement, restore = null;
+      if(active && active.dataset && active.dataset.key){
+        var box = active.closest ? active.closest('.pessoa') : null;
+        restore = { pIdx: box ? [].indexOf.call(c.children, box) : -1, key: active.dataset.key, sel: active.selectionStart };
+      }
+      c.innerHTML='';
+      state.pessoas.forEach(function(p, idx){ c.appendChild(pessoaEl(p, idx)); });
+      $('btn-add-cadeira').classList.toggle('hidden', state.pessoas.length>=2);
+      if(restore && restore.pIdx>=0){
+        var nbox = c.children[restore.pIdx];
+        var el = nbox && nbox.querySelector('input[data-key="'+restore.key+'"]');
+        if(el){ el.focus(); try{ el.setSelectionRange(restore.sel, restore.sel); }catch(e){} }
+      }
+    }
+
+    function field(label, key, p, idx, opts){
+      opts = opts||{};
+      var wrap = document.createElement('div');
+      var lb = document.createElement('label'); lb.textContent = label; if(opts.req) lb.className='req';
+      var inp = document.createElement('input'); inp.className='inp'; inp.value = p[key]||''; inp.dataset.key = key;
+      if(opts.ph) inp.placeholder = opts.ph;
+      if(opts.mode) inp.setAttribute('inputmode', opts.mode);
+      if(key==='cpf'||key==='email_compra'||key==='email_contato'){ inp.setAttribute('autocapitalize','off'); inp.setAttribute('autocorrect','off'); }
+      if(p._prefill && (key==='nome'||key==='email_compra'||key==='telefone')) inp.classList.add('prefill');
+      var err = document.createElement('div'); err.className='fielderr';
+      inp.addEventListener('input', function(){
+        var v = inp.value;
+        if(opts.mask){
+          var pos = inp.selectionStart;
+          var digitsBefore = soDig(v.slice(0, pos)).length;
+          if(opts.mask==='cpf') v=maskCpf(v);
+          else if(opts.mask==='tel') v=maskTel(v);
+          else if(opts.mask==='cep') v=maskCep(v);
+          inp.value=v;
+          var seen=0, newPos=v.length;
+          for(var k=0;k<v.length;k++){ if(/\d/.test(v[k])){ seen++; if(seen>=digitsBefore){ newPos=k+1; break; } } }
+          try{ inp.setSelectionRange(newPos, newPos); }catch(e){}
+          if(opts.mask==='cep' && soDig(v).length===8) buscarCep(soDig(v), idx);
+        }
+        p[key]=v;
+        if(key==='cpf'){ var d=soDig(v); if(d.length===11){ if(cpfValido(v)){inp.classList.remove('err');inp.classList.add('ok');err.textContent='';} else {inp.classList.remove('ok');inp.classList.add('err');err.textContent='CPF inválido';} } else {inp.classList.remove('ok','err');err.textContent='';} }
+      });
+      wrap.appendChild(lb); wrap.appendChild(inp); wrap.appendChild(err);
+      return wrap;
+    }
+
+    function pessoaEl(p, idx){
+      var box = document.createElement('div'); box.className='pessoa';
+      var head = document.createElement('div'); head.className='pessoa-head';
+      head.innerHTML = '<span class="t">'+(idx===0?'👤 Cadeira 1':'👥 Cadeira 2 (sócio)')+'</span>'+
+        (p.is_responsavel_financeiro?'<span class="star">★ responsável financeiro</span>':'');
+      if(idx>0){ var rm=document.createElement('button'); rm.className='lnk'; rm.style.marginLeft='auto'; rm.style.color='var(--danger)'; rm.textContent='remover'; rm.addEventListener('click', function(){ state.pessoas.splice(idx,1); if(!state.pessoas.some(function(x){return x.is_responsavel_financeiro;})) state.pessoas[0].is_responsavel_financeiro=true; renderPessoas(); }); head.appendChild(rm); }
+      box.appendChild(head);
+
+      // flag responsável
+      var flag = document.createElement('label'); flag.className='respflag';
+      var rb=document.createElement('input'); rb.type='radio'; rb.name='resp'; rb.checked=p.is_responsavel_financeiro;
+      rb.addEventListener('change', function(){ state.pessoas.forEach(function(x){x.is_responsavel_financeiro=false;}); p.is_responsavel_financeiro=true; renderPessoas(); });
+      flag.appendChild(rb); flag.appendChild(document.createTextNode(' É o responsável financeiro (quem assina e paga)'));
+      box.appendChild(flag);
+
+      if(p._prefill && p._prefillCpfMasked){
+        var note=document.createElement('div'); note.className='dim'; note.style.marginBottom='8px';
+        note.textContent='CPF na Hotmart: '+p._prefillCpfMasked+' — confirme digitando completo abaixo.';
+        box.appendChild(note);
+      }
+
+      var r1=document.createElement('div'); r1.className='row c2';
+      r1.appendChild(field('Nome completo','nome',p,idx,{req:true, ph:'Nome'}));
+      r1.appendChild(field('Como quer ser chamado','nome_guerra',p,idx,{ph:'apelido (opcional)'}));
+      box.appendChild(r1);
+
+      var r2=document.createElement('div'); r2.className='row c2';
+      r2.appendChild(field('CPF','cpf',p,idx,{req:true, mask:'cpf', mode:'numeric', ph:'000.000.000-00'}));
+      r2.appendChild(field('Telefone / WhatsApp','telefone',p,idx,{req:true, mask:'tel', mode:'tel', ph:'(11) 90000-0000'}));
+      box.appendChild(r2);
+
+      var r3=document.createElement('div'); r3.className='row c2';
+      r3.appendChild(field('E-mail de contato','email_contato',p,idx,{req:true, ph:'que a pessoa realmente lê', mode:'email'}));
+      r3.appendChild(field('E-mail da compra','email_compra',p,idx,{ph:'se diferente', mode:'email'}));
+      box.appendChild(r3);
+
+      // endereço (obrigatório pro responsável)
+      var r4=document.createElement('div'); r4.className='row c3';
+      r4.appendChild(field('CEP','cep',p,idx,{mask:'cep', mode:'numeric', ph:'00000-000', req:p.is_responsavel_financeiro}));
+      r4.appendChild(field('Número','numero',p,idx,{ph:'123'}));
+      r4.appendChild(field('Complemento','complemento',p,idx,{ph:'apto/bloco'}));
+      box.appendChild(r4);
+      var r5=document.createElement('div'); r5.className='row c3';
+      r5.appendChild(field('Rua','rua',p,idx,{}));
+      r5.appendChild(field('Bairro','bairro',p,idx,{}));
+      var cidUf=document.createElement('div'); cidUf.className='row c2'; cidUf.style.margin=0;
+      cidUf.appendChild(field('Cidade','cidade',p,idx,{}));
+      cidUf.appendChild(field('UF','uf',p,idx,{ph:'SP'}));
+      r5.appendChild(cidUf);
+      box.appendChild(r5);
+      p._el = box;
+      return box;
+    }
+
+    function setFieldValue(box, key, val){
+      if(!box) return;
+      var el = box.querySelector('input[data-key="'+key+'"]');
+      if(el && el !== document.activeElement) el.value = val || '';
+    }
+    async function buscarCep(cep, idx){
+      try{
+        var r = await fetch('https://viacep.com.br/ws/'+cep+'/json/'); var j = await r.json();
+        if(j.erro) return;
+        var p = state.pessoas[idx];
+        p.rua=j.logradouro||p.rua; p.bairro=j.bairro||p.bairro; p.cidade=j.localidade||p.cidade; p.uf=j.uf||p.uf;
+        // atualiza SÓ os inputs de endereço (sem recriar o DOM — preserva foco/digitação)
+        if(p._el){ setFieldValue(p._el,'rua',p.rua); setFieldValue(p._el,'bairro',p.bairro); setFieldValue(p._el,'cidade',p.cidade); setFieldValue(p._el,'uf',p.uf); }
+      }catch(e){}
+    }
+
+    $('btn-add-cadeira').addEventListener('click', function(){ if(state.pessoas.length>=2)return; state.pessoas.push(novaPessoa(null,false)); renderPessoas(); });
+
+    $('ap-faturar').addEventListener('change', function(){ $('pj-box').classList.toggle('hidden', this.value!=='pj'); });
+    $('btn-cancelar').addEventListener('click', function(){ if(confirm('Cancelar esta aplicação? Os dados digitados serão perdidos.')) resetFluxo(); });
+
+    $('btn-salvar').addEventListener('click', salvar);
+    async function salvar(){
+      var msg=$('form-msg'); msg.textContent='';
+      // validações essenciais
+      var resp = state.pessoas.filter(function(p){return p.is_responsavel_financeiro;})[0];
+      if(!resp){ msg.textContent='Marque o responsável financeiro.'; return; }
+      var reMail=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      for(var i=0;i<state.pessoas.length;i++){ var p=state.pessoas[i];
+        if(!p.nome.trim()){ msg.textContent='Falta o nome da cadeira '+(i+1); return; }
+        if(!cpfValido(p.cpf)){ msg.textContent='CPF inválido na cadeira '+(i+1); return; }
+        var telLen=soDig(p.telefone).length;
+        if(telLen<10||telLen>11){ msg.textContent='Telefone incompleto na cadeira '+(i+1); return; }
+        if(!reMail.test(p.email_contato.trim())){ msg.textContent='E-mail de contato inválido na cadeira '+(i+1); return; }
+        if(p.email_compra.trim() && !reMail.test(p.email_compra.trim())){ msg.textContent='E-mail da compra inválido na cadeira '+(i+1); return; }
+      }
+      if(!soDig(resp.cep) || soDig(resp.cep).length!==8){ msg.textContent='Endereço (CEP) obrigatório pro responsável financeiro.'; return; }
+      if(!resp.numero.trim()){ msg.textContent='Número do endereço obrigatório pro responsável.'; return; }
+
+      var btn=$('btn-salvar'); btn.disabled=true; btn.textContent='Salvando…';
+      var aplicacao = {
+        origem: state.modo==='hotmart'?'hotmart':(state.modo==='pix'?'pix':'manual'),
+        product_id: state.prefill? state.prefill.product_id : null,
+        consultor_nome: state.consultor.nome, consultor_whatsapp: state.consultor.whatsapp,
+        faturar_em: $('ap-faturar').value, nome_empresa: $('ap-empresa').value.trim()||null,
+        cnpj: soDig($('ap-cnpj').value)||null, razao_social: $('ap-razao').value.trim()||null,
+        valor_pago: parseValor($('ap-valor').value),
+        forma_pagamento: $('ap-forma').value||null, comprovante_ref: $('ap-comprovante').value.trim()||null,
+        observacao: $('ap-obs').value.trim()||null
+      };
+      var pessoas = state.pessoas.map(function(p){
+        return { is_responsavel_financeiro:p.is_responsavel_financeiro, origem_pessoa:p.origem_pessoa,
+          nome:p.nome.trim(), nome_guerra:p.nome_guerra||null, cpf:soDig(p.cpf),
+          email_compra:p.email_compra||null, email_contato:p.email_contato||null,
+          telefone:soDig(p.telefone)||null, whatsapp:soDig(p.telefone)||null,
+          cep:soDig(p.cep)||null, rua:p.rua||null, numero:p.numero||null, complemento:p.complemento||null,
+          bairro:p.bairro||null, cidade:p.cidade||null, uf:p.uf||null,
+          hotmart_transaction:p.hotmart_transaction||null };
+      });
+      try{
+        var r = await api('criar',{evento_id:state.evento.id, aplicacao:aplicacao, pessoas:pessoas});
+        if(r.aviso_duplicata){ toast('Salvo! ⚠ Já havia cadastro com CPF parecido — confira depois.', 'warn'); }
+        else { toast('✅ '+pessoas[0].nome.split(' ')[0]+' cadastrado!'); }
+        resetFluxo();
+      }catch(e){
+        msg.textContent = e.message;
+        toast('Erro ao salvar: '+e.message, 'err');
+      }finally{ btn.disabled=false; btn.textContent='✅ Salvar aplicação'; }
+    }
+
+    // ================= BOOT =================
+    (function boot(){
+      var s = loadSession();
+      var p = new URLSearchParams(location.search);
+      var urlTok = p.get('t');
+      if(urlTok){ lToken.value=urlTok; $('login-token-box').classList.add('hidden'); carregarComToken(urlTok); }
+      else if(s && s.token){ lToken.value=s.token; carregarComToken(s.token).then(function(){
+        if(s.evento){ lEvento.value=s.evento.id; }
+        if(s.consultor){ var v=s.consultor.nome+'|'+(s.consultor.whatsapp||''); lConsultor.value=v; }
+        validarLogin();
+      }); }
+    })();
+  })();
+  </script>
+</body>
+</html>
