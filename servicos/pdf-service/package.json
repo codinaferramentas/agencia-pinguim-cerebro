@@ -1,0 +1,9 @@
+{
+  "name": "pinguim-pdf",
+  "private": true,
+  "description": "Serviço HTML→PDF (Chrome headless) do Pinguim OS — usado pelo Book Comercial 365",
+  "dependencies": {
+    "@sparticuz/chromium": "^131.0.0",
+    "puppeteer-core": "^23.11.1"
+  }
+}
