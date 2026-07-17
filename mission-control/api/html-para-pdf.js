@@ -27,7 +27,7 @@ module.exports = async (req, res) => {
   // o motivo na resposta em vez de FUNCTION_INVOCATION_FAILED mudo
   let chromium, puppeteer;
   try {
-    chromium = require('@sparticuz/chromium');
+    chromium = require('@sparticuz/chromium-min');
     puppeteer = require('puppeteer-core');
   } catch (e) {
     res.status(500).json({ ok: false, erro: 'load deps: ' + e.message, node: process.version });
@@ -48,10 +48,13 @@ module.exports = async (req, res) => {
 
   let browser;
   try {
+    // chromium-min: binário + libs baixados do release oficial pro /tmp
+    // no cold start (cacheado enquanto a instância viver)
+    const PACK = 'https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar';
     browser = await puppeteer.launch({
       args: chromium.args,
       defaultViewport: { width: 1080, height: 1528 },
-      executablePath: await chromium.executablePath(),
+      executablePath: await chromium.executablePath(PACK),
       headless: 'shell',
     });
     const page = await browser.newPage();
