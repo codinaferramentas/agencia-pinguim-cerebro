@@ -25,9 +25,10 @@ module.exports = async (req, res) => {
 
   // require preguiçoso: se o pacote do Chromium falhar no load, devolve
   // o motivo na resposta em vez de FUNCTION_INVOCATION_FAILED mudo
+  // v149+ do sparticuz é ESM-only — precisa de import() dinâmico
   let chromium, puppeteer;
   try {
-    chromium = require('@sparticuz/chromium-min');
+    chromium = (await import('@sparticuz/chromium-min')).default;
     puppeteer = require('puppeteer-core');
   } catch (e) {
     res.status(500).json({ ok: false, erro: 'load deps: ' + e.message, node: process.version });

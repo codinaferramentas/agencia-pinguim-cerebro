@@ -3,7 +3,7 @@ module.exports = async (req, res) => {
   const out = { ok: true, node: process.version };
   if (req.query && req.query.deps === '1') {
     try {
-      const chromium = require('@sparticuz/chromium-min');
+      const chromium = (await import('@sparticuz/chromium-min')).default;
       out.chromium = 'ok (' + typeof chromium.executablePath + ')';
     } catch (e) {
       out.chromium = 'ERRO: ' + e.message.slice(0, 200);
@@ -12,7 +12,7 @@ module.exports = async (req, res) => {
   if (req.query && req.query.extract === '1') {
     try {
       const fs = require('fs');
-      const chromium = require('@sparticuz/chromium-min');
+      const chromium = (await import('@sparticuz/chromium-min')).default;
       const PACK = 'https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.x64.tar';
       out.execPath = await chromium.executablePath(PACK);
       out.ld_library_path = process.env.LD_LIBRARY_PATH || '(vazio)';
