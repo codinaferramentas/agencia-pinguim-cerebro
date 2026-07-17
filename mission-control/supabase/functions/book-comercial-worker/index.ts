@@ -405,11 +405,16 @@ serve(async (req) => {
       // erro determinístico (perfil privado/inexistente/sem posts) não melhora
       // com retry — esgota já e registra na planilha
       const terminal = /PRIVATE_PROFILE|NOT_FOUND|handle invalido|sem posts/i.test(msg);
-      const esgotou = terminal || (job.tentativas || 1) >= MAX_TENTATIVAS;
+      // bloqueio de scraping do Instagram é transitório e passa sozinho:
+      // enquanto a call não aconteceu, NÃO gasta tentativa — a varredura de
+      // 15min re-tenta até conseguir (deadline natural = horário da call)
+      const bloqueioTransitorio = /SCRAPE_BLOCKED/i.test(msg)
+        && job.starts_at && new Date(job.starts_at) > new Date();
+      const esgotou = terminal || (!bloqueioTransitorio && (job.tentativas || 1) >= MAX_TENTATIVAS);
       await atualizarAnalise(job.booking_id, {
         status: 'failed',
         error_message: msg.slice(0, 500),
-        tentativas: terminal ? MAX_TENTATIVAS : job.tentativas,
+        tentativas: terminal ? MAX_TENTATIVAS : (bloqueioTransitorio ? Math.max(0, (job.tentativas || 1) - 1) : job.tentativas),
         finished_at: esgotou ? new Date().toISOString() : null,
       });
       // registra a falha na planilha (best effort, só quando esgotar)

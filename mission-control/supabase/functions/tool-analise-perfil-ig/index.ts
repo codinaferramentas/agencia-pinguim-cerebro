@@ -70,7 +70,7 @@ function musicInfo(p: any): string | null {
 // ============================================================
 // ETAPA 1: Apify scrape
 // ============================================================
-async function scrapeApify(handle: string, apifyToken: string): Promise<any> {
+async function scrapeApifyUmaVez(handle: string, apifyToken: string): Promise<any> {
   const startResp = await fetch(`https://api.apify.com/v2/acts/${APIFY_ACTOR}/runs?token=${apifyToken}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -105,8 +105,34 @@ async function scrapeApify(handle: string, apifyToken: string): Promise<any> {
   const items = await dsResp.json();
   if (!Array.isArray(items) || items.length === 0) throw new Error('NOT_FOUND: perfil não encontrado');
   const data = items[0];
+
+  // O actor pode devolver um ITEM DE ERRO em vez do perfil (ex.: Instagram
+  // bloqueou os proxies naquele momento: error='no_items', "Empty or private
+  // data"). Isso NÃO é perfil inexistente — é bloqueio transitório de
+  // scraping. Classificar certo pro caller poder tentar de novo.
+  if (data.error || data.errorDescription) {
+    throw new Error(`SCRAPE_BLOCKED: ${data.error || ''} ${data.errorDescription || ''}`.trim());
+  }
   if (data.private === true) throw new Error('PRIVATE_PROFILE: perfil é privado');
   return data;
+}
+
+async function scrapeApify(handle: string, apifyToken: string): Promise<any> {
+  // bloqueio do Instagram é transitório — tentar de novo já resolve na maioria
+  // dos casos; 2ª tentativa sai com sessão/proxy diferente do lado do Apify
+  let ultimoErro: Error | null = null;
+  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+    try {
+      return await scrapeApifyUmaVez(handle, apifyToken);
+    } catch (e) {
+      ultimoErro = e instanceof Error ? e : new Error(String(e));
+      const transitorio = /SCRAPE_BLOCKED|Apify TIMEOUT|Apify status/.test(ultimoErro.message);
+      if (!transitorio || tentativa === 2) throw ultimoErro;
+      console.log(`[scrape] tentativa ${tentativa} bloqueada (${ultimoErro.message.slice(0, 80)}), tentando de novo...`);
+      await new Promise((r) => setTimeout(r, 5_000));
+    }
+  }
+  throw ultimoErro;
 }
 
 // ============================================================
@@ -393,7 +419,13 @@ async function executarPipeline(input: { handle: string; nicho: string; objetivo
 
   // ETAPA 2: Normalize
   const norm = normalize(raw);
-  if (norm.posts.length === 0) throw new Error('NOT_FOUND: perfil sem posts');
+  if (norm.posts.length === 0) {
+    // se o perfil DIZ ter posts mas a raspagem não trouxe nenhum, foi
+    // bloqueio parcial do Instagram — transitório, o retry resolve.
+    // NOT_FOUND fica só pro caso do perfil realmente vazio.
+    if ((norm.profile.posts_count || 0) > 0) throw new Error('SCRAPE_BLOCKED: perfil tem posts mas a raspagem voltou vazia (bloqueio transitório)');
+    throw new Error('NOT_FOUND: perfil sem posts');
+  }
 
   // ETAPA 3: Whisper paralelo nos profissionais
   const transcriptByPostId = new Map<string, { text: string | null; skipped_reason: string | null }>();
