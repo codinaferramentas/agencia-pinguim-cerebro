@@ -140,6 +140,7 @@ export async function gerarMunicao(ctx: {
   analiseResumo: string;
   pessoa: any | null;
   depoimentos: { produto: string; itens: any[] }[];
+  respostasForm?: { pergunta: string; resposta: string }[];
 }): Promise<any> {
   const openaiKey = await getChave('OPENAI_API_KEY', 'book-comercial-worker');
 
@@ -163,11 +164,18 @@ export async function gerarMunicao(ctx: {
     ? ctx.depoimentos.map((d) => d.itens.map((i: any) => depLinha(d.produto, i)).join('\n')).join('\n')
     : '(nenhum depoimento disponível)';
 
+  const formTxt = (ctx.respostasForm || []).length
+    ? ctx.respostasForm!.map((r) => `- ${r.pergunta}: ${String(r.resposta).slice(0, 300)}`).join('\n')
+    : '(formulário não recebido)';
+
   const userMsg = `LEAD DA CALL:
 Nome: ${ctx.lead.nome}
 Instagram: @${ctx.lead.instagram}
 Nicho declarado no formulário: ${ctx.lead.nicho || '(não informado)'}
 Faturamento declarado: ${ctx.lead.faturamento || '(não informado)'}
+
+O QUE ELE RESPONDEU NO FORMULÁRIO DE QUALIFICAÇÃO (use — principalmente o desafio principal e o que o incomoda no Instagram — pra personalizar insights, roteiro e objeções):
+${formTxt}
 
 RESUMO DA ANÁLISE DO PERFIL (motor Instagram):
 ${ctx.analiseResumo}

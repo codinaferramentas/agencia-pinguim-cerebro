@@ -62,6 +62,8 @@ export interface BookCtx {
   raiox: RaioX | null;
   municao: Municao | null;
   gerado_em: string;
+  /** todas as respostas do formulário de qualificação Yay!Forms (ficha do lead) */
+  respostas_form?: { pergunta: string; resposta: string }[] | null;
 }
 
 // ---------- CSS exclusivo do book (blocos pretos etc.) ----------
@@ -90,6 +92,13 @@ const BOOK_CSS = `
 .produto-alvo-rac{font-size:13px;color:#b9b3a8;margin-top:8px;line-height:1.55}
 .linha-cliente{margin-top:16px;font-size:13px;color:#d8d2c6;border-top:1px solid rgba(255,255,255,.12);padding-top:14px}
 .linha-cliente strong{color:#fff}
+
+/* ---- ficha do formulário (seção 00) ---- */
+.form-qa{display:grid;grid-template-columns:1fr 1fr;gap:0 26px;break-inside:avoid}
+@media(max-width:680px){.form-qa{grid-template-columns:1fr}}
+.form-qa div{padding:8px 0;border-bottom:1px solid var(--line)}
+.form-qa dt{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:0}
+.form-qa dd{font-size:13px;color:var(--ink-soft);margin:3px 0 0}
 
 /* ---- call box no hero ---- */
 .call-box{display:flex;gap:16px;align-items:center;background:var(--accent-soft);border:1px solid var(--accent);border-left:5px solid var(--accent);border-radius:10px;padding:16px 20px;margin-top:24px;flex-wrap:wrap}
@@ -324,6 +333,14 @@ const secaoResumoConsultor = (ctx: BookCtx): string => {
       </div>
     </div>
   `)}
+  ${(ctx.respostas_form?.length)
+    ? `<div class="card" style="margin-top:16px">
+    <h5>Ficha do formulário de qualificação (respostas literais do lead)</h5>
+    <dl class="form-qa">
+      ${ctx.respostas_form.map((r) => `<div><dt>${esc(r.pergunta)}</dt><dd>${esc(r.resposta)}</dd></div>`).join('')}
+    </dl>
+  </div>`
+    : ''}
 </section>`;
 };
 

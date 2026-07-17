@@ -82,6 +82,28 @@ function extrairPares(payload: Record<string, unknown>): { pares: ParExtraido[];
   const tiposPorPergunta = new Map<string, string>();
   const pares: ParExtraido[] = [];
 
+  // Formato REAL do Yay!Forms (confirmado em produção 17/07/2026):
+  // { response: { id, formId, answers: { <fieldId>: { content, fieldTitle, ... } } } }
+  // content: string | string[] | null (null = campo de aviso/statement, sem resposta)
+  const resp = payload.response as Record<string, unknown> | undefined;
+  if (resp && resp.answers && typeof resp.answers === 'object' && !Array.isArray(resp.answers)) {
+    for (const a of Object.values(resp.answers as Record<string, any>)) {
+      const pergunta = String(a?.fieldTitle || '').trim();
+      let conteudo = a?.content;
+      if (conteudo === null || conteudo === undefined) continue;
+      if (Array.isArray(conteudo)) conteudo = conteudo.join(', ');
+      const resposta = String(conteudo).trim();
+      if (!pergunta || !resposta) continue;
+      pares.push({ pergunta, resposta });
+    }
+    return {
+      pares,
+      formId: String(resp.formId ?? '') || null,
+      submissionId: String(resp.id ?? '') || null,
+      tiposPorPergunta,
+    };
+  }
+
   const definition = fr.definition as Record<string, unknown> | undefined;
   const defFields = (definition?.fields || fr.fields || []) as Record<string, unknown>[];
   const tituloPorId = new Map<string, string>();
@@ -134,23 +156,35 @@ function classificarCampos(pares: ParExtraido[], tipos: Map<string, string>) {
       const dig = soDigitos(resposta);
       if (dig.length >= 8) { out.telefone = dig; continue; }
     }
+    // instagram: a RESPOSTA precisa parecer um handle (evita capturar
+    // "o que te incomoda no seu instagram?" → texto livre)
     if (!out.instagram && (/instagram|insta\b|perfil/.test(p) || resposta.trim().startsWith('@'))) {
-      out.instagram = resposta.trim(); continue;
+      if (normalizarInstagram(resposta)) { out.instagram = resposta.trim(); continue; }
     }
     if (!out.faturamento && /fatura|receita|renda|ganho|financeiro/.test(p)) { out.faturamento = resposta.trim(); continue; }
     if (!out.nicho && /nicho|segmento|mercado|atuacao|area de atua|atua com|trabalha com/.test(p)) { out.nicho = resposta.trim(); continue; }
     if (!out.nome && /\bnome\b/.test(p) && !/instagram|usuario|arroba/.test(p)) { out.nome = resposta.trim(); continue; }
   }
+
+  // nicho fica mais útil composto com "o que você vende" (quando existir)
+  if (out.nicho) {
+    const vende = pares.find(({ pergunta }) => /o que voce vende|o que vende/.test(normalizar(pergunta)));
+    if (vende && !out.nicho.toLowerCase().includes(vende.resposta.toLowerCase())) {
+      out.nicho = `${out.nicho} — ${vende.resposta}`;
+    }
+  }
   return out;
 }
 
-/** Normaliza @ do Instagram: tira @, URL, espaços, lowercase. */
+/** Normaliza @ do Instagram: tira @, URL, lowercase. Texto livre com
+ * espaço no meio NÃO é handle (ex.: "nao sei vender") — retorna null. */
 function normalizarInstagram(v: string | null): string | null {
   if (!v) return null;
   let h = v.trim().toLowerCase();
   const m = h.match(/instagram\.com\/([a-z0-9._]+)/);
   if (m) h = m[1];
-  h = h.replace(/^@/, '').replace(/[\/\s?].*$/, '').trim();
+  h = h.replace(/^@/, '').replace(/[\/?].*$/, '').trim();
+  if (/\s/.test(h)) return null;
   return /^[a-z0-9._]{1,30}$/.test(h) ? h : null;
 }
 

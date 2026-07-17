@@ -65,7 +65,8 @@ function normalizarInstagram(v: string | null | undefined): string | null {
   let h = String(v).trim().toLowerCase();
   const m = h.match(/instagram\.com\/([a-z0-9._]+)/);
   if (m) h = m[1];
-  h = h.replace(/^@/, '').replace(/[\/\s?].*$/, '').trim();
+  h = h.replace(/^@/, '').replace(/[\/?].*$/, '').trim();
+  if (/\s/.test(h)) return null; // texto livre não é handle
   return /^[a-z0-9._]{1,30}$/.test(h) ? h : null;
 }
 
@@ -272,6 +273,7 @@ async function processar(job: any, forcar: boolean): Promise<Record<string, unkn
       analiseResumo: resumirAnalise(analise),
       pessoa,
       depoimentos,
+      respostasForm: form?.respostas || [],
     });
     const raiox = montarRaiox(pessoa, municao);
     raioxCombo = { raiox, municao };
@@ -294,7 +296,7 @@ async function processar(job: any, forcar: boolean): Promise<Record<string, unkn
     form_recebido: !!form,
   };
   const geradoEm = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }).format(new Date());
-  const htmlBook = renderBookConsultor({ lead, analise, raiox: raioxCombo.raiox, municao: raioxCombo.municao, gerado_em: geradoEm });
+  const htmlBook = renderBookConsultor({ lead, analise, raiox: raioxCombo.raiox, municao: raioxCombo.municao, gerado_em: geradoEm, respostas_form: form?.respostas || null });
   const htmlCliente = renderCliente({ lead, analise, gerado_em: geradoEm });
 
   // e) Storage (HTML renderizável) + PDF (opcional) + f) Drive
