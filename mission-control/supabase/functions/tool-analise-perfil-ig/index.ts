@@ -454,7 +454,7 @@ Médias do perfil (apenas conteúdo profissional, ${profissionais.length} posts)
 - Likes médios: ${Math.round(norm.metrics.avg_likes_pro)}
 - Comentários médios: ${Math.round(norm.metrics.avg_comments_pro)}
 - Views médias: ${Math.round(norm.metrics.avg_views_pro)}
-- Engagement score médio: ${norm.metrics.avg_engagement_pro.toFixed(4)}
+- Engagement score médio: ${Number(norm.metrics.avg_engagement_pro ?? 0).toFixed(4)}
 
 ${postBlock('TOP POST (maior engagement rate)', norm.top, transcriptByPostId.get(norm.top.post_id) || null)}
 
@@ -479,7 +479,7 @@ PERFORMANCE MÉDIA (últimos ${norm.posts.length} posts capturados, ${profission
 - Avg likes (pro): ${Math.round(norm.metrics.avg_likes_pro)}
 - Avg comentários (pro): ${Math.round(norm.metrics.avg_comments_pro)}
 - Avg views (pro): ${Math.round(norm.metrics.avg_views_pro)}
-- Avg engagement (pro): ${norm.metrics.avg_engagement_pro.toFixed(4)}
+- Avg engagement (pro): ${Number(norm.metrics.avg_engagement_pro ?? 0).toFixed(4)}
 
 CONTEÚDO REAL — amostra:
 ${profissionais.slice(0, 8).map((p: any, i: number) => `[${i + 1}] [${p.tier}] ${p.post_type} | ${p.likes}❤ ${p.comments}💬${p.views ? ' | ' + p.views + 'v' : ''} | "${(p.full_caption || '').slice(0, 100)}..."`).join('\n')}
@@ -534,7 +534,7 @@ Médias do perfil (conteúdo profissional, ${profissionais.length} posts):
 - Likes médios: ${Math.round(norm.metrics.avg_likes_pro)}
 - Comentários médios: ${Math.round(norm.metrics.avg_comments_pro)}
 - Views médias: ${Math.round(norm.metrics.avg_views_pro)}
-- Engagement médio: ${norm.metrics.avg_engagement_pro.toFixed(4)}
+- Engagement médio: ${Number(norm.metrics.avg_engagement_pro ?? 0).toFixed(4)}
 
 ${postBlock('POST EM ANÁLISE', p, transcriptByPostId.get(p.post_id) || null)}
 
@@ -664,7 +664,12 @@ serve(async (req) => {
 
   try {
     const result = await executarPipeline({ handle, nicho, objetivo, modelo_intermediarios: modeloIntermediarios, analisar_intermediarios: analisarIntermediarios });
-    const html = renderHtml(result);
+    // O HTML interno é conveniência; consumidores como o Book Comercial usam
+    // só o `json`. Uma falha de render (ex.: pilar sem nota) NUNCA pode
+    // derrubar a análise inteira — cai pra html vazio e segue.
+    let html = '';
+    try { html = renderHtml(result); }
+    catch (eRender) { console.error('[analise-perfil-ig] render interno falhou (json segue ok):', eRender instanceof Error ? eRender.message : eRender); }
     return jsonRespTool({
       ok: true,
       handle,

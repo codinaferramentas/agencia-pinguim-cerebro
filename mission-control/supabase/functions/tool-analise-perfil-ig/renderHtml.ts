@@ -1057,7 +1057,7 @@ function renderPostCard(label: string, post: any, isTop: boolean, isWorst: boole
         <div class="post-metric"><div class="post-metric-v">${fmtNum(post.likes)}</div><div class="post-metric-l">Likes</div></div>
         <div class="post-metric"><div class="post-metric-v">${fmtNum(post.comments)}</div><div class="post-metric-l">Coment.</div></div>
         ${isVideo ? `<div class="post-metric"><div class="post-metric-v">${fmtNum(post.views)}</div><div class="post-metric-l">Views</div></div>` : ''}
-        <div class="post-metric"><div class="post-metric-v">${(post.engagement_score * 100).toFixed(2)}%</div><div class="post-metric-l">Engaj.</div></div>
+        <div class="post-metric"><div class="post-metric-v">${(Number(post.engagement_score ?? 0) * 100).toFixed(2)}%</div><div class="post-metric-l">Engaj.</div></div>
       </div>
       <div class="post-meta">
         <span>${esc(post.post_type)}</span>
@@ -1221,9 +1221,9 @@ export function renderHtml(input: RenderInput): string {
           ${Object.entries(overview?.pilares || {}).map(([k, v]: [string, any]) => `
             <div class="pilar">
               <div class="pilar-nome">${esc(pilarLabels[k] || k)}</div>
-              <div class="pilar-nota" style="color:${pilarColor(v.nota)}">${v.nota.toFixed(1)}</div>
+              <div class="pilar-nota" style="color:${pilarColor(v?.nota)}">${Number(v?.nota ?? 0).toFixed(1)}</div>
               <div>
-                <div class="pilar-bar"><div class="pilar-bar-fill" style="width:${v.nota * 10}%;background:${pilarColor(v.nota)}"></div></div>
+                <div class="pilar-bar"><div class="pilar-bar-fill" style="width:${Number(v?.nota ?? 0) * 10}%;background:${pilarColor(v?.nota)}"></div></div>
                 <div class="pilar-just">${esc(v.justificativa)}</div>
               </div>
             </div>`).join('')}
