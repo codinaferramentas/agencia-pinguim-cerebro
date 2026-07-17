@@ -50,7 +50,7 @@ module.exports = async (req, res) => {
   try {
     // chromium-min: binário + libs baixados do release oficial pro /tmp
     // no cold start (cacheado enquanto a instância viver)
-    const PACK = 'https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar';
+    const PACK = 'https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.x64.tar';
     browser = await puppeteer.launch({
       args: chromium.args,
       defaultViewport: { width: 1080, height: 1528 },

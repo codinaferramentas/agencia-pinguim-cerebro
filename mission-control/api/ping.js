@@ -13,7 +13,7 @@ module.exports = async (req, res) => {
     try {
       const fs = require('fs');
       const chromium = require('@sparticuz/chromium-min');
-      const PACK = 'https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar';
+      const PACK = 'https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.x64.tar';
       out.execPath = await chromium.executablePath(PACK);
       out.ld_library_path = process.env.LD_LIBRARY_PATH || '(vazio)';
       out.tmp = fs.readdirSync('/tmp').slice(0, 20);

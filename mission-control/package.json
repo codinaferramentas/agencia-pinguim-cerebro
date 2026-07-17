@@ -3,8 +3,8 @@
   "private": true,
   "description": "Mission Control (site estático) + funções /api no Vercel. SEM script de build de propósito — o Vercel serve a pasta como estático e builda só api/.",
   "dependencies": {
-    "@sparticuz/chromium-min": "^131.0.0",
-    "puppeteer-core": "^23.11.1"
+    "@sparticuz/chromium-min": "^149.0.0",
+    "puppeteer-core": "^25.3.0"
   },
   "engines": {
     "node": "22.x"
