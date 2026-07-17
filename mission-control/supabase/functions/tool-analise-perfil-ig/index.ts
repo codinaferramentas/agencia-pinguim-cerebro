@@ -236,12 +236,13 @@ async function callOpenAI(opts: {
   openaiKey: string;
   maxTokens: number;
   temperature?: number;
+  model?: string;
 }): Promise<any> {
   const resp = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${opts.openaiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'gpt-4o',
+      model: opts.model || 'gpt-4o',
       messages: [
         { role: 'system', content: opts.systemPrompt },
         { role: 'user', content: opts.userMsg },
@@ -377,7 +378,7 @@ function rubricaTo10(r: any): number {
 // ============================================================
 // MAIN PIPELINE
 // ============================================================
-async function executarPipeline(input: { handle: string; nicho: string; objetivo?: string }): Promise<any> {
+async function executarPipeline(input: { handle: string; nicho: string; objetivo?: string; modelo_intermediarios?: string }): Promise<any> {
   const tInicio = Date.now();
   const objetivo = input.objetivo || 'autoridade';
 
@@ -530,6 +531,9 @@ Faça a análise completa e profunda. Compare contra a média do perfil. Cite fr
       openaiKey,
       maxTokens: 2500,
       temperature: 0.7,
+      // opcional: modelo mais barato só pros posts intermediários
+      // (top/worst/bio/overview seguem sempre no gpt-4o)
+      model: input.modelo_intermediarios,
     }).then((analysis) => ({ ...p, analysis })).catch((e) => {
       console.error('[single_post] erro:', e.message);
       return { ...p, analysis: null };
@@ -639,12 +643,13 @@ serve(async (req) => {
   const handle = String(body.handle || '').trim().replace(/^@/, '').toLowerCase();
   const nicho = String(body.nicho || '').trim();
   const objetivo = String(body.objetivo || 'autoridade').trim();
+  const modeloIntermediarios = body.modelo_intermediarios ? String(body.modelo_intermediarios).trim() : undefined;
 
   if (!handle || !/^[a-zA-Z0-9._]{1,30}$/.test(handle)) return jsonRespTool({ ok: false, erro: 'handle invalido (1-30 chars, a-z, 0-9, . e _)' }, 400);
   if (!nicho) return jsonRespTool({ ok: false, erro: 'nicho obrigatorio' }, 400);
 
   try {
-    const result = await executarPipeline({ handle, nicho, objetivo });
+    const result = await executarPipeline({ handle, nicho, objetivo, modelo_intermediarios: modeloIntermediarios });
     const html = renderHtml(result);
     return jsonRespTool({
       ok: true,
