@@ -260,9 +260,10 @@ async function processar(job: any, forcar: boolean): Promise<Record<string, unkn
     const r = await fetch(`${SUPABASE_URL}/functions/v1/tool-analise-perfil-ig`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_ROLE}`, 'x-internal-token': SERVICE_ROLE },
-      // modelo_intermediarios: os 8 reels do meio saem no gpt-4o-mini
-      // (~94% mais barato); top/worst/bio/overview seguem no gpt-4o
-      body: JSON.stringify({ handle: instagram, nicho: nichoMotor, objetivo: 'vender', modelo_intermediarios: 'gpt-4o-mini' }),
+      // analisar_intermediarios:false — o consultor só precisa do maior e do
+      // menor post (o que ele acertou e o que ele errou). Não gasta IA nem
+      // Whisper nos reels do meio. bio/top/worst/overview seguem no gpt-4o.
+      body: JSON.stringify({ handle: instagram, nicho: nichoMotor, objetivo: 'vender', analisar_intermediarios: false }),
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.ok) throw new Error(`motor IG: ${j.erro || 'HTTP ' + r.status}`);

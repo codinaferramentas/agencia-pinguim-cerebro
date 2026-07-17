@@ -378,7 +378,7 @@ function rubricaTo10(r: any): number {
 // ============================================================
 // MAIN PIPELINE
 // ============================================================
-async function executarPipeline(input: { handle: string; nicho: string; objetivo?: string; modelo_intermediarios?: string }): Promise<any> {
+async function executarPipeline(input: { handle: string; nicho: string; objetivo?: string; modelo_intermediarios?: string; analisar_intermediarios?: boolean }): Promise<any> {
   const tInicio = Date.now();
   const objetivo = input.objetivo || 'autoridade';
 
@@ -398,7 +398,14 @@ async function executarPipeline(input: { handle: string; nicho: string; objetivo
   // ETAPA 3: Whisper paralelo nos profissionais
   const transcriptByPostId = new Map<string, { text: string | null; skipped_reason: string | null }>();
   const profissionais = norm.professional;
-  const reelsParaTranscrever = profissionais.filter((p: any) => p.is_video && p.video_url);
+  const analisarIntermediarios = input.analisar_intermediarios !== false;
+  // quando não vamos analisar os reels do meio, também não precisamos
+  // transcrever eles — só o top e o worst entram no Whisper (economia extra)
+  const reelsParaTranscrever = profissionais.filter((p: any) => {
+    if (!p.is_video || !p.video_url) return false;
+    if (analisarIntermediarios) return true;
+    return p.post_id === norm.top.post_id || p.post_id === norm.worst.post_id;
+  });
   if (reelsParaTranscrever.length > 0) {
     const transcripts = await Promise.all(reelsParaTranscrever.map((p: any) => transcribePost(p, openaiKey)));
     reelsParaTranscrever.forEach((p: any, i: number) => transcriptByPostId.set(p.post_id, transcripts[i]));
@@ -509,12 +516,17 @@ Faça o diagnóstico estratégico completo: identidade, pilares, oportunidades, 
   const worst_post = { ...norm.worst, analysis: postsAnalysis.worst_post_analysis };
   const intermediarios = profissionais.filter((p: any) => p.post_id !== norm.top.post_id && p.post_id !== norm.worst.post_id);
 
+  // analisar_intermediarios=false (Book Comercial): pula a análise por IA de
+  // cada reel do meio. O consultor só precisa do maior e do menor. Economiza
+  // 1 chamada gpt-4o por post intermediário (~6-8 chamadas). Default true
+  // pra não alterar quem já chama o motor (uso na extensão/Mission Control).
   const other_posts_analyzed: any[] = [];
-  for (let i = 0; i < intermediarios.length; i += 4) {
-    const batch = intermediarios.slice(i, i + 4);
-    const results = await Promise.all(batch.map((p: any) => callOpenAI({
-      systemPrompt: SINGLE_POST_SYSTEM,
-      userMsg: `Analise este post individual do perfil @${input.handle}.
+  if (analisarIntermediarios) {
+    for (let i = 0; i < intermediarios.length; i += 4) {
+      const batch = intermediarios.slice(i, i + 4);
+      const results = await Promise.all(batch.map((p: any) => callOpenAI({
+        systemPrompt: SINGLE_POST_SYSTEM,
+        userMsg: `Analise este post individual do perfil @${input.handle}.
 Nicho: ${input.nicho}.
 Seguidores: ${norm.profile.followers}
 
@@ -527,18 +539,19 @@ Médias do perfil (conteúdo profissional, ${profissionais.length} posts):
 ${postBlock('POST EM ANÁLISE', p, transcriptByPostId.get(p.post_id) || null)}
 
 Faça a análise completa e profunda. Compare contra a média do perfil. Cite frases literais do áudio/legenda quando houver algo marcante.`,
-      tool: TOOL_SINGLE_POST,
-      openaiKey,
-      maxTokens: 2500,
-      temperature: 0.7,
-      // opcional: modelo mais barato só pros posts intermediários
-      // (top/worst/bio/overview seguem sempre no gpt-4o)
-      model: input.modelo_intermediarios,
-    }).then((analysis) => ({ ...p, analysis })).catch((e) => {
-      console.error('[single_post] erro:', e.message);
-      return { ...p, analysis: null };
-    })));
-    other_posts_analyzed.push(...results);
+        tool: TOOL_SINGLE_POST,
+        openaiKey,
+        maxTokens: 2500,
+        temperature: 0.7,
+        // opcional: modelo mais barato só pros posts intermediários
+        // (top/worst/bio/overview seguem sempre no gpt-4o)
+        model: input.modelo_intermediarios,
+      }).then((analysis) => ({ ...p, analysis })).catch((e) => {
+        console.error('[single_post] erro:', e.message);
+        return { ...p, analysis: null };
+      })));
+      other_posts_analyzed.push(...results);
+    }
   }
 
   // Ordena intermediários por nota_geral desc (com fallback engagement_score)
@@ -644,12 +657,13 @@ serve(async (req) => {
   const nicho = String(body.nicho || '').trim();
   const objetivo = String(body.objetivo || 'autoridade').trim();
   const modeloIntermediarios = body.modelo_intermediarios ? String(body.modelo_intermediarios).trim() : undefined;
+  const analisarIntermediarios = body.analisar_intermediarios !== false; // default true
 
   if (!handle || !/^[a-zA-Z0-9._]{1,30}$/.test(handle)) return jsonRespTool({ ok: false, erro: 'handle invalido (1-30 chars, a-z, 0-9, . e _)' }, 400);
   if (!nicho) return jsonRespTool({ ok: false, erro: 'nicho obrigatorio' }, 400);
 
   try {
-    const result = await executarPipeline({ handle, nicho, objetivo, modelo_intermediarios: modeloIntermediarios });
+    const result = await executarPipeline({ handle, nicho, objetivo, modelo_intermediarios: modeloIntermediarios, analisar_intermediarios: analisarIntermediarios });
     const html = renderHtml(result);
     return jsonRespTool({
       ok: true,

@@ -344,12 +344,12 @@ const secaoResumoConsultor = (ctx: BookCtx): string => {
 </section>`;
 };
 
-const secaoVeredito = (ctx: BookCtx): string => {
+const secaoVeredito = (ctx: BookCtx, num: string): string => {
   const ov = (ctx.analise?.overview ?? null) as Record<string, unknown> | null;
   if (!ov) {
     return `
 <section class="sec">
-  ${secHead('01', 'Veredito', 'Diagnóstico estratégico do perfil')}
+  ${secHead(num, 'Veredito', 'Diagnóstico estratégico do perfil')}
   <div class="card"><p class="vazio">Diagnóstico estratégico indisponível para este perfil.</p></div>
 </section>`;
   }
@@ -357,7 +357,7 @@ const secaoVeredito = (ctx: BookCtx): string => {
 
   return `
 <section class="sec">
-  ${secHead('01', 'Veredito', 'Diagnóstico estratégico do perfil')}
+  ${secHead(num, 'Veredito', 'Diagnóstico estratégico do perfil')}
   <div class="veredito">
     <div class="veredito-nota" style="color:${semaforo(ov.nota_geral)}">${fmtNota(ov.nota_geral)}<small>/10</small></div>
     ${ov.veredito_curto ? `<div class="veredito-frase">“${esc(ov.veredito_curto)}”</div>` : ''}
@@ -383,7 +383,7 @@ const secaoVeredito = (ctx: BookCtx): string => {
 </section>`;
 };
 
-const secaoBio = (ctx: BookCtx): string => {
+const secaoBio = (ctx: BookCtx, num: string): string => {
   const p = (ctx.analise?.profile ?? {}) as Record<string, unknown>;
   const bio = (ctx.analise?.bio_analysis ?? null) as Record<string, unknown> | null;
   const diag = (bio?.analise_diagnostica ?? {}) as Record<string, unknown>;
@@ -425,7 +425,7 @@ const secaoBio = (ctx: BookCtx): string => {
 
   return `
 <section class="sec">
-  ${secHead('02', 'Bio', 'A vitrine do perfil, linha a linha')}
+  ${secHead(num, 'Bio', 'A vitrine do perfil, linha a linha')}
   <div class="grid-2">
     <div class="card">
       <h5>Bio atual</h5>
@@ -452,7 +452,7 @@ const secaoBio = (ctx: BookCtx): string => {
 </section>`;
 };
 
-const secaoConteudo = (ctx: BookCtx): string => {
+const secaoConteudo = (ctx: BookCtx, num: string): string => {
   const a = ctx.analise ?? {};
   const m = (a.metrics ?? {}) as Record<string, unknown>;
   const top = (a.top_post ?? null) as Record<string, unknown> | null;
@@ -465,9 +465,14 @@ const secaoConteudo = (ctx: BookCtx): string => {
       return (Number.isFinite(ny) ? ny : -1) - (Number.isFinite(nx) ? nx : -1);
     });
 
+  // subtítulo depende de termos ou não a análise dos demais posts
+  const sub = outros.length
+    ? `${fmtNum(m.professional_count)} posts profissionais analisados · média de ${fmtNum(m.avg_likes_pro)} curtidas e ${fmtPct(m.avg_engagement_pro)} de engajamento`
+    : `O que funcionou e o que travou — comparados sobre ${fmtNum(m.professional_count)} posts, média de ${fmtNum(m.avg_likes_pro)} curtidas e ${fmtPct(m.avg_engagement_pro)} de engajamento`;
+
   return `
 <section class="sec">
-  ${secHead('03', 'Conteúdo', `${fmtNum(m.professional_count)} posts profissionais analisados · média de ${fmtNum(m.avg_likes_pro)} curtidas e ${fmtPct(m.avg_engagement_pro)} de engajamento`)}
+  ${secHead(num, 'Conteúdo', sub)}
 
   ${top ? `<div class="rank-div"><span>★ Post de maior performance</span></div>${renderPostCard(top, { label: 'Post de maior performance', destaque: 'top', extraHtml: extraPostConsultor(top) })}` : ''}
 
@@ -482,7 +487,7 @@ const secaoConteudo = (ctx: BookCtx): string => {
 </section>`;
 };
 
-const secaoPlaybook = (ctx: BookCtx): string => {
+const secaoPlaybook = (ctx: BookCtx, num: string): string => {
   const ov = (ctx.analise?.overview ?? {}) as Record<string, unknown>;
   const ci = (ctx.analise?.cross_insights ?? null) as Record<string, unknown> | null;
   const oportunidades = Array.isArray(ov.oportunidades) ? (ov.oportunidades as Record<string, unknown>[]) : [];
@@ -560,14 +565,20 @@ const secaoPlaybook = (ctx: BookCtx): string => {
 
   return `
 <section class="sec">
-  ${secHead('04', 'Playbook da call', 'Tudo que o consultor precisa, na ordem da conversa')}
+  ${secHead(num, 'Playbook da call', 'Tudo que o consultor precisa, na ordem da conversa')}
   ${blocoConsultor(conteudo.trim() || '<p class="vazio" style="color:#9c968a">Playbook indisponível — análise estratégica e munição comercial ainda não geradas para este lead.</p>', { grande: true })}
 </section>`;
 };
 
 const secaoRaioX = (ctx: BookCtx, num: string): string => {
   const rx = ctx.raiox;
-  if (!rx) return '';
+  if (!rx) {
+    return `
+<section class="sec">
+  ${secHead(num, 'Raio-X do cliente', 'Relacionamento do lead com o nosso ecossistema')}
+  <div class="card"><p class="vazio">Não foi possível consultar o histórico deste lead nas nossas bases.</p></div>
+</section>`;
+  }
 
   const hotmartHtml = rx.hotmart?.produtos?.length ? `
     <div class="card">
@@ -609,7 +620,13 @@ const secaoRaioX = (ctx: BookCtx, num: string): string => {
 
 const secaoMunicaoNicho = (ctx: BookCtx, num: string): string => {
   const mun = ctx.municao;
-  if (!mun || (!mun.cases?.length && !mun.insights_comerciais?.length)) return '';
+  if (!mun || (!mun.cases?.length && !mun.insights_comerciais?.length)) {
+    return `
+<section class="sec">
+  ${secHead(num, 'Munição do nicho', 'Prova social e argumentos específicos do segmento')}
+  <div class="card"><p class="vazio">Munição comercial ainda não gerada para este lead.</p></div>
+</section>`;
+  }
 
   const casesHtml = mun.cases?.length ? `
     <div class="dark-sub">
@@ -646,21 +663,18 @@ const secaoMunicaoNicho = (ctx: BookCtx, num: string): string => {
 export function renderBookConsultor(ctx: BookCtx): string {
   const p = (ctx.analise?.profile ?? {}) as Record<string, unknown>;
 
-  // Numeração dinâmica das seções finais (Raio-X pode não existir)
-  let n = 5;
-  const numRaiox = String(n).padStart(2, '0');
-  if (ctx.raiox) n++;
-  const numMunicao = String(n).padStart(2, '0');
-
+  // Ordem: primeiro QUEM é o lead e COMO vender pra ele (raio-x + munição),
+  // depois o DIAGNÓSTICO do Instagram (veredito, bio, conteúdo), e por fim
+  // o ROTEIRO da call — que é o que o consultor usa na hora da conversa.
   const corpo = `
 ${heroBook(ctx)}
 ${secaoResumoConsultor(ctx)}
-${secaoVeredito(ctx)}
-${secaoBio(ctx)}
-${secaoConteudo(ctx)}
-${secaoPlaybook(ctx)}
-${secaoRaioX(ctx, numRaiox)}
-${secaoMunicaoNicho(ctx, numMunicao)}
+${secaoRaioX(ctx, '01')}
+${secaoMunicaoNicho(ctx, '02')}
+${secaoVeredito(ctx, '03')}
+${secaoBio(ctx, '04')}
+${secaoConteudo(ctx, '05')}
+${secaoPlaybook(ctx, '06')}
 <footer class="rodape">
   ${marca()}
   <div class="rodape-meta">Uso interno — não compartilhar com o lead</div>
