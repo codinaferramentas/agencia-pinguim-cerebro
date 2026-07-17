@@ -13,9 +13,6 @@
 // site estático não é afetado — package.json não tem build script).
 // ============================================================
 
-const chromium = require('@sparticuz/chromium');
-const puppeteer = require('puppeteer-core');
-
 const PREFIXOS_PERMITIDOS = [
   'https://wmelierxzpjamiofeemh.supabase.co/storage/',
 ];
@@ -23,6 +20,17 @@ const PREFIXOS_PERMITIDOS = [
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).json({ ok: false, erro: 'Use POST' });
+    return;
+  }
+
+  // require preguiçoso: se o pacote do Chromium falhar no load, devolve
+  // o motivo na resposta em vez de FUNCTION_INVOCATION_FAILED mudo
+  let chromium, puppeteer;
+  try {
+    chromium = require('@sparticuz/chromium');
+    puppeteer = require('puppeteer-core');
+  } catch (e) {
+    res.status(500).json({ ok: false, erro: 'load deps: ' + e.message, node: process.version });
     return;
   }
 
