@@ -34,10 +34,5 @@
         }
       ]
     }
-  ],
-  "functions": {
-    "api/html-para-pdf.js": {
-      "maxDuration": 60
-    }
-  }
+  ]
 }
