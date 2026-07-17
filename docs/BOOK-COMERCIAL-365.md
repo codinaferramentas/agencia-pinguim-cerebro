@@ -2,7 +2,7 @@
 
 > Lead compra → preenche Yay!Forms → agenda call no CloserFlow → **o Squad gera sozinho o Book do consultor** (análise de perfil IG + raio-X do cliente + munição de venda) e deixa tudo no Drive do time comercial antes da call.
 
-Status: **EM PRODUÇÃO** desde 16/07/2026 · pg_cron a cada 2 min · custo ~US$1/lead · ~85s por book
+Status: **EM PRODUÇÃO** desde 16/07/2026 · disparo por evento (triggers) + varredura pg_cron 15min · custo ~R$1,50/lead · ~2min por book com PDF automático
 
 ## Fluxo
 
@@ -11,7 +11,8 @@ Yay!Forms ──webhook──> Edge book-lead-form ──> pinguim.book_leads_fo
                                                       │ (match email → telefone)
 CloserFlow (public.bookings, evento comercial-365) ───┤ SOMENTE LEITURA
                                                       ▼
-pg_cron */2min ──> Edge book-comercial-worker (1 lead por invocação, checkpoint por etapa)
+triggers (INSERT booking confirmado / INSERT formulário) + pg_cron */15min (varredura)
+        └──> Edge book-comercial-worker (1 lead por invocação, checkpoint por etapa)
    ├─ a. casa booking + formulário (nicho, faturamento)
    ├─ b. tool-analise-perfil-ig  (Apify + Whisper + gpt-4o — motor existente)
    ├─ c. tool-consultar-pessoa (Hotmart/Clint/ProAlt/Elo/Sirius/boleto)
@@ -36,7 +37,7 @@ pg_cron */2min ──> Edge book-comercial-worker (1 lead por invocação, check
 | Renderizadores | `book-comercial-worker/render-{shared,book,cliente}.ts` |
 | Tabelas | `pinguim.book_leads_form`, `pinguim.book_analises` (status/etapa/checkpoints), `pinguim.book_config` |
 | Bucket | `book-html` (público, caminho com UUID do booking) |
-| Cron | job `book-comercial-worker` `*/2 * * * *` via `pinguim.disparar_edge_function` |
+| Disparo | triggers `tr_book_worker_booking` (public.bookings) e `tr_book_worker_form` (book_leads_form) → `pinguim.book_disparar_worker()`; varredura cron job 38 `*/15 * * * *` |
 | Planilha | id em `book_config.sheet_id` (pasta Hub Comercial `1Uaz2SA2ZKQNloDE-02DcD_lYuImEmrHQ`) |
 | Google | conexão `ferramenta@agenciapinguim.com` via `_shared/oauth-google.ts` |
 
@@ -48,7 +49,7 @@ pg_cron */2min ──> Edge book-comercial-worker (1 lead por invocação, check
 
 ## PDF (ATIVO desde 17/07/2026)
 
-Função  no MESMO projeto Vercel do site (deploy via integração Git — sem token). Chromium via @sparticuz/chromium-min v149 + pack tar do release (ESM: usar import() dinâmico). Recebe  restrita ao Storage do Pinguim OS + header  (env PDF_TOKEN no Vercel). Config no worker: . Cold ~11s, warm ~5s.
+Função `mission-control/api/html-para-pdf.js` no MESMO projeto Vercel do site (deploy via integração Git — sem token). Chromium via `@sparticuz/chromium-min` v149 + pack tar do release (ESM: usar `import()` dinâmico). Recebe `{url}` restrita ao Storage do Pinguim OS + header `x-pdf-token` (env `PDF_TOKEN` no Vercel). Config no worker: `book_config.pdf_endpoint` / `pdf_token`. Cold ~11s, warm ~5s.
 
 ⚠️ Lições Vercel deste projeto: (1) runtime Fluid EXIGE ≥1 env var no projeto, senão TODAS as funções morrem com FUNCTION_INVOCATION_FAILED (EnvFileReadError); (2) bloco functions.maxDuration no vercel.json também matava a invocação neste plano; (3) health check: /api/ping2.
 
