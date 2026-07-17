@@ -29,7 +29,7 @@ module.exports = async (req, res) => {
   let chromium, puppeteer;
   try {
     chromium = (await import('@sparticuz/chromium-min')).default;
-    puppeteer = require('puppeteer-core');
+    puppeteer = (await import('puppeteer-core')).default;
   } catch (e) {
     res.status(500).json({ ok: false, erro: 'load deps: ' + e.message, node: process.version });
     return;
