@@ -49,6 +49,16 @@ module.exports = async (req, res) => {
 
   let browser;
   try {
+    // O Storage do Supabase serve HTML como text/plain (política anti-phishing
+    // deles) — navegar pra URL imprime o código-fonte. Então o próprio serviço
+    // baixa o conteúdo e injeta no Chromium via setContent.
+    const respHtml = await fetch(url);
+    if (!respHtml.ok) {
+      res.status(502).json({ ok: false, erro: 'falha ao baixar HTML do Storage: HTTP ' + respHtml.status });
+      return;
+    }
+    const html = await respHtml.text();
+
     // chromium-min: binário + libs baixados do release oficial pro /tmp
     // no cold start (cacheado enquanto a instância viver)
     const PACK = 'https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.x64.tar';
@@ -59,7 +69,7 @@ module.exports = async (req, res) => {
       headless: 'shell',
     });
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: 'networkidle0', timeout: 45000 });
+    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 45000 });
     try { await page.evaluateHandle('document.fonts.ready'); } catch (_) { /* fontes são best-effort */ }
 
     const pdf = await page.pdf({

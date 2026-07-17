@@ -189,8 +189,19 @@ async function acharFormulario(email: string | null, telefone: string | null): P
 // imagens base64 passa dos 4,5MB de body que o Vercel aceita, por
 // isso vai por URL e não no body.
 async function subirHtmlStorage(html: string, storagePath: string): Promise<string | null> {
-  const up = await sbPin.storage.from('book-html').upload(storagePath, new Blob([html], { type: 'text/html' }), { upsert: true, contentType: 'text/html' });
-  if (up.error) { console.error('[worker] storage upload:', up.error.message); return null; }
+  // upload via REST direto: o supabase-js gravava o objeto como text/plain
+  // (e o Storage serve com nosniff) — o Chrome do PDF imprimia o código-fonte
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/book-html/${storagePath}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${SERVICE_ROLE}`,
+      apikey: SERVICE_ROLE,
+      'Content-Type': 'text/html; charset=utf-8',
+      'x-upsert': 'true',
+    },
+    body: html,
+  });
+  if (!r.ok) { console.error('[worker] storage upload:', r.status, (await r.text()).slice(0, 150)); return null; }
   return `${SUPABASE_URL}/storage/v1/object/public/book-html/${storagePath}`;
 }
 
@@ -249,7 +260,9 @@ async function processar(job: any, forcar: boolean): Promise<Record<string, unkn
     const r = await fetch(`${SUPABASE_URL}/functions/v1/tool-analise-perfil-ig`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_ROLE}`, 'x-internal-token': SERVICE_ROLE },
-      body: JSON.stringify({ handle: instagram, nicho: nichoMotor, objetivo: 'vender' }),
+      // modelo_intermediarios: os 8 reels do meio saem no gpt-4o-mini
+      // (~94% mais barato); top/worst/bio/overview seguem no gpt-4o
+      body: JSON.stringify({ handle: instagram, nicho: nichoMotor, objetivo: 'vender', modelo_intermediarios: 'gpt-4o-mini' }),
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.ok) throw new Error(`motor IG: ${j.erro || 'HTTP ' + r.status}`);
@@ -297,7 +310,10 @@ async function processar(job: any, forcar: boolean): Promise<Record<string, unkn
   };
   const geradoEm = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }).format(new Date());
   const htmlBook = renderBookConsultor({ lead, analise, raiox: raioxCombo.raiox, municao: raioxCombo.municao, gerado_em: geradoEm, respostas_form: form?.respostas || null });
-  const htmlCliente = renderCliente({ lead, analise, gerado_em: geradoEm });
+  // O comercial NÃO entrega a análise pro lead (decisão André 17/07) —
+  // a versão cliente fica desligada; religa com book_config.gerar_cliente='sim'
+  const gerarCliente = (await getConfig('gerar_cliente')) === 'sim';
+  const htmlCliente = gerarCliente ? renderCliente({ lead, analise, gerado_em: geradoEm }) : null;
 
   // e) Storage (HTML renderizável) + PDF (opcional) + f) Drive
   await atualizarAnalise(bookingId, { etapa: 'drive' });
@@ -307,22 +323,28 @@ async function processar(job: any, forcar: boolean): Promise<Record<string, unkn
 
   const [urlHtmlBook, urlHtmlCliente] = await Promise.all([
     subirHtmlStorage(htmlBook, `${bookingId}/book-consultor.html`),
-    subirHtmlStorage(htmlCliente, `${bookingId}/analise-cliente.html`),
+    htmlCliente ? subirHtmlStorage(htmlCliente, `${bookingId}/analise-cliente.html`) : Promise.resolve(null),
   ]);
-  const [pdfBook, pdfCliente] = await Promise.all([gerarPdf(urlHtmlBook), gerarPdf(urlHtmlCliente)]);
+  const [pdfBook, pdfCliente] = await Promise.all([
+    gerarPdf(urlHtmlBook),
+    htmlCliente ? gerarPdf(urlHtmlCliente) : Promise.resolve(null),
+  ]);
 
   const upBook = pdfBook
     ? await uploadArquivo({ token: gToken, folderId, nome: `${base} - BOOK CONSULTOR.pdf`, mime: 'application/pdf', conteudo: pdfBook })
     : await uploadArquivo({ token: gToken, folderId, nome: `${base} - BOOK CONSULTOR.html`, mime: 'text/html', conteudo: htmlBook });
-  const upCliente = pdfCliente
-    ? await uploadArquivo({ token: gToken, folderId, nome: `${base} - ANALISE CLIENTE.pdf`, mime: 'application/pdf', conteudo: pdfCliente })
-    : await uploadArquivo({ token: gToken, folderId, nome: `${base} - ANALISE CLIENTE.html`, mime: 'text/html', conteudo: htmlCliente });
-  log(`drive OK: ${upBook.id} / ${upCliente.id} (pdf=${!!pdfBook})`);
+  let upCliente: { id: string; webViewLink: string } | null = null;
+  if (htmlCliente) {
+    upCliente = pdfCliente
+      ? await uploadArquivo({ token: gToken, folderId, nome: `${base} - ANALISE CLIENTE.pdf`, mime: 'application/pdf', conteudo: pdfCliente })
+      : await uploadArquivo({ token: gToken, folderId, nome: `${base} - ANALISE CLIENTE.html`, mime: 'text/html', conteudo: htmlCliente });
+  }
+  log(`drive OK: ${upBook.id}${upCliente ? ' / ' + upCliente.id : ''} (pdf=${!!pdfBook})`);
 
   // link que o comercial clica: PDF no Drive quando houver; senão o
   // HTML renderizado direto do Storage (abre bonito no navegador)
   const linkBook = pdfBook ? upBook.webViewLink : (urlHtmlBook || upBook.webViewLink);
-  const linkCliente = pdfCliente ? upCliente.webViewLink : (urlHtmlCliente || upCliente.webViewLink);
+  const linkCliente = upCliente ? (pdfCliente ? upCliente.webViewLink : (urlHtmlCliente || upCliente.webViewLink)) : '';
 
   // g) planilha
   await atualizarAnalise(bookingId, { etapa: 'planilha' });
@@ -348,7 +370,7 @@ async function processar(job: any, forcar: boolean): Promise<Record<string, unkn
   await atualizarAnalise(bookingId, {
     status: 'done', etapa: 'done',
     drive_report_url: linkBook,
-    drive_cliente_url: linkCliente,
+    drive_cliente_url: linkCliente || null,
     finished_at: new Date().toISOString(),
   });
   log('DONE');
