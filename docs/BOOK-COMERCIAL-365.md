@@ -25,7 +25,7 @@ pg_cron */2min ──> Edge book-comercial-worker (1 lead por invocação, check
 
 ## Regra-mestra do produto
 
-**Cliente enxerga o problema; consultor entrega a solução na call.** A ANALISE CLIENTE não contém: bio sugerida/variações, recomendações por post, identidade ideal, transcrições, playbook, raio-X, munição. Isso vive só no BOOK CONSULTOR (blocos pretos "⚡ Munição do consultor").
+**Cliente enxerga o problema; consultor entrega a solução na call.** A ANALISE CLIENTE (DESLIGADA por padrão — religa com book_config.gerar_cliente=sim; comercial não entrega material pro lead) não contém: bio sugerida/variações, recomendações por post, identidade ideal, transcrições, playbook, raio-X, munição. Isso vive só no BOOK CONSULTOR (blocos pretos "⚡ Munição do consultor").
 
 ## Peças
 
@@ -46,14 +46,11 @@ pg_cron */2min ──> Edge book-comercial-worker (1 lead por invocação, check
 - `drive_folder_id` — pasta Hub Comercial
 - `pdf_endpoint` / `pdf_token` — serviço HTML→PDF (**opcional**; sem ele o pipeline sobe HTML renderizável e segue o jogo)
 
-## PDF (pendente de token Vercel)
+## PDF (ATIVO desde 17/07/2026)
 
-Serviço pronto em `servicos/pdf-service/` (Vercel function com @sparticuz/chromium; recebe `{url}` — signed/public URL do Storage, porque o HTML com base64 estoura os 4,5MB de body do Vercel). O `VERCEL_TOKEN` do cofre expirou. Pra ativar:
-1. Criar token novo em vercel.com/account/tokens
-2. `cd servicos/pdf-service && npx vercel link --yes --project pinguim-pdf --token <TOKEN>`
-3. `echo "<PDF_TOKEN novo>" | npx vercel env add PDF_TOKEN production --token <TOKEN>` e `npx vercel deploy --prod --token <TOKEN>`
-4. Gravar em `book_config`: `pdf_endpoint` = `https://<dominio>/api/html-para-pdf` e `pdf_token`
-O worker passa a gerar PDF sozinho (zero deploy adicional).
+Função  no MESMO projeto Vercel do site (deploy via integração Git — sem token). Chromium via @sparticuz/chromium-min v149 + pack tar do release (ESM: usar import() dinâmico). Recebe  restrita ao Storage do Pinguim OS + header  (env PDF_TOKEN no Vercel). Config no worker: . Cold ~11s, warm ~5s.
+
+⚠️ Lições Vercel deste projeto: (1) runtime Fluid EXIGE ≥1 env var no projeto, senão TODAS as funções morrem com FUNCTION_INVOCATION_FAILED (EnvFileReadError); (2) bloco functions.maxDuration no vercel.json também matava a invocação neste plano; (3) health check: /api/ping2.
 
 ## Operação
 
