@@ -48,7 +48,7 @@ export interface RaioX {
 }
 
 export interface Municao {
-  produto_alvo: string; // Elo | ProAlt | Lyra | Talos Master | Talos Low Ticket
+  produto_alvo: string; // Elo | ProAlt | Lyra | Taurus Master | Taurus LT
   produto_alternativa?: string;
   produto_alvo_racional: string;
   cases: { autor: string; produto: string; resumo: string; relevancia_nicho: string; valor_mencionado: string | null }[];

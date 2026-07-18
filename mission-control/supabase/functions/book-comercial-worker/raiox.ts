@@ -105,12 +105,12 @@ export async function buscarDepoimentos(): Promise<{ produto: string; itens: any
 export const CATALOGO_PRODUTOS_PADRAO = `- ELO: programa de conteúdo e posicionamento. Pra quem ainda NÃO vende nada pela internet e precisa começar estruturando conteúdo e presença.
 - PROALT: programa pra quem quer COMEÇAR A VENDER o próprio produto pela internet.
 - LYRA (R$ 8 mil): mentoria com acompanhamento próximo, degrau acima do programa.
-- TALOS MASTER: programa de ACELERAÇÃO pra quem JÁ VENDE R$ 20 mil+/mês e quer escalar.
-- TALOS LOW TICKET (R$ 18 mil): mentoria pra quem quer vender produto low ticket COM acompanhamento próximo — pra quem quer mentoria, não só um programa de aceleração.
+- TAURUS MASTER: programa de ACELERAÇÃO pra quem JÁ VENDE R$ 20 mil+/mês e quer escalar.
+- TAURUS LT (R$ 18 mil): mentoria pra quem quer vender produto low ticket COM acompanhamento próximo — pra quem quer mentoria, não só um programa de aceleração.
 
 COMO DECIDIR (pese TODOS os sinais, não só o faturamento):
 1. HISTÓRICO DE COMPRAS: quem já pagou tickets altos (imersões, mentorias) tem propensão e capacidade pra ticket alto — NÃO empurre produto de entrada pra quem já compra caro.
-2. Faturamento declarado: 20 mil+/mês abre Talos Master; baixo/zero sugere Elo ou ProAlt.
+2. Faturamento declarado: 20 mil+/mês abre Taurus Master; baixo/zero sugere Elo ou ProAlt.
 3. Desafio/objetivo declarado no formulário: "escalar" pede aceleração/mentoria; "começar a vender" pede ProAlt; "não sei produzir conteúdo" pede Elo.
 4. Maturidade do perfil no Instagram (nota, audiência, monetização).
 Sempre indique o produto PRINCIPAL + 1 ALTERNATIVA, com racional citando os sinais. A decisão final é do consultor.`;
@@ -126,7 +126,7 @@ const TOOL_MUNICAO = {
         resumo_relacionamento: { type: 'string', description: 'Parágrafo: histórico do lead com a Agência Pinguim (ou "lead novo, sem histórico"). Ancorado só nos dados.' },
         ja_cliente: { type: 'boolean' },
         cliente_desde: { type: 'string', description: 'AAAA-MM-DD da primeira compra, ou vazio' },
-        produto_alvo: { type: 'string', enum: ['Elo', 'ProAlt', 'Lyra', 'Talos Master', 'Talos Low Ticket'], description: 'Produto PRINCIPAL a apresentar na call, decidido pelos critérios do catálogo' },
+        produto_alvo: { type: 'string', enum: ['Elo', 'ProAlt', 'Lyra', 'Taurus Master', 'Taurus LT'], description: 'Produto PRINCIPAL a apresentar na call, decidido pelos critérios do catálogo' },
         produto_alternativa: { type: 'string', description: 'Segunda opção mais provável (nome do produto do catálogo), ou vazio se não houver' },
         produto_alvo_racional: { type: 'string', description: '2-4 frases: por que este produto pra este lead, citando os SINAIS usados (histórico de compras, faturamento, desafio declarado, maturidade do perfil)' },
         cases: {
