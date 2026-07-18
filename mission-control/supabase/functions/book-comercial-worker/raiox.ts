@@ -59,6 +59,28 @@ export async function consultarPessoa(email: string | null, telefone: string | n
 }
 
 // ============================================================
+// 1b. FATO determinístico: já é cliente? desde quando?
+// ============================================================
+// Isso NUNCA é decidido pela IA (bug real: 8 compras na Hotmart e a IA
+// respondeu "lead novo" porque os produtos não eram Elo/Lyra). Se comprou
+// qualquer coisa nossa ou está nas plataformas de aluno, É CLIENTE.
+export function fatoCliente(pessoa: any | null): { ja_cliente: boolean; cliente_desde: string | null; compras: number; plataformas_aluno: string[] } {
+  const hot = pessoa?.resultados?.hotmart;
+  const compras = Number(hot?.total_transacoes || 0);
+  const plataformasAluno = ((pessoa?.achados_em || []) as string[]).filter((f) => ['elo', 'proalt', 'sirius'].includes(f));
+  const ja_cliente = compras > 0 || plataformasAluno.length > 0;
+
+  let desde: Date | null = null;
+  for (const p of hot?.produtos || []) {
+    for (const c of p.compras || []) {
+      const d = c?.data ? new Date(c.data) : null;
+      if (d && !isNaN(d.getTime()) && (!desde || d < desde)) desde = d;
+    }
+  }
+  return { ja_cliente, cliente_desde: desde ? desde.toISOString().slice(0, 10) : null, compras, plataformas_aluno: plataformasAluno };
+}
+
+// ============================================================
 // 2. Prova social dos produtos-alvo
 // ============================================================
 export async function buscarDepoimentos(): Promise<{ produto: string; itens: any[] }[]> {
@@ -141,6 +163,7 @@ export async function gerarMunicao(ctx: {
   pessoa: any | null;
   depoimentos: { produto: string; itens: any[] }[];
   respostasForm?: { pergunta: string; resposta: string }[];
+  fato?: { ja_cliente: boolean; cliente_desde: string | null; compras: number; plataformas_aluno: string[] };
 }): Promise<any> {
   const openaiKey = await getChave('OPENAI_API_KEY', 'book-comercial-worker');
 
@@ -168,11 +191,19 @@ export async function gerarMunicao(ctx: {
     ? ctx.respostasForm!.map((r) => `- ${r.pergunta}: ${String(r.resposta).slice(0, 300)}`).join('\n')
     : '(formulário não recebido)';
 
+  const fatoTxt = ctx.fato
+    ? (ctx.fato.ja_cliente
+        ? `JÁ É CLIENTE (fato verificado no banco — NÃO diga "lead novo"): ${ctx.fato.compras} compra(s) na Hotmart${ctx.fato.cliente_desde ? `, primeira em ${ctx.fato.cliente_desde}` : ''}${ctx.fato.plataformas_aluno.length ? `, presente nas plataformas: ${ctx.fato.plataformas_aluno.join(', ')}` : ''}. Compras de produtos do nosso ecossistema (mesmo que não sejam Elo/Lyra) CONTAM como relacionamento.`
+        : 'LEAD NOVO (fato verificado): nenhuma compra ou cadastro nas nossas bases.')
+    : '(histórico não consultado)';
+
   const userMsg = `LEAD DA CALL:
 Nome: ${ctx.lead.nome}
 Instagram: @${ctx.lead.instagram}
 Nicho declarado no formulário: ${ctx.lead.nicho || '(não informado)'}
 Faturamento declarado: ${ctx.lead.faturamento || '(não informado)'}
+
+STATUS DE RELACIONAMENTO (fato do banco, use como verdade): ${fatoTxt}
 
 O QUE ELE RESPONDEU NO FORMULÁRIO DE QUALIFICAÇÃO (use — principalmente o desafio principal e o que o incomoda no Instagram — pra personalizar insights, roteiro e objeções):
 ${formTxt}
@@ -213,7 +244,7 @@ Gere o raio-X do relacionamento + munição de venda completa pra call.`;
 // ============================================================
 // Monta o objeto RaioX final (programático + resumo da IA)
 // ============================================================
-export function montarRaiox(pessoa: any | null, municao: any): any {
+export function montarRaiox(pessoa: any | null, municao: any, fato?: { ja_cliente: boolean; cliente_desde: string | null }): any {
   const hot = pessoa?.resultados?.hotmart;
   const hotmart = hot?.encontrado
     ? {
@@ -239,13 +270,33 @@ export function montarRaiox(pessoa: any | null, municao: any): any {
 
   return {
     encontrado_em: pessoa?.achados_em || [],
-    ja_cliente: !!municao.ja_cliente,
-    cliente_desde: municao.cliente_desde || null,
+    // fato determinístico manda; a IA só escreve o resumo
+    ja_cliente: fato ? fato.ja_cliente : !!municao.ja_cliente,
+    cliente_desde: fato ? fato.cliente_desde : (municao.cliente_desde || null),
     hotmart,
     teve_reembolso: (hotmart?.valor_reembolsado || 0) > 0,
     plataformas,
     resumo_ia: municao.resumo_relacionamento || '',
   };
+}
+
+/** Fix B1 no consumo: desaninha overview de análises já salvas em checkpoint
+ * (o motor novo já entrega certo, mas análises antigas podem ter nota_geral
+ * dentro de pilares). Mesma lógica do motor. */
+export function normalizarOverview(analise: any): any {
+  const ov = analise?.overview;
+  if (!ov || typeof ov !== 'object') return analise;
+  const p = ov.pilares;
+  if (p && typeof p === 'object') {
+    for (const k of ['nota_geral', 'veredito_curto', 'oportunidades', 'riscos', 'proximos_passos', 'identidade_atual', 'identidade_ideal', 'publico_alvo_inferido']) {
+      if (ov[k] === undefined && p[k] !== undefined) { ov[k] = p[k]; delete p[k]; }
+    }
+    if (ov.nota_geral === undefined || ov.nota_geral === null) {
+      const notas = Object.values(p).map((v: any) => Number(v?.nota)).filter((n: number) => Number.isFinite(n));
+      if (notas.length) ov.nota_geral = Math.round((notas.reduce((a: number, b: number) => a + b, 0) / notas.length) * 10) / 10;
+    }
+  }
+  return analise;
 }
 
 /** Resumo compacto da análise do motor pra alimentar a IA da munição. */

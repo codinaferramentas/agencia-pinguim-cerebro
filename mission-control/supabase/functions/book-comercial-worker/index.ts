@@ -29,7 +29,7 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { requireAuthTool, corsTool, jsonRespTool } from '../_shared/auth-tool.ts';
 import { soDigitos } from '../_shared/telefone-br.ts';
-import { consultarPessoa, buscarDepoimentos, gerarMunicao, montarRaiox, resumirAnalise } from './raiox.ts';
+import { consultarPessoa, buscarDepoimentos, gerarMunicao, montarRaiox, resumirAnalise, fatoCliente, normalizarOverview } from './raiox.ts';
 import { accessTokenGoogle, uploadArquivo, upsertLinhaPlanilha, LinhaPlanilha } from './drive.ts';
 import { renderBookConsultor } from './render-book.ts';
 import { renderCliente } from './render-cliente.ts';
@@ -273,6 +273,8 @@ async function processar(job: any, forcar: boolean): Promise<Record<string, unkn
   } else {
     log('motor IG: usando checkpoint');
   }
+  // fix B1 também em checkpoint antigo (nota_geral aninhada em pilares)
+  normalizarOverview(analise);
 
   // c) raio-X + munição (checkpoint)
   let raioxCombo = forcar ? null : job.raiox_json;
@@ -282,14 +284,17 @@ async function processar(job: any, forcar: boolean): Promise<Record<string, unkn
       consultarPessoa(job.client_email, job.client_phone),
       buscarDepoimentos(),
     ]);
+    // fato determinístico ANTES da IA — cliente/lead novo não é opinião
+    const fato = fatoCliente(pessoa);
     const municao = await gerarMunicao({
       lead: { nome: job.client_name || form?.nome || '', email: job.client_email, telefone: job.client_phone, instagram, nicho, faturamento },
       analiseResumo: resumirAnalise(analise),
       pessoa,
       depoimentos,
       respostasForm: form?.respostas || [],
+      fato,
     });
-    const raiox = montarRaiox(pessoa, municao);
+    const raiox = montarRaiox(pessoa, municao, fato);
     raioxCombo = { raiox, municao };
     await atualizarAnalise(bookingId, { raiox_json: raioxCombo, produto_alvo: municao.produto_alvo });
     log(`raio-X OK | produto_alvo=${municao.produto_alvo} | ja_cliente=${raiox.ja_cliente}`);

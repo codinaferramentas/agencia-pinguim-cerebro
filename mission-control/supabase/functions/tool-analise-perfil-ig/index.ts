@@ -393,6 +393,32 @@ function enforceBioQuality(bio: string, objetivo: string): string {
   return result;
 }
 
+// ============================================================
+// Fix B1 (bug conhecido da espec): o gpt-4o às vezes aninha campos de raiz
+// (nota_geral, veredito_curto, oportunidades, riscos, proximos_passos)
+// DENTRO de `pilares` em vez do nível raiz do overview. Desaninha
+// defensivamente e, se ainda faltar nota_geral, calcula pela média dos
+// pilares (nunca sai "—" no relatório).
+function normalizeOverview(ov: any): any {
+  if (!ov || typeof ov !== 'object') return ov;
+  const p = ov.pilares;
+  if (p && typeof p === 'object') {
+    for (const k of ['nota_geral', 'veredito_curto', 'oportunidades', 'riscos', 'proximos_passos', 'identidade_atual', 'identidade_ideal', 'publico_alvo_inferido']) {
+      if (ov[k] === undefined && p[k] !== undefined) {
+        ov[k] = p[k];
+        delete p[k];
+      }
+    }
+  }
+  if ((ov.nota_geral === undefined || ov.nota_geral === null) && p && typeof p === 'object') {
+    const notas = Object.values(p)
+      .map((v: any) => Number(v?.nota))
+      .filter((n: number) => Number.isFinite(n));
+    if (notas.length) ov.nota_geral = Math.round((notas.reduce((a: number, b: number) => a + b, 0) / notas.length) * 10) / 10;
+  }
+  return ov;
+}
+
 function rubricaTo10(r: any): number {
   if (!r) return 0;
   const vals = Object.values(r).filter((v) => typeof v === 'number') as number[];
@@ -529,11 +555,12 @@ ${norm.worst.transcript ? `- Trecho da fala: "${norm.worst.transcript.slice(0, 4
 Faça o diagnóstico estratégico completo: identidade, pilares, oportunidades, riscos, próximos passos. Seja específico, ancorado nas evidências acima.`;
 
   // PARALELO
-  const [bioAnalysis, postsAnalysis, overview] = await Promise.all([
+  const [bioAnalysis, postsAnalysis, overviewBruto] = await Promise.all([
     callOpenAI({ systemPrompt: BIO_SYSTEM, userMsg: userBio, tool: TOOL_BIO, openaiKey, maxTokens: 3000, temperature: 0.7 }),
     callOpenAI({ systemPrompt: POSTS_SYSTEM, userMsg: userPosts, tool: TOOL_POSTS, openaiKey, maxTokens: 4500, temperature: 0.7 }),
     callOpenAI({ systemPrompt: OVERVIEW_SYSTEM, userMsg: userOverview, tool: TOOL_OVERVIEW, openaiKey, maxTokens: 6000, temperature: 0.7 }),
   ]);
+  const overview = normalizeOverview(overviewBruto);
 
   // Pós-processamento Bio
   if (bioAnalysis.bio_sugerida) {
