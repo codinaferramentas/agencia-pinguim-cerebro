@@ -99,6 +99,22 @@ export async function buscarDepoimentos(): Promise<{ produto: string; itens: any
 // ============================================================
 // 3. Síntese comercial (gpt-4o, tool-calling)
 // ============================================================
+// Catálogo padrão dos produtos que o comercial vende (regras ditadas pelo
+// André 18/07). Editável SEM deploy: grava texto novo em
+// pinguim.book_config chave 'catalogo_produtos' que ele substitui este.
+export const CATALOGO_PRODUTOS_PADRAO = `- ELO: programa de conteúdo e posicionamento. Pra quem ainda NÃO vende nada pela internet e precisa começar estruturando conteúdo e presença.
+- PROALT: programa pra quem quer COMEÇAR A VENDER o próprio produto pela internet.
+- LYRA (R$ 8 mil): mentoria com acompanhamento próximo, degrau acima do programa.
+- TALOS MASTER: programa de ACELERAÇÃO pra quem JÁ VENDE R$ 20 mil+/mês e quer escalar.
+- TALOS LOW TICKET (R$ 18 mil): mentoria pra quem quer vender produto low ticket COM acompanhamento próximo — pra quem quer mentoria, não só um programa de aceleração.
+
+COMO DECIDIR (pese TODOS os sinais, não só o faturamento):
+1. HISTÓRICO DE COMPRAS: quem já pagou tickets altos (imersões, mentorias) tem propensão e capacidade pra ticket alto — NÃO empurre produto de entrada pra quem já compra caro.
+2. Faturamento declarado: 20 mil+/mês abre Talos Master; baixo/zero sugere Elo ou ProAlt.
+3. Desafio/objetivo declarado no formulário: "escalar" pede aceleração/mentoria; "começar a vender" pede ProAlt; "não sei produzir conteúdo" pede Elo.
+4. Maturidade do perfil no Instagram (nota, audiência, monetização).
+Sempre indique o produto PRINCIPAL + 1 ALTERNATIVA, com racional citando os sinais. A decisão final é do consultor.`;
+
 const TOOL_MUNICAO = {
   type: 'function' as const,
   function: {
@@ -110,8 +126,9 @@ const TOOL_MUNICAO = {
         resumo_relacionamento: { type: 'string', description: 'Parágrafo: histórico do lead com a Agência Pinguim (ou "lead novo, sem histórico"). Ancorado só nos dados.' },
         ja_cliente: { type: 'boolean' },
         cliente_desde: { type: 'string', description: 'AAAA-MM-DD da primeira compra, ou vazio' },
-        produto_alvo: { type: 'string', enum: ['Elo', 'Lyra'] },
-        produto_alvo_racional: { type: 'string', description: '2-3 frases: por que este produto pra este lead (faturamento, momento, perfil)' },
+        produto_alvo: { type: 'string', enum: ['Elo', 'ProAlt', 'Lyra', 'Talos Master', 'Talos Low Ticket'], description: 'Produto PRINCIPAL a apresentar na call, decidido pelos critérios do catálogo' },
+        produto_alternativa: { type: 'string', description: 'Segunda opção mais provável (nome do produto do catálogo), ou vazio se não houver' },
+        produto_alvo_racional: { type: 'string', description: '2-4 frases: por que este produto pra este lead, citando os SINAIS usados (histórico de compras, faturamento, desafio declarado, maturidade do perfil)' },
         cases: {
           type: 'array', maxItems: 4,
           items: {
@@ -137,25 +154,26 @@ const TOOL_MUNICAO = {
           },
         },
       },
-      required: ['resumo_relacionamento', 'ja_cliente', 'cliente_desde', 'produto_alvo', 'produto_alvo_racional', 'cases', 'insights_comerciais', 'roteiro_call', 'angulos_objecao'],
+      required: ['resumo_relacionamento', 'ja_cliente', 'cliente_desde', 'produto_alvo', 'produto_alternativa', 'produto_alvo_racional', 'cases', 'insights_comerciais', 'roteiro_call', 'angulos_objecao'],
     },
   },
 };
 
-const MUNICAO_SYSTEM = `Você é o estrategista comercial sênior da Agência Pinguim. Um lead agendou uma call de consultoria (circuito "Comercial 365") e você prepara o consultor pra essa conversa.
+function montarSystemMunicao(catalogo: string): string {
+  return `Você é o estrategista comercial sênior da Agência Pinguim. Um lead agendou uma call de consultoria (circuito "Comercial 365") e você prepara o consultor pra essa conversa.
 
-CONTEXTO DOS PRODUTOS QUE O CONSULTOR VENDE:
-- ELO: programa de assinatura da Agência Pinguim pra estruturar conteúdo, posicionamento e vendas no digital. Porta de entrada ideal pra quem está construindo ou organizando a operação (faturamento menor ou inconsistente).
-- LYRA: mentoria próxima (high-touch) pra quem já tem operação rodando e quer escala. Indicada pra faturamento mais alto e negócio mais maduro.
-Regra prática: faturamento declarado baixo/médio ou operação em estruturação → Elo. Faturamento alto e negócio rodando → Lyra. Sempre explique o racional — a decisão final é do consultor.
+CATÁLOGO DE PRODUTOS QUE O CONSULTOR VENDE (com os critérios de decisão):
+${catalogo}
 
 REGRAS:
 1. Responda APENAS via tool call.
-2. NUNCA invente dados: use só o histórico, a análise do perfil e os depoimentos fornecidos. Se não houver histórico, diga que é lead novo.
-3. Cases: escolha APENAS depoimentos da lista fornecida que tenham relação real com o nicho/momento do lead (mesmo nicho, nicho vizinho ou mesma dor). Se nada tiver relação direta, escolha os de resultado mais concreto e explique a ponte com honestidade.
-4. Insights e roteiro: específicos deste lead — cite o problema real do perfil dele (nota, bio, conteúdo) e conecte com o que o produto resolve. Nada de genérico.
-5. Objeções: antecipe as 2-4 mais prováveis DESTE lead (preço, tempo, "já tentei", "meu nicho é diferente") com respostas ancoradas nos dados e cases.
-6. Tom: direto, consultivo, português brasileiro. O consultor vai ler isso 10 minutos antes da call.`;
+2. NUNCA invente dados: use só o histórico, a análise do perfil e os depoimentos fornecidos. O status de cliente vem como FATO verificado — não contradiga.
+3. produto_alvo e produto_alternativa: siga os critérios do catálogo pesando TODOS os sinais (histórico de compras primeiro, depois faturamento, desafio declarado e maturidade do perfil). O racional DEVE citar quais sinais pesaram.
+4. Cases: escolha APENAS depoimentos da lista fornecida que tenham relação real com o nicho/momento do lead (mesmo nicho, nicho vizinho ou mesma dor). Se nada tiver relação direta, escolha os de resultado mais concreto e explique a ponte com honestidade.
+5. Insights e roteiro: específicos deste lead — cite o problema real do perfil dele (nota, bio, conteúdo) e conecte com o que o produto-alvo resolve. Nada de genérico.
+6. Objeções: antecipe as 2-4 mais prováveis DESTE lead (preço, tempo, "já tentei", "meu nicho é diferente") com respostas ancoradas nos dados e cases.
+7. Tom: direto, consultivo, português brasileiro. O consultor vai ler isso 10 minutos antes da call.`;
+}
 
 export async function gerarMunicao(ctx: {
   lead: { nome: string; email: string | null; telefone: string | null; instagram: string; nicho: string | null; faturamento: string | null };
@@ -164,8 +182,10 @@ export async function gerarMunicao(ctx: {
   depoimentos: { produto: string; itens: any[] }[];
   respostasForm?: { pergunta: string; resposta: string }[];
   fato?: { ja_cliente: boolean; cliente_desde: string | null; compras: number; plataformas_aluno: string[] };
+  catalogo?: string | null;
 }): Promise<any> {
   const openaiKey = await getChave('OPENAI_API_KEY', 'book-comercial-worker');
+  const systemMunicao = montarSystemMunicao(ctx.catalogo || CATALOGO_PRODUTOS_PADRAO);
 
   const pessoaTxt = ctx.pessoa && ctx.pessoa.achados_em?.length
     ? JSON.stringify({
@@ -225,7 +245,7 @@ Gere o raio-X do relacionamento + munição de venda completa pra call.`;
     body: JSON.stringify({
       model: 'gpt-4o',
       messages: [
-        { role: 'system', content: MUNICAO_SYSTEM },
+        { role: 'system', content: systemMunicao },
         { role: 'user', content: userMsg },
       ],
       tools: [TOOL_MUNICAO],

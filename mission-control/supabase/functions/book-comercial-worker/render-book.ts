@@ -48,7 +48,8 @@ export interface RaioX {
 }
 
 export interface Municao {
-  produto_alvo: 'Elo' | 'Lyra';
+  produto_alvo: string; // Elo | ProAlt | Lyra | Talos Master | Talos Low Ticket
+  produto_alternativa?: string;
   produto_alvo_racional: string;
   cases: { autor: string; produto: string; resumo: string; relevancia_nicho: string; valor_mencionado: string | null }[];
   insights_comerciais: string[];
@@ -301,6 +302,7 @@ const secaoResumoConsultor = (ctx: BookCtx): string => {
     <div class="produto-alvo">
       <h5>Produto-alvo</h5>
       <div class="produto-alvo-nome">${esc(ctx.municao.produto_alvo)}</div>
+      ${ctx.municao.produto_alternativa ? `<div style="font-size:12px;color:#9c968a;margin-top:6px">Plano B: <strong style="color:#d8d2c6">${esc(ctx.municao.produto_alternativa)}</strong></div>` : ''}
       ${ctx.municao.produto_alvo_racional ? `<p class="produto-alvo-rac">${esc(ctx.municao.produto_alvo_racional)}</p>` : ''}
     </div>` : '<p class="produto-alvo-rac" style="margin-top:14px">Munição comercial ainda não gerada para este lead.</p>';
 
@@ -377,7 +379,8 @@ const secaoVeredito = (ctx: BookCtx, num: string): string => {
     </div>
   </div>
   ${ov.identidade_ideal ? blocoConsultor(`
-    <h4>Posicionamento-alvo (o que você vai vender na call)</h4>
+    <h4>Posicionamento-alvo do perfil</h4>
+    <p style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9c968a;margin:0 0 10px">Não é o produto — é a transformação que a call vende: onde o perfil dele precisa chegar</p>
     <p class="fr" style="font-size:17px;line-height:1.5">${esc(ov.identidade_ideal)}</p>
   `) : ''}
 </section>`;
@@ -565,7 +568,7 @@ const secaoPlaybook = (ctx: BookCtx, num: string): string => {
 
   return `
 <section class="sec">
-  ${secHead(num, 'Playbook da call', 'Tudo que o consultor precisa, na ordem da conversa')}
+  ${secHead(num, 'Playbook da call', 'Plano de voo — leia isto antes de entrar na conversa')}
   ${blocoConsultor(conteudo.trim() || '<p class="vazio" style="color:#9c968a">Playbook indisponível — análise estratégica e munição comercial ainda não geradas para este lead.</p>', { grande: true })}
 </section>`;
 };
@@ -663,18 +666,19 @@ const secaoMunicaoNicho = (ctx: BookCtx, num: string): string => {
 export function renderBookConsultor(ctx: BookCtx): string {
   const p = (ctx.analise?.profile ?? {}) as Record<string, unknown>;
 
-  // Ordem: primeiro QUEM é o lead e COMO vender pra ele (raio-x + munição),
-  // depois o DIAGNÓSTICO do Instagram (veredito, bio, conteúdo), e por fim
-  // o ROTEIRO da call — que é o que o consultor usa na hora da conversa.
+  // Ordem pensada como um VENDEDOR usa (decisão André 18/07):
+  // plano de voo primeiro (o que fazer na call), depois QUEM é o lead
+  // (raio-x + munição), e por fim o diagnóstico detalhado do Instagram
+  // como material de consulta.
   const corpo = `
 ${heroBook(ctx)}
 ${secaoResumoConsultor(ctx)}
-${secaoRaioX(ctx, '01')}
-${secaoMunicaoNicho(ctx, '02')}
-${secaoVeredito(ctx, '03')}
-${secaoBio(ctx, '04')}
-${secaoConteudo(ctx, '05')}
-${secaoPlaybook(ctx, '06')}
+${secaoPlaybook(ctx, '01')}
+${secaoRaioX(ctx, '02')}
+${secaoMunicaoNicho(ctx, '03')}
+${secaoVeredito(ctx, '04')}
+${secaoBio(ctx, '05')}
+${secaoConteudo(ctx, '06')}
 <footer class="rodape">
   ${marca()}
   <div class="rodape-meta">Uso interno — não compartilhar com o lead</div>

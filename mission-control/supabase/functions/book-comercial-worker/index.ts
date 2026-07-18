@@ -286,6 +286,8 @@ async function processar(job: any, forcar: boolean): Promise<Record<string, unkn
     ]);
     // fato determinístico ANTES da IA — cliente/lead novo não é opinião
     const fato = fatoCliente(pessoa);
+    // catálogo de produtos editável sem deploy (book_config.catalogo_produtos)
+    const catalogo = await getConfig('catalogo_produtos');
     const municao = await gerarMunicao({
       lead: { nome: job.client_name || form?.nome || '', email: job.client_email, telefone: job.client_phone, instagram, nicho, faturamento },
       analiseResumo: resumirAnalise(analise),
@@ -293,6 +295,7 @@ async function processar(job: any, forcar: boolean): Promise<Record<string, unkn
       depoimentos,
       respostasForm: form?.respostas || [],
       fato,
+      catalogo,
     });
     const raiox = montarRaiox(pessoa, municao, fato);
     raioxCombo = { raiox, municao };
