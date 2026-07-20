@@ -30,6 +30,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { requireAuthTool, corsTool, jsonRespTool } from '../_shared/auth-tool.ts';
 import { soDigitos } from '../_shared/telefone-br.ts';
 import { consultarPessoa, buscarDepoimentos, gerarMunicao, montarRaiox, resumirAnalise, fatoCliente, normalizarOverview } from './raiox.ts';
+import { gerarRoteiroAnalise } from './roteiro.ts';
 import { accessTokenGoogle, uploadArquivo, upsertLinhaPlanilha, LinhaPlanilha } from './drive.ts';
 import { renderBookConsultor } from './render-book.ts';
 import { renderCliente } from './render-cliente.ts';
@@ -288,19 +289,26 @@ async function processar(job: any, forcar: boolean): Promise<Record<string, unkn
     const fato = fatoCliente(pessoa);
     // catálogo de produtos editável sem deploy (book_config.catalogo_produtos)
     const catalogo = await getConfig('catalogo_produtos');
-    const municao = await gerarMunicao({
-      lead: { nome: job.client_name || form?.nome || '', email: job.client_email, telefone: job.client_phone, instagram, nicho, faturamento },
-      analiseResumo: resumirAnalise(analise),
-      pessoa,
-      depoimentos,
-      respostasForm: form?.respostas || [],
-      fato,
-      catalogo,
-    });
+    // munição + script de teleprompter em paralelo (2 chamadas gpt-4o)
+    const [municao, roteiro] = await Promise.all([
+      gerarMunicao({
+        lead: { nome: job.client_name || form?.nome || '', email: job.client_email, telefone: job.client_phone, instagram, nicho, faturamento },
+        analiseResumo: resumirAnalise(analise),
+        pessoa,
+        depoimentos,
+        respostasForm: form?.respostas || [],
+        fato,
+        catalogo,
+      }),
+      gerarRoteiroAnalise(analise, nicho).catch((e) => {
+        console.error('[worker] roteiro falhou (segue sem):', (e as Error).message);
+        return null;
+      }),
+    ]);
     const raiox = montarRaiox(pessoa, municao, fato);
-    raioxCombo = { raiox, municao };
+    raioxCombo = { raiox, municao, roteiro };
     await atualizarAnalise(bookingId, { raiox_json: raioxCombo, produto_alvo: municao.produto_alvo });
-    log(`raio-X OK | produto_alvo=${municao.produto_alvo} | ja_cliente=${raiox.ja_cliente}`);
+    log(`raio-X OK | produto_alvo=${municao.produto_alvo} | ja_cliente=${raiox.ja_cliente} | roteiro=${roteiro ? 'ok' : 'falhou'}`);
   } else {
     log('raio-X: usando checkpoint');
   }
@@ -318,7 +326,7 @@ async function processar(job: any, forcar: boolean): Promise<Record<string, unkn
     form_recebido: !!form,
   };
   const geradoEm = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }).format(new Date());
-  const htmlBook = renderBookConsultor({ lead, analise, raiox: raioxCombo.raiox, municao: raioxCombo.municao, gerado_em: geradoEm, respostas_form: form?.respostas || null });
+  const htmlBook = renderBookConsultor({ lead, analise, raiox: raioxCombo.raiox, municao: raioxCombo.municao, roteiro: raioxCombo.roteiro || null, gerado_em: geradoEm, respostas_form: form?.respostas || null });
   // O comercial NÃO entrega a análise pro lead (decisão André 17/07) —
   // a versão cliente fica desligada; religa com book_config.gerar_cliente='sim'
   const gerarCliente = (await getConfig('gerar_cliente')) === 'sim';

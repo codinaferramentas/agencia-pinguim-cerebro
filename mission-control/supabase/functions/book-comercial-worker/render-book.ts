@@ -57,11 +57,18 @@ export interface Municao {
   angulos_objecao: { objecao: string; resposta: string }[];
 }
 
+export interface Roteiro {
+  abertura: string;
+  passos: { titulo_secao: string; fala: string; direcao: string; fato_ancora: string }[];
+  transicao_oferta: string;
+}
+
 export interface BookCtx {
   lead: Lead;
   analise: AnaliseJson;
   raiox: RaioX | null;
   municao: Municao | null;
+  roteiro?: Roteiro | null;
   gerado_em: string;
   /** todas as respostas do formulário de qualificação Yay!Forms (ficha do lead) */
   respostas_form?: { pergunta: string; resposta: string }[] | null;
@@ -134,6 +141,25 @@ const BOOK_CSS = `
 .transcript[open] summary{border-bottom:1px solid rgba(255,255,255,.1)}
 .transcript p{padding:12px 16px;font-size:12.5px;line-height:1.65;white-space:pre-wrap;margin:0;color:#c9c3b7}
 .transcript-print{font-size:11.5px;font-style:italic;color:#b9b3a8;margin-top:10px}
+
+/* ---- script teleprompter (análise ao vivo) ---- */
+.tp-intro{background:var(--accent-soft);border:1px solid var(--accent);border-radius:12px;padding:20px 24px;margin:16px 0}
+.tp-intro .tp-etq{font-family:var(--f-black);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.tp-fala{font-family:var(--f-serif);font-size:19px;line-height:1.5;color:var(--ink);font-style:italic}
+.tp-passo{background:#fff;border:1px solid var(--line);border-radius:12px;padding:0;margin:16px 0;overflow:hidden;box-shadow:0 2px 10px rgba(17,17,17,.05);break-inside:avoid}
+.tp-passo-head{display:flex;align-items:center;gap:14px;background:var(--paper-2);padding:14px 22px;border-bottom:1px solid var(--line)}
+.tp-passo-num{font-family:var(--f-black);font-size:26px;color:var(--accent);line-height:1}
+.tp-passo-titulo{font-family:var(--f-black);font-size:15px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink)}
+.tp-passo-body{padding:20px 24px}
+.tp-passo-body .tp-leia{font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:10px}
+.tp-passo-body .tp-fala{font-family:var(--f-serif);font-size:18px;line-height:1.6;color:var(--ink);font-style:normal}
+.tp-direcao{display:flex;gap:9px;align-items:flex-start;margin-top:16px;background:#141210;color:#ece7dd;border-radius:7px;padding:11px 15px;font-size:12.5px;line-height:1.5}
+.tp-direcao .tp-dir-etq{font-family:var(--f-black);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);white-space:nowrap;padding-top:2px}
+.tp-fato{margin-top:12px;font-size:11px;color:var(--muted);border-top:1px dashed var(--line);padding-top:10px}
+.tp-fato strong{color:var(--ink-soft);font-weight:700}
+.tp-oferta{background:var(--dark);color:#ece7dd;border-radius:12px;padding:20px 24px;margin:16px 0}
+.tp-oferta .tp-etq{font-family:var(--f-black);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.tp-oferta .tp-fala{font-family:var(--f-serif);font-size:18px;line-height:1.55;color:#f1ede6;font-style:italic}
 
 /* ---- playbook ---- */
 .opp{display:grid;grid-template-columns:52px 1fr;gap:16px;padding:16px 0;border-bottom:1px solid rgba(255,255,255,.12)}
@@ -490,6 +516,50 @@ const secaoConteudo = (ctx: BookCtx, num: string): string => {
 </section>`;
 };
 
+// Script de teleprompter: o comercial LÊ isto ao vivo pra conduzir a
+// análise de perfil como se fosse especialista em conteúdo.
+const secaoScriptAnalise = (ctx: BookCtx, num: string): string => {
+  const r = ctx.roteiro;
+  if (!r || !Array.isArray(r.passos) || r.passos.length === 0) {
+    return `
+<section class="sec">
+  ${secHead(num, 'Script da análise ao vivo', 'Roteiro pronto pra conduzir a análise de perfil na call')}
+  <div class="card"><p class="vazio">Script ainda não gerado para este lead.</p></div>
+</section>`;
+  }
+
+  const passosHtml = r.passos.map((p, i) => `
+    <div class="tp-passo">
+      <div class="tp-passo-head">
+        <span class="tp-passo-num">${String(i + 1).padStart(2, '0')}</span>
+        <span class="tp-passo-titulo">${esc(p.titulo_secao)}</span>
+      </div>
+      <div class="tp-passo-body">
+        <div class="tp-leia">Leia em voz alta</div>
+        <p class="tp-fala">${esc(p.fala)}</p>
+        ${p.direcao ? `<div class="tp-direcao"><span class="tp-dir-etq">Direção</span><span>${esc(p.direcao)}</span></div>` : ''}
+        ${p.fato_ancora ? `<div class="tp-fato"><strong>Fato usado:</strong> ${esc(p.fato_ancora)}</div>` : ''}
+      </div>
+    </div>`).join('');
+
+  return `
+<section class="sec">
+  ${secHead(num, 'Script da análise ao vivo', 'Teleprompter pronto — leia palavra por palavra e conduza como especialista')}
+
+  ${r.abertura ? `<div class="tp-intro">
+    <div class="tp-etq">▸ Abertura — leia isto pra começar</div>
+    <p class="tp-fala">${esc(r.abertura)}</p>
+  </div>` : ''}
+
+  ${passosHtml}
+
+  ${r.transicao_oferta ? `<div class="tp-oferta">
+    <div class="tp-etq">⚡ Fechamento — ponte pra oferta</div>
+    <p class="tp-fala">${esc(r.transicao_oferta)}</p>
+  </div>` : ''}
+</section>`;
+};
+
 const secaoPlaybook = (ctx: BookCtx, num: string): string => {
   const ov = (ctx.analise?.overview ?? {}) as Record<string, unknown>;
   const ci = (ctx.analise?.cross_insights ?? null) as Record<string, unknown> | null;
@@ -666,19 +736,21 @@ const secaoMunicaoNicho = (ctx: BookCtx, num: string): string => {
 export function renderBookConsultor(ctx: BookCtx): string {
   const p = (ctx.analise?.profile ?? {}) as Record<string, unknown>;
 
-  // Ordem pensada como um VENDEDOR usa (decisão André 18/07):
-  // plano de voo primeiro (o que fazer na call), depois QUEM é o lead
-  // (raio-x + munição), e por fim o diagnóstico detalhado do Instagram
-  // como material de consulta.
+  // Ordem pensada como um VENDEDOR usa (André 18-20/07):
+  //  00 Resumo · 01 Playbook (plano de voo) · 02 Raio-X (quem é) ·
+  //  03 Munição (cases pra vender) · 04 SCRIPT DA ANÁLISE (teleprompter
+  //  que ele lê ao vivo) · e depois o material técnico que embasa o
+  //  script (veredito, bio, conteúdo) pra consulta/aprofundamento.
   const corpo = `
 ${heroBook(ctx)}
 ${secaoResumoConsultor(ctx)}
 ${secaoPlaybook(ctx, '01')}
 ${secaoRaioX(ctx, '02')}
 ${secaoMunicaoNicho(ctx, '03')}
-${secaoVeredito(ctx, '04')}
-${secaoBio(ctx, '05')}
-${secaoConteudo(ctx, '06')}
+${secaoScriptAnalise(ctx, '04')}
+${secaoVeredito(ctx, '05')}
+${secaoBio(ctx, '06')}
+${secaoConteudo(ctx, '07')}
 <footer class="rodape">
   ${marca()}
   <div class="rodape-meta">Uso interno — não compartilhar com o lead</div>
