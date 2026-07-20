@@ -163,6 +163,9 @@ const BOOK_CSS = `
 .momento-consulta{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent)}
 
 /* ---- ANÁLISE DO PERFIL (fala + dado colados) ---- */
+.an-abertura{background:#141210;color:#ece7dd;border-radius:12px;padding:20px 22px;margin-top:8px;break-inside:avoid}
+.an-abertura .an-fala-etq{font-family:var(--f-black);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:9px}
+.an-abertura .an-fala-txt{font-family:var(--f-serif);font-size:16.5px;line-height:1.6;color:#f4f1ea;margin:0}
 .an-passo{margin:22px 0 0;break-inside:avoid}
 .an-passo-head{display:flex;align-items:center;gap:12px;margin-bottom:10px}
 .an-passo-num{font-family:var(--f-black);font-size:22px;color:var(--accent);line-height:1}
@@ -544,16 +547,21 @@ const visaoGeralHtml = (ctx: BookCtx): string => {
       ${v?.justificativa ? `<div class="vg-just"><strong>Neste perfil:</strong> ${esc(String(v.justificativa))}</div>` : ''}
     </div>`).join('');
   return `
-    <div class="an-cena an-cena-full">
+    <div class="an-abertura">
+      <div class="an-fala-etq">Leia em voz alta · abertura</div>
+      <p class="an-fala-txt">${esc((ctx.roteiro?.abertura) || 'Antes de tudo, eu entrei no seu perfil e preparei uma análise sua, de presente. Vou te mostrar o que enxergo de fora — começo, meio e fim. Depois a gente conversa. Pode ser?')}</p>
+    </div>
+    <div class="an-passo">
+      <div class="an-passo-head"><span class="an-passo-num">01</span><span class="an-passo-titulo">Comece pela visão geral</span></div>
+      <div class="an-cena an-cena-full">
       <div class="an-fala">
-        <div class="an-fala-etq">Leia em voz alta · abertura</div>
-        <p class="an-fala-txt">${esc((ctx.roteiro?.abertura) || 'Antes de tudo, eu entrei no seu perfil e preparei uma análise sua, de presente. Vou te mostrar o que enxergo de fora — começo, meio e fim. Depois a gente conversa. Pode ser?')}</p>
-        <div class="an-fala-etq" style="margin-top:16px">Agora dê a visão geral</div>
+        <div class="an-fala-etq">Leia em voz alta</div>
         <p class="an-fala-txt">Deixa eu começar te dando uma visão geral do seu perfil, olhando 5 pontos, e depois a gente mergulha em cada um. Vou te explicar cada um enquanto passo pela nota.</p>
       </div>
       <div class="an-dado">
         <div class="an-dado-tit">Visão geral do perfil${nota != null ? ` — nota <strong style="color:${semaforo(nota)}">${fmtNota(nota)}/10</strong>` : ''}</div>
         <div class="vg">${linhas || '<p class="vazio">Pilares não avaliados.</p>'}</div>
+      </div>
       </div>
     </div>`;
 };
@@ -664,9 +672,9 @@ const secaoAnalisePerfil = (ctx: BookCtx, num: string): string => {
 <section class="sec">
   ${secHead(num, 'Script da análise de perfil', 'O roteiro pra você apresentar a análise ao vivo — leia em voz alta, na ordem. Cada fala já vem com o dado ao lado.', 'vivo')}
   ${visaoGeralHtml(ctx)}
-  ${cenaPasso(ctx, pBio, dadoBio(ctx), 1, 'Comece pela bio')}
-  ${cenaPasso(ctx, pMelhor, dadoPost(top, '★ Post de maior engajamento', 'top'), 2, 'O que ele acertou')}
-  ${cenaPasso(ctx, pPior, dadoPost(worst, 'Post de menor engajamento', 'worst'), 3, 'Onde dá pra melhorar')}
+  ${cenaPasso(ctx, pBio, dadoBio(ctx), 2, 'Agora a bio')}
+  ${cenaPasso(ctx, pMelhor, dadoPost(top, '★ Post de maior engajamento', 'top'), 3, 'O que ele acertou')}
+  ${cenaPasso(ctx, pPior, dadoPost(worst, 'Post de menor engajamento', 'worst'), 4, 'Onde dá pra melhorar')}
   ${r?.transicao_oferta ? `<div class="an-ponte">
     <div class="an-ponte-etq">⚡ Só agora: a ponte pra oferta</div>
     <p class="an-ponte-txt">${esc(r.transicao_oferta)}</p>
