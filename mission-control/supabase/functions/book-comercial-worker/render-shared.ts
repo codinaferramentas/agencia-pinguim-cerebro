@@ -191,14 +191,21 @@ export const notaChip = (nota: unknown): string => {
 };
 
 /** Cabeçalho de seção: número gigante laranja + título + régua laranja. */
-export const secHead = (num: string, titulo: string, sub?: string): string => `
+export const secHead = (num: string, titulo: string, sub?: string, momento?: 'antes' | 'vivo' | 'consulta'): string => {
+  const selo = momento === 'antes' ? '<span class="momento momento-antes">📋 Antes da call</span>'
+    : momento === 'vivo' ? '<span class="momento momento-vivo">⚡ Use ao vivo</span>'
+    : momento === 'consulta' ? '<span class="momento momento-consulta">📎 Consulta se precisar</span>'
+    : '';
+  return `
 <header class="sec-head">
   <span class="sec-num">${esc(num)}</span>
   <div class="sec-head-txt">
+    ${selo}
     <h2 class="sec-titulo">${esc(titulo)}</h2>
     ${sub ? `<p class="sec-sub">${esc(sub)}</p>` : ''}
   </div>
 </header>`;
+};
 
 /** Barra horizontal 1-5 (rubricas). */
 export const barraRubrica = (label: string, val: unknown, escuro = false): string => {
@@ -554,11 +561,23 @@ small{font-weight:400}
   .hero{padding-top:0}
   .hero-nome{font-size:34pt}
   .sec{margin-top:34px}
-  .sec-head{break-after:avoid;page-break-after:avoid}
+  /* cabeçalho de seção nunca fica órfão no fim da página, e leva junto
+     o começo do conteúdo (mín. algumas linhas) pra não abrir seção no pé */
+  .sec-head{break-after:avoid;page-break-after:avoid;break-inside:avoid}
+  .sec>.sec-head+*{break-before:avoid}
   .card,.pilar,.veredito,.citacoes,.an-mini,.fat,.pm-grid,.rub,.stat{break-inside:avoid;page-break-inside:avoid}
+  /* blocos MENORES: nunca cortam no meio (ficam feios partidos) */
+  .tp-intro,.tp-passo,.tp-oferta,.opp,.risco,.passo-call,.case,.produto-alvo,.form-qa,.bio-shot,.bio-var,.rx-produto,.dark-sub{break-inside:avoid;page-break-inside:avoid}
+  /* blocos pretos GRANDES podem quebrar entre suas sub-partes (senão o
+     navegador ignora o avoid e corta em lugar aleatório); as sub-partes
+     (.dark-sub, .case) é que ficam inteiras. Blocos pretos pequenos
+     (sem filhos .dark-sub) ainda tentam ficar inteiros. */
+  .dark:not(.dark-grande){break-inside:avoid;page-break-inside:avoid}
+  .dark,.tp-passo-body,.opp p,.tp-fala{orphans:3;widows:3}
   .post-card{break-inside:auto}
   .post-compacto{break-inside:avoid;page-break-inside:avoid}
-  .post-head{break-after:avoid}
+  .post-head{break-after:avoid;break-inside:avoid}
+  h4,h5,.rank-div,.dark-tag,.tp-passo-head{break-after:avoid}
   a{color:inherit}
   .post-link{display:none}
 }
