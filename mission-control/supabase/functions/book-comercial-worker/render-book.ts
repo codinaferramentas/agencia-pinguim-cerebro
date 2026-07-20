@@ -142,24 +142,65 @@ const BOOK_CSS = `
 .transcript p{padding:12px 16px;font-size:12.5px;line-height:1.65;white-space:pre-wrap;margin:0;color:#c9c3b7}
 .transcript-print{font-size:11.5px;font-style:italic;color:#b9b3a8;margin-top:10px}
 
-/* ---- mapa de uso (seção 00) ---- */
-.mapa{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin:16px 0;box-shadow:0 2px 12px rgba(17,17,17,.05)}
-.mapa-row{display:grid;grid-template-columns:150px 1fr;gap:0;border-bottom:1px solid var(--line)}
-.mapa-row:last-child{border-bottom:0}
-.mapa-quando{padding:14px 18px;font-family:var(--f-black);font-size:11px;letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center;gap:7px}
+/* ---- índice / mapa de uso ---- */
+.mapa{display:flex;flex-direction:column;gap:14px;margin:16px 0}
+.mapa-grupo{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;break-inside:avoid}
+.mapa-grupo-etq{padding:11px 18px;font-family:var(--f-black);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
 .mapa-q-antes{background:var(--paper-2);color:var(--ink-soft)}
 .mapa-q-vivo{background:#141210;color:var(--accent)}
 .mapa-q-consulta{background:var(--accent-soft);color:var(--accent)}
-.mapa-o{padding:14px 18px;border-left:1px solid var(--line)}
-.mapa-o strong{display:block;font-size:14px;color:var(--ink);margin-bottom:2px}
-.mapa-o span{font-size:12.5px;color:var(--muted)}
-.mapa-legenda{display:flex;gap:20px;flex-wrap:wrap;margin-top:12px;font-size:11.5px;color:var(--muted)}
-.mapa-legenda b{color:var(--ink-soft)}
+.mapa-item{display:flex;flex-direction:column;gap:2px;padding:12px 18px;border-top:1px solid var(--line)}
+.mapa-item strong{font-size:14px;color:var(--ink)}
+.mapa-item span{font-size:12.5px;color:var(--muted);line-height:1.45}
 /* selo de momento no cabeçalho de cada seção */
 .momento{display:inline-flex;align-items:center;gap:6px;font-family:var(--f-black);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:4px 11px;border-radius:5px;margin-bottom:12px}
 .momento-antes{background:var(--paper-2);color:var(--ink-soft)}
 .momento-vivo{background:#141210;color:var(--accent)}
 .momento-consulta{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent)}
+
+/* ---- ANÁLISE DO PERFIL (fala + dado colados) ---- */
+.an-passo{margin:22px 0 0;break-inside:avoid}
+.an-passo-head{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.an-passo-num{font-family:var(--f-black);font-size:22px;color:var(--accent);line-height:1}
+.an-passo-titulo{font-family:var(--f-black);font-size:15px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink)}
+.an-cena{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;align-items:stretch;break-inside:avoid}
+@media(max-width:760px){.an-cena{grid-template-columns:1fr}}
+/* lado esquerdo: a FALA (teleprompter) */
+.an-fala{background:#141210;color:#ece7dd;border-radius:12px;padding:20px 22px}
+.an-fala-etq{font-family:var(--f-black);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:9px}
+.an-fala-txt{font-family:var(--f-serif);font-size:16.5px;line-height:1.6;color:#f4f1ea;margin:0}
+.an-direcao{margin-top:14px;background:rgba(244,83,31,.14);border-radius:6px;padding:8px 12px;font-size:12px;color:#f0d9cd;line-height:1.45}
+.an-dir-etq{font-family:var(--f-black);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-right:7px}
+/* lado direito: o DADO real */
+.an-dado{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+.an-dado-tit{font-family:var(--f-black);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);margin-bottom:12px}
+.an-dado-tit strong{color:inherit}
+.an-post{display:flex;gap:14px;align-items:center}
+.an-post-thumb{width:88px;height:88px;object-fit:cover;border-radius:9px;border:1px solid var(--line);flex-shrink:0}
+.an-post-noimg{display:flex;align-items:center;justify-content:center;background:var(--paper-2);font-size:10px;color:var(--muted);text-align:center}
+.an-post-tipo{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:6px}
+.an-post-nums{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--ink-soft)}
+.an-post-nums strong{color:var(--ink);font-family:var(--f-black);font-size:15px}
+.an-legenda{margin-top:14px;font-family:var(--f-serif);font-style:italic;font-size:13px;line-height:1.5;color:var(--ink-soft)}
+.an-legenda-etq{display:block;font-family:var(--f-sans);font-style:normal;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:5px}
+.an-obs{margin-top:14px;display:flex;flex-direction:column;gap:8px;font-size:12.5px;line-height:1.5;color:var(--ink-soft)}
+.an-obs-etq{display:inline-block;font-family:var(--f-black);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:3px;margin-right:6px;color:#fff}
+.an-obs-pos{background:var(--good)}
+.an-obs-neg{background:var(--warn)}
+.an-bio-atual{background:var(--paper-2);border-radius:8px;padding:12px 14px;font-size:13.5px;line-height:1.5;color:var(--ink);white-space:pre-wrap}
+.an-bio-nova{margin-top:12px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:8px;padding:12px 14px;font-family:var(--f-serif);font-style:italic;font-size:13.5px;line-height:1.5;color:var(--ink)}
+/* visão geral (tabelinha) */
+.vg{display:flex;flex-direction:column;gap:9px}
+.vg-linha{display:grid;grid-template-columns:1fr 70px 34px;gap:10px;align-items:center}
+.vg-nome{font-size:12.5px;color:var(--ink-soft)}
+.vg-barra{height:7px;background:var(--paper-2);border-radius:4px;overflow:hidden}
+.vg-fill{display:block;height:100%;border-radius:4px}
+.vg-nota{font-family:var(--f-black);font-size:14px;text-align:right}
+/* ponte pra oferta */
+.an-ponte{background:var(--dark);border:2px solid var(--accent);border-radius:14px;padding:24px 26px;margin:26px 0 0;break-inside:avoid}
+.an-ponte-etq{font-family:var(--f-black);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+.an-ponte-txt{font-family:var(--f-serif);font-size:18px;line-height:1.6;color:#f4f1ea;font-style:italic;margin:0}
+.an-ponte-nota{margin-top:14px;font-size:11.5px;color:#9c968a;border-top:1px solid rgba(255,255,255,.14);padding-top:12px}
 
 /* ---- script teleprompter (análise ao vivo) ---- */
 .tp-intro{background:var(--accent-soft);border:1px solid var(--accent);border-radius:12px;padding:20px 24px;margin:16px 0}
@@ -337,40 +378,51 @@ const heroBook = (ctx: BookCtx): string => {
 
 // SEÇÃO 00 — MAPA DE USO: a 1ª coisa que o vendedor vê. Diz o que é o
 // documento e quando abrir cada parte. Elimina o "por onde começo?".
-const secaoMapaUso = (ctx: BookCtx): string => {
-  const temRaiox = !!ctx.raiox;
-  const linhas = [
-    { q: 'antes', s: '01 · Briefing do lead', o: 'Quem é, o que já comprou, o que oferecer' },
-    { q: 'antes', s: '02 · Decisão de oferta', o: 'Qual produto apresentar e por quê' },
-    ...(temRaiox ? [{ q: 'antes', s: '03 · Raio-X do relacionamento', o: 'Histórico de compras e presença nas plataformas' }] : []),
-    { q: 'antes', s: `${temRaiox ? '04' : '03'} · Estratégia da call`, o: 'Roteiro, objeções e próximos passos' },
-    { q: 'vivo', s: `${temRaiox ? '05' : '04'} · Script da análise`, o: 'Falas prontas — leia em voz alta na call' },
-    { q: 'consulta', s: `${temRaiox ? '06-08' : '05-07'} · Aprofundamento`, o: 'Veredito, bio e conteúdo — se o cliente perguntar detalhe' },
-    { q: 'consulta', s: `${temRaiox ? '09' : '08'} · Provas do nicho`, o: 'Cases de outros alunos pra citar' },
+interface NumMap { nBriefing: string; nRaiox: string | null; nOferta: string; nArgs: string; nAnalise: string; nProvas: string }
+
+// ÍNDICE — agrupa por MOMENTO (antes / durante / consulta), cada item com
+// o número da seção. É a 1ª coisa que o vendedor vê.
+const secaoMapaUso = (ctx: BookCtx, nm: NumMap): string => {
+  const grupos = [
+    {
+      etq: '📋 Antes da call', cls: 'mapa-q-antes',
+      itens: [
+        { s: `${nm.nBriefing} · Briefing do lead`, o: 'Quem é, nota do perfil, o que ele já comprou' },
+        ...(nm.nRaiox ? [{ s: `${nm.nRaiox} · Raio-X do relacionamento`, o: 'Histórico de compras e presença nas plataformas' }] : []),
+        { s: `${nm.nOferta} · Decisão de oferta`, o: 'Qual produto apresentar e por quê' },
+        { s: `${nm.nArgs} · Argumentos & objeções`, o: 'Como responder as objeções mais prováveis' },
+      ],
+    },
+    {
+      etq: '⚡ Durante a call', cls: 'mapa-q-vivo',
+      itens: [
+        { s: `${nm.nAnalise} · Análise do perfil ao vivo`, o: 'O presente pro lead — leia em voz alta, na ordem: visão geral → bio → melhor conteúdo → onde melhorar → ponte pra oferta' },
+      ],
+    },
+    {
+      etq: '📎 Consulta', cls: 'mapa-q-consulta',
+      itens: [
+        { s: `${nm.nProvas} · Provas do nicho`, o: 'Cases de outros alunos pra citar, se precisar de prova social' },
+      ],
+    },
   ];
-  const cls = (q: string) => q === 'vivo' ? 'mapa-q-vivo' : q === 'consulta' ? 'mapa-q-consulta' : 'mapa-q-antes';
-  const rot = (q: string) => q === 'vivo' ? '⚡ Ao vivo' : q === 'consulta' ? '📎 Consulta' : '📋 Antes';
 
   return `
 <section class="sec">
-  ${secHead('00', 'Como usar este book', 'Seu mapa de bolso pra chegar preparado e conduzir a call sem travar')}
+  ${secHead('', 'Índice — como usar este book', 'Cada seção tem um momento certo. Siga a ordem e conduza a call sem travar.')}
   <div class="mapa">
-    ${linhas.map((l) => `<div class="mapa-row">
-      <div class="mapa-quando ${cls(l.q)}">${rot(l.q)}</div>
-      <div class="mapa-o"><strong>${esc(l.s)}</strong><span>${esc(l.o)}</span></div>
+    ${grupos.map((g) => `
+    <div class="mapa-grupo">
+      <div class="mapa-grupo-etq ${g.cls}">${g.etq}</div>
+      ${g.itens.map((l) => `<div class="mapa-item"><strong>${esc(l.s)}</strong><span>${esc(l.o)}</span></div>`).join('')}
     </div>`).join('')}
-  </div>
-  <div class="mapa-legenda">
-    <span><b>📋 Antes</b> — leia antes de entrar na call</span>
-    <span><b>⚡ Ao vivo</b> — abra na tela e leia durante a conversa</span>
-    <span><b>📎 Consulta</b> — só se precisar de um detalhe</span>
   </div>
 </section>`;
 };
 
 // SEÇÃO 01 — BRIEFING: quem é o lead, enxuto. A nota, o essencial e a
 // ficha do formulário (que antes entupia o resumo, agora fica ao fim aqui).
-const secaoBriefing = (ctx: BookCtx): string => {
+const secaoBriefing = (ctx: BookCtx, num: string): string => {
   const ov = (ctx.analise?.overview ?? {}) as Record<string, unknown>;
   const nota = ov.nota_geral;
 
@@ -390,7 +442,7 @@ const secaoBriefing = (ctx: BookCtx): string => {
 
   return `
 <section class="sec">
-  ${secHead('01', 'Briefing do lead', 'O essencial sobre quem você vai atender', 'antes')}
+  ${secHead(num, 'Briefing do lead', 'O essencial sobre quem você vai atender', 'antes')}
   ${blocoConsultor(`
     <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:18px;border-bottom:1px solid rgba(255,255,255,.12);padding-bottom:16px">
       <div class="resumo00-nota" style="color:${semaforo(nota)};font-size:44px">${fmtNota(nota)}<small style="font-size:16px">/10</small></div>
@@ -421,7 +473,7 @@ const secaoBriefing = (ctx: BookCtx): string => {
 
 // SEÇÃO 02 — DECISÃO DE OFERTA: promovida a seção própria (era enterrada
 // no resumo). É a decisão de venda — merece destaque.
-const secaoDecisaoOferta = (ctx: BookCtx): string => {
+const secaoDecisaoOferta = (ctx: BookCtx, num: string): string => {
   const m = ctx.municao;
   const corpo = m ? `
     <div class="produto-alvo" style="margin-top:0">
@@ -433,256 +485,139 @@ const secaoDecisaoOferta = (ctx: BookCtx): string => {
 
   return `
 <section class="sec">
-  ${secHead('02', 'Decisão de oferta', 'O produto certo pra este lead, com o porquê', 'antes')}
+  ${secHead(num, 'Decisão de oferta', 'O produto certo pra este lead, com o porquê', 'antes')}
   ${blocoConsultor(corpo, { tag: '🎯 O que oferecer', grande: true })}
 </section>`;
 };
 
-const secaoVeredito = (ctx: BookCtx, num: string): string => {
-  const ov = (ctx.analise?.overview ?? null) as Record<string, unknown> | null;
-  if (!ov) {
-    return `
-<section class="sec">
-  ${secHead(num, 'Veredito', 'Diagnóstico estratégico do perfil', 'consulta')}
-  <div class="card"><p class="vazio">Diagnóstico estratégico indisponível para este perfil.</p></div>
-</section>`;
-  }
-  const pilares = (ov.pilares ?? {}) as Record<string, { nota?: unknown; justificativa?: unknown }>;
+// ============================================================
+// SEÇÃO "ANÁLISE DO PERFIL AO VIVO" — o coração do book.
+// ============================================================
+// Estrutura validada por vendedor sênior (André 20/07): a análise é um
+// PRESENTE, com começo-meio-fim EVOLUTIVO, seguindo o Instagram.
+// Cada bloco cola FALA (o que o vendedor lê) + DADO REAL (bio literal,
+// foto do post, números) — nunca separados. Sequência:
+//   Abertura → Visão geral (tabelinha) → Bio → Melhor conteúdo →
+//   Menor engajamento → Ponte pra oferta.
+// O veredito geral vem ANTES dos detalhes; a ponte só no fim.
 
-  return `
-<section class="sec">
-  ${secHead(num, 'Veredito', 'Diagnóstico estratégico do perfil', 'consulta')}
-  <div class="veredito">
-    <div class="veredito-nota" style="color:${semaforo(ov.nota_geral)}">${fmtNota(ov.nota_geral)}<small>/10</small></div>
-    ${ov.veredito_curto ? `<div class="veredito-frase">“${esc(ov.veredito_curto)}”</div>` : ''}
-  </div>
-  <div class="card">
-    ${Object.entries(pilares).map(([k, v]) =>
-      pilarRow(PILAR_LABELS[k] || k.replace(/_/g, ' '), v?.nota, v?.justificativa)).join('') || '<p class="vazio">Pilares não avaliados.</p>'}
-  </div>
-  <div class="grid-2">
-    <div class="card">
-      <h5>Como o perfil aparece hoje</h5>
-      <p style="font-size:13.5px">${esc(ov.identidade_atual || '—')}</p>
-    </div>
-    <div class="card">
-      <h5>Público inferido</h5>
-      <p style="font-size:13.5px">${esc(ov.publico_alvo_inferido || '—')}</p>
-    </div>
-  </div>
-  ${ov.identidade_ideal ? blocoConsultor(`
-    <h4>Posicionamento-alvo do perfil</h4>
-    <p style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9c968a;margin:0 0 10px">Não é o produto — é a transformação que a call vende: onde o perfil dele precisa chegar</p>
-    <p class="fr" style="font-size:17px;line-height:1.5">${esc(ov.identidade_ideal)}</p>
-  `, { tag: '🎯 Onde ele precisa chegar' }) : ''}
-</section>`;
-};
-
-const secaoBio = (ctx: BookCtx, num: string): string => {
-  const p = (ctx.analise?.profile ?? {}) as Record<string, unknown>;
-  const bio = (ctx.analise?.bio_analysis ?? null) as Record<string, unknown> | null;
-  const diag = (bio?.analise_diagnostica ?? {}) as Record<string, unknown>;
-  const scoreAtual = rubricaScore10(bio?.rubrica_bio_atual);
-  const scoreNovo = rubricaScore10(bio?.rubrica_bio_nova);
-
-  const bioShot = (texto: unknown): string => `
-    <div class="bio-shot">
-      <div class="bio-shot-top">
-        ${avatarHtml(p.avatar_url, p.full_name || p.handle, 'bio-shot-avatar')}
-        <div>
-          <div class="bio-shot-nome">${esc(p.full_name || p.handle || '—')}${bio?.sugestao_keyword_nome ? ` <span class="bio-shot-kw">| ${esc(bio.sugestao_keyword_nome)}</span>` : ''}</div>
-          <div class="bio-shot-kw">@${esc(p.handle || '—')}</div>
-        </div>
-      </div>
-      <div class="bio-shot-texto">${esc(texto || '—')}</div>
-      ${p.bio_link ? `<div class="bio-shot-cta">🔗 ${esc(p.bio_link)}</div>` : ''}
-    </div>`;
-
-  const consultorBio = bio ? blocoConsultor(`
-    <h4>Bio sugerida (pronta pra propor na call)</h4>
-    ${bioShot(bio.bio_sugerida)}
-    ${scoreNovo !== null ? `<div class="bio-score-novo" style="color:${semaforo(scoreNovo)}">${fmtNota(scoreNovo)}<small>/10</small> <small style="font-size:11px;letter-spacing:.1em;text-transform:uppercase">score da nova bio</small></div>` : ''}
-    ${bio.justificativa_bio ? `<p style="font-size:13px;margin-top:12px">${esc(bio.justificativa_bio)}</p>` : ''}
-    ${bio.sugestao_keyword_nome ? `<p style="font-size:12.5px"><strong style="color:var(--accent)">Keyword pro campo Nome:</strong> ${esc(bio.sugestao_keyword_nome)}</p>` : ''}
-    ${bio.cta_sugerido ? `<p style="font-size:12.5px"><strong style="color:var(--accent)">CTA sugerido:</strong> ${esc(bio.cta_sugerido)}</p>` : ''}
-    <div class="bio-vars">
-      ${[
-        ['Autoridade', bio.bio_variacao_autoridade],
-        ['Conexão', bio.bio_variacao_conexao],
-        ['Ação', bio.bio_variacao_acao],
-      ].filter(([, v]) => v).map(([label, v]) => `
-      <div class="bio-var">
-        <div class="bio-var-label">${label}</div>
-        <div class="bio-var-texto">${esc(v)}</div>
-      </div>`).join('')}
-    </div>
-  `, { tag: '✍️ Bio pronta pra propor' }) : '';
-
-  return `
-<section class="sec">
-  ${secHead(num, 'Bio', 'A vitrine do perfil, linha a linha', 'consulta')}
-  <div class="grid-2">
-    <div class="card">
-      <h5>Bio atual</h5>
-      ${bioShot(p.bio_text || '(bio vazia)')}
-      ${scoreAtual !== null ? `<div style="font-family:var(--f-black);font-size:30px;margin-top:14px;color:${semaforo(scoreAtual)}">${fmtNota(scoreAtual)}<small style="font-size:13px;color:var(--muted)">/10</small></div>` : ''}
-      ${rubricaBarras(bio?.rubrica_bio_atual, RUBRICA_BIO_LABELS)}
-    </div>
-    <div class="card">
-      <h5>Diagnóstico</h5>
-      ${Object.keys(diag).length
-        ? Object.entries(diag).map(([k, v]) => `
-          <div style="margin-bottom:10px">
-            <strong style="font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)">${esc(DIAG_BIO_LABELS[k] || k.replace(/_/g, ' '))}</strong>
-            <p style="font-size:12.5px;margin:3px 0 0;color:var(--ink-soft)">${esc(v)}</p>
-          </div>`).join('')
-        : '<p class="vazio">Diagnóstico de bio indisponível.</p>'}
-    </div>
-  </div>
-  <div class="grid-2">
-    <div class="card"><h5>Pontos fortes</h5><p style="font-size:13px">${esc(bio?.pontos_fortes || '—')}</p></div>
-    <div class="card"><h5>Pontos de melhoria</h5><p style="font-size:13px">${esc(bio?.pontos_de_melhoria || '—')}</p></div>
-  </div>
-  ${consultorBio}
-</section>`;
-};
-
-const secaoConteudo = (ctx: BookCtx, num: string): string => {
-  const a = ctx.analise ?? {};
-  const m = (a.metrics ?? {}) as Record<string, unknown>;
-  const top = (a.top_post ?? null) as Record<string, unknown> | null;
-  const worst = (a.worst_post ?? null) as Record<string, unknown> | null;
-  const outros = (Array.isArray(a.other_posts_analyzed) ? a.other_posts_analyzed : [])
-    .slice()
-    .sort((x: Record<string, unknown>, y: Record<string, unknown>) => {
-      const nx = Number((x?.analysis as Record<string, unknown>)?.nota_geral ?? -1);
-      const ny = Number((y?.analysis as Record<string, unknown>)?.nota_geral ?? -1);
-      return (Number.isFinite(ny) ? ny : -1) - (Number.isFinite(nx) ? nx : -1);
-    });
-
-  // subtítulo depende de termos ou não a análise dos demais posts
-  const sub = outros.length
-    ? `${fmtNum(m.professional_count)} posts profissionais analisados · média de ${fmtNum(m.avg_likes_pro)} curtidas e ${fmtPct(m.avg_engagement_pro)} de engajamento`
-    : `O que funcionou e o que travou — comparados sobre ${fmtNum(m.professional_count)} posts, média de ${fmtNum(m.avg_likes_pro)} curtidas e ${fmtPct(m.avg_engagement_pro)} de engajamento`;
-
-  return `
-<section class="sec">
-  ${secHead(num, 'Conteúdo', sub, 'consulta')}
-
-  ${top ? `<div class="rank-div"><span>★ Post de maior performance</span></div>${renderPostCard(top, { label: 'Post de maior performance', destaque: 'top', extraHtml: extraPostConsultor(top) })}` : ''}
-
-  ${worst ? `<div class="rank-div"><span>Post de menor performance</span></div>${renderPostCard(worst, { label: 'Post de menor performance', destaque: 'worst', extraHtml: extraPostConsultor(worst) })}` : ''}
-
-  ${outros.length ? `<div class="rank-div"><span>Demais posts · ordenados por nota</span></div>${outros.map((p: Record<string, unknown>, i: number) =>
-    renderPostCard(p, {
-      label: `Post #${i + 1}`,
-      compacto: true,
-      extraHtml: extraPostConsultor(p),
-    })).join('')}` : ''}
-</section>`;
-};
-
-// Script de teleprompter: o comercial LÊ isto ao vivo pra conduzir a
-// análise de perfil como se fosse especialista em conteúdo.
-const secaoScriptAnalise = (ctx: BookCtx, num: string): string => {
-  const r = ctx.roteiro;
-  if (!r || !Array.isArray(r.passos) || r.passos.length === 0) {
-    return `
-<section class="sec">
-  ${secHead(num, 'Script da análise ao vivo', 'Roteiro pronto pra conduzir a análise de perfil na call', 'vivo')}
-  <div class="card"><p class="vazio">Script ainda não gerado para este lead.</p></div>
-</section>`;
-  }
-
-  const passosHtml = r.passos.map((p, i) => `
-    <div class="tp-passo">
-      <div class="tp-passo-head">
-        <span class="tp-passo-num">${String(i + 1).padStart(2, '0')}</span>
-        <span class="tp-passo-titulo">${esc(p.titulo_secao)}</span>
-      </div>
-      <div class="tp-passo-body">
-        <div class="tp-leia">Leia em voz alta</div>
-        <p class="tp-fala">${esc(p.fala)}</p>
-        ${p.direcao ? `<div class="tp-direcao"><span class="tp-dir-etq">Direção</span><span>${esc(p.direcao)}</span></div>` : ''}
-        ${p.fato_ancora ? `<div class="tp-fato"><strong>Fato usado:</strong> ${esc(p.fato_ancora)}</div>` : ''}
-      </div>
-    </div>`).join('');
-
-  return `
-<section class="sec">
-  ${secHead(num, 'Script da análise ao vivo', 'Teleprompter pronto — leia palavra por palavra e conduza como especialista', 'vivo')}
-
-  ${r.abertura ? `<div class="tp-intro">
-    <div class="tp-etq">▸ Abertura — leia isto pra começar</div>
-    <p class="tp-fala">${esc(r.abertura)}</p>
-  </div>` : ''}
-
-  ${passosHtml}
-
-  ${r.transicao_oferta ? `<div class="tp-oferta">
-    <div class="tp-etq">⚡ Fechamento — ponte pra oferta</div>
-    <p class="tp-fala">${esc(r.transicao_oferta)}</p>
-  </div>` : ''}
-</section>`;
-};
-
-const secaoPlaybook = (ctx: BookCtx, num: string): string => {
+// mini-tabela dos 5 pilares (a "tabelinha" — visão geral)
+const visaoGeralHtml = (ctx: BookCtx): string => {
   const ov = (ctx.analise?.overview ?? {}) as Record<string, unknown>;
-  const ci = (ctx.analise?.cross_insights ?? null) as Record<string, unknown> | null;
-  const oportunidades = Array.isArray(ov.oportunidades) ? (ov.oportunidades as Record<string, unknown>[]) : [];
-  const riscos = Array.isArray(ov.riscos) ? (ov.riscos as Record<string, unknown>[]) : [];
-  const passos = Array.isArray(ov.proximos_passos) ? (ov.proximos_passos as unknown[]) : [];
-  const mun = ctx.municao;
-
-  const blocoCI = ci ? `
-    <div class="dark-sub">
-      <h4>Padrões do conteúdo</h4>
-      <div class="grid-3" style="gap:18px">
-        ${ci.padrao_que_funciona ? `<div><h5>O que funciona</h5><p style="font-size:12.5px">${esc(ci.padrao_que_funciona)}</p></div>` : ''}
-        ${ci.o_que_o_worst_pode_aprender ? `<div><h5>Lição do post de menor performance</h5><p style="font-size:12.5px">${esc(ci.o_que_o_worst_pode_aprender)}</p></div>` : ''}
-        ${ci.padroes_do_perfil ? `<div><h5>Padrões gerais do perfil</h5><p style="font-size:12.5px">${esc(ci.padroes_do_perfil)}</p></div>` : ''}
+  const pilares = (ov.pilares ?? {}) as Record<string, { nota?: unknown; justificativa?: unknown }>;
+  const nota = ov.nota_geral;
+  const linhas = Object.entries(pilares).map(([k, v]) => `
+    <div class="vg-linha">
+      <span class="vg-nome">${esc(PILAR_LABELS[k] || k.replace(/_/g, ' '))}</span>
+      <span class="vg-barra"><span class="vg-fill" style="width:${(Number(v?.nota) || 0) * 10}%;background:${semaforo((Number(v?.nota) || 0))}"></span></span>
+      <span class="vg-nota" style="color:${semaforo(Number(v?.nota))}">${fmtNota(v?.nota)}</span>
+    </div>`).join('');
+  return `
+    <div class="an-cena">
+      <div class="an-fala">
+        <div class="an-fala-etq">Leia em voz alta · abertura</div>
+        <p class="an-fala-txt">${esc((ctx.roteiro?.abertura) || 'Antes de tudo, eu entrei no seu perfil e preparei uma análise sua, de presente. Vou te mostrar o que enxergo de fora — começo, meio e fim. Depois a gente conversa. Pode ser?')}</p>
+        <div class="an-fala-etq" style="margin-top:16px">Agora dê a visão geral</div>
+        <p class="an-fala-txt">Deixa eu começar te dando uma visão geral do seu perfil, e depois a gente mergulha em cada ponto.</p>
       </div>
-    </div>` : '';
+      <div class="an-dado">
+        <div class="an-dado-tit">Visão geral do perfil${nota != null ? ` — nota <strong style="color:${semaforo(nota)}">${fmtNota(nota)}/10</strong>` : ''}</div>
+        <div class="vg">${linhas || '<p class="vazio">Pilares não avaliados.</p>'}</div>
+      </div>
+    </div>`;
+};
 
-  const blocoOpp = oportunidades.length ? `
-    <div class="dark-sub">
-      <h4>Oportunidades — o argumento de venda mora aqui</h4>
-      ${oportunidades.map((o, i) => `
-      <div class="opp">
-        <div class="opp-num">${i + 1}</div>
-        <div>
-          <h4>${esc(o.titulo || '')}</h4>
-          <p>${esc(o.racional || '')}</p>
-          <div class="chips">${chipImpacto(o.impacto_esperado)}${chipEsforco(o.esforco)}</div>
-          ${o.primeiro_passo ? `<div class="opp-passo"><strong>Primeiro passo:</strong> ${esc(o.primeiro_passo)}</div>` : ''}
+// um passo da análise: fala do script + o dado real (post ou bio) ao lado
+const cenaPasso = (ctx: BookCtx, passo: { titulo_secao: string; fala: string; direcao: string; fato_ancora: string } | null, dado: string, i: number, titulo: string): string => {
+  const fala = passo?.fala || '';
+  return `
+  <div class="an-passo">
+    <div class="an-passo-head"><span class="an-passo-num">${String(i).padStart(2, '0')}</span><span class="an-passo-titulo">${esc(titulo)}</span></div>
+    <div class="an-cena">
+      <div class="an-fala">
+        <div class="an-fala-etq">Leia em voz alta</div>
+        <p class="an-fala-txt">${fala ? esc(fala) : 'Fala não gerada para este passo.'}</p>
+        ${passo?.direcao ? `<div class="an-direcao"><span class="an-dir-etq">Direção</span>${esc(passo.direcao)}</div>` : ''}
+      </div>
+      <div class="an-dado">${dado}</div>
+    </div>
+  </div>`;
+};
+
+// painel de dado de um post (foto + números + o que funcionou/evoluir)
+const dadoPost = (post: Record<string, unknown> | null, rotulo: string): string => {
+  if (!post) return '<p class="vazio">Post não disponível.</p>';
+  const a = (post.analysis ?? {}) as Record<string, unknown>;
+  const isVideo = post.post_type === 'Reel' || post.post_type === 'Video';
+  const pos = Array.isArray(a.fatores_positivos) ? (a.fatores_positivos as unknown[]) : [];
+  const neg = Array.isArray(a.fatores_negativos) ? (a.fatores_negativos as unknown[]) : [];
+  return `
+    <div class="an-dado-tit">${esc(rotulo)}</div>
+    <div class="an-post">
+      ${post.thumb_url ? `<img class="an-post-thumb" src="${esc(post.thumb_url)}" alt="post">` : '<div class="an-post-thumb an-post-noimg">sem imagem</div>'}
+      <div class="an-post-info">
+        <div class="an-post-tipo">${esc(post.post_type || 'post')}</div>
+        <div class="an-post-nums">
+          <span><strong>${fmtNum(post.likes)}</strong> curtidas</span>
+          <span><strong>${fmtNum(post.comments)}</strong> coment.</span>
+          ${isVideo && post.views != null ? `<span><strong>${fmtNum(post.views)}</strong> views</span>` : ''}
         </div>
-      </div>`).join('')}
-    </div>` : '';
+      </div>
+    </div>
+    ${post.full_caption ? `<div class="an-legenda"><span class="an-legenda-etq">Legenda do post</span>“${esc(truncaPalavras(String(post.full_caption), 40))}”</div>` : ''}
+    ${(pos.length || neg.length) ? `<div class="an-obs">
+      ${pos.length ? `<div><span class="an-obs-etq an-obs-pos">Acertou</span> ${esc(String(pos[0]))}</div>` : ''}
+      ${neg.length ? `<div><span class="an-obs-etq an-obs-neg">Dá pra melhorar</span> ${esc(String(neg[0]))}</div>` : ''}
+    </div>` : ''}`;
+};
 
-  const blocoRiscos = riscos.length ? `
-    <div class="dark-sub">
-      <h4>Riscos — as dores pra nomear na call</h4>
-      ${riscos.map((r) => `
-      <div class="risco">
-        <h4>${esc(r.titulo || '')}</h4>
-        <p>${esc(r.descricao || '')}</p>
-        ${r.impacto_se_nao_resolvido ? `<div class="risco-imp">Se não resolver: ${esc(r.impacto_se_nao_resolvido)}</div>` : ''}
-      </div>`).join('')}
-    </div>` : '';
+// painel de dado da bio (bio literal + o gap)
+const dadoBio = (ctx: BookCtx): string => {
+  const p = (ctx.analise?.profile ?? {}) as Record<string, unknown>;
+  const bio = (ctx.analise?.bio_analysis ?? {}) as Record<string, unknown>;
+  return `
+    <div class="an-dado-tit">A bio dele hoje</div>
+    <div class="an-bio-atual">${esc(p.bio_text || '(bio vazia)')}</div>
+    ${bio.pontos_de_melhoria ? `<div class="an-obs"><div><span class="an-obs-etq an-obs-neg">O gap</span> ${esc(String(bio.pontos_de_melhoria))}</div></div>` : ''}
+    ${bio.bio_sugerida ? `<div class="an-bio-nova"><span class="an-legenda-etq">💡 Sugestão pronta pra propor</span>“${esc(String(bio.bio_sugerida))}”</div>` : ''}`;
+};
 
-  const blocoPassos = passos.length ? `
-    <div class="dark-sub">
-      <h4>Próximos passos do perfil</h4>
-      ${passos.map((p, i) => `
-      <div class="passo-call">
-        <div class="passo-call-num">${i + 1}</div>
-        <div class="passo-call-txt">${esc(p)}</div>
-      </div>`).join('')}
-    </div>` : '';
+const secaoAnalisePerfil = (ctx: BookCtx, num: string): string => {
+  const r = ctx.roteiro;
+  const top = (ctx.analise?.top_post ?? null) as Record<string, unknown> | null;
+  const worst = (ctx.analise?.worst_post ?? null) as Record<string, unknown> | null;
+  // casa cada passo do script pelo título (bio / melhor / travou / veredito)
+  const acha = (re: RegExp) => (r?.passos || []).find((p) => re.test(p.titulo_secao || '')) || null;
+  const pBio = acha(/bio/i);
+  const pMelhor = acha(/melhor|acert|maior/i);
+  const pPior = acha(/trav|menor|pior|fraco/i);
+
+  return `
+<section class="sec">
+  ${secHead(num, 'Análise do perfil ao vivo', 'O presente pro lead — leia em voz alta, na ordem. Cada fala já vem com o dado ao lado.', 'vivo')}
+  ${visaoGeralHtml(ctx)}
+  ${cenaPasso(ctx, pBio, dadoBio(ctx), 1, 'Comece pela bio')}
+  ${cenaPasso(ctx, pMelhor, dadoPost(top, '★ Post de maior engajamento'), 2, 'O que ele acertou')}
+  ${cenaPasso(ctx, pPior, dadoPost(worst, 'Post de menor engajamento'), 3, 'Onde dá pra melhorar')}
+  ${r?.transicao_oferta ? `<div class="an-ponte">
+    <div class="an-ponte-etq">⚡ Só agora: a ponte pra oferta</div>
+    <p class="an-ponte-txt">${esc(r.transicao_oferta)}</p>
+    <div class="an-ponte-nota">Entregue a análise TODA antes de ler isto. O presente cria a reciprocidade; a ponte colhe.</div>
+  </div>` : ''}
+</section>`;
+};
+
+// SEÇÃO Argumentos & objeções — SÓ o que é de VENDA (não de conteúdo).
+// As sugestões de conteúdo (oportunidades/riscos/próximos passos do perfil)
+// saíram daqui — elas vivem DENTRO da análise, como prova de autoridade,
+// nunca como argumento comercial (André 20/07: ninguém compra mentoria de
+// R$ 37k porque você ensinou a fazer um reel).
+const secaoArgumentos = (ctx: BookCtx, num: string): string => {
+  const mun = ctx.municao;
 
   const blocoRoteiro = mun?.roteiro_call?.length ? `
     <div class="dark-sub">
-      <h4>Roteiro da call — passo a passo</h4>
+      <h4>Roteiro comercial da call — passo a passo</h4>
       ${mun.roteiro_call.map((p, i) => `
       <div class="passo-call">
         <div class="passo-call-num">${i + 1}</div>
@@ -692,20 +627,20 @@ const secaoPlaybook = (ctx: BookCtx, num: string): string => {
 
   const blocoObjecoes = mun?.angulos_objecao?.length ? `
     <div class="dark-sub">
-      <h4>Ângulos de objeção</h4>
+      <h4>Objeções mais prováveis — e como responder</h4>
       ${mun.angulos_objecao.map((o) => `
       <div class="obje">
-        <div class="obje-q">${esc(o.objecao)}”</div>
+        <div class="obje-q">“${esc(o.objecao)}”</div>
         <div class="obje-a"><strong>Como responder</strong>${esc(o.resposta)}</div>
       </div>`).join('')}
     </div>` : '';
 
-  const conteudo = blocoCI + blocoOpp + blocoRiscos + blocoPassos + blocoRoteiro + blocoObjecoes;
+  const conteudo = blocoRoteiro + blocoObjecoes;
 
   return `
 <section class="sec">
-  ${secHead(num, 'Estratégia da call', 'Como conduzir a conversa: oportunidades, riscos, objeções e próximos passos', 'antes')}
-  ${blocoConsultor(conteudo.trim() || '<p class="vazio" style="color:#9c968a">Estratégia indisponível — análise estratégica ainda não gerada para este lead.</p>', { grande: true, tag: '🧭 Plano da conversa' })}
+  ${secHead(num, 'Argumentos & objeções', 'O plano comercial da conversa e as respostas prontas pras objeções', 'antes')}
+  ${blocoConsultor(conteudo.trim() || '<p class="vazio" style="color:#9c968a">Argumentos ainda não gerados para este lead.</p>', { grande: true, tag: '🧭 Plano comercial' })}
 </section>`;
 };
 
@@ -802,32 +737,31 @@ const secaoMunicaoNicho = (ctx: BookCtx, num: string): string => {
 export function renderBookConsultor(ctx: BookCtx): string {
   const p = (ctx.analise?.profile ?? {}) as Record<string, unknown>;
 
-  // Arquitetura validada por painel de vendedores + designer (20/07):
-  // storytelling preparação → execução → consulta.
-  //  00 Como usar (mapa) · 01 Briefing (quem é) · 02 Decisão de oferta ·
-  //  [03 Raio-X, se houver] · Estratégia da call · ⚡ Script (ao vivo) ·
-  //  📎 Veredito/Bio/Conteúdo (aprofundamento) · 📎 Provas do nicho.
-  // Numeração dinâmica (Raio-X pode faltar).
-  let n = 3;
+  // Arquitetura v3 (André 20/07) — 3 partes com storytelling:
+  //  ANTES DA CALL: 01 Briefing · 02 Raio-X · 03 Decisão de oferta ·
+  //                 04 Argumentos & objeções
+  //  DURANTE A CALL: 05 Análise do perfil ao vivo (UNIFICADA: visão
+  //    geral → bio → melhor → menor → ponte; fala+dado colados)
+  //  CONSULTA: 06 Provas do nicho
+  // A análise de perfil deixou de ser 4 seções tortas (script/veredito/
+  // bio/conteúdo separados) e virou UMA seção evolutiva. Numeração
+  // dinâmica (Raio-X pode faltar).
+  let n = 1;
+  const nBriefing = String(n++).padStart(2, '0');
   const nRaiox = ctx.raiox ? String(n++).padStart(2, '0') : null;
-  const nEstrategia = String(n++).padStart(2, '0');
-  const nScript = String(n++).padStart(2, '0');
-  const nVeredito = String(n++).padStart(2, '0');
-  const nBio = String(n++).padStart(2, '0');
-  const nConteudo = String(n++).padStart(2, '0');
+  const nOferta = String(n++).padStart(2, '0');
+  const nArgs = String(n++).padStart(2, '0');
+  const nAnalise = String(n++).padStart(2, '0');
   const nProvas = String(n++).padStart(2, '0');
 
   const corpo = `
 ${heroBook(ctx)}
-${secaoMapaUso(ctx)}
-${secaoBriefing(ctx)}
-${secaoDecisaoOferta(ctx)}
+${secaoMapaUso(ctx, { nBriefing, nRaiox, nOferta, nArgs, nAnalise, nProvas })}
+${secaoBriefing(ctx, nBriefing)}
 ${nRaiox ? secaoRaioX(ctx, nRaiox) : ''}
-${secaoPlaybook(ctx, nEstrategia)}
-${secaoScriptAnalise(ctx, nScript)}
-${secaoVeredito(ctx, nVeredito)}
-${secaoBio(ctx, nBio)}
-${secaoConteudo(ctx, nConteudo)}
+${secaoDecisaoOferta(ctx, nOferta)}
+${secaoArgumentos(ctx, nArgs)}
+${secaoAnalisePerfil(ctx, nAnalise)}
 ${secaoMunicaoNicho(ctx, nProvas)}
 <footer class="rodape">
   ${marca()}

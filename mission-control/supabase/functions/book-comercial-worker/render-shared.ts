@@ -198,7 +198,7 @@ export const secHead = (num: string, titulo: string, sub?: string, momento?: 'an
     : '';
   return `
 <header class="sec-head">
-  <span class="sec-num">${esc(num)}</span>
+  ${num ? `<span class="sec-num">${esc(num)}</span>` : ''}
   <div class="sec-head-txt">
     ${selo}
     <h2 class="sec-titulo">${esc(titulo)}</h2>
