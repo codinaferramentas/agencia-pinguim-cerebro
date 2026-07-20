@@ -9,6 +9,7 @@ import {
   AnaliseJson,
   DIAG_BIO_LABELS,
   Lead,
+  PILAR_EXPLICA,
   PILAR_LABELS,
   RUBRICA_BIO_LABELS,
   avatarHtml,
@@ -24,6 +25,7 @@ import {
   rubricaBarras,
   rubricaScore10,
   secHead,
+  serieBadge,
   semaforo,
   shell,
   statRow,
@@ -69,6 +71,8 @@ export interface BookCtx {
   raiox: RaioX | null;
   municao: Municao | null;
   roteiro?: Roteiro | null;
+  /** depoimentos brutos (com anexo_url = print) pra casar com os cases */
+  depoimentos_ref?: { autor: string; produto: string; anexo_url: string | null }[] | null;
   gerado_em: string;
   /** todas as respostas do formulário de qualificação Yay!Forms (ficha do lead) */
   respostas_form?: { pergunta: string; resposta: string }[] | null;
@@ -163,8 +167,10 @@ const BOOK_CSS = `
 .an-passo-head{display:flex;align-items:center;gap:12px;margin-bottom:10px}
 .an-passo-num{font-family:var(--f-black);font-size:22px;color:var(--accent);line-height:1}
 .an-passo-titulo{font-family:var(--f-black);font-size:15px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink)}
-.an-cena{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;align-items:stretch;break-inside:avoid}
+.an-cena{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;break-inside:avoid}
 @media(max-width:760px){.an-cena{grid-template-columns:1fr}}
+/* cena da abertura/visão geral: fala em cima (largura total), tabela embaixo */
+.an-cena-full{grid-template-columns:1fr}
 /* lado esquerdo: a FALA (teleprompter) */
 .an-fala{background:#141210;color:#ece7dd;border-radius:12px;padding:20px 22px}
 .an-fala-etq{font-family:var(--f-black);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:9px}
@@ -187,15 +193,32 @@ const BOOK_CSS = `
 .an-obs-etq{display:inline-block;font-family:var(--f-black);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:3px;margin-right:6px;color:#fff}
 .an-obs-pos{background:var(--good)}
 .an-obs-neg{background:var(--warn)}
+.an-post-tipo-linha{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.an-resumo{margin-top:14px;font-size:13px;line-height:1.55;color:var(--ink-soft)}
+.an-citacao{margin-top:12px;font-family:var(--f-serif);font-style:italic;font-size:14px;line-height:1.5;color:var(--ink);border-left:3px solid var(--accent);padding-left:12px}
+.ap-bloco{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
+.ap-bloco-tit{font-family:var(--f-black);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.ap-corpo{display:flex;flex-direction:column;gap:9px}
+.ap-linha{font-size:12.5px;line-height:1.5;color:var(--ink-soft)}
+.ap-linha-rot{display:inline-block;font-family:var(--f-black);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-right:8px;vertical-align:1px}
+.an-recs{margin-top:16px;background:var(--accent-soft);border-radius:9px;padding:14px 16px}
+.an-recs-tit{font-family:var(--f-black);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:9px}
+.an-recs ol{margin:0;padding-left:20px}
+.an-recs li{font-size:12.5px;line-height:1.55;color:var(--ink-soft);margin-bottom:6px}
 .an-bio-atual{background:var(--paper-2);border-radius:8px;padding:12px 14px;font-size:13.5px;line-height:1.5;color:var(--ink);white-space:pre-wrap}
-.an-bio-nova{margin-top:12px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:8px;padding:12px 14px;font-family:var(--f-serif);font-style:italic;font-size:13.5px;line-height:1.5;color:var(--ink)}
-/* visão geral (tabelinha) */
-.vg{display:flex;flex-direction:column;gap:9px}
-.vg-linha{display:grid;grid-template-columns:1fr 70px 34px;gap:10px;align-items:center}
-.vg-nome{font-size:12.5px;color:var(--ink-soft)}
+.an-bio-nova{margin-top:12px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:8px;padding:12px 14px;font-size:13.5px;line-height:1.6;color:var(--ink);white-space:pre-wrap}
+.an-bio-nova .an-legenda-etq{font-style:normal}
+/* visão geral (tabelinha explicada) */
+.vg{display:flex;flex-direction:column;gap:14px}
+.vg-pilar{break-inside:avoid}
+.vg-topo{display:grid;grid-template-columns:1fr 64px 32px;gap:10px;align-items:center}
+.vg-nome{font-family:var(--f-black);font-size:12.5px;text-transform:uppercase;letter-spacing:.02em;color:var(--ink)}
 .vg-barra{height:7px;background:var(--paper-2);border-radius:4px;overflow:hidden}
 .vg-fill{display:block;height:100%;border-radius:4px}
 .vg-nota{font-family:var(--f-black);font-size:14px;text-align:right}
+.vg-explica{font-size:11.5px;color:var(--muted);line-height:1.45;margin-top:4px}
+.vg-just{font-size:12px;color:var(--ink-soft);line-height:1.5;margin-top:5px}
+.vg-just strong{color:var(--accent);font-weight:700}
 /* ponte pra oferta */
 .an-ponte{background:var(--dark);border:2px solid var(--accent);border-radius:14px;padding:24px 26px;margin:26px 0 0;break-inside:avoid}
 .an-ponte-etq{font-family:var(--f-black);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
@@ -273,6 +296,9 @@ const BOOK_CSS = `
 .case-rel{font-size:11.5px;color:#9c968a}
 .case-rel strong{color:#d8d2c6;font-size:10px;letter-spacing:.12em;text-transform:uppercase;display:block;margin-bottom:2px}
 .case-valor{display:inline-block;font-family:var(--f-black);font-size:12px;color:var(--dark);background:var(--accent);border-radius:4px;padding:3px 9px;margin-top:8px}
+.case-com-print{display:grid;grid-template-columns:96px 1fr;gap:14px;align-items:start}
+@media(max-width:600px){.case-com-print{grid-template-columns:1fr}}
+.case-print img{width:100%;border-radius:8px;border:1px solid rgba(255,255,255,.16);display:block}
 
 @media print{
   .dark,.case,.obje,.opp,.passo-call,.risco,.bio-shot,.call-box{break-inside:avoid;page-break-inside:avoid}
@@ -396,7 +422,7 @@ const secaoMapaUso = (ctx: BookCtx, nm: NumMap): string => {
     {
       etq: '⚡ Durante a call', cls: 'mapa-q-vivo',
       itens: [
-        { s: `${nm.nAnalise} · Análise do perfil ao vivo`, o: 'O presente pro lead — leia em voz alta, na ordem: visão geral → bio → melhor conteúdo → onde melhorar → ponte pra oferta' },
+        { s: `${nm.nAnalise} · Script da análise de perfil`, o: 'O roteiro pra apresentar a análise ao vivo, na ordem: visão geral → bio → melhor conteúdo → onde melhorar → ponte pra oferta' },
       ],
     },
     {
@@ -501,24 +527,29 @@ const secaoDecisaoOferta = (ctx: BookCtx, num: string): string => {
 //   Menor engajamento → Ponte pra oferta.
 // O veredito geral vem ANTES dos detalhes; a ponte só no fim.
 
-// mini-tabela dos 5 pilares (a "tabelinha" — visão geral)
+// mini-tabela dos 5 pilares (a "tabelinha") — cada pilar EXPLICADO, porque
+// o vendedor não domina conteúdo e precisa saber o que cada nota significa.
 const visaoGeralHtml = (ctx: BookCtx): string => {
   const ov = (ctx.analise?.overview ?? {}) as Record<string, unknown>;
   const pilares = (ov.pilares ?? {}) as Record<string, { nota?: unknown; justificativa?: unknown }>;
   const nota = ov.nota_geral;
   const linhas = Object.entries(pilares).map(([k, v]) => `
-    <div class="vg-linha">
-      <span class="vg-nome">${esc(PILAR_LABELS[k] || k.replace(/_/g, ' '))}</span>
-      <span class="vg-barra"><span class="vg-fill" style="width:${(Number(v?.nota) || 0) * 10}%;background:${semaforo((Number(v?.nota) || 0))}"></span></span>
-      <span class="vg-nota" style="color:${semaforo(Number(v?.nota))}">${fmtNota(v?.nota)}</span>
+    <div class="vg-pilar">
+      <div class="vg-topo">
+        <span class="vg-nome">${esc(PILAR_LABELS[k] || k.replace(/_/g, ' '))}</span>
+        <span class="vg-barra"><span class="vg-fill" style="width:${(Number(v?.nota) || 0) * 10}%;background:${semaforo((Number(v?.nota) || 0))}"></span></span>
+        <span class="vg-nota" style="color:${semaforo(Number(v?.nota))}">${fmtNota(v?.nota)}</span>
+      </div>
+      ${PILAR_EXPLICA[k] ? `<div class="vg-explica">${esc(PILAR_EXPLICA[k])}</div>` : ''}
+      ${v?.justificativa ? `<div class="vg-just"><strong>Neste perfil:</strong> ${esc(String(v.justificativa))}</div>` : ''}
     </div>`).join('');
   return `
-    <div class="an-cena">
+    <div class="an-cena an-cena-full">
       <div class="an-fala">
         <div class="an-fala-etq">Leia em voz alta · abertura</div>
         <p class="an-fala-txt">${esc((ctx.roteiro?.abertura) || 'Antes de tudo, eu entrei no seu perfil e preparei uma análise sua, de presente. Vou te mostrar o que enxergo de fora — começo, meio e fim. Depois a gente conversa. Pode ser?')}</p>
         <div class="an-fala-etq" style="margin-top:16px">Agora dê a visão geral</div>
-        <p class="an-fala-txt">Deixa eu começar te dando uma visão geral do seu perfil, e depois a gente mergulha em cada ponto.</p>
+        <p class="an-fala-txt">Deixa eu começar te dando uma visão geral do seu perfil, olhando 5 pontos, e depois a gente mergulha em cada um. Vou te explicar cada um enquanto passo pela nota.</p>
       </div>
       <div class="an-dado">
         <div class="an-dado-tit">Visão geral do perfil${nota != null ? ` — nota <strong style="color:${semaforo(nota)}">${fmtNota(nota)}/10</strong>` : ''}</div>
@@ -545,18 +576,35 @@ const cenaPasso = (ctx: BookCtx, passo: { titulo_secao: string; fala: string; di
 };
 
 // painel de dado de um post (foto + números + o que funcionou/evoluir)
-const dadoPost = (post: Record<string, unknown> | null, rotulo: string): string => {
+const dadoPost = (post: Record<string, unknown> | null, rotulo: string, modo: 'top' | 'worst'): string => {
   if (!post) return '<p class="vazio">Post não disponível.</p>';
   const a = (post.analysis ?? {}) as Record<string, unknown>;
   const isVideo = post.post_type === 'Reel' || post.post_type === 'Video';
   const pos = Array.isArray(a.fatores_positivos) ? (a.fatores_positivos as unknown[]) : [];
   const neg = Array.isArray(a.fatores_negativos) ? (a.fatores_negativos as unknown[]) : [];
+  const recs = Array.isArray(a.recomendacoes) ? (a.recomendacoes as unknown[]) : [];
+  const cit = Array.isArray(a.citacoes_de_impacto) ? (a.citacoes_de_impacto as unknown[]) : [];
+
+  // linha de análise só quando há conteúdo real (motor devolve "N/A" p/ áudio sem transcript)
+  const linha = (rot: string, v: unknown) => {
+    const s = String(v ?? '').trim();
+    if (!s || s === 'N/A' || s.length < 8) return '';
+    return `<div class="ap-linha"><span class="ap-linha-rot">${rot}</span><span>${esc(s)}</span></div>`;
+  };
+
+  const tituloPorques = modo === 'top' ? 'Por que funcionou' : 'Por que teve menos alcance';
+  const seloRec = modo === 'top' ? 'Pra replicar nos próximos' : 'Como corrigir';
+
   return `
     <div class="an-dado-tit">${esc(rotulo)}</div>
     <div class="an-post">
       ${post.thumb_url ? `<img class="an-post-thumb" src="${esc(post.thumb_url)}" alt="post">` : '<div class="an-post-thumb an-post-noimg">sem imagem</div>'}
       <div class="an-post-info">
-        <div class="an-post-tipo">${esc(post.post_type || 'post')}</div>
+        <div class="an-post-tipo-linha">
+          <span class="an-post-tipo">${esc(post.post_type || 'post')}</span>
+          ${a.classificacao ? serieBadge(a.classificacao) : ''}
+          ${a.nota_geral != null ? notaChip(a.nota_geral) : ''}
+        </div>
         <div class="an-post-nums">
           <span><strong>${fmtNum(post.likes)}</strong> curtidas</span>
           <span><strong>${fmtNum(post.comments)}</strong> coment.</span>
@@ -564,10 +612,30 @@ const dadoPost = (post: Record<string, unknown> | null, rotulo: string): string 
         </div>
       </div>
     </div>
-    ${post.full_caption ? `<div class="an-legenda"><span class="an-legenda-etq">Legenda do post</span>“${esc(truncaPalavras(String(post.full_caption), 40))}”</div>` : ''}
+    ${post.full_caption ? `<div class="an-legenda"><span class="an-legenda-etq">Legenda do post</span>“${esc(truncaPalavras(String(post.full_caption), 45))}”</div>` : ''}
+    ${a.resumo_desempenho ? `<div class="an-resumo">${esc(String(a.resumo_desempenho))}</div>` : ''}
+    ${cit.length && String(cit[0]).trim().length >= 15 ? `<div class="an-citacao">“${esc(String(cit[0]))}”</div>` : ''}
+
+    <div class="ap-bloco">
+      <div class="ap-bloco-tit">${esc(tituloPorques)}</div>
+      <div class="ap-corpo">
+        ${linha('Gancho', a.analise_gancho)}
+        ${linha('Áudio', a.analise_audio)}
+        ${linha('Legenda', a.analise_legenda)}
+        ${linha('Formato', a.analise_formato)}
+        ${linha('Hashtags', a.analise_hashtags)}
+        ${linha('Estratégia', a.analise_estrategica)}
+      </div>
+    </div>
+
     ${(pos.length || neg.length) ? `<div class="an-obs">
-      ${pos.length ? `<div><span class="an-obs-etq an-obs-pos">Acertou</span> ${esc(String(pos[0]))}</div>` : ''}
-      ${neg.length ? `<div><span class="an-obs-etq an-obs-neg">Dá pra melhorar</span> ${esc(String(neg[0]))}</div>` : ''}
+      ${pos.slice(0, 2).map((f) => `<div><span class="an-obs-etq an-obs-pos">Acertou</span> ${esc(String(f))}</div>`).join('')}
+      ${neg.slice(0, 2).map((f) => `<div><span class="an-obs-etq an-obs-neg">Dá pra melhorar</span> ${esc(String(f))}</div>`).join('')}
+    </div>` : ''}
+
+    ${recs.length ? `<div class="an-recs">
+      <div class="an-recs-tit">${esc(seloRec)}</div>
+      <ol>${recs.slice(0, 4).map((rc) => `<li>${esc(String(rc))}</li>`).join('')}</ol>
     </div>` : ''}`;
 };
 
@@ -594,11 +662,11 @@ const secaoAnalisePerfil = (ctx: BookCtx, num: string): string => {
 
   return `
 <section class="sec">
-  ${secHead(num, 'Análise do perfil ao vivo', 'O presente pro lead — leia em voz alta, na ordem. Cada fala já vem com o dado ao lado.', 'vivo')}
+  ${secHead(num, 'Script da análise de perfil', 'O roteiro pra você apresentar a análise ao vivo — leia em voz alta, na ordem. Cada fala já vem com o dado ao lado.', 'vivo')}
   ${visaoGeralHtml(ctx)}
   ${cenaPasso(ctx, pBio, dadoBio(ctx), 1, 'Comece pela bio')}
-  ${cenaPasso(ctx, pMelhor, dadoPost(top, '★ Post de maior engajamento'), 2, 'O que ele acertou')}
-  ${cenaPasso(ctx, pPior, dadoPost(worst, 'Post de menor engajamento'), 3, 'Onde dá pra melhorar')}
+  ${cenaPasso(ctx, pMelhor, dadoPost(top, '★ Post de maior engajamento', 'top'), 2, 'O que ele acertou')}
+  ${cenaPasso(ctx, pPior, dadoPost(worst, 'Post de menor engajamento', 'worst'), 3, 'Onde dá pra melhorar')}
   ${r?.transicao_oferta ? `<div class="an-ponte">
     <div class="an-ponte-etq">⚡ Só agora: a ponte pra oferta</div>
     <p class="an-ponte-txt">${esc(r.transicao_oferta)}</p>
@@ -702,19 +770,36 @@ const secaoMunicaoNicho = (ctx: BookCtx, num: string): string => {
 </section>`;
   }
 
+  // casa o print (anexo_url) do depoimento original pelo nome do autor
+  const refs = ctx.depoimentos_ref || [];
+  const achaPrint = (autor: string): string | null => {
+    if (!autor) return null;
+    const a = autor.toLowerCase().trim();
+    const r = refs.find((d) => d.anexo_url && d.autor && (d.autor.toLowerCase().includes(a) || a.includes(d.autor.toLowerCase())));
+    return r?.anexo_url || null;
+  };
+
   const casesHtml = mun.cases?.length ? `
     <div class="dark-sub">
       <h4>Cases de sucesso pra citar na call</h4>
-      ${mun.cases.map((c) => `
+      ${mun.cases.map((c) => {
+        const print = achaPrint(c.autor);
+        return `
       <div class="case">
         <div class="case-top">
           <span class="case-autor">${esc(c.autor)}</span>
           <span class="case-produto">${esc(c.produto)}</span>
         </div>
-        <p>${esc(c.resumo)}</p>
-        ${c.relevancia_nicho ? `<div class="case-rel"><strong>Por que cola nesse nicho</strong>${esc(c.relevancia_nicho)}</div>` : ''}
-        ${c.valor_mencionado ? `<span class="case-valor">${esc(c.valor_mencionado)}</span>` : ''}
-      </div>`).join('')}
+        <div class="case-body${print ? ' case-com-print' : ''}">
+          ${print ? `<a class="case-print" href="${esc(print)}" target="_blank"><img src="${esc(print)}" alt="print do depoimento" loading="lazy"></a>` : ''}
+          <div>
+            <p>${esc(c.resumo)}</p>
+            ${c.relevancia_nicho ? `<div class="case-rel"><strong>Por que cola nesse nicho</strong>${esc(c.relevancia_nicho)}</div>` : ''}
+            ${c.valor_mencionado ? `<span class="case-valor">${esc(c.valor_mencionado)}</span>` : ''}
+          </div>
+        </div>
+      </div>`;
+      }).join('')}
     </div>` : '';
 
   const insightsHtml = mun.insights_comerciais?.length ? `

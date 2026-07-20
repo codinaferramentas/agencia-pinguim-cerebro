@@ -169,7 +169,7 @@ REGRAS:
 1. Responda APENAS via tool call.
 2. NUNCA invente dados: use só o histórico, a análise do perfil e os depoimentos fornecidos. O status de cliente vem como FATO verificado — não contradiga.
 3. produto_alvo e produto_alternativa: siga os critérios do catálogo pesando TODOS os sinais (histórico de compras primeiro, depois faturamento, desafio declarado e maturidade do perfil). O racional DEVE citar quais sinais pesaram.
-4. Cases: escolha APENAS depoimentos da lista fornecida que tenham relação real com o nicho/momento do lead (mesmo nicho, nicho vizinho ou mesma dor). Se nada tiver relação direta, escolha os de resultado mais concreto e explique a ponte com honestidade.
+4. Cases: escolha APENAS depoimentos da lista fornecida que tenham relação real com o nicho/momento do lead (mesmo nicho, nicho vizinho ou mesma dor). Priorize os marcados [TEM PRINT ✓] quando forem igualmente relevantes (o print enriquece o material). No campo "resumo" do case, seja CONCRETO com o resultado que a pessoa teve (não escreva "compartilhou experiência positiva" — diga O QUE ela conquistou). Se nada tiver relação direta com o nicho, escolha os de resultado mais concreto e explique a ponte com honestidade.
 5. Insights e roteiro: específicos deste lead — cite o problema real do perfil dele (nota, bio, conteúdo) e conecte com o que o produto-alvo resolve. Nada de genérico.
 6. Objeções: antecipe as 2-4 mais prováveis DESTE lead (preço, tempo, "já tentei", "meu nicho é diferente") com respostas ancoradas nos dados e cases.
 7. Tom: direto, consultivo, português brasileiro. O consultor vai ler isso 10 minutos antes da call.`;
@@ -201,7 +201,9 @@ export async function gerarMunicao(ctx: {
     const autor = i.autor || (i.titulo || '').replace(/^depoimento\s*[—-]\s*/i, '').replace(/\s*\(.+\)$/, '').trim() || 'aluno';
     const texto = i.resumo || i.titulo || '';
     const cat = i.categoria_inferida ? ` [tema: ${i.categoria_inferida}]` : '';
-    return `- [${produto}] ${autor}: ${String(texto).slice(0, 220)}${cat}${i.valor_mencionado ? ` (valor citado: ${i.valor_mencionado})` : ''}`;
+    // marca quem tem PRINT — a IA deve preferir esses (o print enriquece o book)
+    const print = i.anexo_url ? ' [TEM PRINT ✓]' : '';
+    return `- [${produto}] ${autor}: ${String(texto).slice(0, 220)}${cat}${i.valor_mencionado ? ` (valor citado: ${i.valor_mencionado})` : ''}${print}`;
   };
   const depTxt = ctx.depoimentos.length
     ? ctx.depoimentos.map((d) => d.itens.map((i: any) => depLinha(d.produto, i)).join('\n')).join('\n')

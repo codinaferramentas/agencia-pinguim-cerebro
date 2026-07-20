@@ -159,6 +159,16 @@ export const PILAR_LABELS: Record<string, string> = {
   engajamento_relacionamento: 'Engajamento & relacionamento',
 };
 
+// Explicação leve de cada pilar — o vendedor NÃO domina conteúdo, então
+// cada categoria vem com uma frase em português de gente do que ela mede.
+export const PILAR_EXPLICA: Record<string, string> = {
+  clareza_nicho: 'Se quem chega no perfil entende em 3 segundos pra quem ele fala e o que entrega.',
+  autoridade_percebida: 'Se a audiência olha o perfil e sente que ele é referência — por provas, resultados e consistência.',
+  estrategia_conteudo: 'Se existe um padrão no que ele posta e se ele repete o que dá certo, em vez de postar solto.',
+  monetizacao: 'Se o perfil tem um caminho claro pra transformar seguidor em cliente (link, oferta, CTA visível).',
+  engajamento_relacionamento: 'Se a audiência interage de verdade (comenta, responde) ou só assiste calada.',
+};
+
 export const DIAG_BIO_LABELS: Record<string, string> = {
   proposta_valor: 'Proposta de valor',
   segmentacao_publico: 'Segmentação de público',
@@ -193,7 +203,7 @@ export const notaChip = (nota: unknown): string => {
 /** Cabeçalho de seção: número gigante laranja + título + régua laranja. */
 export const secHead = (num: string, titulo: string, sub?: string, momento?: 'antes' | 'vivo' | 'consulta'): string => {
   const selo = momento === 'antes' ? '<span class="momento momento-antes">📋 Antes da call</span>'
-    : momento === 'vivo' ? '<span class="momento momento-vivo">⚡ Use ao vivo</span>'
+    : momento === 'vivo' ? '<span class="momento momento-vivo">⚡ Script — use ao vivo</span>'
     : momento === 'consulta' ? '<span class="momento momento-consulta">📎 Consulta se precisar</span>'
     : '';
   return `

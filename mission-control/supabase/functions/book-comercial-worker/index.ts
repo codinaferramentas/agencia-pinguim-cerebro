@@ -306,7 +306,14 @@ async function processar(job: any, forcar: boolean): Promise<Record<string, unkn
       }),
     ]);
     const raiox = montarRaiox(pessoa, municao, fato);
-    raioxCombo = { raiox, municao, roteiro };
+    // guarda os depoimentos brutos (com anexo_url = print do case) pra o
+    // render casar de volta com os cases que a IA escolheu, por autor
+    const depoimentosFlat = depoimentos.flatMap((d) => d.itens.map((i: any) => ({
+      autor: i.autor || (i.titulo || '').replace(/^depoimento\s*[—-]\s*/i, '').replace(/\s*\(.+\)$/, '').trim(),
+      produto: d.produto,
+      anexo_url: i.anexo_url || null,
+    })));
+    raioxCombo = { raiox, municao, roteiro, depoimentos_ref: depoimentosFlat };
     await atualizarAnalise(bookingId, { raiox_json: raioxCombo, produto_alvo: municao.produto_alvo });
     log(`raio-X OK | produto_alvo=${municao.produto_alvo} | ja_cliente=${raiox.ja_cliente} | roteiro=${roteiro ? 'ok' : 'falhou'}`);
   } else {
@@ -326,7 +333,7 @@ async function processar(job: any, forcar: boolean): Promise<Record<string, unkn
     form_recebido: !!form,
   };
   const geradoEm = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }).format(new Date());
-  const htmlBook = renderBookConsultor({ lead, analise, raiox: raioxCombo.raiox, municao: raioxCombo.municao, roteiro: raioxCombo.roteiro || null, gerado_em: geradoEm, respostas_form: form?.respostas || null });
+  const htmlBook = renderBookConsultor({ lead, analise, raiox: raioxCombo.raiox, municao: raioxCombo.municao, roteiro: raioxCombo.roteiro || null, depoimentos_ref: raioxCombo.depoimentos_ref || null, gerado_em: geradoEm, respostas_form: form?.respostas || null });
   // O comercial NÃO entrega a análise pro lead (decisão André 17/07) —
   // a versão cliente fica desligada; religa com book_config.gerar_cliente='sim'
   const gerarCliente = (await getConfig('gerar_cliente')) === 'sim';

@@ -377,19 +377,29 @@ function validateBioTextClaims(bio: string, corpus: string): string {
 
 function enforceBioQuality(bio: string, objetivo: string): string {
   if (!bio) return bio;
-  let lines = bio.split('\n').filter((l) => l.trim());
+  let lines = bio.split('\n').map((l) => l.trim()).filter(Boolean);
   // CTA na última linha
   if (lines.length > 0 && !CTA_PATTERN.test(lines[lines.length - 1])) {
     lines.push(CTA_BY_OBJETIVO[objetivo] || CTA_BY_OBJETIVO.autoridade);
   }
-  // Max 3 linhas
+  // Máx 3 linhas: se passar, DESCARTA linhas do meio (não junta com " | ",
+  // que gerava frases sem pontuação tipo "ajudo a vender 200 milhões low tickets")
   if (lines.length > 3) {
-    const meio = lines.slice(1, -1).join(' | ');
-    lines = [lines[0], meio, lines[lines.length - 1]];
+    lines = [lines[0], lines[1], lines[lines.length - 1]];
   }
   let result = lines.join('\n');
-  // Trunca a 149
-  if (result.length > 149) result = result.slice(0, 149);
+  // Se passar de 149, remove a última linha inteira até caber — NUNCA corta
+  // no meio de uma palavra (era o que deixava a bio truncada/incoerente)
+  while (result.length > 149 && lines.length > 1) {
+    lines.pop();
+    result = lines.join('\n');
+  }
+  // último recurso: 1 linha só e ainda grande → corta na última palavra inteira
+  if (result.length > 149) {
+    result = result.slice(0, 149);
+    const ultimoEspaco = result.lastIndexOf(' ');
+    if (ultimoEspaco > 100) result = result.slice(0, ultimoEspaco);
+  }
   return result;
 }
 

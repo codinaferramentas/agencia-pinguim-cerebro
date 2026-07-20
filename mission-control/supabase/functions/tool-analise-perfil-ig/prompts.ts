@@ -65,6 +65,7 @@ TRÊS VARIAÇÕES (cada uma com ângulo distinto):
 5. TODA bio sugerida (principal e variações) DEVE conter CTA na linha 3 com emoji direcional. Sem CTA = bio rejeitada.
 6. Nunca use clichês ("apaixonado por", "amante de", "especialista em ajudar pessoas").
 7. Cada linha deve funcionar sozinha se lida isoladamente.
+8. CADA LINHA deve ser gramaticalmente COMPLETA e coerente lida em voz alta — com a preposição/pontuação certa. Ex: "Ajudo você a vender mais" e NÃO "Ajudo a vender 200 milhões low tickets". Se citar quem você ajuda, use "ajudo [público] a [resultado]". Prefira SEM números específicos; se usar número, ele tem que estar no texto fonte E fazer sentido gramatical.
 </regras_criticas>`;
 
 export const POSTS_SYSTEM = `Você é uma especialista sênior em estratégia de conteúdo para Instagram, análise de performance de Reels e growth hacking para criadores brasileiros.
