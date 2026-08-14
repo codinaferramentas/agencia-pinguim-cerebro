@@ -38,6 +38,9 @@ const CONTA_ROBO = 'ferramenta@agenciapinguim.com';
 // America/Sao_Paulo é UTC-3 fixo (sem horário de verão desde 2019)
 const TZ_OFFSET_MS = -3 * 3600 * 1000;
 
+const ID_RAFAEL = '1083728715726463068';
+const ID_DJAIRO = '1083731934238228590';
+
 interface ConfigAgenda {
   slug: string;
   nome: string;
@@ -45,11 +48,15 @@ interface ConfigAgenda {
   // Se presente: só alerta eventos que tenham PELO MENOS UM desses e-mails
   // entre os participantes (caso contato@ — agenda tem eventos de outros times)
   filtroParticipantes?: string[];
+  // Quem marcar quando o invite NÃO identifica o consultor (ProAlt/ELO só têm
+  // o aluno). Quando o agendamento lá na ponta passar a incluir o consultor,
+  // o mapeamento por participante assume e marca só quem estiver no evento.
+  mencaoPadrao?: string[];
 }
 
 const AGENDAS: ConfigAgenda[] = [
-  { slug: 'proalt', nome: 'ProAlt', calendarId: 'proalt.agenda@gmail.com' },
-  { slug: 'elo', nome: 'ELO', calendarId: 'ciclo.agendas@gmail.com' },
+  { slug: 'proalt', nome: 'ProAlt', calendarId: 'proalt.agenda@gmail.com', mencaoPadrao: [ID_RAFAEL, ID_DJAIRO] },
+  { slug: 'elo', nome: 'ELO', calendarId: 'ciclo.agendas@gmail.com', mencaoPadrao: [ID_RAFAEL, ID_DJAIRO] },
   {
     slug: 'pinguim', nome: 'Pinguim', calendarId: 'contato@agenciapinguim.com',
     filtroParticipantes: ['rafael.agenciapinguim@gmail.com', 'jairo.agenciapinguim@gmail.com'],
@@ -82,6 +89,7 @@ interface Evento {
   fim: Date | null;
   participantes: { email: string; nome?: string }[];
   meet: string | null;
+  mencoes: string[];  // ids Discord a marcar nas mensagens deste evento
 }
 
 // ---------- tempo ----------
@@ -150,6 +158,10 @@ async function eventosDoDia(tok: string, inicioDia: Date, fimDia: Date): Promise
         const tem = participantes.some((p: { email: string }) => ag.filtroParticipantes!.includes(p.email));
         if (!tem) continue;
       }
+      // Consultor identificado no invite → marca só ele; senão, padrão da agenda
+      const mapeados = participantes
+        .map((p: { email: string }) => MENCAO_DISCORD[p.email])
+        .filter(Boolean) as string[];
       todos.push({
         agenda_slug: ag.slug,
         agenda_nome: ag.nome,
@@ -159,6 +171,7 @@ async function eventosDoDia(tok: string, inicioDia: Date, fimDia: Date): Promise
         fim: e.end?.dateTime ? new Date(e.end.dateTime) : null,
         participantes,
         meet: extrairMeet(e),
+        mencoes: mapeados.length ? mapeados : (ag.mencaoPadrao || []),
       });
     }
   }
@@ -195,10 +208,13 @@ async function postarDiscord(conteudo: string) {
 // ---------- mensagens ----------
 function linhaEvento(ev: Evento): string {
   let l = `• **${horaBRT(ev.inicio)}** — ${ev.titulo}`;
+  const mencoes = ev.mencoes.map(id => `<@${id}>`);
   const nomes = ev.participantes
-    .map(p => MENCAO_DISCORD[p.email] ? `<@${MENCAO_DISCORD[p.email]}>` : (p.nome || p.email))
-    .slice(0, 6);
-  if (nomes.length) l += `\n  👥 ${nomes.join(', ')}`;
+    .filter(p => !MENCAO_DISCORD[p.email])  // mapeado já aparece como menção
+    .map(p => p.nome || p.email)
+    .slice(0, 5);
+  const pessoas = [...mencoes, ...nomes];
+  if (pessoas.length) l += `\n  👥 ${pessoas.join(', ')}`;
   if (ev.meet) l += `\n  🔗 ${ev.meet}`;
   return l;
 }
