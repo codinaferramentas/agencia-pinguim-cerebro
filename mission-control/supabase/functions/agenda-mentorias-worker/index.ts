@@ -64,6 +64,15 @@ const MENCAO_DISCORD: Record<string, string> = {
   'fernandalisboa.agenciapinguim@gmail.com': '1210285892489449603', // Fernanda Lisboa (fora do filtro por ora)
 };
 
+// Quem é marcado quando o worker detecta CONFLITO entre agendas
+// (Rafael, Djairo, Fernanda, Ingrid — pedido do Andre 14/ago)
+const MENCOES_CONFLITO = [
+  '1083728715726463068',  // Rafael Sousa
+  '1083731934238228590',  // Djairo Alves
+  '1210285892489449603',  // Fernanda Lisboa
+  '1205120597433122846',  // Ingrid Nascimento
+];
+
 interface Evento {
   agenda_slug: string;
   agenda_nome: string;
@@ -172,7 +181,9 @@ async function postarDiscord(conteudo: string) {
     const r = await fetch(`https://discord.com/api/v10/channels/${CANAL_DISCORD}/messages`, {
       method: 'POST',
       headers: { 'Authorization': `Bot ${bot}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: bloco, allowed_mentions: { parse: ['users'] } }),
+      // flags 4 = SUPPRESS_EMBEDS — sem isso o Discord anexa um cartão "Meet"
+      // por link, poluindo a mensagem (links continuam clicáveis)
+      body: JSON.stringify({ content: bloco, allowed_mentions: { parse: ['users'] }, flags: 4 }),
     });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
@@ -205,6 +216,37 @@ function montarResumo(eventos: Evento[], agora: Date): string {
   }
   if (vazias.length) linhas.push('', `_Sem encontros hoje: ${vazias.join(', ')}_`);
   return linhas.join('\n');
+}
+
+// Conflito = dois eventos alertáveis de AGENDAS DIFERENTES com horário
+// sobreposto (os consultores atendem as 3 agendas; não podem estar em duas
+// calls ao mesmo tempo). Dedup por par de eventos.
+function detectarConflitos(eventos: Evento[]): { id: string; inicio: Date; a: Evento; b: Evento }[] {
+  const conflitos: { id: string; inicio: Date; a: Evento; b: Evento }[] = [];
+  for (let i = 0; i < eventos.length; i++) {
+    for (let j = i + 1; j < eventos.length; j++) {
+      const a = eventos[i], b = eventos[j];
+      if (a.agenda_slug === b.agenda_slug) continue;
+      const fimA = a.fim ?? new Date(a.inicio.getTime() + 3600_000);  // sem fim → assume 1h
+      const fimB = b.fim ?? new Date(b.inicio.getTime() + 3600_000);
+      const sobrepoe = a.inicio < fimB && b.inicio < fimA;
+      if (!sobrepoe) continue;
+      const id = [a.evento_id, b.evento_id].sort().join('+');
+      conflitos.push({ id, inicio: new Date(Math.max(a.inicio.getTime(), b.inicio.getTime())), a, b });
+    }
+  }
+  return conflitos;
+}
+
+function montarConflito(c: { a: Evento; b: Evento }): string {
+  const mencoes = MENCOES_CONFLITO.map(id => `<@${id}>`).join(' ');
+  return [
+    `🚨 **CONFLITO DE AGENDA** ${mencoes}`,
+    `Dois encontros no mesmo horário em agendas diferentes:`,
+    `• [${c.a.agenda_nome}] **${horaBRT(c.a.inicio)}** — ${c.a.titulo}`,
+    `• [${c.b.agenda_nome}] **${horaBRT(c.b.inicio)}** — ${c.b.titulo}`,
+    `Alguém precisa remarcar um dos dois. 🙏`,
+  ].join('\n');
 }
 
 function montarAlerta(tipo: string, ev: Evento): string {
@@ -257,6 +299,15 @@ serve(async (req) => {
 
   const log: any = { agora: agora.toISOString(), hora_brt: horaBRT(agora), dry_run: dryRun, resumo: null, alertas: [] };
 
+  // Fim de semana (sáb/dom em São Paulo): ninguém trabalhando → nenhum aviso
+  // (regra de negócio do Andre, 14/ago). Segunda 7h o resumo volta normal.
+  const diaSemana = brt(agora).getUTCDay();
+  if (diaSemana === 0 || diaSemana === 6) {
+    return new Response(JSON.stringify({ ok: true, ...log, pulado: 'fim de semana (BRT), sem avisos' }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   try {
     // Janela do dia BRT em UTC (00h BRT = 03h UTC)
     const dataBRT = brt(agora).toISOString().slice(0, 10);
@@ -287,6 +338,26 @@ serve(async (req) => {
           .lt('enviado_em', new Date(agora.getTime() - 60 * 24 * 3600 * 1000).toISOString());
       } else {
         log.resumo = { enviado: false, motivo: 'já enviado hoje' };
+      }
+    }
+
+    // ---------- 1b. conflitos entre agendas (toda rodada, dedup por par) ----------
+    log.conflitos = [];
+    for (const c of detectarConflitos(eventos)) {
+      // só avisa conflito FUTURO (não adianta avisar depois que a call passou)
+      if (c.inicio.getTime() < agora.getTime() - 5 * 60000) continue;
+      if (dryRun) {
+        log.conflitos.push({ par: c.id, enviaria: !(await jaEnviado('conflito', c.id, c.inicio)), mensagem: montarConflito(c) });
+        continue;
+      }
+      if (await marcarEnviado('conflito', c.id, c.inicio, `${c.a.agenda_slug}+${c.b.agenda_slug}`, `${c.a.titulo} × ${c.b.titulo}`)) {
+        try {
+          await postarDiscord(montarConflito(c));
+          log.conflitos.push({ par: c.id, enviado: true });
+        } catch (e) {
+          await desmarcarEnviado('conflito', c.id, c.inicio);
+          throw e;
+        }
       }
     }
 

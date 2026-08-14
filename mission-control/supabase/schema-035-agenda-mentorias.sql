@@ -16,7 +16,8 @@
 -- (evento_inicio muda), os alertas voltam a valer pro novo horário.
 create table if not exists pinguim.agenda_alertas_enviados (
   id            uuid primary key default gen_random_uuid(),
-  tipo          text not null check (tipo in ('resumo_dia', 'alerta_1h', 'alerta_10min', 'alerta_na_hora')),
+  -- 'conflito' = dois eventos sobrepostos em agendas diferentes (evento_id = par ordenado 'idA+idB')
+  tipo          text not null check (tipo in ('resumo_dia', 'alerta_1h', 'alerta_10min', 'alerta_na_hora', 'conflito')),
   evento_id     text not null,           -- id do evento no Google (ou 'resumo-YYYY-MM-DD')
   evento_inicio timestamptz not null,    -- pro resumo: início do dia BRT
   agenda        text,                    -- slug: proalt | elo | pinguim
