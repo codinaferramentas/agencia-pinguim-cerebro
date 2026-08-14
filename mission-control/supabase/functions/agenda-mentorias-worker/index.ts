@@ -56,6 +56,14 @@ const AGENDAS: ConfigAgenda[] = [
   },
 ];
 
+// E-mail (Google) → user id (Discord). Participante mapeado vira <@menção>
+// nas mensagens — sem isso o pessoal não vê o aviso (pedido do Andre 14/ago).
+const MENCAO_DISCORD: Record<string, string> = {
+  'rafael.agenciapinguim@gmail.com': '1083728715726463068',   // Rafael Sousa
+  'jairo.agenciapinguim@gmail.com': '1083731934238228590',    // Djairo Alves
+  'fernandalisboa.agenciapinguim@gmail.com': '1210285892489449603', // Fernanda Lisboa (fora do filtro por ora)
+};
+
 interface Evento {
   agenda_slug: string;
   agenda_nome: string;
@@ -164,7 +172,7 @@ async function postarDiscord(conteudo: string) {
     const r = await fetch(`https://discord.com/api/v10/channels/${CANAL_DISCORD}/messages`, {
       method: 'POST',
       headers: { 'Authorization': `Bot ${bot}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: bloco }),
+      body: JSON.stringify({ content: bloco, allowed_mentions: { parse: ['users'] } }),
     });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
@@ -176,7 +184,9 @@ async function postarDiscord(conteudo: string) {
 // ---------- mensagens ----------
 function linhaEvento(ev: Evento): string {
   let l = `• **${horaBRT(ev.inicio)}** — ${ev.titulo}`;
-  const nomes = ev.participantes.map(p => p.nome || p.email).slice(0, 6);
+  const nomes = ev.participantes
+    .map(p => MENCAO_DISCORD[p.email] ? `<@${MENCAO_DISCORD[p.email]}>` : (p.nome || p.email))
+    .slice(0, 6);
   if (nomes.length) l += `\n  👥 ${nomes.join(', ')}`;
   if (ev.meet) l += `\n  🔗 ${ev.meet}`;
   return l;
