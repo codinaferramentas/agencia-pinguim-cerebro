@@ -387,7 +387,9 @@ serve(async (req) => {
       const tipos: [string, boolean][] = [
         ['alerta_1h', minAte > 50 && minAte <= 60],
         ['alerta_10min', minAte > 5 && minAte <= 10],
-        ['alerta_na_hora', minAte > -5 && minAte <= 5],
+        // "na hora" só dispara DO horário em diante (tick 16h00 pro evento
+        // 16h00) — nunca antes; até 10min depois serve de retry/backstop
+        ['alerta_na_hora', minAte > -10 && minAte <= 0],
       ];
       for (const [tipo, dentro] of tipos) {
         if (!dentro) continue;
