@@ -380,10 +380,13 @@ serve(async (req) => {
     // ---------- 2. alertas por evento ----------
     for (const ev of eventos) {
       const minAte = (ev.inicio.getTime() - agora.getTime()) / 60000;
-      // Janelas largas (cron 5/5 min) — dedup garante envio único
+      // Janelas casadas com o tick de 5 min pra disparar NO horário certo
+      // (evento 16h00 → 1h às 15h00, 10min às 15h50). O teto inclusivo pega o
+      // tick exato; o piso dá 1 tick de retry se uma execução falhar. Se ainda
+      // assim perder a janela, o "na hora" é o backstop.
       const tipos: [string, boolean][] = [
-        ['alerta_1h', minAte > 45 && minAte <= 70],
-        ['alerta_10min', minAte > 5 && minAte <= 15],
+        ['alerta_1h', minAte > 50 && minAte <= 60],
+        ['alerta_10min', minAte > 5 && minAte <= 10],
         ['alerta_na_hora', minAte > -5 && minAte <= 5],
       ];
       for (const [tipo, dentro] of tipos) {
