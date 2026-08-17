@@ -242,7 +242,9 @@ function detectarConflitos(eventos: Evento[]): { id: string; inicio: Date; a: Ev
   for (let i = 0; i < eventos.length; i++) {
     for (let j = i + 1; j < eventos.length; j++) {
       const a = eventos[i], b = eventos[j];
-      if (a.agenda_slug === b.agenda_slug) continue;
+      // Sobreposição vale tanto entre agendas diferentes quanto DENTRO da mesma
+      // agenda (cada agenda atende 1 consultor por vez — Andre 17/ago). Dois
+      // eventos no mesmo horário na mesma agenda = erro que precisa remarcar.
       const fimA = a.fim ?? new Date(a.inicio.getTime() + 3600_000);  // sem fim → assume 1h
       const fimB = b.fim ?? new Date(b.inicio.getTime() + 3600_000);
       const sobrepoe = a.inicio < fimB && b.inicio < fimA;
@@ -256,9 +258,13 @@ function detectarConflitos(eventos: Evento[]): { id: string; inicio: Date; a: Ev
 
 function montarConflito(c: { a: Evento; b: Evento }): string {
   const mencoes = MENCOES_CONFLITO.map(id => `<@${id}>`).join(' ');
+  const mesma = c.a.agenda_slug === c.b.agenda_slug;
+  const subtitulo = mesma
+    ? `Dois encontros no mesmo horário na agenda **${c.a.agenda_nome}**:`
+    : `Dois encontros no mesmo horário em agendas diferentes:`;
   return [
     `🚨 **CONFLITO DE AGENDA** ${mencoes}`,
-    `Dois encontros no mesmo horário em agendas diferentes:`,
+    subtitulo,
     `• [${c.a.agenda_nome}] **${horaBRT(c.a.inicio)}** — ${c.a.titulo}`,
     `• [${c.b.agenda_nome}] **${horaBRT(c.b.inicio)}** — ${c.b.titulo}`,
     `Alguém precisa remarcar um dos dois. 🙏`,
@@ -357,11 +363,12 @@ serve(async (req) => {
       }
     }
 
-    // ---------- 1b. conflitos entre agendas (toda rodada, dedup por par) ----------
+    // ---------- 1b. conflitos (toda rodada, dedup por par) ----------
+    // Avisa QUALQUER conflito do dia, já passado ou não (Andre 17/ago): se
+    // marcaram errado, o time precisa remarcar de qualquer jeito. O dedup
+    // garante 1 aviso por par de eventos.
     log.conflitos = [];
     for (const c of detectarConflitos(eventos)) {
-      // só avisa conflito FUTURO (não adianta avisar depois que a call passou)
-      if (c.inicio.getTime() < agora.getTime() - 5 * 60000) continue;
       if (dryRun) {
         log.conflitos.push({ par: c.id, enviaria: !(await jaEnviado('conflito', c.id, c.inicio)), mensagem: montarConflito(c) });
         continue;
