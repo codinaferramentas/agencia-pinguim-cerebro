@@ -190,22 +190,30 @@ function extrairVenda(payload: any): {
   const nome = pick(buyer, 'name') || pick(payload, 'data.subscriber.name');
   if (!email && !nome) return null;
 
-  // ID da oferta: caminhos conhecidos v1/v2
+  // ID da oferta — confirmado no payload REAL v2.0.0: data.purchase.offer.code.
+  // Mantém fallbacks pra v1/variações por segurança.
   const ofertaId = pick(payload,
     'data.purchase.offer.code', 'purchase.offer.code',
     'data.offer.code', 'offer.code',
     'data.purchase.offer.key', 'prod_offer', 'offer_code',
   );
 
-  // telefone: Hotmart às vezes manda checkout_phone / phone (+DDD junto)
+  // Telefone (payload real): buyer.checkout_phone (número) +
+  // buyer.checkout_phone_code (código/DDD). Ambos podem vir só com dígitos.
   const foneBruto = pick(buyer, 'checkout_phone', 'phone')
     || pick(payload, 'data.buyer.phone', 'buyer.phone');
-  const ddd = pick(buyer, 'phone_local_code', 'ddd');
+  const codigoFone = pick(buyer, 'checkout_phone_code', 'phone_local_code', 'ddd');
+  const { ddd, telefone } = separarDddTelefone(codigoFone, foneBruto);
+
   const documento = pick(buyer, 'document', 'documents.0.value')
     || pick(payload, 'data.buyer.document');
 
-  const data = pick(purchase, 'order_date', 'approved_date')
+  // Data (payload real): order_date vem como TIMESTAMP EM MILISSEGUNDOS
+  // (ex.: 1511783344000). Converte pra "DD/MM/AAAA HH:MM" BRT, igual aos
+  // prints da planilha. Fallback approved_date / creation_date.
+  const dataMs = pick(purchase, 'order_date', 'approved_date')
     || pick(payload, 'creation_date', 'data.purchase.order_date');
+  const data = formatarDataBR(dataMs);
 
   return {
     ofertaId,
@@ -214,8 +222,39 @@ function extrairVenda(payload: any): {
     documento,
     email,
     ddd,
-    telefone: foneBruto,
+    telefone,
   };
+}
+
+// America/Sao_Paulo = UTC-3 fixo (sem horário de verão desde 2019).
+const TZ_OFFSET_MS = -3 * 3600 * 1000;
+
+// Converte timestamp Hotmart (ms) pra "DD/MM/AAAA HH:MM:SS" BRT — mesmo
+// formato das linhas existentes da planilha (ex.: "12/08/2026 16:19:45").
+// Se vier vazio ou não-numérico, devolve o que veio (defensivo).
+function formatarDataBR(valor: string): string {
+  const n = Number(valor);
+  if (!valor || !Number.isFinite(n) || n <= 0) return valor || '';
+  const d = new Date(n + TZ_OFFSET_MS);
+  const p = (x: number) => String(x).padStart(2, '0');
+  return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+}
+
+// Separa DDD do número. A Hotmart manda checkout_phone_code (pode ser DDD, ou
+// código país+DDD, ou vazio) e checkout_phone (número, às vezes já com DDD).
+// Regra: se o code tem 2-3 dígitos, é o DDD. Senão, tenta extrair os 2
+// primeiros dígitos do número como DDD. Nunca inventa — na dúvida deixa o
+// número inteiro em telefone e DDD vazio.
+function separarDddTelefone(code: string, numero: string): { ddd: string; telefone: string } {
+  const soDig = (s: string) => String(s || '').replace(/\D/g, '');
+  const c = soDig(code);
+  const n = soDig(numero);
+  // code com cara de DDD (2-3 dígitos) → usa direto
+  if (c.length >= 2 && c.length <= 3) return { ddd: c, telefone: n };
+  // número com 10-11 dígitos (DDD + fone) → fatia os 2 primeiros como DDD
+  if (n.length >= 10 && n.length <= 11) return { ddd: n.slice(0, 2), telefone: n.slice(2) };
+  // não dá pra afirmar → não inventa
+  return { ddd: '', telefone: n };
 }
 
 // Monta a linha na ORDEM das colunas da planilha (dos prints):
