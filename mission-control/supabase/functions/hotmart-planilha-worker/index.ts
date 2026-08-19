@@ -148,7 +148,11 @@ async function appendLinha(spreadsheetId: string, aba: string, valores: any[], t
   if (!r.ok) throw new Error(`Sheets append "${aba}" ${r.status}: ${(await r.text()).slice(0, 200)}`);
 }
 
-// cria a aba INCONSISTENCIA se não existir (idempotente)
+// cabeçalho da aba INCONSISTENCIA (mesmas colunas + a coluna do ID órfão)
+const CAB_INCONSISTENCIA = ['Data', 'Nome', 'Documento', 'Email', 'DDD', 'Telefone', 'Oferta (sem aba)'];
+
+// cria a aba INCONSISTENCIA se não existir, JÁ com uma linha de cabeçalho
+// (idempotente: se a aba já existe, não faz nada).
 async function garantirAbaInconsistencia(spreadsheetId: string, abas: AbaInfo[], token: string): Promise<void> {
   if (abas.some((a) => a.title === ABA_INCONSISTENCIA)) return;
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
@@ -158,6 +162,8 @@ async function garantirAbaInconsistencia(spreadsheetId: string, abas: AbaInfo[],
     body: JSON.stringify({ requests: [{ addSheet: { properties: { title: ABA_INCONSISTENCIA } } }] }),
   });
   if (!r.ok) throw new Error(`Sheets criar aba INCONSISTENCIA ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  // aba recém-criada → grava o cabeçalho na primeira linha
+  await appendLinha(spreadsheetId, ABA_INCONSISTENCIA, CAB_INCONSISTENCIA, token);
 }
 
 // ========================================================================
