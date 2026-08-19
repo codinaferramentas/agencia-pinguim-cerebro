@@ -102,12 +102,37 @@ async function accessTokenGoogle(): Promise<string> {
 // ========================================================================
 // Sheets API helpers
 // ========================================================================
-async function listarAbas(spreadsheetId: string, token: string): Promise<string[]> {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`;
+interface AbaInfo { title: string; sheetId: number; }
+async function listarAbas(spreadsheetId: string, token: string): Promise<AbaInfo[]> {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties(title,sheetId)`;
   const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) throw new Error(`Sheets listar abas ${r.status}: ${(await r.text()).slice(0, 200)}`);
   const j = await r.json();
-  return (j.sheets || []).map((s: any) => s.properties?.title).filter(Boolean);
+  return (j.sheets || [])
+    .map((s: any) => ({ title: s.properties?.title, sheetId: s.properties?.sheetId }))
+    .filter((a: AbaInfo) => a.title != null && a.sheetId != null);
+}
+
+// Garante que a coluna A (Data) da aba exiba data COM hora
+// ("DD/MM/AAAA HH:MM:SS"), pra bater com as linhas existentes. Idempotente:
+// aplicar o mesmo formato de novo não muda nada. Assim vale até pras abas
+// de meses futuros, sem ninguém formatar na mão.
+async function formatarColunaData(spreadsheetId: string, sheetId: number, token: string): Promise<void> {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
+  const req = {
+    repeatCell: {
+      range: { sheetId, startColumnIndex: 0, endColumnIndex: 1, startRowIndex: 1 }, // coluna A, pula cabeçalho
+      cell: { userEnteredFormat: { numberFormat: { type: 'DATE_TIME', pattern: 'dd/mm/yyyy hh:mm:ss' } } },
+      fields: 'userEnteredFormat.numberFormat',
+    },
+  };
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests: [req] }),
+  });
+  // não é fatal: se falhar, a venda já entrou; só o formato de exibição fica pendente.
+  if (!r.ok) console.warn(`formatar coluna Data falhou ${r.status}: ${(await r.text()).slice(0, 150)}`);
 }
 
 // append de uma linha no fim de uma aba (values.append cuida da última linha)
@@ -124,8 +149,8 @@ async function appendLinha(spreadsheetId: string, aba: string, valores: any[], t
 }
 
 // cria a aba INCONSISTENCIA se não existir (idempotente)
-async function garantirAbaInconsistencia(spreadsheetId: string, abasExistentes: string[], token: string): Promise<void> {
-  if (abasExistentes.includes(ABA_INCONSISTENCIA)) return;
+async function garantirAbaInconsistencia(spreadsheetId: string, abas: AbaInfo[], token: string): Promise<void> {
+  if (abas.some((a) => a.title === ABA_INCONSISTENCIA)) return;
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
   const r = await fetch(url, {
     method: 'POST',
@@ -278,12 +303,14 @@ async function processarOutbox(row: any): Promise<{ status: string; aba?: string
   const token = await accessTokenGoogle();
   const abas = await listarAbas(spreadsheetId, token);
 
-  // acha a aba pelo ID da oferta
-  const abaAlvo = abas.find((a) => abaCasaOferta(a, ofertaId));
+  // acha a aba pelo ID da oferta (varre TODAS as abas)
+  const abaAlvo = abas.find((a) => abaCasaOferta(a.title, ofertaId));
 
   if (abaAlvo) {
-    await appendLinha(spreadsheetId, abaAlvo, linha, token);
-    return { status: 'inserido', aba: abaAlvo };
+    // garante que a coluna Data exiba com hora (idempotente; vale p/ abas novas)
+    await formatarColunaData(spreadsheetId, abaAlvo.sheetId, token);
+    await appendLinha(spreadsheetId, abaAlvo.title, linha, token);
+    return { status: 'inserido', aba: abaAlvo.title };
   }
 
   // sem aba → INCONSISTENCIA (+ coluna com o ID que não bateu)
