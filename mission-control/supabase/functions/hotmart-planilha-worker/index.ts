@@ -61,6 +61,18 @@ const PRODUTO_DEFAULT = 'proalt';
 
 const ABA_INCONSISTENCIA = 'INCONSISTENCIA';
 
+// ------------------------------------------------------------------------
+// Etapa 2 — Curseduca (área de membros). TODA venda (ProAlt ou Elo) ganha
+// acesso vitalício de bônus à Escola do Perpétuo (grupo 74). Cria o membro
+// na turma via POST /members (idempotente por email → reenvio de webhook
+// não duplica). Segredos no cofre; NADA hardcoded aqui além de ids públicos.
+// ------------------------------------------------------------------------
+const CURSEDUCA_BASE = 'https://prof.curseduca.pro';
+const CURSEDUCA_GRUPO_BONUS = 74;          // "Escola do Perpétuo: Plano Black (Black 2025)"
+const CURSEDUCA_TAG = 'hotmart-bonus';     // etiqueta de origem
+// Canal de alerta se o token expirar (mesmo do worker de agenda).
+const DISCORD_CANAL_ALERTA = '1372556339578011701'; // #novo-grupo-pinguim
+
 // CORS liberado (webhook server-to-server; navegador não chama, mas mantém padrão).
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -306,23 +318,46 @@ async function processarOutbox(row: any): Promise<{ status: string; aba?: string
   const linha: any[] = row.linha ?? montarLinha(extrairVenda(row.payload));
   const ofertaId: string = row.oferta_id || '';
 
-  const token = await accessTokenGoogle();
-  const abas = await listarAbas(spreadsheetId, token);
+  const venda = extrairVenda(row.payload);
 
-  // acha a aba pelo ID da oferta (varre TODAS as abas)
-  const abaAlvo = abas.find((a) => abaCasaOferta(a.title, ofertaId));
-
-  if (abaAlvo) {
-    // garante que a coluna Data exiba com hora (idempotente; vale p/ abas novas)
-    await formatarColunaData(spreadsheetId, abaAlvo.sheetId, token);
-    await appendLinha(spreadsheetId, abaAlvo.title, linha, token);
-    return { status: 'inserido', aba: abaAlvo.title };
+  // ---- DESTINO 1: planilha (só se ainda não feito — evita duplicar no retry) ----
+  let statusPlanilha = row.planilha_ok ? 'inserido' : '';
+  let abaUsada = row.aba_usada || '';
+  if (!row.planilha_ok) {
+    const token = await accessTokenGoogle();
+    const abas = await listarAbas(spreadsheetId, token);
+    const abaAlvo = abas.find((a) => abaCasaOferta(a.title, ofertaId));
+    if (abaAlvo) {
+      await formatarColunaData(spreadsheetId, abaAlvo.sheetId, token);
+      await appendLinha(spreadsheetId, abaAlvo.title, linha, token);
+      statusPlanilha = 'inserido'; abaUsada = abaAlvo.title;
+    } else {
+      await garantirAbaInconsistencia(spreadsheetId, abas, token);
+      await appendLinha(spreadsheetId, ABA_INCONSISTENCIA, [...linha, `oferta:${ofertaId || '(vazia)'}`], token);
+      statusPlanilha = 'inconsistencia'; abaUsada = ABA_INCONSISTENCIA;
+    }
+    // marca destino 1 como feito ANTES de tentar o 2 (se o 2 falhar, retry não reescreve o 1)
+    await sb.from('hotmart_planilha_outbox').update({ planilha_ok: true, aba_usada: abaUsada }).eq('id', row.id);
   }
 
-  // sem aba → INCONSISTENCIA (+ coluna com o ID que não bateu)
-  await garantirAbaInconsistencia(spreadsheetId, abas, token);
-  await appendLinha(spreadsheetId, ABA_INCONSISTENCIA, [...linha, `oferta:${ofertaId || '(vazia)'}`], token);
-  return { status: 'inconsistencia', aba: ABA_INCONSISTENCIA };
+  // ---- DESTINO 2: Curseduca (só se ainda não feito) ----
+  let curseducaMemberId = row.curseduca_member_id || '';
+  if (!row.curseduca_ok) {
+    try {
+      const res = await criarAcessoCurseduca(venda);
+      curseducaMemberId = res.memberId;
+      await sb.from('hotmart_planilha_outbox')
+        .update({ curseduca_ok: true, curseduca_member_id: curseducaMemberId, curseduca_erro: null }).eq('id', row.id);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await sb.from('hotmart_planilha_outbox').update({ curseduca_erro: msg.slice(0, 300) }).eq('id', row.id);
+      if (e instanceof CurseducaAuthError) await alertarTokenCurseduca(msg);
+      // NÃO joga fora: planilha já foi (marcada), mas curseduca faltou → deixa pro retry.
+      throw new Error(`curseduca pendente: ${msg}`);
+    }
+  }
+
+  return { status: statusPlanilha || 'inserido', aba: abaUsada, curseduca_member_id: curseducaMemberId };
 }
 
 async function marcarEApagar(id: string, resultado: { status: string; aba?: string }) {
@@ -335,6 +370,73 @@ async function marcarErro(id: string, erro: string) {
   await sb.from('hotmart_planilha_outbox')
     .update({ status: 'erro', ultimo_erro: erro.slice(0, 500), tentativas: (data?.tentativas ?? 0) + 1, atualizado_em: new Date().toISOString() })
     .eq('id', id);
+}
+
+// ========================================================================
+// Curseduca — libera acesso de bônus (Escola do Perpétuo, grupo 74).
+// Cria membro via POST /members (idempotente por email: reenvio de webhook
+// devolve o mesmo id, sem duplicar). Auth = api_key + Bearer accessToken.
+// Erros classificados: 'auth' (token expirou → alertar) vs outros.
+// ========================================================================
+class CurseducaAuthError extends Error {}
+
+async function criarAcessoCurseduca(v: ReturnType<typeof extrairVenda>): Promise<{ memberId: string }> {
+  if (!v || (!v.email && !v.nome)) throw new Error('curseduca: venda sem email/nome');
+  if (!v.email) throw new Error('curseduca: venda sem email (obrigatório)');
+
+  const [apiKey, accessToken, senha] = await Promise.all([
+    getChave('CURSEDUCA_API_KEY', 'hotmart-planilha-worker'),
+    getChave('CURSEDUCA_ACCESS_TOKEN', 'hotmart-planilha-worker'),
+    getChave('CURSEDUCA_SENHA_PADRAO', 'hotmart-planilha-worker'),
+  ]);
+
+  const body: any = {
+    name: v.nome || v.email,
+    email: v.email,
+    password: senha,
+    tag: CURSEDUCA_TAG,
+    group: { id: CURSEDUCA_GRUPO_BONUS },
+    sendMemberRegisteredEmail: false,
+    document: v.documento || '',
+  };
+  // telefone real da Hotmart quando houver (formato {mobile:{countryCode,areaCode,number}})
+  if (v.telefone) {
+    body.phones = { mobile: { countryCode: '55', areaCode: v.ddd || '', number: v.telefone } };
+  }
+
+  const r = await fetch(`${CURSEDUCA_BASE}/members`, {
+    method: 'POST',
+    headers: { 'api_key': apiKey, 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (r.status === 403 || r.status === 401) {
+    const t = await r.text();
+    throw new CurseducaAuthError(`token Curseduca expirado/inválido (${r.status}): ${t.slice(0, 150)}`);
+  }
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`curseduca POST /members ${r.status}: ${t.slice(0, 200)}`);
+  }
+  const j = await r.json();
+  return { memberId: String(j.id ?? j.uuid ?? '') };
+}
+
+// Alerta no Discord quando o token do Curseduca expira (precisa renovar
+// no painel Home→acesso rápido). Best-effort: falha de alerta não quebra nada.
+async function alertarTokenCurseduca(detalhe: string): Promise<void> {
+  try {
+    const botToken = await getChave('DISCORD_BOT_TOKEN', 'hotmart-planilha-worker');
+    await fetch(`https://discord.com/api/v10/channels/${DISCORD_CANAL_ALERTA}/messages`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bot ${botToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: `🔴 **Curseduca: token expirou.** Vendas estão presas no outbox (não se perdem) até renovar.\n`
+          + `➡️ Renove o Access Token no painel Curseduca (Home → acesso rápido) e atualize a chave \`CURSEDUCA_ACCESS_TOKEN\` no cofre.\n`
+          + `Detalhe: ${detalhe.slice(0, 200)}`,
+      }),
+    });
+  } catch (_) { /* alerta é best-effort */ }
 }
 
 // ========================================================================
@@ -421,7 +523,7 @@ serve(async (req) => {
     try {
       const r = await processarOutbox(ins);
       await marcarEApagar(ins.id, r);
-      return json({ ok: true, status: r.status, aba: r.aba, oferta: ofertaId });
+      return json({ ok: true, status: r.status, aba: r.aba, oferta: ofertaId, curseduca_member_id: r.curseduca_member_id });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       await marcarErro(ins.id, msg);
