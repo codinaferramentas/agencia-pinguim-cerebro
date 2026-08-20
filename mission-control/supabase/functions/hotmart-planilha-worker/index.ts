@@ -380,6 +380,22 @@ async function marcarErro(id: string, erro: string) {
 // ========================================================================
 class CurseducaAuthError extends Error {}
 
+function soDigitos(s: string): string { return String(s || '').replace(/\D/g, ''); }
+
+// Valida CPF de verdade (11 dígitos + dígitos verificadores). Curseduca
+// recusa CPF malformado com 400, então só mandamos se passar aqui.
+function cpfValido(v: string): boolean {
+  const c = soDigitos(v);
+  if (c.length !== 11 || /^(\d)\1{10}$/.test(c)) return false;
+  const dv = (base: string, pesoIni: number) => {
+    let soma = 0;
+    for (let i = 0; i < base.length; i++) soma += parseInt(base[i], 10) * (pesoIni - i);
+    const r = (soma * 10) % 11;
+    return r === 10 ? 0 : r;
+  };
+  return dv(c.slice(0, 9), 10) === parseInt(c[9], 10) && dv(c.slice(0, 10), 11) === parseInt(c[10], 10);
+}
+
 async function criarAcessoCurseduca(v: ReturnType<typeof extrairVenda>): Promise<{ memberId: string }> {
   if (!v || (!v.email && !v.nome)) throw new Error('curseduca: venda sem email/nome');
   if (!v.email) throw new Error('curseduca: venda sem email (obrigatório)');
@@ -397,8 +413,11 @@ async function criarAcessoCurseduca(v: ReturnType<typeof extrairVenda>): Promise
     tag: CURSEDUCA_TAG,
     group: { id: CURSEDUCA_GRUPO_BONUS },
     sendMemberRegisteredEmail: false,
-    document: v.documento || '',
   };
+  // document é OPCIONAL: só manda se for CPF válido. Curseduca rejeita
+  // (400 "Invalid document") documento malformado — e aí travaria a venda
+  // inteira por causa de um campo que nem é obrigatório. Melhor omitir.
+  if (cpfValido(v.documento)) body.document = soDigitos(v.documento);
   // telefone real da Hotmart quando houver (formato {mobile:{countryCode,areaCode,number}})
   if (v.telefone) {
     body.phones = { mobile: { countryCode: '55', areaCode: v.ddd || '', number: v.telefone } };
