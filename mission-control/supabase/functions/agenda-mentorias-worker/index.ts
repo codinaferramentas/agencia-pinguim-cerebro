@@ -364,11 +364,14 @@ serve(async (req) => {
     }
 
     // ---------- 1b. conflitos (toda rodada, dedup por par) ----------
-    // Avisa QUALQUER conflito do dia, já passado ou não (Andre 17/ago): se
-    // marcaram errado, o time precisa remarcar de qualquer jeito. O dedup
-    // garante 1 aviso por par de eventos.
+    // Só avisa se dá tempo de remarcar: PELO MENOS UM dos dois eventos ainda
+    // não começou (Andre 21/ago). Assim, marcar às 14h uma call das 14h30 ainda
+    // alerta; mas editar a agenda às 19h50 não ressuscita choque das 14h30 que
+    // já passou. Dedup garante 1 aviso por par.
     log.conflitos = [];
     for (const c of detectarConflitos(eventos)) {
+      const maisTarde = Math.max(c.a.inicio.getTime(), c.b.inicio.getTime());
+      if (maisTarde < agora.getTime() - 2 * 60000) continue; // ambos já começaram → não adianta
       if (dryRun) {
         log.conflitos.push({ par: c.id, enviaria: !(await jaEnviado('conflito', c.id, c.inicio)), mensagem: montarConflito(c) });
         continue;
