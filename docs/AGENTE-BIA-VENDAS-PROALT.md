@@ -243,9 +243,9 @@ prompt + completo vetorizado.
 - [x] ~~PREÇO OFICIAL~~ ✅ **RESOLVIDO 2026-08-21** pelo pitch V2 (17/08): **R$ 2.500 à vista ou 12x R$ 258** (âncora R$ 6.997). Cartão e Pix. O R$ 1.497 era material de julho, superado.
 - [ ] **Link do checkout** (cartão/Pix — e boleto existe? O pitch não menciona; o projeto boleto-ProAlt sugere que sim)
 - [x] ~~Bônus nomeados~~ ✅ do pitch V2: #1 Escola do Perpétuo (vitalício, "de R$ 3.000"), #2 Funil de Quiz, #3 Desafio Lo-Fi, iniciante "2-5 mil/30 dias", avançado Protocolo 500K. ⚠️ Confirmar quais valem na condição 1-a-1 (Super Bônus consultoria individual era "somente durante o desafio")
-- [ ] **Garantia** (dias, como funciona) — ZERO menção em TODAS as fontes, incluindo os 84 slides do pitch. A Bia VAI levar essa pergunta.
+- [x] ~~Garantia~~ ✅ **7 dias** (Andre, 21/08). Uso: redutor de risco no fechamento, nunca muleta "compra pra testar". VAI FIXA no system prompt (query de garantia se perde nas aulas — fato crítico não depende de RAG).
 - [ ] **Validade da condição** 1-a-1 (no pitch a urgência é "enquanto a live estiver no ar" — não transferível; padrão do funil: segunda 23h59)
-- [ ] **Divergências internas do deck** pra padronizar: bônus iniciante "2-5 mil" (pág. 61) vs "2-10 mil" (pág. 82); consultoria individual é entrega fixa ou bônus condicional? (pág. 82 vs 59-60)
+- [x] ~~Divergências do deck~~ ✅ (Andre, 21/08): bônus iniciante é **"2 a 10 mil em 30 dias"**; consultoria individual = 🃏 **CARTA NA MANGA** — nunca de cara, só como concessão final no fechamento com lead hesitando (1x por lead, nunca em follow-up frio). Scripts em `BIA-SCRIPTS-OBJECOES.md`.
 
 **Operação:**
 - [x] ~~Risco de parecer golpe~~ **MITIGADO (Andre, 2026-08-20):** o número da Bia é o MESMO que manda as boas-vindas oficiais na compra do desafio — o lead já conhece e já recebeu mensagem dele. Template ancora nisso ("a gente se falou por aqui quando você entrou no desafio 🙂"). Anúncio no grupo ainda ajuda, mas deixou de ser bloqueador.

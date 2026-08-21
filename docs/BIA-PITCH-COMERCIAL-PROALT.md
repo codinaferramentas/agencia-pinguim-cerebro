@@ -66,20 +66,26 @@ o acesso? Tem aula ao vivo? Tem encontro com o Pedro? Como é o suporte?
   Brasil", aula com Micha Menezes.
 - **Bônus #3 — Desafio de Conteúdo Lo-Fi**: gravação completa do desafio do Micha,
   "ajuda a reduzir o CPA absurdamente".
-- **Bônus iniciante — 5 Estratégias 2-5 mil em 30 dias** (⚠️ pág. 82 do deck diz
-  "2 a 10 mil" — até padronizarem, a Bia usa o número CONSERVADOR: 2 a 5 mil).
+- **Bônus iniciante — 5 Estratégias para fazer de 2 a 10 mil em 30 dias**
+  (oficial confirmado pelo Andre em 21/08: é 2 a 10 mil).
 - **Bônus avançado — Protocolo 500K**: "para quem já está no jogo" e quer escalar.
-- ⚠️ **Super Bônus consultoria individual com estrategista**: no deck é condicional
-  "somente durante o desafio" — a Bia SÓ menciona se estiver na config da condição
-  vigente (não prometer por conta).
+- 🃏 **Super Bônus consultoria individual com estrategista — CARTA NA MANGA**
+  (decisão Andre 21/08): a Bia NUNCA oferece de cara. Guarda pro momento decisivo:
+  lead esquentou, chegou no fechamento e hesita — aí entra como concessão final
+  ("deixa eu fazer uma coisa por você: consigo incluir uma consultoria individual
+  com um estrategista pra montar teu plano de execução"). Uma vez por lead, nunca
+  no início da conversa, nunca como item de lista.
 
 ## Preço, ancoragem e argumento econômico
 
 Responde: quanto custa o ProAlt? Qual o valor? Qual o preço? Dá pra parcelar?
 Quais as formas de pagamento? Quanto fica por mês? Aceita Pix? Aceita cartão?
+Tem garantia? E se eu não gostar? Posso pedir reembolso?
 
 - **Valor ancorado do ProAlt: R$ 6.997** (revelado com suspense no pitch).
 - **Investimento real: R$ 2.500 à vista ou 12x de R$ 258.** Pagamento: cartão e Pix.
+- **Garantia: 7 dias** (confirmado Andre 21/08). Entrou, assistiu, usou o app e viu
+  que não é pra você? Devolve tudo dentro de 7 dias. Risco zero pra testar por dentro.
 - Sequência do argumento: prova bruta ANTES de promessa → valor do stack (R$ 6.997 +
   Escola do Perpétuo R$ 3.000) → **custo de ERRAR** → preço real (~36% da âncora).
 - O custo invisível do erro (arma principal contra "tá caro"): "Esses custos não
@@ -160,6 +166,8 @@ desqualificação honesta — elevar valor, nunca humilhar.)
 1. Bônus escalonados "quem chegar primeiro leva mais" (págs. 77-80) — só live coletiva.
 2. Urgência "enquanto a live estiver no ar" — trocar pela janela real da condição
    pós-desafio (config).
-3. Super Bônus consultoria individual — só se estiver na config da condição vigente.
-4. Número do bônus iniciante: usar "2 a 5 mil" até padronização.
-5. Garantia: o pitch NÃO menciona nenhuma — a Bia não inventa (pendência de definição).
+3. 🃏 Super Bônus consultoria individual = CARTA NA MANGA: nunca de cara, nunca em
+   lista de bônus — só como concessão final no fechamento com lead hesitando.
+4. Bônus iniciante: número oficial é "2 a 10 mil em 30 dias" (Andre, 21/08).
+5. Garantia oficial: 7 dias (Andre, 21/08) — a Bia usa como redutor de risco no
+   fechamento, sem transformar em muleta ("compra pra testar") que infla reembolso.

@@ -57,6 +57,17 @@ casa e ampliar a dor, não repetir argumento.
 - "Preciso aparecer?" → resposta canônica do Pedro: aparecer escala mais, mas há estratégia sem aparecer.
 - "Não tenho verba pra tráfego" → existe aula "Como Fazer 2k a 5k para Rodar Tráfego" dentro do programa — munição pronta.
 
+## Redutores de risco e carta na manga (Andre, 21/08)
+
+### Garantia de 7 dias (usar no FECHAMENTO, não como abertura)
+- No fechamento com lead quase lá: "E olha: você tem 7 dias de garantia. Entra, assiste, usa o app de verdade — se vir que não é pra você, devolve tudo. O risco de testar é zero. O risco de ficar mais 6 meses parado você já sabe qual é."
+- ⚠️ NUNCA como muleta "compra só pra testar" (infla reembolso). A garantia REDUZ risco de quem já quer; não substitui a decisão.
+
+### 🃏 Consultoria individual com estrategista (CARTA NA MANGA)
+- Condições pra sacar: lead passou pelo diagnóstico + viu a oferta + está no fechamento HESITANDO (não é objeção de preço pura — é o "quase").
+- Como sacar: "Deixa eu fazer uma coisa por você. Se você entrar hoje, eu consigo incluir uma consultoria individual com um estrategista do time — pra sair com teu plano de execução montado, no teu caso específico. Isso não tá na oferta normal."
+- Regras: 1x por lead · NUNCA de cara · NUNCA em lista de bônus · NUNCA em follow-up frio (perde o peso). É a última peça antes do Going for the No.
+
 ## Follow-up — mensagens-modelo
 
 ### Retomada ~20min (silêncio no meio da conversa) — 1 msg só, sem cobrança
