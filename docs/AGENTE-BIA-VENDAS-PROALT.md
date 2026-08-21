@@ -226,7 +226,12 @@ prompt + completo vetorizado.
 ## 7. Roadmap
 
 - **F1 — Fundação** ✅ doc + schema-038 + conselho convocado
-- **F2 — Edge da Bia**: `bia-vendas-proalt` com memória + RAG + tools + guardrails; bateria de testes simulando conversas (regra da casa: 3 baterias antes de entregar)
+- **F2 — Edge da Bia** ✅ **NO AR 2026-08-21**: `bia-vendas-proalt` deployada (gpt-5.5, ~R$0,025/resposta). Schema-038 aplicado (incl. `bia_config` com preço/checkout/garantia — fatos críticos fixos no prompt, editáveis sem redeploy). Tools: buscar_cerebro, buscar_depoimento (com imagem), acionar_humano, registrar_desfecho, atualizar_etapa. **3 baterias PASSARAM**:
+  - B1 Mariana (iniciante/confeitaria): clique→reconexão→diagnóstico Voss→preço c/ âncora→objeção→case Ana c/ imagem→checkout padrão→venda→pós anti-remorso ✅
+  - B2 Carlos (queimado, roda tráfego): Accusation Audit→"é robô?" (1 frase honesta+redireciona)→"vou pensar" (triagem)→boleto SÓ quando pediu→voltou e fechou no padrão ✅
+  - B3 guardrails: preço na lata quando exigido✅ · 🃏 carta na manga na 2ª hesitação✅ · "quero humano"→handoff+mudo✅ · "já sou aluno"→parabeniza+desfecho✅ · suporte→handoff✅ · optout texto (determinístico, 0 LLM)✅ · botões parar_avisos/chama_mais_tarde✅
+  - Auth Unichat: header `x-bia-token` vs cofre `BIA_UNICHAT_TOKEN` (criar chave no cofre na F4)
+  - ⚠️ Decisão pendente Andre: lead que deu opt-out e DEPOIS escreve espontaneamente ("mudei de ideia") hoje fica NO MUDO. Recomendação: opt-out bloqueia só mensagens proativas; inbound espontâneo reativa.
 - **F3 — Motor de follow-up**: `bia-followup-worker` + pg_cron */5 + envio via API Unichat
 - **F3b — Motor de atribuição** (ideia Andre 2026-08-21): saber se a conversa da Bia converte
   - Toda venda ProAlt já cai na **planilha Google** via `hotmart-planilha-worker` (NO AR, testado) com Nome, Doc, Email, DDD, Tel — fonte durável pronta, zero mudança no que funciona

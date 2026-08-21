@@ -36,6 +36,8 @@ export function sb(): SupabaseClient {
 // =====================================================
 const PRECOS_USD_POR_1K = {
   // OpenAI
+  'openai:gpt-5.5':              { input: 0.00125, output: 0.010,   cached_input: 0.000125 },
+  'openai:gpt-5.4-mini':         { input: 0.00025, output: 0.002,   cached_input: 0.000025 },
   'openai:gpt-5':                { input: 0.00125, output: 0.010,   cached_input: 0.000125 },
   'openai:gpt-5-mini':           { input: 0.00025, output: 0.002,   cached_input: 0.000025 },
   'openai:gpt-5-codex':          { input: 0.00125, output: 0.010,   cached_input: 0.000125 },

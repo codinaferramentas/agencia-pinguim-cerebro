@@ -140,6 +140,37 @@ create index if not exists idx_bia_followups_pendente
 alter table pinguim.bia_followups enable row level security;
 
 -- ------------------------------------------------------------------------
+-- 5. CONFIG DA OFERTA — fatos críticos que a Bia NUNCA busca via RAG.
+--    Editável sem redeploy (preço mudou? UPDATE aqui e pronto).
+-- ------------------------------------------------------------------------
+create table if not exists pinguim.bia_config (
+  chave         text primary key,
+  valor         text not null,
+  atualizado_em timestamptz not null default now()
+);
+
+comment on table pinguim.bia_config is
+  'Fatos da oferta ProAlt que entram FIXOS no prompt da Bia (preço, garantia, '
+  'checkout, contatos). Nunca via RAG. Editar aqui reflete na próxima mensagem.';
+
+alter table pinguim.bia_config enable row level security;
+
+insert into pinguim.bia_config (chave, valor) values
+  ('preco_avista',      'R$ 2.500'),
+  ('preco_parcelado',   '12x de R$ 258 no cartão'),
+  ('preco_ancora',      'R$ 6.997'),
+  ('garantia_dias',     '7'),
+  ('checkout_padrao',   'https://pay.hotmart.com/Y107116867Y?off=xksngssn&sck=bia-agente-ia&src=bia-agente'),
+  ('checkout_boleto',   'https://pay.hotmart.com/Y107116867Y?off=g1eac87q&sck=bia-agente&src=bia-agente'),
+  ('regra_boleto',      'SO manda o checkout boleto se o cliente PEDIR boleto. O foco é sempre o checkout padrão (cartão/Pix).'),
+  ('bonus_lista',       'Bônus #1 Escola do Perpétuo (acesso vitalício, valor de R$ 3.000) · Bônus #2 Funil de Quiz (aula com Micha Menezes) · Bônus #3 Desafio de Conteúdo Lo-Fi (gravação completa) · Bônus iniciante: 5 Estratégias para fazer de 2 a 10 mil em 30 dias · Bônus avançado: Protocolo 500K'),
+  ('carta_na_manga',    'Consultoria individual com estrategista do time (plano de execução personalizado). REGRAS: só no fechamento com lead hesitando, 1x por lead, nunca de cara, nunca em lista de bônus, nunca em follow-up frio.'),
+  ('janela_condicao',   'PENDENTE'),
+  ('contato_karen',     'PENDENTE'),
+  ('contato_suporte',   'PENDENTE')
+on conflict (chave) do nothing;
+
+-- ------------------------------------------------------------------------
 -- Cron do worker de follow-up — APLICAR SÓ DEPOIS do deploy da edge
 -- bia-followup-worker (Fase 3), senão o job chama endpoint inexistente.
 -- Padrão idêntico aos jobs 40/42. ⚠️ argumento do job SEMPRE entre aspas.
