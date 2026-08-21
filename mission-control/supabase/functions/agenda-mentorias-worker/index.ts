@@ -40,6 +40,7 @@ const TZ_OFFSET_MS = -3 * 3600 * 1000;
 
 const ID_RAFAEL = '1083728715726463068';
 const ID_DJAIRO = '1083731934238228590';
+const ID_FERNANDA = '1210285892489449603';
 
 interface ConfigAgenda {
   slug: string;
@@ -56,7 +57,8 @@ interface ConfigAgenda {
 
 const AGENDAS: ConfigAgenda[] = [
   { slug: 'proalt', nome: 'ProAlt', calendarId: 'proalt.agenda@gmail.com', mencaoPadrao: [ID_RAFAEL, ID_DJAIRO] },
-  { slug: 'elo', nome: 'ELO', calendarId: 'ciclo.agendas@gmail.com', mencaoPadrao: [ID_RAFAEL, ID_DJAIRO] },
+  // ELO passou a ser da Fernanda Lisboa (Andre 21/ago) — marca só ela
+  { slug: 'elo', nome: 'ELO', calendarId: 'ciclo.agendas@gmail.com', mencaoPadrao: [ID_FERNANDA] },
   {
     slug: 'pinguim', nome: 'Pinguim', calendarId: 'contato@agenciapinguim.com',
     filtroParticipantes: ['rafael.agenciapinguim@gmail.com', 'jairo.agenciapinguim@gmail.com'],
