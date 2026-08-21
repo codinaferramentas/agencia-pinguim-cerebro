@@ -521,6 +521,16 @@ serve(async (req) => {
       }
     }
 
+    // 1.5) RENOVAÇÃO de assinatura recorrente → IGNORA.
+    // Produtos recorrentes (ex.: "Proalt - Recorrente") disparam
+    // PURCHASE_APPROVED a CADA cobrança mensal. Só a 1ª compra
+    // (recurrence_number ausente ou == 1) libera acesso + vira linha.
+    // Cobrança 2, 3, ... não duplica linha nem reprocessa (acesso já existe).
+    const recNum = Number(body?.data?.purchase?.recurrence_number ?? body?.purchase?.recurrence_number ?? 1);
+    if (Number.isFinite(recNum) && recNum > 1) {
+      return json({ ok: true, ignorado: 'renovacao_recorrente', recurrence_number: recNum });
+    }
+
     const venda = extrairVenda(body);
     const ofertaId = venda?.ofertaId || '';
     const linha = montarLinha(venda);
