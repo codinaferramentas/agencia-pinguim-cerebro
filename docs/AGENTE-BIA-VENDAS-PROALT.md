@@ -228,18 +228,24 @@ prompt + completo vetorizado.
 - **F1 — Fundação** ✅ doc + schema-038 + conselho convocado
 - **F2 — Edge da Bia**: `bia-vendas-proalt` com memória + RAG + tools + guardrails; bateria de testes simulando conversas (regra da casa: 3 baterias antes de entregar)
 - **F3 — Motor de follow-up**: `bia-followup-worker` + pg_cron */5 + envio via API Unichat
+- **F3b — Motor de atribuição** (ideia Andre 2026-08-21): saber se a conversa da Bia converte
+  - Toda venda ProAlt já cai na **planilha Google** via `hotmart-planilha-worker` (NO AR, testado) com Nome, Doc, Email, DDD, Tel — fonte durável pronta, zero mudança no que funciona
+  - Edge `bia-atribuicao-worker` + pg_cron diário (~8h): lê linhas novas da planilha, normaliza telefone (`_shared/telefone-br.ts`), cruza com `bia_leads` por telefone → fallback email
+  - Match → `bia_leads.estado='comprou'`, `bia_conversas.resultado='venda'` + mensagem `sistema` na conversa (a Bia "sabe" que vendeu e pode fazer o pós-venda E7 no dia seguinte)
+  - Resumo no grupo dos sócios: "Bia: X vendas atribuídas / Y conversas ativas / Z vendas ProAlt sem passar pela Bia" — é o placar Bia vs. comercial
+  - `bia_leads.email` adicionado ao schema-038 pra esse cruzamento
 - **F4 — Canal**: template Marketing aprovado na Meta + fluxo/tags na Unichat + teste ponta a ponta com nossos números
 - **F5 — Piloto**: disparo pra 30-50 números, medir resposta/conversa/venda, ajustar, disparo full
 
 ## 8. Pendências do ANDRE (a Bia não vai pro ar sem isso)
 
 **Bloqueadores de venda:**
-- [ ] ⚠️ **PREÇO OFICIAL** — conflito: briefing diz R$ 2.500; funil DLT de jul/26 registrou R$ 1.497 / 12x R$ 158,49; cérebro não tem preço nenhum. Qual vale?
-- [ ] **Link do checkout** cartão E boleto (e se muda por condição especial)
-- [ ] **Valores exatos**: à vista, 12x de quanto, boleto (quanto a mais, quantas parcelas)
-- [ ] **Bônus da condição especial** pós-desafio — o slide "atalhos" existe mas não está vetorizado (bônus SEMPRE nomeados)
-- [ ] **Garantia** (dias, como funciona) — ZERO registro em qualquer fonte
-- [ ] **Validade da condição** (padrão do funil: até segunda 23h59 — confirmar de qual semana)
+- [x] ~~PREÇO OFICIAL~~ ✅ **RESOLVIDO 2026-08-21** pelo pitch V2 (17/08): **R$ 2.500 à vista ou 12x R$ 258** (âncora R$ 6.997). Cartão e Pix. O R$ 1.497 era material de julho, superado.
+- [ ] **Link do checkout** (cartão/Pix — e boleto existe? O pitch não menciona; o projeto boleto-ProAlt sugere que sim)
+- [x] ~~Bônus nomeados~~ ✅ do pitch V2: #1 Escola do Perpétuo (vitalício, "de R$ 3.000"), #2 Funil de Quiz, #3 Desafio Lo-Fi, iniciante "2-5 mil/30 dias", avançado Protocolo 500K. ⚠️ Confirmar quais valem na condição 1-a-1 (Super Bônus consultoria individual era "somente durante o desafio")
+- [ ] **Garantia** (dias, como funciona) — ZERO menção em TODAS as fontes, incluindo os 84 slides do pitch. A Bia VAI levar essa pergunta.
+- [ ] **Validade da condição** 1-a-1 (no pitch a urgência é "enquanto a live estiver no ar" — não transferível; padrão do funil: segunda 23h59)
+- [ ] **Divergências internas do deck** pra padronizar: bônus iniciante "2-5 mil" (pág. 61) vs "2-10 mil" (pág. 82); consultoria individual é entrega fixa ou bônus condicional? (pág. 82 vs 59-60)
 
 **Operação:**
 - [x] ~~Risco de parecer golpe~~ **MITIGADO (Andre, 2026-08-20):** o número da Bia é o MESMO que manda as boas-vindas oficiais na compra do desafio — o lead já conhece e já recebeu mensagem dele. Template ancora nisso ("a gente se falou por aqui quando você entrou no desafio 🙂"). Anúncio no grupo ainda ajuda, mas deixou de ser bloqueador.
@@ -251,9 +257,9 @@ prompt + completo vetorizado.
 - [ ] **Unichat**: tags (`bia-ia`, `bia-optout`), fluxo com bloco HTTP pra edge, token/endpoint da API de envio (follow-up worker)
 
 **Enriquecimento do cérebro (turbina, não bloqueia):**
-- [ ] **Transcrição do PITCH do Pedro no desafio** (momento da oferta) — a peça mais valiosa que falta; a v1 no repo é lixo de transcrição, a v2 é reunião interna
+- [x] ~~Pitch novo~~ ✅ **ENTREGUE E INGERIDO 2026-08-21**: deck oficial `ProAlt-Pitch-V2-2026-08-17.pdf` (84 slides) extraído → `docs/BIA-PITCH-COMERCIAL-PROALT.md` → 10 fontes granulares no cérebro (promessa, reposicionamento, stack, bônus, preço, prova social, quebras, frases, para quem é, avisos). Págs. 77-80 ("quem chegar primeiro leva mais") EXCLUÍDAS por ordem do Andre. Teste: pitch no top-2 em 4/5 queries de lead.
+- [ ] Transcrição do PITCH FALADO do Pedro no desafio (o deck cobre a estrutura; o falado ainda agrega tom/improviso)
 - [ ] Cérebro ProAlt atualizado com "como aumentar o valor" (Andre vai subir conversas)
-- [ ] Pitch novo (Pedro+Luiz estão reescrevendo) — versão final com promessa/ancoragem/stack
 - [ ] **Resumo de decisão pro sócio/cônjuge** (pedido literal recorrente no 1:1 — não existe; a Bia vai oferecer na objeção #5)
 - [ ] Metadados da prova social (autor/resumo/imagem estão null na tool) — eu arrumo na F2
 - [ ] Depoimento "1 nome + 1 número" limpo (ex.: "10→35 contratos") — não existe nenhum catalogado

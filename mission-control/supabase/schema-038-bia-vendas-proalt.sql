@@ -21,6 +21,8 @@ create table if not exists pinguim.bia_leads (
   id             uuid primary key default gen_random_uuid(),
   telefone       text not null unique,        -- normalizado E.164 (ex.: 5511999998888)
   nome           text,
+  email          text,                        -- pro motor de atribuição casar com a venda
+                                              -- Hotmart quando o telefone do checkout divergir
   origem         text not null default 'desafio-low-ticket',  -- de onde veio (edição do desafio, grupo)
 
   -- ciclo de vida do lead na campanha
