@@ -231,6 +231,7 @@ prompt + completo vetorizado.
   - B2 Carlos (queimado, roda tráfego): Accusation Audit→"é robô?" (1 frase honesta+redireciona)→"vou pensar" (triagem)→boleto SÓ quando pediu→voltou e fechou no padrão ✅
   - B3 guardrails: preço na lata quando exigido✅ · 🃏 carta na manga na 2ª hesitação✅ · "quero humano"→handoff+mudo✅ · "já sou aluno"→parabeniza+desfecho✅ · suporte→handoff✅ · optout texto (determinístico, 0 LLM)✅ · botões parar_avisos/chama_mais_tarde✅
   - Auth Unichat: header `x-bia-token` vs cofre `BIA_UNICHAT_TOKEN` (criar chave no cofre na F4)
+  - **Áudio e imagem** (2026-08-22): lead manda áudio → whisper-1 transcreve → Bia responde em texto sem comentar o formato ✅ testado com voice note real (TTS). Lead manda imagem → visão multimodal: **comprovante de pagamento → venda_sinalizada + pós-venda automático** ✅ testado com print Hotmart · print de erro → orienta · print do negócio dele → comenta específico. Payload: `midia_url` + `midia_tipo?` ('audio'/'imagem', inferido se ausente). Mídia >20MB ou formato estranho → fallback educado sem LLM. Bolhas apertadas: máx 2 frases (~250 chars), normal 1-2 bolhas.
   - ⚠️ Decisão pendente Andre: lead que deu opt-out e DEPOIS escreve espontaneamente ("mudei de ideia") hoje fica NO MUDO. Recomendação: opt-out bloqueia só mensagens proativas; inbound espontâneo reativa.
 - **F3 — Motor de follow-up**: `bia-followup-worker` + pg_cron */5 + envio via API Unichat
 - **F3b — Motor de atribuição** (ideia Andre 2026-08-21): saber se a conversa da Bia converte

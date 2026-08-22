@@ -12,10 +12,15 @@
 //     telefone: "+55 11 99999-8888"   (obrigatório — qualquer formato BR)
 //     nome?: "Fulano"
 //     mensagem?: "texto do lead"
+//     midia_url?: "https://..."       (áudio ou imagem que o lead mandou)
+//     midia_tipo?: "audio" | "imagem" (se ausente, inferido pela extensão/content-type)
 //     evento?: "mensagem" (default) | "clique_me_conta_mais"
 //            | "chama_mais_tarde" | "parar_avisos"
 //     teste?: true                    (marca lead de teste — origem 'teste')
 //   }
+//   Áudio → transcrito (whisper-1) e tratado como texto do lead.
+//   Imagem → entra como visão multimodal (a Bia "vê" — ex.: comprovante de
+//   pagamento dispara pós-venda; print de erro no checkout ela orienta).
 //
 // Saída:
 //   { ok, mensagens: string[], resposta, etapa, lead_estado, anexos: string[] }
@@ -58,6 +63,54 @@ function telefoneCanonico(input: string): string | null {
   // 55 + DDD(2) + 8~9 dígitos
   if (d.length < 12 || d.length > 13) return null;
   return d;
+}
+
+// ========================================================================
+// Mídia do lead: áudio → transcrição whisper · imagem → base64 pra visão
+// ========================================================================
+const EXT_AUDIO_RX = /\.(mp3|ogg|opus|m4a|wav|webm|aac)(\?|$)/i;
+const EXT_IMG_RX = /\.(png|jpe?g|webp|gif)(\?|$)/i;
+
+async function baixarMidia(url: string): Promise<{ bytes: Uint8Array; contentType: string }> {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`download mídia ${resp.status}`);
+  const contentType = resp.headers.get('content-type') || '';
+  const bytes = new Uint8Array(await resp.arrayBuffer());
+  if (bytes.length > 20 * 1024 * 1024) throw new Error('mídia acima de 20MB');
+  return { bytes, contentType };
+}
+
+function inferirTipoMidia(url: string, contentType: string, declarado?: string): 'audio' | 'imagem' | null {
+  if (declarado === 'audio' || declarado === 'imagem') return declarado;
+  if (contentType.startsWith('audio/') || EXT_AUDIO_RX.test(url)) return 'audio';
+  if (contentType.startsWith('image/') || EXT_IMG_RX.test(url)) return 'imagem';
+  return null;
+}
+
+async function transcreverAudio(bytes: Uint8Array, contentType: string): Promise<string> {
+  const KEY = await getChave('OPENAI_API_KEY', 'bia-vendas-proalt');
+  const ext = contentType.includes('ogg') ? 'ogg' : contentType.includes('mp4') || contentType.includes('m4a') ? 'm4a' : contentType.includes('wav') ? 'wav' : contentType.includes('webm') ? 'webm' : 'mp3';
+  const form = new FormData();
+  form.append('file', new Blob([bytes], { type: contentType || 'audio/mpeg' }), `audio.${ext}`);
+  form.append('model', 'whisper-1');
+  form.append('language', 'pt');
+  const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${KEY}` },
+    body: form,
+  });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data?.error?.message || `whisper ${resp.status}`);
+  return (data.text || '').trim();
+}
+
+function bytesParaDataUrl(bytes: Uint8Array, contentType: string): string {
+  let bin = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return `data:${contentType || 'image/jpeg'};base64,${btoa(bin)}`;
 }
 
 // ========================================================================
@@ -327,7 +380,7 @@ Argumento síntese: o app substitui copywriter + designer + pesquisador + analis
 # REGRAS DE OURO (leis — violar qualquer uma é falha grave)
 
 1. NUNCA apresente preço antes de o lead verbalizar dor + custo. Se ele perguntar o preço cedo, responda ("R$ 2.500 ou 12x de R$ 258") SEM enrolação e emende UMA pergunta de diagnóstico — nunca sonegue preço, mas nunca deixe ele nu sem contexto de valor.
-2. Mensagens CURTAS de WhatsApp. 1 ideia por bolha. Máximo 3 bolhas por resposta (separe bolhas com |||). O lead deve falar MAIS que você.
+2. Mensagens CURTAS de WhatsApp. 1 ideia por bolha, no MÁXIMO 2 frases (~250 caracteres) por bolha. Máximo 3 bolhas por resposta (separe com |||) — e o normal é 1-2. Nada de parágrafos longos: se precisar de mais, guarde pro próximo turno. O lead deve falar MAIS que você.
 3. NUNCA "por quê" em objeção. NUNCA "como você se sente?".
 4. NUNCA desconto. NUNCA urgência/escassez inventada. NUNCA bônus fora da lista.
 5. NUNCA linguagem de coach ("transforme sua vida", "realize seus sonhos", "oportunidade única", "incrível"). Número concreto sempre.
@@ -337,7 +390,8 @@ Argumento síntese: o app substitui copywriter + designer + pesquisador + analis
 9. "Já comprei / já sou aluno" → parabenize com entusiasmo genuíno, aponte pro app e pras aulas, registrar_desfecho(comprou_antes), encerre com carinho.
 10. Pedido de SUPORTE (acesso, login, senha, reembolso, boleto já emitido) → você não resolve: passe o contato do suporte${cfg['contato_suporte'] && cfg['contato_suporte'] !== 'PENDENTE' ? ` (${cfg['contato_suporte']})` : ' (time de suporte do ProAlt)'} e volte ao seu papel se couber.
 11. Pedido explícito pra parar de receber mensagem → registrar_desfecho(optout) + despedida curta e elegante. Sem tentar reverter.
-12. Emojis: no máximo 1 por mensagem, nem sempre. Português brasileiro natural, informal-profissional. Tom do ecossistema Pedro Aredes: próximo, direto, intenso na medida — ecoe expressões dele com moderação ("bora", "vale demais", "de uma vez por todas", "calma, te mostro") sem imitar.
+12. ÁUDIO E IMAGEM: quando o lead manda áudio, você recebe a transcrição — responda normal (em texto), sem comentar que "ouviu um áudio". Quando manda IMAGEM, você a vê: COMPROVANTE de pagamento/pedido aprovado → comemore, registrar_desfecho(venda_sinalizada) e vá pro pós-venda · print de ERRO/tela de checkout → oriente com calma o próximo passo · print de página/anúncio/métricas do negócio DELE → comente algo específico do que viu (gera confiança absurda) e conecte com o diagnóstico · imagem aleatória/meme → reaja leve em 1 frase e volte ao assunto.
+13. Emojis: no máximo 1 por mensagem, nem sempre. Português brasileiro natural, informal-profissional. Tom do ecossistema Pedro Aredes: próximo, direto, intenso na medida — ecoe expressões dele com moderação ("bora", "vale demais", "de uma vez por todas", "calma, te mostro") sem imitar.
 
 # FERRAMENTAS
 
@@ -377,11 +431,39 @@ serve(async (req) => {
   const telefone = telefoneCanonico(body.telefone || body.phone || '');
   if (!telefone) return jsonRespTool({ error: 'telefone inválido' }, 400);
   const nome = (body.nome || body.name || '').trim() || null;
-  const mensagem = (body.mensagem || body.message || body.text || '').trim();
+  let mensagem = (body.mensagem || body.message || body.text || '').trim();
   const evento = body.evento || 'mensagem';
   const ehTeste = body.teste === true;
 
   const db = sb();
+
+  // ---------------------------------------------------------------
+  // 0. Mídia do lead (áudio → transcreve; imagem → visão multimodal)
+  // ---------------------------------------------------------------
+  const midiaUrl = (body.midia_url || body.media_url || body.audio_url || body.image_url || '').trim();
+  let imagemDataUrl: string | null = null;
+  let marcadorMidia = '';
+  if (midiaUrl && evento !== 'parar_avisos' && evento !== 'chama_mais_tarde') {
+    try {
+      const { bytes, contentType } = await baixarMidia(midiaUrl);
+      const tipo = inferirTipoMidia(midiaUrl, contentType, body.midia_tipo || body.media_type);
+      if (tipo === 'audio') {
+        const transcricao = await transcreverAudio(bytes, contentType);
+        mensagem = [mensagem, transcricao].filter(Boolean).join(' — ').trim();
+        marcadorMidia = '[áudio] ';
+      } else if (tipo === 'imagem') {
+        imagemDataUrl = bytesParaDataUrl(bytes, contentType);
+        marcadorMidia = '[imagem] ';
+      } else {
+        throw new Error(`tipo não suportado (${contentType})`);
+      }
+    } catch (e) {
+      console.warn('[bia] mídia falhou:', String(e?.message || e));
+      // Não trava a venda: resposta determinística pedindo texto (sem gastar LLM)
+      const bolha = 'Opa, não consegui abrir o que você mandou aqui 🙈 Consegue me escrever em texto rapidinho?';
+      return jsonRespTool({ ok: true, mensagens: [bolha], resposta: bolha, midia_erro: true });
+    }
+  }
 
   // ---------------------------------------------------------------
   // 1. Lead: SELECT antes de CREATE
@@ -495,9 +577,20 @@ serve(async (req) => {
       llmMessages.push({ role: 'user', content: mensagem });
     }
   } else {
-    if (!mensagem) return jsonRespTool({ error: 'mensagem vazia' }, 400);
-    await db.from('bia_mensagens').insert({ conversa_id: conversa.id, papel: 'lead', conteudo: mensagem });
-    llmMessages.push({ role: 'user', content: mensagem });
+    if (!mensagem && !imagemDataUrl) return jsonRespTool({ error: 'mensagem vazia' }, 400);
+    const conteudoDb = marcadorMidia + (mensagem || (imagemDataUrl ? '(imagem enviada pelo lead)' : ''));
+    await db.from('bia_mensagens').insert({ conversa_id: conversa.id, papel: 'lead', conteudo: conteudoDb });
+    if (imagemDataUrl) {
+      llmMessages.push({
+        role: 'user',
+        content: [
+          { type: 'text', text: mensagem || 'O lead enviou esta imagem sem legenda. Interprete e reaja de acordo com o contexto da conversa.' },
+          { type: 'image_url', image_url: { url: imagemDataUrl } },
+        ],
+      });
+    } else {
+      llmMessages.push({ role: 'user', content: mensagem });
+    }
   }
 
   await db.from('bia_conversas').update({ ultima_msg_lead_em: new Date().toISOString(), atualizado_em: new Date().toISOString() }).eq('id', conversa.id);

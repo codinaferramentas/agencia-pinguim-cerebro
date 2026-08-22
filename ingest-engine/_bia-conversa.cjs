@@ -4,15 +4,16 @@ const fs = require('fs');
 const env = fs.readFileSync('c:/Squad/.env.local', 'utf8');
 env.split(/\r?\n/).forEach(l => { const m = l.match(/^([A-Z_]+)=(.*)$/); if (m) process.env[m[1]] = m[2]; });
 
-const [telefone, evento, mensagem, nome] = process.argv.slice(2);
+const [telefone, evento, mensagem, nome, midiaUrl] = process.argv.slice(2);
 
 (async () => {
   const body = {
     telefone,
     teste: true,
     ...(evento && evento !== '-' ? { evento } : {}),
-    ...(mensagem ? { mensagem } : {}),
-    ...(nome ? { nome } : {}),
+    ...(mensagem && mensagem !== '-' ? { mensagem } : {}),
+    ...(nome && nome !== '-' ? { nome } : {}),
+    ...(midiaUrl ? { midia_url: midiaUrl } : {}),
   };
   const t0 = Date.now();
   const r = await fetch(process.env.SUPABASE_URL + '/functions/v1/bia-vendas-proalt', {
