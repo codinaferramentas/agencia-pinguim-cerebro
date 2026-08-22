@@ -328,24 +328,38 @@ async function executarTool(
         const casou = scored.filter((x: any) => x.score >= 2).slice(0, 2);
         const base = casou.length ? casou : scored.slice(0, 2);
 
-        const itens = base.map(({ d, temImg }: any) => {
+        // Extrai o autor REAL do texto quando o campo autor é nulo
+        // (formato do md: "**Aluno:** Fulano").
+        function autorReal(d: any): string {
+          if (d.autor) return d.autor;
+          if (d.metadata?.autor) return d.metadata.autor;
+          const m = (d.conteudo_md || '').match(/Aluno:\*{0,2}\s*([^\n*]+)/i);
+          return (m?.[1] || '').trim() || 'um aluno do ProAlt';
+        }
+
+        const itens = base.map(({ d }: any) => {
           const anexo = d.metadata?.anexo_principal_url || null;
-          if (anexo) ctx.anexos.push(anexo);
           return {
-            autor: d.autor || d.metadata?.autor || 'aluno do ProAlt',
+            autor: autorReal(d),
             resumo: d.metadata?.resumo || null,
-            texto: (d.conteudo_md || '').replace(/\*\*/g, '').slice(0, 500),
-            imagem_link: anexo,   // link público — a Bia PODE mandar esse link
-            tem_imagem: temImg,
+            texto: (d.conteudo_md || '').replace(/\*\*/g, '').slice(0, 400),
+            // link SEMPRE amarrado a ESTE autor; se não tem, deixa explícito.
+            print_deste_autor: anexo,
+            sem_print: !anexo,
           };
         });
 
         return JSON.stringify({
           depoimentos: itens,
           casou_nicho: casou.length > 0,
+          REGRA_CRITICA:
+            'Cada depoimento tem (ou não) o print_deste_autor DELE. É PROIBIDO mandar o print de um autor falando de outro autor. ' +
+            'Se você vai citar o Fulano, só cole um link se o print_deste_autor do Fulano existir. ' +
+            'Se o depoimento que você quer citar tem sem_print=true, cite o relato em texto e NÃO mande link nenhum (nem o de outra pessoa). ' +
+            'Prefira citar UM depoimento que tenha print (mais forte) e mande o print_deste_autor DELE, verbalizando: "olha o print do [autor]: [print_deste_autor]".',
           instrucao: casou.length
-            ? 'Achei case(s) relacionado(s). Cite o autor + o resultado em 1 frase. Se houver imagem_link, VERBALIZE e cole o link na mesma mensagem: "olha o print do resultado do [autor]: [imagem_link]". Não deixe o link solto sem contexto — apresente como prova.'
-            : 'NÃO achei case do nicho exato. NUNCA diga "não temos do seu nicho". Diga: "idêntico ao seu eu não tenho na mão agora, mas tenho de gente que partiu de algo parecido" e cite um dos que devolvi. Se houver imagem_link, VERBALIZE e cole: "olha o print do [autor]: [imagem_link]". O que vende é o método funcionar, não o nicho idêntico.',
+            ? 'Achei case(s) relacionado(s). Escolha UM, cite autor + resultado, e mande o print SÓ se for o print_deste_autor dele.'
+            : 'NÃO achei case do nicho exato. NUNCA diga "não temos do seu nicho". Diga que tem de situação parecida e cite um. Print, só o print_deste_autor de quem você citar.',
         });
       }
       case 'acionar_humano': {
@@ -550,18 +564,22 @@ function normalizarPayload(raw: any): {
 
   // Intenção explícita pode vir em raw.evento OU raw.contact.fields.evento (se o
   // Andre preferir passar num field), senão inferimos pela tag.
-  // Prioridade: parar > mais-tarde > quero (o opt-out sempre vence — segurança).
+  // Prioridade: parar > mais-tarde > ativar (o opt-out sempre vence — segurança).
   //
-  // ⚠️ A tag 'quero saber mais' FICA grudada no contato pra sempre (é a prova de
-  // que ele optou por conversar / condição de entrada do fluxo Conversa). Por isso
-  // ela vira o evento PROVISÓRIO 'quero_ou_continua': o handler decide se é
-  // abertura (não há conversa em andamento) ou continuação (já existe histórico).
-  // Assim o fluxo Conversa pode reenviar a tag à vontade sem reabrir a conversa.
+  // ⚠️ SEGURANÇA (pedido Andre 22/08): as tags de acionamento têm que ser
+  // EXCLUSIVAS da Bia — NADA de casar por "quero"/"saber mais" genérico, senão um
+  // template/anúncio futuro com esse CTA comum aciona a IA sem querer. Por isso
+  // exigimos o prefixo "bia-" nas tags de acionamento:
+  //   bia-ativar / bia-conversar / bia-quero-condicao  → abre a conversa
+  //   bia-mais-tarde                                    → follow-up depois
+  //   bia-parar / bia-optout                            → opt-out
+  // A tag de acionamento FICA grudada no contato → vira 'quero_ou_continua'
+  // (handler decide abrir vs continuar pelo histórico).
   let evento = raw.evento || c.fields?.evento || '';
   if (!evento) {
-    if (temTag(['parar', 'nao-quero', 'não-quero', 'optout', 'opt-out', 'descadastr'])) evento = 'parar_avisos';
-    else if (temTag(['mais-tarde', 'mais tarde', 'depois'])) evento = 'chama_mais_tarde';
-    else if (temTag(['quero', 'saber-mais', 'saber mais', 'conta-mais', 'conta mais', 'me-conta'])) evento = 'quero_ou_continua';
+    if (temTag(['bia-parar', 'bia-optout', 'bia-opt-out', 'bia-nao-quero', 'bia-descadastr'])) evento = 'parar_avisos';
+    else if (temTag(['bia-mais-tarde', 'bia-depois', 'bia-maistarde'])) evento = 'chama_mais_tarde';
+    else if (temTag(['bia-ativar', 'bia-conversar', 'bia-quero', 'bia-condicao', 'bia-condição', 'bia-saber'])) evento = 'quero_ou_continua';
     else evento = 'mensagem';
   }
 

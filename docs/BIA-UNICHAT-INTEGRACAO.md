@@ -55,27 +55,28 @@ com o payload real):
 
 ## Eventos — definidos pela TAG que você marca (ou campo `evento`)
 
-A Bia infere a intenção pela **tag do contato** (casa por substring, então o nome
-exato do slug é flexível — só precisa CONTER a palavra-chave):
+⚠️ **Tags de acionamento são EXCLUSIVAS da Bia (prefixo `bia-`)** — decisão Andre
+22/08. NÃO casamos mais por "quero"/"saber mais" genérico, pra um anúncio/template
+futuro com CTA comum NÃO acionar a IA sem querer. Só estas tags acionam:
 
-| Tag contém… | Evento | O que a Bia faz |
+| Tag do contato | Evento | O que a Bia faz |
 |---|---|---|
-| `quero` / `saber-mais` / `conta-mais` | primeiro toque | Abre a conversa (reconexão), **não vende** |
-| `mais-tarde` / `depois` / `chama` | me chama mais tarde | Responde curto e agenda retomada ~2h30 |
-| `parar` / `nao-quero` / `optout` | parar avisos | Opt-out definitivo, despedida, nunca mais fala |
-| _(sem tag de intenção)_ | mensagem normal | Fluxo de conversa/venda com o texto do lead |
+| `bia-ativar` (ou `bia-conversar` / `bia-quero` / `bia-condicao` / `bia-saber`) | abrir | Abre a conversa (reconexão), **não vende** |
+| `bia-mais-tarde` (ou `bia-depois`) | mais tarde | Responde curto e agenda retomada ~2h30 |
+| `bia-parar` (ou `bia-optout` / `bia-nao-quero`) | opt-out | Opt-out definitivo, nunca mais fala |
+| _(qualquer tag sem prefixo bia-)_ | mensagem normal | Trata como conversa em andamento |
 
-Validado 2026-08-22: `bia-quero-saber-mais` → reconexão sem vender ✅ ·
-`bia-parar-avisos` → optout ✅ · `bia-mais-tarde` → aguardando ✅.
+**Tag recomendada pro botão do template: `bia-ativar`.** O CTA do botão pode ser
+o texto que você quiser (ex.: "Quero minha condição") — o que aciona é a TAG, não
+o texto. Assim você troca o CTA à vontade sem mexer em nada.
 
-> ⚠️ IMPORTANTE: o **primeiro contato** (quando o lead clica "quero saber mais" no
-> template) TEM que vir com a tag de "quero" — senão a Bia trata a mensagem como
-> conversa já em andamento. No teste inicial a tag era genérica (`tag1,tag2`) e a
-> Bia interpretou "Eu quero" como intenção de compra e correu pro fechamento. Com a
-> tag certa, ela abre com diagnóstico, como deve.
->
-> `parar_avisos` e `chama_mais_tarde` a Bia responde **na hora** (não precisa de
-> LLM). Os demais passam pelo Fluxo 2 (assíncrono) quando ele estiver configurado.
+Validado 2026-08-22: `bia-ativar` → abre ✅ · `bia-parar` → optout ✅ ·
+`bia-mais-tarde` → aguardando ✅.
+
+> Segurança em camadas: (1) só entra no fluxo quem tem `bia-ia`; (2) só ABRE a
+> conversa quem tem `bia-ativar`; (3) comprador (`comprador-proalt` ou trava no
+> app) não é atendido. Um CTA comum reaproveitado por engano em outra campanha
+> não tem nenhuma dessas tags, então não aciona a Bia.
 
 ## O que a Bia POSTa no seu Fluxo 2 ("Resposta da IA")
 
