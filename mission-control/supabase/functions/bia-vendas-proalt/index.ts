@@ -497,11 +497,17 @@ function normalizarPayload(raw: any): {
   // Intenção explícita pode vir em raw.evento OU raw.contact.fields.evento (se o
   // Andre preferir passar num field), senão inferimos pela tag.
   // Prioridade: parar > mais-tarde > quero (o opt-out sempre vence — segurança).
+  //
+  // ⚠️ A tag 'quero saber mais' FICA grudada no contato pra sempre (é a prova de
+  // que ele optou por conversar / condição de entrada do fluxo Conversa). Por isso
+  // ela vira o evento PROVISÓRIO 'quero_ou_continua': o handler decide se é
+  // abertura (não há conversa em andamento) ou continuação (já existe histórico).
+  // Assim o fluxo Conversa pode reenviar a tag à vontade sem reabrir a conversa.
   let evento = raw.evento || c.fields?.evento || '';
   if (!evento) {
     if (temTag(['parar', 'nao-quero', 'não-quero', 'optout', 'opt-out', 'descadastr'])) evento = 'parar_avisos';
     else if (temTag(['mais-tarde', 'mais tarde', 'depois'])) evento = 'chama_mais_tarde';
-    else if (temTag(['quero', 'saber-mais', 'saber mais', 'conta-mais', 'conta mais', 'me-conta'])) evento = 'clique_me_conta_mais';
+    else if (temTag(['quero', 'saber-mais', 'saber mais', 'conta-mais', 'conta mais', 'me-conta'])) evento = 'quero_ou_continua';
     else evento = 'mensagem';
   }
 
@@ -521,7 +527,8 @@ function normalizarPayload(raw: any): {
     mensagem: midia_url && midia_url === msgTexto ? '' : msgTexto,
     evento,
     midia_url,
-    teste: false,
+    teste: raw.teste === true,
+    sync: raw.sync === true,   // permite forçar síncrono em teste mesmo no payload nativo
   };
 }
 
@@ -559,7 +566,7 @@ serve(async (req) => {
   if (!telefone) return jsonRespTool({ error: 'telefone inválido', payload_visto: Object.keys(raw || {}) }, 400);
   const nome = (body.nome || '').trim() || null;
   let mensagem = (body.mensagem || '').trim();
-  const evento = body.evento || 'mensagem';
+  let evento = body.evento || 'mensagem';   // let: resolvido depois (quero_ou_continua)
   const ehTeste = body.teste === true;
 
   const db = sb();
@@ -723,6 +730,16 @@ serve(async (req) => {
     content: m.papel === 'sistema' ? `[evento] ${m.conteudo}` : m.conteudo,
   }));
 
+  // Resolve o evento provisório da tag "quero" (que fica grudada no contato):
+  //  - conversa nova / sem nenhuma fala da Bia ainda → ABRIR (clique_me_conta_mais)
+  //  - já houve conversa (a Bia já falou) → é continuação → tratar como 'mensagem'
+  // Assim o fluxo Conversa reenvia a tag sem reabrir; o fluxo Ativador (1º clique)
+  // cai na abertura naturalmente porque ainda não há histórico.
+  if (evento === 'quero_ou_continua') {
+    const jaFalou = historico.some((m: any) => m.papel === 'bia');
+    evento = jaFalou ? 'mensagem' : 'clique_me_conta_mais';
+  }
+
   if (evento === 'clique_me_conta_mais') {
     const msgSistema = 'O lead clicou no botão "Me conta mais" do template inicial (sobre a condição especial do ProAlt pra quem fez o desafio). Abra a conversa: etapa reconexao — reancore no desafio, micro-contrato, e faça a primeira pergunta. NÃO venda ainda.';
     await db.from('bia_mensagens').insert({ conversa_id: conversa.id, papel: 'sistema', conteudo: '[clique] Me conta mais' });
@@ -879,6 +896,11 @@ serve(async (req) => {
     return jsonRespTool({ ok: true, recebido: true, modo: 'async' }, 202);
   }
 
-  const payload = await processar();
-  return jsonRespTool(payload, payload?.error ? (payload.status || 400) : 200);
+  try {
+    const payload = await processar();
+    return jsonRespTool(payload, payload?.error ? (payload.status || 400) : 200);
+  } catch (e) {
+    console.error('[bia][sync] exceção:', String(e?.stack || e?.message || e));
+    return jsonRespTool({ error: 'erro interno', detalhe: String(e?.message || e) }, 500);
+  }
 });
