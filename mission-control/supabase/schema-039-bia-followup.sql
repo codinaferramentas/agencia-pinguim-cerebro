@@ -12,7 +12,8 @@
 
 insert into pinguim.bia_config (chave, valor) values
   ('followup_modo',     'dry-run'),
-  ('unichat_envio_url', 'PENDENTE')
+  ('unichat_envio_url', 'PENDENTE'),
+  ('debounce_segundos', '12')   -- espera o lead terminar de digitar (0 desliga)
 on conflict (chave) do nothing;
 
 -- Cron: mesmo padrão dos jobs 40/42 (disparar_edge_function via vault).

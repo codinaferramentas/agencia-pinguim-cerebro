@@ -45,6 +45,13 @@ const MAX_TOOL_ROUNDS = 4;
 const HISTORICO_MAX_MSGS = 40;
 const CEREBRO_PROALT_ID = '864e6f53-ce6e-4710-901c-72ba09128260';
 
+// DEBOUNCE (agrupamento de mensagens): a pessoa costuma mandar a pergunta em
+// várias frases. Em vez de responder cada uma, espera o lead PARAR de digitar
+// e responde uma vez só à mensagem completa. Editável via bia_config
+// ('debounce_segundos'; 0 desliga).
+const DEBOUNCE_SEG_DEFAULT = 12;    // silêncio necessário pra processar
+const DEBOUNCE_PASSO_MS = 1500;     // granularidade da checagem
+
 function sb() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
@@ -409,14 +416,22 @@ Argumento síntese: o app substitui copywriter + designer + pesquisador + analis
 
 # METODOLOGIA (máquina de estados — use atualizar_etapa ao avançar)
 
-1. **reconexao** (1-2 msgs): reancorar no desafio + micro-contrato ("te faço 2 perguntas rápidas e te digo se faz sentido — se não fizer, te falo na boa. Fechado?"). NUNCA venda aqui. Lead respondeu → diagnostico. Se já veio com objeção → pule pra objecoes.
-2. **diagnostico** (2-4 trocas): descubra (a) a dor real e (b) POR QUE não comprou no evento. Pergunte "o que te segurou na hora H?" — NUNCA "por que você não comprou?". Faça o lead quantificar: "há quanto tempo você tá nisso?", "quanto isso já te custou?". Identifique o perfil: INICIANTE (quer criar o 1º low ticket — 35% dos leads) ou RODANDO (já vende/anuncia e não escala). SÓ avance quando o lead verbalizou dor + custo E confirmou que não desistiu.
-3. **oferta**: reapresente AMARRADO ao que o lead disse. Estrutura: 1 case parecido com número + a funcionalidade do app que resolve A DOR DELE + encontro mensal com Pedro + comunidade. Apresentação curta — ela já foi pré-vendida pelo diagnóstico.
-4. **prova_social**: use buscar_depoimento com o tema/nicho do lead. UM case certeiro, não metralhadora.
-5. **objecoes**: sequência: tom calmo → rotule a emoção ("parece que...") → pergunta calibrada ("como"/"o quê", NUNCA "por quê") → SÓ DEPOIS argumento. Se a MESMA objeção voltar 2x, o problema é dor mal amplificada: volte ao diagnóstico, não repita argumento.
-6. **fechamento**: link do checkout padrão + escolha binária ("prefere à vista no Pix ou 12x no cartão?"). Garantia de ${garantia} dias como redutor de risco. Toda mensagem termina com próximo passo claro.
-   🃏 CARTA NA MANGA (use NO MÁXIMO 1x por lead, SÓ aqui no fechamento, SÓ se o lead esquentou e está hesitando — nunca de cara, nunca em lista de bônus): ${cartaNaManga}
-7. **pos** (se o lead comprou/sinalizou compra): parabenize, diga o que acontece nas próximas 24h (app na hora, aulas em 24h, boas-vindas no grupo), e antecipe o remorso: "nos próximos dias pode bater um 'será que fiz certo' — normal. Faz a primeira aula hoje que isso morre." Use registrar_desfecho(venda_sinalizada).
+⚡ REGRA-MÃE (a mais importante de todas): você é VENDEDORA, não entrevistadora. Diagnóstico é MEIO, não fim. No WhatsApp o lead cansa rápido: cada pergunta a mais é risco de ele sumir. Na dúvida entre PERGUNTAR mais ou APRESENTAR a solução → APRESENTE. É melhor uma venda tentada do que um lead entediado. Objetivo de toda conversa: chegar no checkout, não coletar informação.
+
+TETO DE PERGUNTAS: no MÁXIMO 2 trocas de diagnóstico (2 respostas do lead). Assim que o lead nomear UMA dor concreta (ex.: "não sei fazer página", "não sei a copy", "não tenho produto"), PARE de perguntar e VÁ PRA OFERTA na próxima mensagem. Nunca faça uma 3ª pergunta de diagnóstico se já tem uma dor clara na mão.
+
+UMA pergunta por mensagem. NUNCA duas perguntas juntas (ex.: "você já tentou? e há quanto tempo?" é PROIBIDO — escolha uma).
+
+1. **reconexao** (1 msg): "aqui é a Bia, do time do Pedro" + micro-contrato curto + 1 pergunta de abertura. NUNCA venda aqui. Lead respondeu → diagnostico. Se já veio com objeção → objecoes.
+2. **diagnostico** (1-2 trocas, NÃO MAIS): descubra a dor principal com 1 pergunta certeira ("o que mais te trava hoje pra tirar isso do papel?"). Se der, entenda em meia linha por que não entrou no evento. Assim que tiver UMA dor concreta → oferta IMEDIATAMENTE. NÃO fique cavando "há quanto tempo", "quanto te custou", "quanto importa pra você" em sequência — isso afunda a conversa. Uma amplificação leve no máximo, e olhe lá.
+3. **oferta** (assim que tiver a dor — não espere o lead "estar pronto"): conecte a dor dele DIRETO à solução. Estrutura curta: "é exatamente isso que o ProAlt resolve" + a funcionalidade do app que mata a dor dele ("o app escreve tua página de vendas dobra por dobra") + 1 frase de reforço (encontro com Pedro / comunidade / método). Sem enrolar. Depois de apresentar, caminhe pro preço/fechamento com naturalidade.
+4. **prova_social** (só se ajudar a fechar): use buscar_depoimento com o nicho do lead. UM case certeiro. Não é etapa obrigatória — se o lead já tá quente, pule direto pro fechamento.
+5. **objecoes**: tom calmo → rotule ("parece que...") → 1 pergunta calibrada se precisar → argumento. NUNCA "por quê". Mesma objeção 2x = amplifique a dor uma vez, não repita argumento. Não transforme objeção em novo interrogatório.
+6. **fechamento** (puxe você, não espere o lead pedir): assim que apresentou a oferta e ele não recusou, ofereça o próximo passo: link do checkout padrão + binária ("prefere à vista no Pix ou 12x no cartão?"). Garantia de ${garantia} dias como redutor de risco. Toda mensagem termina com um próximo passo claro, nunca no ar.
+   🃏 CARTA NA MANGA (NO MÁXIMO 1x por lead, SÓ no fechamento com lead hesitando — nunca de cara, nunca em lista): ${cartaNaManga}
+7. **pos** (comprou/sinalizou compra): parabenize, diga o que acontece em 24h (app na hora, aulas, grupo) e antecipe o remorso ("pode bater um 'será que fiz certo' — normal, faz a aula 1 hoje que isso morre"). Use registrar_desfecho(venda_sinalizada).
+
+FLUXO IDEAL (mire nisso): abre → 1-2 perguntas → apresenta o ProAlt amarrado à dor → preço → fecha. Uma conversa de venda no WhatsApp que converte tem POUCAS mensagens, não muitas. Se você passou de 4 respostas suas sem ter apresentado o ProAlt e o preço, você errou — corrija apresentando AGORA.
 
 # QUEBRAS DE OBJEÇÃO (resumo do playbook)
 
@@ -744,18 +759,21 @@ serve(async (req) => {
     evento = jaFalou ? 'mensagem' : 'clique_me_conta_mais';
   }
 
+  let minhaMsgId: string | null = null;  // ID da mensagem do lead desta chamada (âncora do debounce)
   if (evento === 'clique_me_conta_mais') {
     const msgSistema = 'O lead clicou no botão "Me conta mais" do template inicial (sobre a condição especial do ProAlt pra quem fez o desafio). Abra a conversa: etapa reconexao — reancore no desafio, micro-contrato, e faça a primeira pergunta. NÃO venda ainda.';
     await db.from('bia_mensagens').insert({ conversa_id: conversa.id, papel: 'sistema', conteudo: '[clique] Me conta mais' });
     llmMessages.push({ role: 'system', content: msgSistema });
     if (mensagem) {
-      await db.from('bia_mensagens').insert({ conversa_id: conversa.id, papel: 'lead', conteudo: mensagem });
+      const { data: ins } = await db.from('bia_mensagens').insert({ conversa_id: conversa.id, papel: 'lead', conteudo: mensagem }).select('id').single();
+      minhaMsgId = ins?.id || null;
       llmMessages.push({ role: 'user', content: mensagem });
     }
   } else {
     if (!mensagem && !imagemDataUrl) return { error: 'mensagem vazia', status: 400 };
     const conteudoDb = marcadorMidia + (mensagem || (imagemDataUrl ? '(imagem enviada pelo lead)' : ''));
-    await db.from('bia_mensagens').insert({ conversa_id: conversa.id, papel: 'lead', conteudo: conteudoDb });
+    const { data: ins } = await db.from('bia_mensagens').insert({ conversa_id: conversa.id, papel: 'lead', conteudo: conteudoDb }).select('id').single();
+    minhaMsgId = ins?.id || null;
     if (imagemDataUrl) {
       llmMessages.push({
         role: 'user',
@@ -769,7 +787,62 @@ serve(async (req) => {
     }
   }
 
-  await db.from('bia_conversas').update({ ultima_msg_lead_em: new Date().toISOString(), atualizado_em: new Date().toISOString() }).eq('id', conversa.id);
+  const meuTimestamp = new Date().toISOString();
+  await db.from('bia_conversas').update({ ultima_msg_lead_em: meuTimestamp, atualizado_em: meuTimestamp }).eq('id', conversa.id);
+
+  // -------------------------------------------------------------------
+  // DEBOUNCE: espera o lead terminar de digitar (várias frases → 1 pergunta).
+  // Enquanto espera, se chegar mensagem MAIS NOVA (outra chamada da edge),
+  // esta desiste e deixa a mais nova responder — evita resposta dupla e
+  // resposta a pergunta pela metade. Só quem for a "última" processa,
+  // juntando tudo que o lead mandou desde a última fala da Bia.
+  // Pulado para: eventos de botão (já respondem na hora, sem LLM),
+  // imagem (comprovante precisa de reação imediata) e quando desligado.
+  // -------------------------------------------------------------------
+  const debounceSeg = Number(config['debounce_segundos'] ?? DEBOUNCE_SEG_DEFAULT);
+  const aplicaDebounce = debounceSeg > 0 && !imagemDataUrl && evento !== 'clique_me_conta_mais' && !!minhaMsgId;
+  if (aplicaDebounce) {
+    // Timestamp exato da MINHA mensagem (âncora à prova de empate).
+    const { data: minha } = await db.from('bia_mensagens').select('criado_em').eq('id', minhaMsgId).single();
+    const meuCriadoEm = minha?.criado_em || meuTimestamp;
+    const alvo = Date.now() + debounceSeg * 1000;
+    while (Date.now() < alvo) {
+      await new Promise(r => setTimeout(r, DEBOUNCE_PASSO_MS));
+      // Chegou mensagem do lead depois da minha (id diferente, criada depois)?
+      // Então NÃO sou o último — outra chamada vai responder por todas.
+      const { data: maisNova } = await db.from('bia_mensagens')
+        .select('id')
+        .eq('conversa_id', conversa.id)
+        .eq('papel', 'lead')
+        .gt('criado_em', meuCriadoEm)
+        .neq('id', minhaMsgId)
+        .limit(1)
+        .maybeSingle();
+      if (maisNova) {
+        return { ok: true, telefone, mensagens: [], debounce: 'superado' };
+      }
+    }
+    // Sobrevivi à espera: sou o último. Recarrega o histórico pra pegar TODAS
+    // as frases que o lead mandou enquanto eu esperava (elas já estão no banco).
+    const { data: histAtualizado } = await db.from('bia_mensagens')
+      .select('papel, conteudo, criado_em')
+      .eq('conversa_id', conversa.id)
+      .order('criado_em', { ascending: false })
+      .limit(HISTORICO_MAX_MSGS);
+    const histNovo = (histAtualizado || []).reverse();
+    // Reconstrói llmMessages com o histórico completo (inclui as frases extras).
+    llmMessages.length = 0;
+    for (const m of histNovo) {
+      if (m.papel === 'sistema') {
+        llmMessages.push({ role: 'system', content: `[evento] ${m.conteudo}` });
+      } else {
+        llmMessages.push({ role: m.papel === 'lead' ? 'user' : 'assistant', content: m.conteudo });
+      }
+    }
+    if (evento === 'clique_me_conta_mais') {
+      llmMessages.push({ role: 'system', content: 'O lead abriu a conversa. Etapa reconexao — reancore no desafio, micro-contrato, primeira pergunta. NÃO venda ainda.' });
+    }
+  }
 
   if (jaComprou) {
     llmMessages.push({
