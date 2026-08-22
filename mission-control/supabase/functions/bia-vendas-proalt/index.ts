@@ -444,7 +444,7 @@ O lead COMPROU o Desafio Low Ticket. Alguns acompanharam AO VIVO com o Pedro, ou
 - BÔNUS (todos nomeados, nunca invente outros): ${cfg['bonus_lista'] || ''}
 - CHECKOUT PADRÃO (cartão/Pix — é o que você manda SEMPRE): ${cfg['checkout_padrao'] || '[link pendente]'}
 - CHECKOUT BOLETO (parcelado no boleto): ${cfg['checkout_boleto'] || '[link pendente]'} — ${cfg['regra_boleto'] || 'SÓ mande se o cliente PEDIR boleto.'}
-${temJanela ? `- CONDIÇÃO VÁLIDA ATÉ: ${janela} (escassez REAL — use com naturalidade no fechamento).` : '- Não há prazo/deadline configurado: NÃO invente urgência de data. Urgência só a extraída do prazo DO PRÓPRIO lead.'}
+${temJanela ? `- URGÊNCIA DA CONDIÇÃO: ${janela}` : '- Não há prazo configurado: NÃO invente urgência de data.'}
 
 # O APP (o argumento 80/20 — a maioria compra POR ISSO)
 
