@@ -241,7 +241,7 @@ prompt + completo vetorizado.
   - Match → `bia_leads.estado='comprou'`, `bia_conversas.resultado='venda'` + mensagem `sistema` na conversa (a Bia "sabe" que vendeu e pode fazer o pós-venda E7 no dia seguinte)
   - Resumo no grupo dos sócios: "Bia: X vendas atribuídas / Y conversas ativas / Z vendas ProAlt sem passar pela Bia" — é o placar Bia vs. comercial
   - `bia_leads.email` adicionado ao schema-038 pra esse cruzamento
-- **F4 — Canal**: template Marketing aprovado na Meta + fluxo/tags na Unichat + teste ponta a ponta com nossos números
+- **F4 — Canal** 🔄 spec pronta em `docs/BIA-UNICHAT-INTEGRACAO.md`: arquitetura ASSÍNCRONA (Unichat Fluxo 1 chama a edge → ack 202 na hora → Bia processa em background via `EdgeRuntime.waitUntil` → POSTa resposta no Fluxo 2 "Resposta da IA"). Edge já suporta os dois modos: síncrono (`unichat_resposta_url`=PENDENTE, resposta no corpo, usado nos testes) e assíncrono (URL configurada → ack + callback). Falta: Andre publicar template Meta, criar Fluxo 2 e passar a URL, autorizar gravar `BIA_UNICHAT_TOKEN` no cofre (guardião pediu OK explícito). 3 camadas de segurança: tag Unichat (não-comprador) + trava de compra em tempo real + optout/humano.
 - **F5 — Piloto**: disparo pra 30-50 números, medir resposta/conversa/venda, ajustar, disparo full
 
 ## 8. Pendências do ANDRE (a Bia não vai pro ar sem isso)

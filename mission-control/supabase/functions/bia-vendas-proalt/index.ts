@@ -487,6 +487,20 @@ serve(async (req) => {
 
   const db = sb();
 
+  // Config primeiro: decide o modo de entrega da resposta.
+  //   unichat_resposta_url = PENDENTE → SÍNCRONO (resposta no corpo HTTP — testes)
+  //   unichat_resposta_url configurada → ASSÍNCRONO (ack 202 na hora; a resposta
+  //     é POSTada no fluxo "Resposta da IA" da Unichat quando ficar pronta —
+  //     o bloco HTTP da Unichat não espera o LLM pensar)
+  //   body.sync === true força síncrono mesmo com URL configurada (debug)
+  const { data: cfgRows } = await db.from('bia_config').select('chave, valor');
+  const config: Record<string, string> = {};
+  (cfgRows || []).forEach((r: any) => { config[r.chave] = r.valor; });
+  const respostaUrl = (config['unichat_resposta_url'] || '').trim();
+  const asyncMode = !!respostaUrl && respostaUrl !== 'PENDENTE' && body.sync !== true;
+
+  const processar = async (): Promise<any> => {
+
   // ---------------------------------------------------------------
   // 0. Mídia do lead (áudio → transcreve; imagem → visão multimodal)
   // ---------------------------------------------------------------
@@ -511,7 +525,7 @@ serve(async (req) => {
       console.warn('[bia] mídia falhou:', String(e?.message || e));
       // Não trava a venda: resposta determinística pedindo texto (sem gastar LLM)
       const bolha = 'Opa, não consegui abrir o que você mandou aqui 🙈 Consegue me escrever em texto rapidinho?';
-      return jsonRespTool({ ok: true, mensagens: [bolha], resposta: bolha, midia_erro: true });
+      return { ok: true, telefone, mensagens: [bolha], resposta: bolha, midia_erro: true };
     }
   }
 
@@ -526,7 +540,7 @@ serve(async (req) => {
       origem: ehTeste ? 'teste' : 'desafio-low-ticket',
       estado: 'conversando',
     }).select('*').single();
-    if (eL) return jsonRespTool({ error: `criar lead: ${eL.message}` }, 500);
+    if (eL) return { error: `criar lead: ${eL.message}`, status: 500 };
     lead = novo;
   } else if (nome && !lead.nome) {
     await db.from('bia_leads').update({ nome, atualizado_em: new Date().toISOString() }).eq('id', lead.id);
@@ -537,10 +551,10 @@ serve(async (req) => {
   // 2. Bloqueios absolutos: optout e humano — a Bia NUNCA responde
   // ---------------------------------------------------------------
   if (lead.optout || lead.estado === 'optout') {
-    return jsonRespTool({ ok: true, mensagens: [], ignorado: 'optout', lead_estado: 'optout' });
+    return { ok: true, telefone, mensagens: [], ignorado: 'optout', lead_estado: 'optout' };
   }
   if (lead.estado === 'humano') {
-    return jsonRespTool({ ok: true, mensagens: [], ignorado: 'humano', lead_estado: 'humano' });
+    return { ok: true, telefone, mensagens: [], ignorado: 'humano', lead_estado: 'humano' };
   }
 
   // ---------------------------------------------------------------
@@ -550,22 +564,24 @@ serve(async (req) => {
     await db.from('bia_leads').update({ optout: true, estado: 'optout', atualizado_em: new Date().toISOString() }).eq('id', lead.id);
     await db.from('bia_followups').update({ status: 'cancelado' }).eq('lead_id', lead.id).eq('status', 'pendente');
     await db.from('bia_conversas').update({ aberta: false, resultado: 'optout' }).eq('lead_id', lead.id).eq('aberta', true);
-    return jsonRespTool({
+    return {
       ok: true,
+      telefone,
       mensagens: ['Tranquilo! Não te mando mais nada por aqui. Se um dia quiser retomar, é só chamar. Sucesso! 🙌'],
       lead_estado: 'optout',
-    });
+    };
   }
 
   if (evento === 'chama_mais_tarde') {
     const agendado = new Date(Date.now() + 2.5 * 60 * 60 * 1000).toISOString();
     await db.from('bia_leads').update({ estado: 'aguardando_retorno', atualizado_em: new Date().toISOString() }).eq('id', lead.id);
     await db.from('bia_followups').insert({ lead_id: lead.id, tipo: 'chama_mais_tarde', agendado_para: agendado });
-    return jsonRespTool({
+    return {
       ok: true,
+      telefone,
       mensagens: [`Fechado${lead.nome ? ', ' + lead.nome.split(' ')[0] : ''}! Te chamo daqui a pouco então 🙂`],
       lead_estado: 'aguardando_retorno',
-    });
+    };
   }
 
   // ---------------------------------------------------------------
@@ -576,7 +592,7 @@ serve(async (req) => {
     .order('criado_em', { ascending: false }).limit(1).maybeSingle();
   if (!conversa) {
     const { data: nova, error: eC } = await db.from('bia_conversas').insert({ lead_id: lead.id }).select('*').single();
-    if (eC) return jsonRespTool({ error: `criar conversa: ${eC.message}` }, 500);
+    if (eC) return { error: `criar conversa: ${eC.message}`, status: 500 };
     conversa = nova;
   }
 
@@ -596,7 +612,7 @@ serve(async (req) => {
     await db.from('bia_followups').update({ status: 'cancelado' }).eq('lead_id', lead.id).eq('status', 'pendente');
     const bolha = 'Entendido, paro por aqui! Obrigada pelo papo e sucesso na tua caminhada 🙌';
     await db.from('bia_mensagens').insert({ conversa_id: conversa.id, papel: 'bia', conteudo: bolha });
-    return jsonRespTool({ ok: true, mensagens: [bolha], lead_estado: 'optout' });
+    return { ok: true, telefone, mensagens: [bolha], lead_estado: 'optout' };
   }
 
   // ---------------------------------------------------------------
@@ -616,12 +632,8 @@ serve(async (req) => {
   }
 
   // ---------------------------------------------------------------
-  // 6. Config + histórico + prompt
+  // 6. Histórico + prompt (config já carregada lá em cima)
   // ---------------------------------------------------------------
-  const { data: cfgRows } = await db.from('bia_config').select('chave, valor');
-  const config: Record<string, string> = {};
-  (cfgRows || []).forEach((r: any) => { config[r.chave] = r.valor; });
-
   const { data: histRows } = await db.from('bia_mensagens')
     .select('papel, conteudo, criado_em')
     .eq('conversa_id', conversa.id)
@@ -643,7 +655,7 @@ serve(async (req) => {
       llmMessages.push({ role: 'user', content: mensagem });
     }
   } else {
-    if (!mensagem && !imagemDataUrl) return jsonRespTool({ error: 'mensagem vazia' }, 400);
+    if (!mensagem && !imagemDataUrl) return { error: 'mensagem vazia', status: 400 };
     const conteudoDb = marcadorMidia + (mensagem || (imagemDataUrl ? '(imagem enviada pelo lead)' : ''));
     await db.from('bia_mensagens').insert({ conversa_id: conversa.id, papel: 'lead', conteudo: conteudoDb });
     if (imagemDataUrl) {
@@ -747,8 +759,10 @@ serve(async (req) => {
   const { data: leadFinal } = await db.from('bia_leads').select('estado').eq('id', lead.id).maybeSingle();
   const { data: convFinal } = await db.from('bia_conversas').select('etapa').eq('id', conversa.id).maybeSingle();
 
-  return jsonRespTool({
+  return {
     ok: true,
+    telefone,
+    nome: lead.nome || null,
     mensagens: bolhas,
     resposta: bolhas.join('\n\n'),
     etapa: convFinal?.etapa || conversa.etapa,
@@ -757,5 +771,37 @@ serve(async (req) => {
     tools: toolsUsadas,
     custo_usd: Number(custoUSD.toFixed(6)),
     latencia_ms: Date.now() - t0,
-  });
+  };
+
+  }; // fim de processar()
+
+  // ---------------------------------------------------------------
+  // Entrega: assíncrona (Unichat) ou síncrona (testes/debug)
+  // ---------------------------------------------------------------
+  if (asyncMode) {
+    // Ack IMEDIATO pro bloco HTTP da Unichat; o resultado vai pro fluxo
+    // "Resposta da IA" quando o processamento terminar.
+    // @ts-ignore — EdgeRuntime existe no runtime da Supabase
+    EdgeRuntime.waitUntil((async () => {
+      try {
+        const payload = await processar();
+        if (payload?.mensagens?.length) {
+          const r = await fetch(respostaUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!r.ok) console.error(`[bia][async] resposta-url ${r.status}: ${(await r.text()).slice(0, 200)}`);
+        } else if (payload?.error) {
+          console.error('[bia][async] processar erro:', payload.error);
+        }
+      } catch (e) {
+        console.error('[bia][async] exceção:', String(e?.message || e));
+      }
+    })());
+    return jsonRespTool({ ok: true, recebido: true, modo: 'async' }, 202);
+  }
+
+  const payload = await processar();
+  return jsonRespTool(payload, payload?.error ? (payload.status || 400) : 200);
 });
