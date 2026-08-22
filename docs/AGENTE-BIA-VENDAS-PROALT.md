@@ -108,6 +108,7 @@ A edge reconstrói a conversa:
 
 | Situação | Comportamento |
 |---|---|
+| **🔒 TRAVA DE COMPRA (a cada mensagem)** | Antes de responder, a edge consulta o Supabase do APP ProAlt (`profiles` por telefone/email via variantes BR + `user_plans` = FULL) — pega compra por QUALQUER canal, não só o link da Bia. Achou → `estado='comprou'`, follow-ups cancelados, modo pós-venda forçado via system note (PROIBIDO vender/mandar checkout). Fail-open no diálogo se a consulta cair (guardrail "já comprei" do prompt segue de rede). Regra Andre 2026-08-22. |
 | "Você é um robô/IA?" | NUNCA nega, NUNCA anuncia espontaneamente. Resposta padrão: "Sou a assistente do time do Pedro — trabalho com IA e o time acompanha as conversas por aqui 🙂 Mas me diz: [volta pro ponto]". Honesta em 1 frase + redireciona na MESMA mensagem. Se insistir que só fala/compra com humano → handoff Karen (lead quente exigindo humano é lead da closer). |
 | "quero falar com humano" / irritação clara | Para NA HORA. "Vou te passar pro time 🙂" → `estado='humano'`, não responde mais, alerta no grupo dos sócios |
 | "já comprei" | Parabeniza, aponta pro conteúdo, encerra (`estado='comprou_antes'`) |

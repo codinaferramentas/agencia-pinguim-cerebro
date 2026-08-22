@@ -35,7 +35,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { requireAuthTool, corsTool, jsonRespTool } from '../_shared/auth-tool.ts';
 import { chamarLLM, logarCustoFinOps, calcularCustoUSD } from '../_shared/agente.ts';
 import { getChave } from '../_shared/cofre.ts';
-import { soDigitos } from '../_shared/telefone-br.ts';
+import { soDigitos, variantesTelefoneBR, orTelefonePostgrest } from '../_shared/telefone-br.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -63,6 +63,53 @@ function telefoneCanonico(input: string): string | null {
   // 55 + DDD(2) + 8~9 dígitos
   if (d.length < 12 || d.length > 13) return null;
   return d;
+}
+
+// ========================================================================
+// TRAVA DE SEGURANÇA: lead já comprou o ProAlt?
+// Fonte da verdade: Supabase do APP ProAlt (profiles + user_plans), que o
+// webhook Hotmart alimenta em tempo real — pega compra por QUALQUER canal
+// (link da Bia, link do evento, comercial), não só as com sck=bia-agente.
+// Checado a CADA mensagem antes de vender (regra Andre 2026-08-22).
+// ========================================================================
+const PROALT_APP_REST = 'https://vdrlvflludyqkyhfoiwb.supabase.co/rest/v1';
+const PLANO_FULL_PROALT = '2cf21005-9c84-4c60-8566-782809edc41b';
+
+async function verificarCompraProAlt(telefone: string, email: string | null): Promise<boolean> {
+  try {
+    const key = await getChave('PROALT_SERVICE_ROLE_KEY', 'bia-vendas-proalt');
+    if (!key) return false;
+    const headers = { 'apikey': key, 'Authorization': `Bearer ${key}` };
+
+    // 1. Acha profiles por telefone (variantes BR — fronteira nossa) e/ou email
+    const variantes = variantesTelefoneBR(telefone);
+    const filtros: string[] = [];
+    if (variantes.length) filtros.push(orTelefonePostgrest('phone', variantes));
+    if (email) filtros.push(`email=eq.${encodeURIComponent(email.toLowerCase())}`);
+
+    const userIds = new Set<string>();
+    for (const filtro of filtros) {
+      const r = await fetch(`${PROALT_APP_REST}/profiles?select=user_id&${filtro}&limit=10`, { headers });
+      if (!r.ok) continue;
+      for (const p of await r.json()) if (p.user_id) userIds.add(p.user_id);
+    }
+    if (userIds.size === 0) return false;
+
+    // 2. Algum deles tem o plano FULL ativo?
+    const ids = [...userIds].join(',');
+    const r2 = await fetch(
+      `${PROALT_APP_REST}/user_plans?select=user_id,plan_id&user_id=in.(${ids})&plan_id=eq.${PLANO_FULL_PROALT}&limit=1`,
+      { headers },
+    );
+    if (!r2.ok) return false;
+    const planos = await r2.json();
+    return planos.length > 0;
+  } catch (e) {
+    // Falha na checagem NUNCA derruba a conversa — só loga (fail-open pro
+    // diálogo, mas o guardrail "já comprei" do prompt segue de rede)
+    console.warn('[bia] verificarCompraProAlt falhou:', String(e?.message || e));
+    return false;
+  }
 }
 
 // ========================================================================
@@ -550,6 +597,22 @@ serve(async (req) => {
   }
 
   // ---------------------------------------------------------------
+  // 5b. TRAVA: já comprou? (checa a CADA mensagem — pode ter comprado
+  //     há 3 minutos por QUALQUER link, não só o da Bia)
+  // ---------------------------------------------------------------
+  let jaComprou = lead.estado === 'comprou' || lead.estado === 'comprou_antes';
+  if (!jaComprou) {
+    jaComprou = await verificarCompraProAlt(telefone, lead.email || null);
+    if (jaComprou) {
+      await db.from('bia_leads').update({ estado: 'comprou', atualizado_em: new Date().toISOString() }).eq('id', lead.id);
+      await db.from('bia_conversas').update({ etapa: 'pos', resultado: 'venda', atualizado_em: new Date().toISOString() }).eq('id', conversa.id);
+      await db.from('bia_followups').update({ status: 'cancelado' }).eq('lead_id', lead.id).eq('status', 'pendente');
+      await db.from('bia_mensagens').insert({ conversa_id: conversa.id, papel: 'sistema', conteudo: '[trava] compra aprovada detectada no app ProAlt (Hotmart)' });
+      lead.estado = 'comprou';
+    }
+  }
+
+  // ---------------------------------------------------------------
   // 6. Config + histórico + prompt
   // ---------------------------------------------------------------
   const { data: cfgRows } = await db.from('bia_config').select('chave, valor');
@@ -594,6 +657,16 @@ serve(async (req) => {
   }
 
   await db.from('bia_conversas').update({ ultima_msg_lead_em: new Date().toISOString(), atualizado_em: new Date().toISOString() }).eq('id', conversa.id);
+
+  if (jaComprou) {
+    llmMessages.push({
+      role: 'system',
+      content: 'ATENÇÃO: este lead JÁ TEM COMPRA APROVADA do ProAlt (registro oficial Hotmart no app). ' +
+        'É PROIBIDO vender, mandar link de checkout, oferta ou bônus. Modo pós-venda/aluno: se for a primeira vez que isso aparece, ' +
+        'parabenize e oriente os primeiros passos (app na hora, aulas em 24h, grupo). Se ele pedir algo de suporte, direcione ao suporte. ' +
+        'Se só está conversando, seja breve, calorosa e encerre bem.',
+    });
+  }
 
   const systemPrompt = montarSystemPrompt(config, lead.nome);
 
