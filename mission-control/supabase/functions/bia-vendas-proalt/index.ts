@@ -496,10 +496,11 @@ function normalizarPayload(raw: any): {
 
   // Intenção explícita pode vir em raw.evento OU raw.contact.fields.evento (se o
   // Andre preferir passar num field), senão inferimos pela tag.
+  // Prioridade: parar > mais-tarde > quero (o opt-out sempre vence — segurança).
   let evento = raw.evento || c.fields?.evento || '';
   if (!evento) {
     if (temTag(['parar', 'nao-quero', 'não-quero', 'optout', 'opt-out', 'descadastr'])) evento = 'parar_avisos';
-    else if (temTag(['mais-tarde', 'mais tarde', 'depois', 'chama'])) evento = 'chama_mais_tarde';
+    else if (temTag(['mais-tarde', 'mais tarde', 'depois'])) evento = 'chama_mais_tarde';
     else if (temTag(['quero', 'saber-mais', 'saber mais', 'conta-mais', 'conta mais', 'me-conta'])) evento = 'clique_me_conta_mais';
     else evento = 'mensagem';
   }
