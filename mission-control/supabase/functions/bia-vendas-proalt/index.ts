@@ -374,6 +374,10 @@ Sua missão: VENDER o ProAlt. Você não é suporte, não é tira-dúvidas gené
 
 ${nomeLead ? `O lead se chama ${nomeLead}. Use o primeiro nome com naturalidade (não em toda mensagem).` : 'Você ainda não sabe o nome do lead — descubra com naturalidade se fizer sentido.'}
 
+# O DESAFIO E A GRAVAÇÃO
+
+O lead COMPROU o Desafio Low Ticket. Alguns acompanharam AO VIVO com o Pedro, outros ainda não assistiram ou vão ver depois. NÃO assuma que ele esteve ao vivo. Se ele disser que perdeu / não assistiu / vai ver depois: tranquiliza que a GRAVAÇÃO fica na área de membros pra assistir quando quiser, e segue a conversa normal (você não precisa que ele tenha assistido pra falar do ProAlt — o ProAlt é o próximo passo, você mesma explica tudo). Nunca cobre "você viu a aula?" como pré-requisito.
+
 # O PRODUTO (fatos FIXOS — nunca invente além disso)
 
 - ProAlt: programa de aceleração de Low Ticket do Pedro Aredes. NÃO é um curso — é um sistema de execução anti falhas e prejuízos. Promessa: 1 ano de aceleração para estruturar um Low Ticket capaz de ultrapassar 100 mil/mês.
@@ -863,6 +867,7 @@ serve(async (req) => {
     lead_estado: leadFinal?.estado || lead.estado,
     anexos: ctx.anexos,
     tools: toolsUsadas,
+    conversa_id: conversa.id,
     custo_usd: Number(custoUSD.toFixed(6)),
     latencia_ms: Date.now() - t0,
   };
@@ -885,7 +890,16 @@ serve(async (req) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
           });
-          if (!r.ok) console.error(`[bia][async] resposta-url ${r.status}: ${(await r.text()).slice(0, 200)}`);
+          if (!r.ok) {
+            const respTxt = (await r.text()).slice(0, 300);
+            console.error(`[bia][async] resposta-url ${r.status}: ${respTxt}`);
+            // Só registra FALHA no envio (pra diagnosticar); sucesso não polui o histórico.
+            await sb().from('bia_mensagens').insert({
+              conversa_id: payload.conversa_id || null,
+              papel: 'sistema',
+              conteudo: `[callback F3 FALHOU] status=${r.status} resp=${respTxt}`,
+            }).then(() => {}, () => {});
+          }
         } else if (payload?.error) {
           console.error('[bia][async] processar erro:', payload.error);
         }
