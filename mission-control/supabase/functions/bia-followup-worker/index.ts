@@ -120,6 +120,9 @@ async function gerarFollowup(
 }
 
 // ---- envio --------------------------------------------------------------
+// Reusa o MESMO canal de entrega da edge principal: o Fluxo 3 "Resposta da IA"
+// da Unichat (config unichat_resposta_url), com o mesmo payload que ela já
+// entrega. Assim o follow-up sai pelo caminho já testado e funcionando.
 async function enviar(
   modo: string,
   config: Record<string, string>,
@@ -127,16 +130,15 @@ async function enviar(
   texto: string,
 ): Promise<{ ok: boolean; dry: boolean; erro?: string }> {
   if (modo !== 'ativo') return { ok: true, dry: true };
-  const url = config['unichat_envio_url'];
-  if (!url || url === 'PENDENTE') return { ok: false, dry: false, erro: 'unichat_envio_url não configurada' };
+  const url = config['unichat_resposta_url'];
+  if (!url || url === 'PENDENTE') return { ok: false, dry: false, erro: 'unichat_resposta_url não configurada' };
   try {
-    const token = await getChave('UNICHAT_API_TOKEN', 'bia-followup-worker');
     const r = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ telefone, mensagem: texto }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telefone, nome: null, mensagens: [texto], resposta: texto, anexos: [], lead_estado: 'conversando' }),
     });
-    if (!r.ok) return { ok: false, dry: false, erro: `unichat ${r.status}: ${(await r.text()).slice(0, 150)}` };
+    if (!r.ok) return { ok: false, dry: false, erro: `fluxo3 ${r.status}: ${(await r.text()).slice(0, 150)}` };
     return { ok: true, dry: false };
   } catch (e) {
     return { ok: false, dry: false, erro: String(e?.message || e) };
