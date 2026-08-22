@@ -453,6 +453,78 @@ Só o texto das mensagens (bolhas separadas por |||). Sem markdown, sem listas c
 }
 
 // ========================================================================
+// Normalizador de payload — entende o formato NATIVO da Unichat e o simples.
+//
+// Unichat manda (visto no teste real 2026-08-22):
+//   { contact: { name, email, phoneNumber, tags, lastMessage,
+//                lastMessageData: { message, messageType, id }, fields },
+//     event_date, triggerData: {...} }
+//
+// Formato simples (testes internos): { telefone, nome, mensagem, evento, midia_url, teste }
+//
+// Eventos por TAG (a Unichat marca tags; a gente lê a intenção delas):
+//   tag contém "quero" / "saber-mais" / "conta-mais" → clique_me_conta_mais
+//   tag contém "mais-tarde" / "depois"               → chama_mais_tarde
+//   tag contém "parar" / "nao-quero" / "optout"      → parar_avisos
+// (nomes flexíveis — o Andre decide os slugs das tags e a gente casa por substring)
+// ========================================================================
+function normalizarPayload(raw: any): {
+  telefone: string; nome: string; mensagem: string;
+  evento: string; midia_url: string; teste: boolean; sync?: boolean;
+} {
+  // Já é o formato simples?
+  if (raw?.telefone || raw?.phone) {
+    return {
+      telefone: raw.telefone || raw.phone || '',
+      nome: raw.nome || raw.name || '',
+      mensagem: raw.mensagem || raw.message || raw.text || '',
+      evento: raw.evento || 'mensagem',
+      midia_url: raw.midia_url || raw.media_url || raw.audio_url || raw.image_url || '',
+      teste: raw.teste === true,
+      sync: raw.sync === true,
+    };
+  }
+
+  // Formato nativo Unichat
+  const c = raw?.contact || {};
+  const lmd = c.lastMessageData || {};
+  const tagsArr: string[] = Array.isArray(c.tags)
+    ? c.tags
+    : typeof c.tags === 'string' ? c.tags.split(',') : [];
+  const tags = tagsArr.map((t: string) => String(t).toLowerCase().trim());
+  const temTag = (frags: string[]) => tags.some(t => frags.some(f => t.includes(f)));
+
+  // Intenção explícita pode vir em raw.evento OU raw.contact.fields.evento (se o
+  // Andre preferir passar num field), senão inferimos pela tag.
+  let evento = raw.evento || c.fields?.evento || '';
+  if (!evento) {
+    if (temTag(['parar', 'nao-quero', 'não-quero', 'optout', 'opt-out', 'descadastr'])) evento = 'parar_avisos';
+    else if (temTag(['mais-tarde', 'mais tarde', 'depois', 'chama'])) evento = 'chama_mais_tarde';
+    else if (temTag(['quero', 'saber-mais', 'saber mais', 'conta-mais', 'conta mais', 'me-conta'])) evento = 'clique_me_conta_mais';
+    else evento = 'mensagem';
+  }
+
+  // Mídia: a Unichat costuma sinalizar tipo em messageType (image/audio) e a URL
+  // no próprio message ou num campo de anexo. Cobrimos os nomes mais prováveis.
+  const tipoMsg = String(lmd.messageType || '').toLowerCase();
+  let midia_url = c.mediaUrl || lmd.mediaUrl || lmd.url || lmd.fileUrl || raw.midia_url || '';
+  const msgTexto = c.lastMessage || lmd.message || '';
+  // Se o messageType é mídia e o "texto" parece uma URL, trata como mídia
+  if (!midia_url && (tipoMsg.includes('image') || tipoMsg.includes('audio') || tipoMsg.includes('ptt') || tipoMsg.includes('voice')) && /^https?:\/\//i.test(msgTexto)) {
+    midia_url = msgTexto;
+  }
+
+  return {
+    telefone: c.phoneNumber || c.phone || '',
+    nome: c.name || '',
+    mensagem: midia_url && midia_url === msgTexto ? '' : msgTexto,
+    evento,
+    midia_url,
+    teste: false,
+  };
+}
+
+// ========================================================================
 // Handler
 // ========================================================================
 serve(async (req) => {
@@ -475,13 +547,17 @@ serve(async (req) => {
   if (!autorizado) return jsonRespTool({ error: 'não autorizado' }, 401);
 
   const t0 = Date.now();
-  let body: any;
-  try { body = await req.json(); } catch { return jsonRespTool({ error: 'JSON inválido' }, 400); }
+  let raw: any;
+  try { raw = await req.json(); } catch { return jsonRespTool({ error: 'JSON inválido' }, 400); }
 
-  const telefone = telefoneCanonico(body.telefone || body.phone || '');
-  if (!telefone) return jsonRespTool({ error: 'telefone inválido' }, 400);
-  const nome = (body.nome || body.name || '').trim() || null;
-  let mensagem = (body.mensagem || body.message || body.text || '').trim();
+  // Normaliza: aceita o formato NATIVO da Unichat (objeto `contact` + triggerData)
+  // e o formato simples { telefone, nome, mensagem, evento } (testes internos).
+  const body = normalizarPayload(raw);
+
+  const telefone = telefoneCanonico(body.telefone || '');
+  if (!telefone) return jsonRespTool({ error: 'telefone inválido', payload_visto: Object.keys(raw || {}) }, 400);
+  const nome = (body.nome || '').trim() || null;
+  let mensagem = (body.mensagem || '').trim();
   const evento = body.evento || 'mensagem';
   const ehTeste = body.teste === true;
 

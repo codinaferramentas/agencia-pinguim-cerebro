@@ -25,35 +25,57 @@ Lead responde no WhatsApp
 POST https://wmelierxzpjamiofeemh.supabase.co/functions/v1/bia-vendas-proalt
 Headers:
   Content-Type: application/json
-  x-bia-token: <BIA_UNICHAT_TOKEN>     ← te passo em canal seguro (fica no cofre)
-Body (JSON) — mapeie as variáveis da Unichat:
-  {
-    "telefone": "{{contato.telefone}}",        (obrigatório, qualquer formato BR)
-    "nome": "{{contato.nome}}",                 (opcional)
-    "mensagem": "{{mensagem.texto}}",           (o que o lead escreveu)
-    "midia_url": "{{mensagem.midia_url}}",      (se o lead mandou áudio/imagem)
-    "evento": "clique_me_conta_mais"            (ver tabela de eventos abaixo)
-  }
+  x-bia-token: <BIA_UNICHAT_TOKEN>
 ```
+
+**A edge entende o formato NATIVO da Unichat direto** — não precisa customizar o body.
+O objeto `contact` que a Unichat já envia é lido automaticamente (validado 2026-08-22
+com o payload real):
+
+```json
+{
+  "contact": {
+    "name": "...",              → nome
+    "phoneNumber": "5511...",   → telefone  (obrigatório)
+    "email": "...",             → usado na trava de compra
+    "tags": "bia-ia,bia-quero-saber-mais",   → DEFINE O EVENTO (ver abaixo)
+    "lastMessage": "texto que o lead digitou",
+    "lastMessageData": { "message": "...", "messageType": "message|image|audio" }
+  }
+}
+```
+
+> Se preferir controle explícito, dá pra mandar `"evento": "clique_me_conta_mais"`
+> no corpo ou em `contact.fields.evento` — isso tem prioridade sobre a tag.
 
 ### Resposta imediata do endpoint (o que o Fluxo 1 recebe na hora)
 - **HTTP 202** `{ "ok": true, "recebido": true, "modo": "async" }` → só significa
   "recebi, tô processando". **Não use isso pra responder o lead** — a resposta real
   chega pelo Fluxo 2. O bloco HTTP pode encerrar aqui.
 
-## Eventos (campo `evento`)
+## Eventos — definidos pela TAG que você marca (ou campo `evento`)
 
-| Quando | `evento` | O que a Bia faz |
+A Bia infere a intenção pela **tag do contato** (casa por substring, então o nome
+exato do slug é flexível — só precisa CONTER a palavra-chave):
+
+| Tag contém… | Evento | O que a Bia faz |
 |---|---|---|
-| Lead clicou **"Quero saber mais"** no template | `clique_me_conta_mais` | Abre a conversa (reconexão), sem `mensagem` |
-| Lead clicou **"Me chama mais tarde"** | `chama_mais_tarde` | Responde curto e agenda retomada em ~2h30 (o worker cuida) |
-| Lead clicou **"Não quero"** / opt-out | `parar_avisos` | Marca opt-out, despedida, nunca mais fala |
-| Lead **escreveu/mandou áudio/imagem** | `mensagem` (ou omita) | Fluxo normal de venda |
+| `quero` / `saber-mais` / `conta-mais` | primeiro toque | Abre a conversa (reconexão), **não vende** |
+| `mais-tarde` / `depois` / `chama` | me chama mais tarde | Responde curto e agenda retomada ~2h30 |
+| `parar` / `nao-quero` / `optout` | parar avisos | Opt-out definitivo, despedida, nunca mais fala |
+| _(sem tag de intenção)_ | mensagem normal | Fluxo de conversa/venda com o texto do lead |
 
-> Os 3 primeiros são disparados pelos **botões do template**. O `mensagem` é toda
-> resposta livre subsequente. Para `parar_avisos`/`chama_mais_tarde` a Bia devolve
-> a bolha **na hora** (HTTP 200, síncrono) porque não precisa de LLM — se quiser,
-> pode usar essa resposta direto no Fluxo 1. Pros demais, sempre via Fluxo 2.
+Validado 2026-08-22: `bia-quero-saber-mais` → reconexão sem vender ✅ ·
+`bia-parar-avisos` → optout ✅ · `bia-mais-tarde` → aguardando ✅.
+
+> ⚠️ IMPORTANTE: o **primeiro contato** (quando o lead clica "quero saber mais" no
+> template) TEM que vir com a tag de "quero" — senão a Bia trata a mensagem como
+> conversa já em andamento. No teste inicial a tag era genérica (`tag1,tag2`) e a
+> Bia interpretou "Eu quero" como intenção de compra e correu pro fechamento. Com a
+> tag certa, ela abre com diagnóstico, como deve.
+>
+> `parar_avisos` e `chama_mais_tarde` a Bia responde **na hora** (não precisa de
+> LLM). Os demais passam pelo Fluxo 2 (assíncrono) quando ele estiver configurado.
 
 ## O que a Bia POSTa no seu Fluxo 2 ("Resposta da IA")
 
