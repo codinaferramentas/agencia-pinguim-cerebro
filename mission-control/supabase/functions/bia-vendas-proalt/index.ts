@@ -200,12 +200,12 @@ const TOOLS = [
     function: {
       name: 'buscar_depoimento',
       description:
-        'Busca depoimentos reais de alunos do ProAlt (com print/imagem quando houver). ' +
-        'Use na etapa de prova ou pra quebrar objeção "será que funciona pra mim". ' +
-        'Passe o tema/nicho/situação do lead pra achar o case mais parecido.',
+        'Busca depoimentos reais de alunos do ProAlt, COM LINK da imagem/print quando houver (é link público, você PODE mandar pro lead). ' +
+        'SEMPRE devolve algo (nunca volta vazio). Use quando: o lead pergunta se funciona pro caso dele, quer prova, ou pra quebrar objeção de confiança. ' +
+        'Passe o NICHO e/ou o TIPO DE PRODUTO do lead (ex: "template pra professoras", "curso de brigadeiro", "ebook de dieta") — a busca casa por nicho, depois por tipo de produto, e no pior caso traz os cases mais fortes.',
       parameters: {
         type: 'object',
-        properties: { tema: { type: 'string', description: 'tema, nicho ou situação do lead (ex: "produto parado", "primeira venda", "escala")' } },
+        properties: { tema: { type: 'string', description: 'nicho + tipo de produto do lead (ex: "template aulas professoras", "curso confeitaria brigadeiro", "ebook dieta emagrecimento")' } },
         required: ['tema'],
       },
     },
@@ -287,31 +287,66 @@ async function executarTool(
         });
       }
       case 'buscar_depoimento': {
-        // 11 depoimentos no banco — busca direta com score simples por keyword.
+        // Busca em CAMADAS (malícia): tenta casar por nicho/produto do lead, mas
+        // NUNCA volta de mãos vazias. Se não achar o nicho exato, cai pra tipo de
+        // produto (template, curso, ebook...) e por fim pros cases mais fortes.
+        // A imagem do print é link PÚBLICO do Storage → a Bia manda o link e a
+        // pessoa vê a prova real (a Unichat entrega em `anexos`).
         const { data: deps } = await sb()
           .from('cerebro_fontes')
           .select('id, autor, conteudo_md, metadata, url')
           .eq('cerebro_id', CEREBRO_PROALT_ID)
           .eq('tipo', 'depoimento')
-          .limit(30);
+          .limit(50);
+
         const tema = (args.tema || '').toLowerCase();
-        const palavras = tema.split(/\s+/).filter((p: string) => p.length >= 4);
+        // termos do nicho/produto do lead (>=4 letras) + sinônimos de "tipo de produto"
+        const termos = tema.split(/\s+/).filter((p: string) => p.length >= 4);
+        const TIPOS_PRODUTO = ['template', 'curso', 'ebook', 'e-book', 'planilha', 'aula', 'mentoria', 'guia', 'pdf', 'receita', 'apostila'];
+        const tiposNoTema = TIPOS_PRODUTO.filter(t => tema.includes(t));
+
         const scored = (deps || []).map((d: any) => {
           const txt = ((d.conteudo_md || '') + ' ' + JSON.stringify(d.metadata || {})).toLowerCase();
-          const score = palavras.reduce((s: number, p: string) => s + (txt.includes(p) ? 1 : 0), 0);
-          return { d, score };
-        }).sort((a: any, b: any) => b.score - a.score);
-        const top = scored.slice(0, 3).map(({ d }: any) => {
+          let score = 0;
+          // nicho/produto exato do lead pesa mais
+          score += termos.reduce((s: number, p: string) => s + (txt.includes(p) ? 3 : 0), 0);
+          // tipo de produto (template/curso/ebook) pesa médio
+          score += tiposNoTema.reduce((s: number, t: string) => s + (txt.includes(t) ? 2 : 0), 0);
+          // ter imagem/print e ter número/resultado dá um empurrão (converte mais)
+          const temImg = !!(d.metadata?.anexo_principal_url);
+          if (temImg) score += 1;
+          if (/\b(mil|k\b|r\$|\d{2,})/.test(txt)) score += 1;
+          return { d, score, temImg };
+        });
+
+        // Ordena por score; empate → quem tem imagem primeiro
+        scored.sort((a: any, b: any) => (b.score - a.score) || (Number(b.temImg) - Number(a.temImg)));
+
+        // Camada 1: casou algo do nicho/produto (score alto)? pega esses.
+        // Camada 2 (fallback): nada casou → devolve os cases mais fortes MESMO ASSIM,
+        // priorizando os que têm imagem (nunca "não achei").
+        const casou = scored.filter((x: any) => x.score >= 2).slice(0, 2);
+        const base = casou.length ? casou : scored.slice(0, 2);
+
+        const itens = base.map(({ d, temImg }: any) => {
           const anexo = d.metadata?.anexo_principal_url || null;
           if (anexo) ctx.anexos.push(anexo);
           return {
-            autor: d.autor || d.metadata?.autor || null,
+            autor: d.autor || d.metadata?.autor || 'aluno do ProAlt',
             resumo: d.metadata?.resumo || null,
-            texto: (d.conteudo_md || '').slice(0, 600),
-            tem_imagem: !!anexo,
+            texto: (d.conteudo_md || '').replace(/\*\*/g, '').slice(0, 500),
+            imagem_link: anexo,   // link público — a Bia PODE mandar esse link
+            tem_imagem: temImg,
           };
         });
-        return JSON.stringify({ depoimentos: top, nota: 'se tem_imagem=true, a imagem será anexada automaticamente à sua resposta' });
+
+        return JSON.stringify({
+          depoimentos: itens,
+          casou_nicho: casou.length > 0,
+          instrucao: casou.length
+            ? 'Achei case(s) relacionado(s). Cite o autor + o resultado em 1 frase. Se houver imagem_link, VERBALIZE e cole o link na mesma mensagem: "olha o print do resultado do [autor]: [imagem_link]". Não deixe o link solto sem contexto — apresente como prova.'
+            : 'NÃO achei case do nicho exato. NUNCA diga "não temos do seu nicho". Diga: "idêntico ao seu eu não tenho na mão agora, mas tenho de gente que partiu de algo parecido" e cite um dos que devolvi. Se houver imagem_link, VERBALIZE e cole: "olha o print do [autor]: [imagem_link]". O que vende é o método funcionar, não o nicho idêntico.',
+        });
       }
       case 'acionar_humano': {
         await sb().from('bia_leads').update({ estado: 'humano', atualizado_em: new Date().toISOString() }).eq('id', ctx.leadId);
@@ -425,7 +460,7 @@ UMA pergunta por mensagem. NUNCA duas perguntas juntas (ex.: "você já tentou? 
 1. **reconexao** (1 msg): "aqui é a Bia, do time do Pedro" + micro-contrato curto + 1 pergunta de abertura. NUNCA venda aqui. Lead respondeu → diagnostico. Se já veio com objeção → objecoes.
 2. **diagnostico** (1-2 trocas, NÃO MAIS): descubra a dor principal com 1 pergunta certeira ("o que mais te trava hoje pra tirar isso do papel?"). Se der, entenda em meia linha por que não entrou no evento. Assim que tiver UMA dor concreta → oferta IMEDIATAMENTE. NÃO fique cavando "há quanto tempo", "quanto te custou", "quanto importa pra você" em sequência — isso afunda a conversa. Uma amplificação leve no máximo, e olhe lá.
 3. **oferta** (assim que tiver a dor — não espere o lead "estar pronto"): conecte a dor dele DIRETO à solução. Estrutura curta: "é exatamente isso que o ProAlt resolve" + a funcionalidade do app que mata a dor dele ("o app escreve tua página de vendas dobra por dobra") + 1 frase de reforço (encontro com Pedro / comunidade / método). Sem enrolar. Depois de apresentar, caminhe pro preço/fechamento com naturalidade.
-4. **prova_social** (só se ajudar a fechar): use buscar_depoimento com o nicho do lead. UM case certeiro. Não é etapa obrigatória — se o lead já tá quente, pule direto pro fechamento.
+4. **prova_social** (quando o lead duvida "será que funciona pro meu caso"): use buscar_depoimento passando o NICHO + TIPO DE PRODUTO dele. MALÍCIA: se não houver case do nicho exato, NUNCA diga "não temos do seu nicho" — use um case de situação parecida ("não tenho de professora de português na mão, mas tenho de gente que também vendia template/material pronto e conseguiu"). O que vende é o MÉTODO funcionar, não o nicho idêntico. Se o case tiver um imagem_link, MANDE O LINK ("olha o print do resultado dele: [link]") — o print real é a prova mais forte que existe. UM case certeiro, não metralhadora. Se o lead já tá quente, pule pro fechamento.
 5. **objecoes**: tom calmo → rotule ("parece que...") → 1 pergunta calibrada se precisar → argumento. NUNCA "por quê". Mesma objeção 2x = amplifique a dor uma vez, não repita argumento. Não transforme objeção em novo interrogatório.
 6. **fechamento** (puxe você, não espere o lead pedir): assim que apresentou a oferta e ele não recusou, ofereça o próximo passo: link do checkout padrão + binária ("prefere à vista no Pix ou 12x no cartão?"). Garantia de ${garantia} dias como redutor de risco. Toda mensagem termina com um próximo passo claro, nunca no ar.
    🃏 CARTA NA MANGA (NO MÁXIMO 1x por lead, SÓ no fechamento com lead hesitando — nunca de cara, nunca em lista): ${cartaNaManga}
