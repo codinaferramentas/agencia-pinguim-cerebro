@@ -323,7 +323,10 @@ async function executarTool(
           comprou_antes: { lead: 'comprou_antes', fecha: true },
           desqualificado: { conversa: 'perdido', fecha: true },
           optout: { lead: 'optout', conversa: 'optout', fecha: true },
-          venda_sinalizada: { fecha: false },
+          // venda sinalizada: lead vira 'comprou' (auto-declarado; a trava do app
+          // confirma depois), conversa marca venda mas FICA ABERTA pro pós.
+          // Follow-ups pendentes morrem — comprador não leva cutucada.
+          venda_sinalizada: { lead: 'comprou', conversa: 'venda', fecha: false },
         };
         const m = mapa[args.tipo];
         if (!m) return JSON.stringify({ erro: 'tipo inválido' });
@@ -338,7 +341,7 @@ async function executarTool(
             atualizado_em: new Date().toISOString(),
           }).eq('id', ctx.conversaId);
         }
-        if (args.tipo === 'optout') {
+        if (args.tipo === 'optout' || args.tipo === 'venda_sinalizada' || args.tipo === 'comprou_antes') {
           await sb().from('bia_followups').update({ status: 'cancelado' }).eq('lead_id', ctx.leadId).eq('status', 'pendente');
         }
         await sb().from('bia_mensagens').insert({ conversa_id: ctx.conversaId, papel: 'sistema', conteudo: `[desfecho] ${args.tipo}: ${args.detalhe || ''}` });
