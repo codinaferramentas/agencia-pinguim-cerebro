@@ -37,6 +37,11 @@ const CONTA_ROBO = 'ferramenta@agenciapinguim.com';
 const AGENDA_CONFIRMACAO = 'contato@agenciapinguim.com';
 const TZ_OFFSET_MS = -3 * 3600 * 1000; // America/Sao_Paulo (sem horário de verão desde 2019)
 const LISTAS_DIA = ['', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', '']; // index = getUTCDay do relógio BRT
+// dia citado na seção DISPARO -> lista de origem + índice do dia (getUTCDay)
+const MAPA_DIA: Record<string, { lista: string; idx: number }> = {
+  segunda: { lista: 'Segunda', idx: 1 }, 'terça': { lista: 'Terça', idx: 2 }, terca: { lista: 'Terça', idx: 2 },
+  quarta: { lista: 'Quarta', idx: 3 }, quinta: { lista: 'Quinta', idx: 4 }, sexta: { lista: 'Sexta', idx: 5 },
+};
 const MARCA_LOG = '🤖'; // prefixo dos comentários do robô (usado na rotação)
 const MAX_LOGS_POR_CARD = 4;
 const ATRASO_MAX_MIN = 55; // até quanto tempo depois do horário ainda dispara
@@ -259,9 +264,12 @@ serve(async (req) => {
       }
       if (!destinos.length) { pulo(`nenhum link cadastrado no de-para (${desconhecidos.length} desconhecido/s)`); continue; }
 
-      // confirmação na agenda (só automáticos; manual = vontade expressa do gestor)
+      // confirmação na agenda — SÓ pros cards recorrentes (Segunda..Sexta).
+      // Exceções que dispensam agenda (Andre 25/08): lista Avulso (disparo
+      // pontual agendado na mão) e Enviar Agora (manual).
+      const isAvulso = card.lista === 'Avulso';
       let agendaOk = true;
-      if (!manual) {
+      if (!manual && !isAvulso) {
         if (!linksAgenda) linksAgenda = await linksNaAgendaHoje(inicioDia, fimDia);
         agendaOk = card.links.some(l => linksAgenda!.has(l));
         if (!agendaOk && !modoTeste) { pulo('sem evento na agenda contato@ com o link do grupo'); continue; }
@@ -296,8 +304,11 @@ serve(async (req) => {
 
         // envia (teste: tudo pro grupo de teste, com carimbo do destino real)
         const jidFinal = modoTeste ? cfg!.jid_grupo_teste : dest.jid;
+        const statusAgenda = isAvulso ? '📌 avulso — dispensa agenda'
+          : agendaOk ? '✅ evento confirmado na agenda'
+          : '⚠️ SEM evento na agenda (em produção NÃO enviaria)';
         const texto = modoTeste
-          ? `🧪 *[TESTE — destino real: ${dest.nome}]*\n${agendaOk ? '✅ evento confirmado na agenda' : '⚠️ SEM evento na agenda (em produção NÃO enviaria)'}${manual ? '\n🔁 reenvio manual' : ''}\n———\n${card.mensagem}`
+          ? `🧪 *[TESTE — destino real: ${dest.nome}]*\n${statusAgenda}${manual ? '\n🔁 reenvio manual' : ''}\n———\n${card.mensagem}`
           : card.mensagem;
         try {
           await enviarWhats(jidFinal, texto);
@@ -332,9 +343,49 @@ serve(async (req) => {
       };
       if (card.lista === 'Avulso') await mover('Concluidos');
       else if (manual) {
-        const mapa: Record<string, string> = { segunda: 'Segunda', 'terça': 'Terça', terca: 'Terça', quarta: 'Quarta', quinta: 'Quinta', sexta: 'Sexta' };
-        const destinoLista = card.diaSemana ? mapa[card.diaSemana.toLowerCase()] : null;
+        const destinoLista = card.diaSemana ? MAPA_DIA[card.diaSemana.toLowerCase()]?.lista : null;
         await mover(destinoLista || 'Concluidos');
+      }
+    }
+
+    // ---------- Reserva: card ali NUNCA dispara (bloqueio consciente do time).
+    // Quando o horário dele passa no dia dele, o robô devolve sozinho pra
+    // lista de origem — pronto pra semana seguinte, sem gestão manual (Andre 25/08).
+    log.reserva = [];
+    const lReserva = listas.find(x => x.name === 'Reserva');
+    if (lReserva) {
+      const cardsReserva = await trello(`lists/${lReserva.id}/cards?fields=name,desc`) as any[];
+      for (const c of cardsReserva) {
+        const card = parseCard(c, 'Reserva');
+        const janelaPassou = (() => {
+          if (!card.hora) return false;
+          const [hh, mm] = card.hora.split(':').map(Number);
+          return agora.getTime() > inicioDia.getTime() + (hh * 60 + mm + ATRASO_MAX_MIN) * 60000;
+        })();
+        const dia = card.diaSemana ? MAPA_DIA[card.diaSemana.toLowerCase()] : null;
+
+        if (dia && b.getUTCDay() === dia.idx && janelaPassou) {
+          // dia do card, horário já passou → devolve pra lista de origem
+          if (!dryRun) {
+            const lDestino = listas.find(x => x.name === dia.lista);
+            if (lDestino) await trello(`cards/${card.id}?idList=${lDestino.id}`, { method: 'PUT' });
+            await comentarCard(card.id, `⏭️ Hoje (${dataRefDDMM}) NÃO foi disparado — estava na Reserva. Devolvido pra ${dia.lista}: volta a valer na próxima semana.`).catch(() => {});
+          }
+          log.reserva.push({ card: card.nome, acao: `devolvido pra ${dia.lista}` });
+        } else if (!dia && card.dataExplicita) {
+          // card avulso com data: passou a data/janela → Concluidos (não foi enviado)
+          const [dd, mm2] = card.dataExplicita.split('/').map(Number);
+          const passouData = (mm2 < b.getUTCMonth() + 1) || (mm2 === b.getUTCMonth() + 1 && dd < b.getUTCDate())
+            || (card.dataExplicita === dataRefDDMM && janelaPassou);
+          if (passouData) {
+            if (!dryRun) {
+              const lConc = listas.find(x => x.name === 'Concluidos');
+              if (lConc) await trello(`cards/${card.id}?idList=${lConc.id}`, { method: 'PUT' });
+              await comentarCard(card.id, `⏭️ NÃO disparado (estava na Reserva quando a data ${card.dataExplicita} passou). Movido pra Concluidos.`).catch(() => {});
+            }
+            log.reserva.push({ card: card.nome, acao: 'movido pra Concluidos (data passou sem disparo)' });
+          }
+        }
       }
     }
 
