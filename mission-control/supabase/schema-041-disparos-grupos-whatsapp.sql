@@ -64,10 +64,14 @@ values (1, true, '120363412147836318@g.us')
 on conflict (id) do update set jid_grupo_teste = excluded.jid_grupo_teste;
 
 -- ------------------------------------------------------------------------
--- Cron: worker a cada 5 min (mesmo padrão do agenda-mentorias-worker)
+-- Cron: worker a cada 1 MINUTO (Andre 25/08 — precisão de disparo: card das
+-- 17:23 sai às 17:23; "Enviar Agora" espera no máximo 1 min). Custo real é
+-- desprezível: ~1.4k invocações/dia da edge + ~6 chamadas Trello/min, tudo
+-- muito abaixo de qualquer limite. O process-reminders (job 1) já roda 1/1min
+-- há meses no mesmo banco.
 -- ------------------------------------------------------------------------
 select cron.schedule(
   'alertas-grupos-worker',
-  '*/5 * * * *',
+  '* * * * *',
   $$select pinguim.disparar_edge_function('alertas-grupos-worker')$$
 );

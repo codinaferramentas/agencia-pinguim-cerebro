@@ -100,7 +100,9 @@ function parseCard(c: { id: string; name: string; desc: string }, lista: string)
   const disparo = secao(desc, 'DISPARO');
   const horaTitulo = c.name.match(/(\d{1,2}):(\d{2})/);
   const horaDisparo = disparo.match(/(\d{1,2}):(\d{2})/);
-  const h = horaTitulo || horaDisparo;
+  // A seção DISPARO MANDA; o título é só etiqueta visual. (Lição 25/08: card
+  // duplicado ficou com título "09:00" e DISPARO 16:40 — tem que valer o 16:40.)
+  const h = horaDisparo || horaTitulo;
   const hora = h ? `${h[1].padStart(2, '0')}:${h[2]}` : null;
   const dataM = disparo.match(/(\d{1,2})\/(\d{1,2})(?:\/\d{2,4})?/);
   const diaM = disparo.match(/segunda|terça|terca|quarta|quinta|sexta/i);
