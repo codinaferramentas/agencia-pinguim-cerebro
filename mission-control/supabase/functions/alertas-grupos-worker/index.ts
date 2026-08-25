@@ -157,6 +157,61 @@ async function linksNaAgendaHoje(inicioDia: Date, fimDia: Date): Promise<Set<str
   return links;
 }
 
+// ---------- monitor da instância (queda = ninguém recebe alerta de agenda) ----------
+const CANAL_DISCORD = '1372556339578011701'; // #novo-grupo-pinguim
+const MENCOES_QUEDA = ['1077338884981133413', '1205120597433122846']; // Codina + Ingrid
+const REALERTA_MIN = 60; // se seguir caída, repete o alerta a cada 1h
+
+async function evolutionCfg() {
+  const [base, inst, tok] = await Promise.all([
+    getChave('EVOLUTION_API_URL', 'alertas-grupos-worker'),
+    getChave('EVOLUTION_INSTANCE_ALERTAS_GRUPOS', 'alertas-grupos-worker'),
+    getChave('EVOLUTION_INSTANCE_ALERTAS_GRUPOS_TOKEN', 'alertas-grupos-worker'),
+  ]);
+  return { base: base.replace(/\/$/, ''), inst, tok };
+}
+
+async function estadoInstancia(): Promise<string> {
+  try {
+    const { base, inst, tok } = await evolutionCfg();
+    const r = await fetch(`${base}/instance/connectionState/${inst}`, { headers: { apikey: tok } });
+    const j = await r.json().catch(() => ({}));
+    return j?.instance?.state || `erro-http-${r.status}`;
+  } catch (e) {
+    return `inacessivel: ${e instanceof Error ? e.message.slice(0, 80) : e}`;
+  }
+}
+
+// tenta pegar o QR de reconexão (só existe quando a instância está desconectada;
+// expira em ~40s — por isso o alerta também ensina a gerar um novo)
+async function qrReconexao(): Promise<Uint8Array | null> {
+  try {
+    const { base, inst, tok } = await evolutionCfg();
+    const r = await fetch(`${base}/instance/connect/${inst}`, { headers: { apikey: tok } });
+    const j = await r.json().catch(() => ({}));
+    const b64 = (j.base64 || j.qrcode?.base64 || '').replace(/^data:image\/\w+;base64,/, '');
+    if (!b64) return null;
+    return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  } catch (_) { return null; }
+}
+
+async function postarDiscord(conteudo: string, imagemPng?: Uint8Array | null) {
+  const bot = await getChave('DISCORD_BOT_TOKEN', 'alertas-grupos-worker');
+  const payload = { content: conteudo, allowed_mentions: { parse: ['users'] }, flags: 4 };
+  let body: BodyInit; const headers: Record<string, string> = { Authorization: `Bot ${bot}` };
+  if (imagemPng) {
+    const fd = new FormData();
+    fd.append('payload_json', JSON.stringify(payload));
+    fd.append('files[0]', new Blob([imagemPng.buffer as ArrayBuffer], { type: 'image/png' }), 'qr-reconexao.png');
+    body = fd;
+  } else {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(payload);
+  }
+  const r = await fetch(`https://discord.com/api/v10/channels/${CANAL_DISCORD}/messages`, { method: 'POST', headers, body });
+  if (!r.ok) throw new Error(`Discord ${r.status}: ${(await r.text()).slice(0, 150)}`);
+}
+
 // ---------- evolution ----------
 async function enviarWhats(jid: string, texto: string) {
   const [base, inst, tok] = await Promise.all([
@@ -216,6 +271,51 @@ serve(async (req) => {
     const { data: cfg } = await sb.from('alertas_grupos_config').select('*').eq('id', 1).maybeSingle();
     const modoTeste = cfg?.modo_teste !== false;
     log.modo = modoTeste ? 'TESTE' : 'PRODUCAO';
+
+    // ---------- saúde da instância Evolution (sem ela, nenhum aviso sai) ----------
+    const estado = body.simular_queda ? 'close (simulação)' : await estadoInstancia();
+    log.instancia = estado;
+    if (estado !== 'open') {
+      const ultimoAlerta = cfg?.instancia_ultimo_alerta ? new Date(cfg.instancia_ultimo_alerta).getTime() : 0;
+      const precisaAlertar = cfg?.instancia_status === 'open' || (agora.getTime() - ultimoAlerta > REALERTA_MIN * 60000);
+      if (precisaAlertar && !dryRun) {
+        const qr = await qrReconexao();
+        const menc = MENCOES_QUEDA.map(id => `<@${id}>`).join(' ');
+        const cabecalho = body.simular_queda ? '🧪 *[TESTE do alerta de queda — a instância está OK, ignorem]*\n' : '';
+        await postarDiscord(
+          `${cabecalho}🚨 ${menc} **EVOLUTION CAIU — instância da Ingrid (alertas de agenda no WhatsApp)**\n` +
+          `Estado: \`${estado}\`. Enquanto estiver assim, NENHUM aviso sai nos grupos — reconectar é urgente.\n` +
+          (qr
+            ? `📷 QR de reconexão anexado — **expira em ~40 segundos!** Se não der tempo: WhatsApp da Ingrid → Aparelhos conectados → Conectar aparelho → escanear um QR novo no painel do Evolution (instância elo_1775155882289).`
+            : `⚠️ Não consegui gerar o QR automaticamente — reconectar pelo painel do Evolution (instância elo_1775155882289).`) +
+          `\nAviso aqui assim que reconectar. 🤖`,
+          qr,
+        );
+        if (!body.simular_queda) {
+          await sb.from('alertas_grupos_config').update({
+            instancia_status: estado,
+            instancia_caiu_em: cfg?.instancia_status === 'open' ? agora.toISOString() : (cfg?.instancia_caiu_em || agora.toISOString()),
+            instancia_ultimo_alerta: agora.toISOString(),
+            atualizado_em: agora.toISOString(),
+          }).eq('id', 1);
+        }
+        log.alerta_queda_enviado = true;
+      }
+      if (!body.simular_queda) {
+        // NÃO processa disparos com a instância caída: as travas ficam
+        // preservadas e, se reconectar dentro da janela de 55min, tudo sai.
+        log.pulados.push({ motivo: `instância Evolution fora do ar (${estado}) — disparos adiados` });
+        return new Response(JSON.stringify({ ok: true, ...log }), { headers: { 'Content-Type': 'application/json' } });
+      }
+    } else if (cfg?.instancia_status && cfg.instancia_status !== 'open') {
+      // reconectou → avisa e limpa o estado
+      if (!dryRun) {
+        const menc = MENCOES_QUEDA.map(id => `<@${id}>`).join(' ');
+        await postarDiscord(`✅ ${menc} **Evolution reconectada** — a instância da Ingrid está ON. Disparos de agenda voltam ao normal (o que ficou pendente dentro da janela de 55 min ainda sai). 🤖`);
+        await sb.from('alertas_grupos_config').update({ instancia_status: 'open', instancia_ultimo_alerta: null, atualizado_em: agora.toISOString() }).eq('id', 1);
+      }
+      log.instancia_recuperada = true;
+    }
     const { data: grupos } = await sb.from('grupos_whatsapp_alertas').select('nome, link_convite, jid_evolution').eq('ativo', true);
     const porLink = new Map((grupos || []).map(g => [g.link_convite, g]));
 

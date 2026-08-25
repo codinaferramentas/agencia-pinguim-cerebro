@@ -50,6 +50,10 @@ create table if not exists pinguim.alertas_grupos_config (
   id              int primary key default 1 check (id = 1),
   modo_teste      boolean not null default true,
   jid_grupo_teste text,
+  -- monitor da instância Evolution (alerta Discord Codina+Ingrid se cair):
+  instancia_status        text not null default 'open',
+  instancia_caiu_em       timestamptz,
+  instancia_ultimo_alerta timestamptz,
   atualizado_em   timestamptz not null default now()
 );
 
