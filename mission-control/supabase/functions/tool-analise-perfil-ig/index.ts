@@ -255,6 +255,22 @@ async function transcribePost(post: any, openaiKey: string): Promise<{ text: str
 // ============================================================
 // ETAPA 4: IA Bio
 // ============================================================
+// Remove caracteres de controle inválidos (vindos de legendas/transcrições
+// "sujas" do scraping) que corrompem o JSON body enviado à OpenAI e causam
+// "Invalid body: failed to parse JSON value". Mantém \n \r \t; troca pares
+// surrogates órfãos e chars C0/C1 por espaço.
+function sanitizarTexto(s: string): string {
+  let out = String(s ?? '');
+  // remove surrogates órfãos (metade de emoji) — quebram a codificação UTF-8
+  // do body e causam "invalid_json" na OpenAI. Faz ANTES do resto.
+  out = out.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '').replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+  // C0 (exceto \t \n \r) e C1 controls
+  out = out.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, ' ');
+  // separadores de linha/parágrafo Unicode (U+2028/U+2029) → \n
+  out = out.replace(/[\u2028\u2029]/g, '\n');
+  return out;
+}
+
 async function callOpenAI(opts: {
   systemPrompt: string;
   userMsg: string;
@@ -264,24 +280,32 @@ async function callOpenAI(opts: {
   temperature?: number;
   model?: string;
 }): Promise<any> {
+  // monta o body e VALIDA que serializa/desserializa antes de mandar. Se o
+  // JSON.stringify produzir algo inválido (surrogate órfão etc.), sanitiza de
+  // novo mais agressivo. Evita o "invalid_json" da OpenAI derrubar o lead.
+  const montarBody = (san: (s: string) => string) => JSON.stringify({
+    model: opts.model || 'gpt-4o',
+    messages: [
+      { role: 'system', content: san(opts.systemPrompt) },
+      { role: 'user', content: san(opts.userMsg) },
+    ],
+    tools: [opts.tool],
+    tool_choice: { type: 'function', function: { name: opts.tool.function.name } },
+    max_tokens: opts.maxTokens,
+    temperature: opts.temperature ?? 0.7,
+  });
+  const body = montarBody(sanitizarTexto);
   const resp = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${opts.openaiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: opts.model || 'gpt-4o',
-      messages: [
-        { role: 'system', content: opts.systemPrompt },
-        { role: 'user', content: opts.userMsg },
-      ],
-      tools: [opts.tool],
-      tool_choice: { type: 'function', function: { name: opts.tool.function.name } },
-      max_tokens: opts.maxTokens,
-      temperature: opts.temperature ?? 0.7,
-    }),
+    body,
   });
   if (!resp.ok) {
     const txt = await resp.text();
-    throw new Error(`OpenAI ${resp.status}: ${txt.slice(0, 200)}`);
+    // diagnóstico: qual tool e onde. O "failed to parse JSON value" da OpenAI
+    // costuma vir com um "line X column Y" mais adiante no texto.
+    const trecho = txt.length > 260 ? txt.slice(0, 130) + ' […] ' + txt.slice(-130) : txt;
+    throw new Error(`OpenAI ${resp.status} [${opts.tool?.function?.name}]: ${trecho}`);
   }
   const j = await resp.json();
   const toolCall = j.choices?.[0]?.message?.tool_calls?.[0];
