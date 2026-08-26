@@ -7,10 +7,15 @@
 A instância Evolution `elo_1775155882289` (número da Ingrid, membro dos 10 grupos de alunos) manda **cada mensagem nova** via webhook pra edge `monitor-grupos-webhook` (Supabase Pinguim). A edge:
 
 1. Descarta o que não interessa (grupo não monitorado, mensagem nossa, sem texto).
-2. Classifica com **regex determinística** (66 padrões calibrados em corpus real de 2.634 mensagens) em 3 categorias:
+2. Classifica com **regex determinística** (66 padrões calibrados em corpus real de 2.634 mensagens) em 4 categorias:
    - 🆘 `pedido_ajuda` — "não recebi acesso", "não consigo entrar", "cadê o link", "deu erro"…
    - 📣 `reclamacao` — "ninguém responde", "estou decepcionado", "esperando desde…"…
    - 🚨 `chateado_risco` — "quero cancelar", "reembolso", "me arrependi", "desisto"…
+   - 💬 `resposta_adm` — aluno respondeu (reply) uma mensagem de ADM do grupo, qualquer conteúdo. O alerta inclui o trecho da msg do ADM respondida.
+
+   Regras estruturais (v2, 26/08/2026 tarde — ordem: padrões de conteúdo > resposta_adm > interrogação):
+   - **"?" sem direção** → `pedido_ajuda`: mensagem com interrogação que não é reply e não marca ninguém (pergunta jogada no grupo). URLs são removidas antes do teste (todo link tem `?`); reply a outro aluno ou mensagem com `@fulano` não alerta (é conversa entre alunos / já tem destinatário).
+   - Volume medido no histórico: ~1,5/dia ("?") + ~1,3/dia (resposta ao ADM).
 3. Grava **toda** mensagem em `pinguim.monitor_grupos_mensagens` (as não-flagadas são o corpus pra evoluir os padrões e a futura base de conhecimento de falhas de processo).
 4. Se flagou **e o autor não é ADM do grupo** → DM no Discord pro Codina e pra Ingrid (fallback: canal #novo-grupo-pinguim marcando os dois).
 

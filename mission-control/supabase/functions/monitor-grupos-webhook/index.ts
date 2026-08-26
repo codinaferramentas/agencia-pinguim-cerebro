@@ -9,6 +9,9 @@
 //   3. classifica com os padrões de pinguim.monitor_grupos_padroes
 //      (regex sobre texto normalizado; peso >=3 dispara sozinho; limiar 3;
 //      empate/prioridade: chateado_risco > reclamacao > pedido_ajuda)
+//      + R2: aluno respondendo msg de ADM → 'resposta_adm' (sempre alerta)
+//      + R1: "?" sem responder nem marcar ninguém → 'pedido_ajuda'
+//        (URLs removidas antes do teste; ordem: conteúdo > R2 > R1)
 //   4. grava TODA mensagem em pinguim.monitor_grupos_mensagens
 //      (não-flagadas = corpus pra evoluir os padrões depois)
 //   5. flagou e autor NÃO é admin do grupo → DM Discord (Codina + Ingrid)
@@ -48,6 +51,7 @@ const ROTULOS: Record<string, { emoji: string; titulo: string }> = {
   pedido_ajuda: { emoji: '🆘', titulo: 'PEDIDO DE AJUDA' },
   reclamacao: { emoji: '📣', titulo: 'RECLAMAÇÃO' },
   chateado_risco: { emoji: '🚨', titulo: 'ALUNO CHATEADO — RISCO' },
+  resposta_adm: { emoji: '💬', titulo: 'RESPOSTA AO ADM' },
 };
 
 // ---------- caches em memória (por instância da função) ----------
@@ -187,6 +191,32 @@ function extrairTexto(msg: any): string {
     ?? '').toString().trim();
 }
 
+// contextInfo: quem a mensagem responde (reply) e quem ela marca (@)
+function extrairContexto(msg: any): { respondeuJid: string; mencionados: string[]; citada: string } {
+  const m = msg?.message ?? {};
+  const ci = m.extendedTextMessage?.contextInfo
+    ?? m.imageMessage?.contextInfo
+    ?? m.videoMessage?.contextInfo
+    ?? m.documentMessage?.contextInfo
+    ?? msg?.contextInfo ?? {};
+  const q = ci.quotedMessage ?? {};
+  const citada = (q.conversation ?? q.extendedTextMessage?.text ?? q.imageMessage?.caption ?? '').toString();
+  return {
+    respondeuJid: (ci.participant ?? '').toString(),
+    mencionados: Array.isArray(ci.mentionedJid) ? ci.mentionedJid : [],
+    citada,
+  };
+}
+
+// R1: "?" sem direção = pergunta jogada no grupo (não responde nem marca ninguém).
+// URLs saem antes do teste — todo link tem "?".
+function perguntaSemDirecao(texto: string, respondeuJid: string, mencionados: string[]): boolean {
+  if (respondeuJid || mencionados.length > 0) return false;
+  const semUrl = texto.replace(/https?:\/\/\S+/g, '');
+  if (/@\d{6,}/.test(semUrl)) return false; // marcação que veio só no texto
+  return semUrl.includes('?');
+}
+
 // ---------- handler ----------
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok');
@@ -227,8 +257,17 @@ serve(async (req) => {
       const remetenteJid = (key.participant || key.participantAlt || '') as string;
       const remetenteNome = (item.pushName || '') as string;
       const ts = Number(item.messageTimestamp) || null;
+      const ctx = extrairContexto(item);
 
-      const { categoria, score, padroes: quais } = classificar(texto, await padroes());
+      let { categoria, score, padroes: quais } = classificar(texto, await padroes());
+      // R2: aluno respondendo mensagem de ADM → sempre alerta (categoria própria)
+      if (!categoria && ctx.respondeuJid && await ehAdmin(grupo, ctx.respondeuJid)) {
+        categoria = 'resposta_adm'; score = 3; quais = ['respondeu mensagem de ADM'];
+      }
+      // R1: pergunta jogada no grupo (tem "?", não responde nem marca ninguém)
+      if (!categoria && perguntaSemDirecao(texto, ctx.respondeuJid, ctx.mencionados)) {
+        categoria = 'pedido_ajuda'; score = 3; quais = ['pergunta sem direção (?)'];
+      }
 
       // grava TODA mensagem; conflito (grupo+message_id) = já processada, pula alerta
       const { data: inserida, error: errIns } = await sb.from('monitor_grupos_mensagens')
@@ -240,6 +279,8 @@ serve(async (req) => {
           remetente_nome: remetenteNome,
           texto: texto.slice(0, 4000),
           categoria, score, padroes: quais,
+          respondeu_jid: ctx.respondeuJid || null,
+          mencionados: ctx.mencionados,
           msg_timestamp: ts ? new Date(ts * 1000).toISOString() : null,
         }, { onConflict: 'grupo_jid,message_id', ignoreDuplicates: true })
         .select('id');
@@ -269,15 +310,18 @@ serve(async (req) => {
 
       const rot = ROTULOS[categoria];
       const numero = soDigitos(remetenteJid);
-      const alerta = [
+      const linhas = [
         `${rot.emoji} **MONITOR DE GRUPOS — ${rot.titulo}**`,
         `**Grupo:** ${grupo.nome}`,
         `**Quem:** ${remetenteNome || 'sem nome'}${numero ? ` (+${numero})` : ''}`,
         `**Hora:** ${horaBRT(ts)} (BRT) · score ${score}`,
         `**Padrões:** ${quais.slice(0, 3).join(' · ')}`,
-        '',
-        texto.slice(0, 500).split('\n').map((l) => `> ${l}`).join('\n'),
-      ].join('\n');
+      ];
+      if (categoria === 'resposta_adm' && ctx.citada) {
+        linhas.push(`**Msg do ADM respondida:** "${ctx.citada.slice(0, 120).replace(/\n/g, ' ')}"`);
+      }
+      linhas.push('', texto.slice(0, 500).split('\n').map((l) => `> ${l}`).join('\n'));
+      const alerta = linhas.join('\n');
 
       try {
         await avisarResponsaveis(alerta);
