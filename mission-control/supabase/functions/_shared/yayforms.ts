@@ -130,8 +130,17 @@ export function classificarCampos(pares: ParExtraido[], tipos: Map<string, strin
     if (!out.instagram && (/instagram|insta\b|perfil/.test(p) || resposta.trim().startsWith('@'))) {
       if (normalizarInstagram(resposta)) { out.instagram = resposta.trim(); continue; }
     }
-    if (!out.faturamento && /fatura|receita|renda|ganho|financeiro/.test(p)) { out.faturamento = resposta.trim(); continue; }
-    if (!out.nicho && /nicho|segmento|mercado|atuacao|area de atua|atua com|trabalha com/.test(p)) { out.nicho = resposta.trim(); continue; }
+    // faturamento: precisa ser a PERGUNTA sobre quanto fatura/ganha por mês.
+    // NÃO usar "financeiro" solto — aparece no exemplo da pergunta de área
+    // ("ex: ...consultor financeiro") e roubava o campo. Ancorar em "quanto"
+    // + fatura/ganha/renda, OU numa resposta em faixa de R$.
+    if (!out.faturamento && (/quanto.*(fatura|ganh|receb|renda)/.test(p) || /(fatura|receita|faturamento).*(m[eê]s|mensal)/.test(p) || (/faixa de fatura|seu faturamento/.test(p)) || /^(at[eé]|acima de|de)\s*r\$/i.test(resposta.trim()))) {
+      out.faturamento = resposta.trim(); continue;
+    }
+    // nicho/área de atuação (a pergunta "Dentro do seu nicho, qual sua área...")
+    if (!out.nicho && (/area de atua|\barea\b|atuacao|profissao|dentro do seu nicho|seu nicho|segmento|mercado|atua com|trabalha com/.test(p))) {
+      out.nicho = resposta.trim(); continue;
+    }
     if (!out.nome && /\bnome\b/.test(p) && !/instagram|usuario|arroba/.test(p)) { out.nome = resposta.trim(); continue; }
   }
 
