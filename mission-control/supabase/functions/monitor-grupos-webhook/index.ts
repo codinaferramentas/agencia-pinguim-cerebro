@@ -56,7 +56,12 @@ const ROTULOS: Record<string, { emoji: string; titulo: string }> = {
 
 // ---------- caches em memória (por instância da função) ----------
 const CACHE_TTL_MS = 2 * 60 * 1000;
-interface Grupo { jid: string; nome: string; ativo: boolean; admins: string[]; admins_atualizado_em: string | null }
+interface Participante { tel: string; nome: string; adm: boolean }
+interface Grupo {
+  jid: string; nome: string; ativo: boolean;
+  admins: string[]; admins_atualizado_em: string | null;
+  participantes: Record<string, Participante>;
+}
 interface Padrao { categoria: string; re: RegExp; peso: number; descricao: string }
 let _grupos: { at: number; mapa: Map<string, Grupo> } | null = null;
 let _padroes: { at: number; lista: Padrao[] } | null = null;
@@ -64,7 +69,7 @@ let _padroes: { at: number; lista: Padrao[] } | null = null;
 async function grupos(): Promise<Map<string, Grupo>> {
   if (_grupos && Date.now() - _grupos.at < CACHE_TTL_MS) return _grupos.mapa;
   const { data, error } = await sb.from('monitor_grupos')
-    .select('jid, nome, ativo, admins, admins_atualizado_em').eq('ativo', true);
+    .select('jid, nome, ativo, admins, admins_atualizado_em, participantes').eq('ativo', true);
   if (error) throw new Error(`ler monitor_grupos: ${error.message}`);
   const mapa = new Map<string, Grupo>();
   for (const g of data ?? []) mapa.set(g.jid, g as Grupo);
@@ -111,36 +116,78 @@ function classificar(texto: string, regras: Padrao[]) {
   return { categoria, score, padroes: categoria ? bateram[categoria] : [] };
 }
 
-// ---------- admins do grupo (cache lazy no banco) ----------
+// ---------- participantes do grupo (cache lazy no banco) ----------
 function soDigitos(jid: string): string { return (jid || '').split('@')[0].replace(/\D/g, ''); }
 
-async function ehAdmin(grupo: Grupo, remetenteJid: string): Promise<boolean> {
+// WhatsApp identifica membros por LID (@lid) — id interno que não diz nada
+// pro consultor. O /group/participants entrega o de-para pro número real.
+async function refreshParticipantes(grupo: Grupo): Promise<void> {
+  try {
+    const [base, tok] = await Promise.all([
+      getChave('EVOLUTION_API_URL', 'monitor-grupos-webhook'),
+      getChave('EVOLUTION_API_KEY', 'monitor-grupos-webhook'),
+    ]);
+    const r = await fetch(`${base.replace(/\/$/, '')}/group/participants/elo_1775155882289?groupJid=${encodeURIComponent(grupo.jid)}`,
+      { headers: { apikey: tok } });
+    if (!r.ok) return;
+    const j = await r.json();
+    const parts = j.participants ?? j ?? [];
+    const admins: string[] = [];
+    const mapa: Record<string, Participante> = {};
+    for (const p of (Array.isArray(parts) ? parts : [])) {
+      const adm = p.admin === 'admin' || p.admin === 'superadmin';
+      if (adm) admins.push(p.id);
+      mapa[p.id] = { tel: soDigitos(p.phoneNumber || (String(p.id).endsWith('@s.whatsapp.net') ? p.id : '')), nome: p.name || '', adm };
+    }
+    grupo.admins = admins;
+    grupo.participantes = mapa;
+    grupo.admins_atualizado_em = new Date().toISOString();
+    await sb.from('monitor_grupos')
+      .update({ admins, participantes: mapa, admins_atualizado_em: grupo.admins_atualizado_em, atualizado_em: grupo.admins_atualizado_em })
+      .eq('jid', grupo.jid);
+  } catch (_) { /* Evolution fora → usa cache velho; melhor alertar admin que perder alerta */ }
+}
+
+async function garantirParticipantes(grupo: Grupo, jidProcurado?: string): Promise<void> {
   const idade = grupo.admins_atualizado_em ? Date.now() - new Date(grupo.admins_atualizado_em).getTime() : Infinity;
-  if (idade > ADMINS_TTL_H * 3600 * 1000) {
-    try {
-      const [base, inst, tok] = await Promise.all([
-        getChave('EVOLUTION_API_URL', 'monitor-grupos-webhook'),
-        Promise.resolve('elo_1775155882289'),
-        getChave('EVOLUTION_API_KEY', 'monitor-grupos-webhook'),
-      ]);
-      const r = await fetch(`${base.replace(/\/$/, '')}/group/participants/${inst}?groupJid=${encodeURIComponent(grupo.jid)}`,
-        { headers: { apikey: tok } });
-      if (r.ok) {
-        const j = await r.json();
-        const parts = j.participants ?? j ?? [];
-        const admins = (Array.isArray(parts) ? parts : [])
-          .filter((p: any) => p.admin === 'admin' || p.admin === 'superadmin')
-          .map((p: any) => p.id as string);
-        grupo.admins = admins;
-        grupo.admins_atualizado_em = new Date().toISOString();
-        await sb.from('monitor_grupos')
-          .update({ admins, admins_atualizado_em: grupo.admins_atualizado_em, atualizado_em: grupo.admins_atualizado_em })
-          .eq('jid', grupo.jid);
-      }
-    } catch (_) { /* Evolution fora → usa cache velho; melhor alertar admin que perder alerta */ }
+  const desconhecido = jidProcurado && !(grupo.participantes || {})[jidProcurado];
+  // refresh se cache velho OU se apareceu membro fora do cache (entrou no grupo depois)
+  if (idade > ADMINS_TTL_H * 3600 * 1000 || (desconhecido && idade > 2 * 60 * 1000)) {
+    await refreshParticipantes(grupo);
   }
+}
+
+async function ehAdmin(grupo: Grupo, remetenteJid: string): Promise<boolean> {
+  await garantirParticipantes(grupo, remetenteJid);
   const alvo = soDigitos(remetenteJid);
   return (grupo.admins || []).some((a) => a === remetenteJid || soDigitos(a) === alvo);
+}
+
+// telefone real: participantAlt do payload (se vier em @s.whatsapp.net) > mapa do grupo > vazio
+function resolverTelefone(grupo: Grupo, jid: string, alt?: string): string {
+  if (jid.endsWith('@s.whatsapp.net')) return soDigitos(jid);
+  if (alt && alt.endsWith('@s.whatsapp.net')) return soDigitos(alt);
+  return (grupo.participantes || {})[jid]?.tel || '';
+}
+
+// nome de um jid (pro ADM respondido): mapa do grupo > último pushName gravado no banco
+async function resolverNome(grupo: Grupo, jid: string): Promise<string> {
+  const doMapa = (grupo.participantes || {})[jid]?.nome;
+  if (doMapa) return doMapa;
+  const { data } = await sb.from('monitor_grupos_mensagens')
+    .select('remetente_nome').eq('remetente_jid', jid).not('remetente_nome', 'is', null)
+    .order('criado_em', { ascending: false }).limit(1);
+  return data?.[0]?.remetente_nome || '';
+}
+
+function fmtTel(tel: string): string {
+  if (!tel) return '';
+  // BR: +55 11 99999-9999; outros países: +numero cru
+  if (tel.startsWith('55') && (tel.length === 12 || tel.length === 13)) {
+    const ddd = tel.slice(2, 4), resto = tel.slice(4);
+    return `+55 ${ddd} ${resto.slice(0, resto.length - 4)}-${resto.slice(-4)}`;
+  }
+  return `+${tel}`;
 }
 
 // ---------- discord ----------
@@ -258,6 +305,8 @@ serve(async (req) => {
       const remetenteNome = (item.pushName || '') as string;
       const ts = Number(item.messageTimestamp) || null;
       const ctx = extrairContexto(item);
+      await garantirParticipantes(grupo, remetenteJid);
+      const telefone = resolverTelefone(grupo, remetenteJid, (key.participantAlt || '') as string);
 
       let { categoria, score, padroes: quais } = classificar(texto, await padroes());
       // R2: aluno respondendo mensagem de ADM → sempre alerta (categoria própria)
@@ -277,6 +326,7 @@ serve(async (req) => {
           message_id: key.id || crypto.randomUUID(),
           remetente_jid: remetenteJid,
           remetente_nome: remetenteNome,
+          remetente_telefone: telefone || null,
           texto: texto.slice(0, 4000),
           categoria, score, padroes: quais,
           respondeu_jid: ctx.respondeuJid || null,
@@ -309,16 +359,18 @@ serve(async (req) => {
       }
 
       const rot = ROTULOS[categoria];
-      const numero = soDigitos(remetenteJid);
       const linhas = [
         `${rot.emoji} **MONITOR DE GRUPOS — ${rot.titulo}**`,
         `**Grupo:** ${grupo.nome}`,
-        `**Quem:** ${remetenteNome || 'sem nome'}${numero ? ` (+${numero})` : ''}`,
+        `**Quem:** ${remetenteNome || 'sem nome'} (${telefone ? fmtTel(telefone) : 'número não identificado'})`,
         `**Hora:** ${horaBRT(ts)} (BRT) · score ${score}`,
         `**Padrões:** ${quais.slice(0, 3).join(' · ')}`,
       ];
-      if (categoria === 'resposta_adm' && ctx.citada) {
-        linhas.push(`**Msg do ADM respondida:** "${ctx.citada.slice(0, 120).replace(/\n/g, ' ')}"`);
+      if (categoria === 'resposta_adm') {
+        const admNome = await resolverNome(grupo, ctx.respondeuJid);
+        const admTel = resolverTelefone(grupo, ctx.respondeuJid);
+        linhas.push(`**ADM respondido:** ${admNome || 'ADM'}${admTel ? ` (${fmtTel(admTel)})` : ''}`);
+        if (ctx.citada) linhas.push(`**Msg do ADM:** "${ctx.citada.slice(0, 120).replace(/\n/g, ' ')}"`);
       }
       linhas.push('', texto.slice(0, 500).split('\n').map((l) => `> ${l}`).join('\n'));
       const alerta = linhas.join('\n');
