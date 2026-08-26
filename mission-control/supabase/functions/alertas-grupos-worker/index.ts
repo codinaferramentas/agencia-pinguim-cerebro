@@ -160,9 +160,10 @@ async function linksNaAgendaHoje(inicioDia: Date, fimDia: Date): Promise<Set<str
 }
 
 // ---------- monitor da instância (queda = ninguém recebe alerta de agenda) ----------
-const CANAL_DISCORD = '1372556339578011701'; // #novo-grupo-pinguim
+const CANAL_DISCORD = '1372556339578011701'; // #novo-grupo-pinguim (só FALLBACK se DM falhar)
 const MENCOES_QUEDA = ['1077338884981133413', '1205120597433122846']; // Codina + Ingrid
 const REALERTA_MIN = 60; // se seguir caída, repete o alerta a cada 1h
+const CONFIRMACAO_QUEDA_MIN = 3; // espera N min caída antes de alertar (evita spam de soluço)
 
 async function evolutionCfg() {
   const [base, inst, tok] = await Promise.all([
@@ -197,7 +198,7 @@ async function qrReconexao(): Promise<Uint8Array | null> {
   } catch (_) { return null; }
 }
 
-async function postarDiscord(conteudo: string, imagemPng?: Uint8Array | null) {
+async function postarDiscord(conteudo: string, imagemPng?: Uint8Array | null, canalId: string = CANAL_DISCORD) {
   const bot = await getChave('DISCORD_BOT_TOKEN', 'alertas-grupos-worker');
   const payload = { content: conteudo, allowed_mentions: { parse: ['users'] }, flags: 4 };
   let body: BodyInit; const headers: Record<string, string> = { Authorization: `Bot ${bot}` };
@@ -210,8 +211,31 @@ async function postarDiscord(conteudo: string, imagemPng?: Uint8Array | null) {
     headers['Content-Type'] = 'application/json';
     body = JSON.stringify(payload);
   }
-  const r = await fetch(`https://discord.com/api/v10/channels/${CANAL_DISCORD}/messages`, { method: 'POST', headers, body });
+  const r = await fetch(`https://discord.com/api/v10/channels/${canalId}/messages`, { method: 'POST', headers, body });
   if (!r.ok) throw new Error(`Discord ${r.status}: ${(await r.text()).slice(0, 150)}`);
+}
+
+// Aviso PRIVADO (DM) pro Codina e pra Ingrid — o resto do servidor não vê.
+// Se a DM de alguém falhar (privacidade bloqueando), cai no canal como
+// fallback marcando a pessoa — alerta de instância nunca pode se perder.
+async function avisarResponsaveis(conteudo: string, imagemPng?: Uint8Array | null) {
+  const bot = await getChave('DISCORD_BOT_TOKEN', 'alertas-grupos-worker');
+  const falharam: string[] = [];
+  for (const userId of MENCOES_QUEDA) {
+    try {
+      const r = await fetch('https://discord.com/api/v10/users/@me/channels', {
+        method: 'POST', headers: { Authorization: `Bot ${bot}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient_id: userId }),
+      });
+      const dm = await r.json();
+      if (!r.ok) throw new Error(`abrir DM: ${r.status}`);
+      await postarDiscord(conteudo, imagemPng, dm.id);
+    } catch (_) { falharam.push(userId); }
+  }
+  if (falharam.length) {
+    const menc = falharam.map(id => `<@${id}>`).join(' ');
+    await postarDiscord(`${menc} (não consegui te mandar DM — avisando por aqui)\n${conteudo}`, imagemPng, CANAL_DISCORD);
+  }
 }
 
 // ---------- evolution ----------
@@ -278,30 +302,42 @@ serve(async (req) => {
     const estado = body.simular_queda ? 'close (simulação)' : await estadoInstancia();
     log.instancia = estado;
     if (estado !== 'open') {
-      const ultimoAlerta = cfg?.instancia_ultimo_alerta ? new Date(cfg.instancia_ultimo_alerta).getTime() : 0;
-      const precisaAlertar = cfg?.instancia_status === 'open' || (agora.getTime() - ultimoAlerta > REALERTA_MIN * 60000);
-      if (precisaAlertar && !dryRun) {
-        const qr = await qrReconexao();
-        const menc = MENCOES_QUEDA.map(id => `<@${id}>`).join(' ');
-        const cabecalho = body.simular_queda ? '🧪 *[TESTE do alerta de queda — a instância está OK, ignorem]*\n' : '';
-        await postarDiscord(
-          `${cabecalho}🚨 ${menc} **EVOLUTION CAIU — instância da Ingrid (alertas de agenda no WhatsApp)**\n` +
-          `Estado: \`${estado}\`. Enquanto estiver assim, NENHUM aviso sai nos grupos — reconectar é urgente.\n` +
-          (qr
-            ? `📷 QR de reconexão anexado — **expira em ~40 segundos!** Se não der tempo: WhatsApp da Ingrid → Aparelhos conectados → Conectar aparelho → escanear um QR novo no painel do Evolution (instância elo_1775155882289).`
-            : `⚠️ Não consegui gerar o QR automaticamente — reconectar pelo painel do Evolution (instância elo_1775155882289).`) +
-          `\nAviso aqui assim que reconectar. 🤖`,
-          qr,
-        );
-        if (!body.simular_queda) {
+      if (cfg?.instancia_status === 'open' && !body.simular_queda) {
+        // 1ª vez que vê caída: anota EM SILÊNCIO — pode ser soluço de 30s.
+        // Só alerta se continuar caída por CONFIRMACAO_QUEDA_MIN minutos.
+        if (!dryRun) {
           await sb.from('alertas_grupos_config').update({
-            instancia_status: estado,
-            instancia_caiu_em: cfg?.instancia_status === 'open' ? agora.toISOString() : (cfg?.instancia_caiu_em || agora.toISOString()),
-            instancia_ultimo_alerta: agora.toISOString(),
-            atualizado_em: agora.toISOString(),
+            instancia_status: estado, instancia_caiu_em: agora.toISOString(), atualizado_em: agora.toISOString(),
           }).eq('id', 1);
         }
-        log.alerta_queda_enviado = true;
+        log.instancia_obs = `queda detectada — aguardando ${CONFIRMACAO_QUEDA_MIN}min de confirmação antes de alertar`;
+      } else {
+        const caiuEm = cfg?.instancia_caiu_em ? new Date(cfg.instancia_caiu_em).getTime() : agora.getTime();
+        const minCaida = (agora.getTime() - caiuEm) / 60000;
+        const ultimoAlerta = cfg?.instancia_ultimo_alerta ? new Date(cfg.instancia_ultimo_alerta).getTime() : 0;
+        const confirmada = minCaida >= CONFIRMACAO_QUEDA_MIN;
+        const precisaAlertar = confirmada && (!ultimoAlerta || agora.getTime() - ultimoAlerta > REALERTA_MIN * 60000);
+        if ((precisaAlertar || body.simular_queda) && !dryRun) {
+          const qr = await qrReconexao();
+          const cabecalho = body.simular_queda ? '🧪 *[TESTE do alerta de queda — a instância está OK, ignora]*\n' : '';
+          await avisarResponsaveis(
+            `${cabecalho}🚨 **EVOLUTION CAIU — instância da Ingrid (alertas de agenda no WhatsApp)**\n` +
+            `Fora do ar há ${body.simular_queda ? '(simulação)' : Math.round(minCaida) + ' min'} (estado: \`${estado}\`). Enquanto estiver assim, NENHUM aviso sai nos grupos — reconectar é urgente.\n` +
+            (qr
+              ? `📷 QR de reconexão anexado — **expira em ~40 segundos!** Se não der tempo: WhatsApp da Ingrid → Aparelhos conectados → Conectar aparelho → escanear um QR novo no painel do Evolution (instância elo_1775155882289).`
+              : `⚠️ Não consegui gerar o QR automaticamente — reconectar pelo painel do Evolution (instância elo_1775155882289).`) +
+            `\nTe aviso aqui assim que reconectar. 🤖`,
+            qr,
+          );
+          if (!body.simular_queda) {
+            await sb.from('alertas_grupos_config').update({
+              instancia_status: estado, instancia_ultimo_alerta: agora.toISOString(), atualizado_em: agora.toISOString(),
+            }).eq('id', 1);
+          }
+          log.alerta_queda_enviado = true;
+        } else if (!confirmada) {
+          log.instancia_obs = `caída há ${minCaida.toFixed(1)}min — ainda aguardando confirmação`;
+        }
       }
       if (!body.simular_queda) {
         // NÃO processa disparos com a instância caída: as travas ficam
@@ -310,13 +346,16 @@ serve(async (req) => {
         return new Response(JSON.stringify({ ok: true, ...log }), { headers: { 'Content-Type': 'application/json' } });
       }
     } else if (cfg?.instancia_status && cfg.instancia_status !== 'open') {
-      // reconectou → avisa e limpa o estado
-      if (!dryRun) {
-        const menc = MENCOES_QUEDA.map(id => `<@${id}>`).join(' ');
-        await postarDiscord(`✅ ${menc} **Evolution reconectada** — a instância da Ingrid está ON. Disparos de agenda voltam ao normal (o que ficou pendente dentro da janela de 55 min ainda sai). 🤖`);
-        await sb.from('alertas_grupos_config').update({ instancia_status: 'open', instancia_ultimo_alerta: null, atualizado_em: agora.toISOString() }).eq('id', 1);
+      // voltou ao ar. Aviso de recuperação SÓ se o alerta de queda chegou a
+      // sair — soluço curto reconecta em silêncio, ninguém é incomodado.
+      const tinhaAlertado = !!cfg.instancia_ultimo_alerta;
+      if (tinhaAlertado && !dryRun) {
+        await avisarResponsaveis(`✅ **Evolution reconectada** — a instância da Ingrid está ON. Disparos de agenda voltam ao normal (o que ficou pendente dentro da janela de 55 min ainda sai). 🤖`);
       }
-      log.instancia_recuperada = true;
+      if (!dryRun) {
+        await sb.from('alertas_grupos_config').update({ instancia_status: 'open', instancia_caiu_em: null, instancia_ultimo_alerta: null, atualizado_em: agora.toISOString() }).eq('id', 1);
+      }
+      log.instancia_recuperada = tinhaAlertado ? 'com aviso' : 'soluço curto — silêncio';
     }
     const { data: grupos } = await sb.from('grupos_whatsapp_alertas').select('nome, link_convite, jid_evolution').eq('ativo', true);
     const porLink = new Map((grupos || []).map(g => [g.link_convite, g]));
