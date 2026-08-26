@@ -383,10 +383,15 @@ const heroBook = (ctx: BookCtx): string => {
     </div>
   </div>
 
-  <div class="call-box">
+  ${/sem call/i.test(lead.data_call || '')
+    ? `<div class="call-box">
+    <span class="call-box-label">Status</span>
+    <span class="call-box-valor">Lead da Mentoria em Grupo — sem call agendada</span>
+  </div>`
+    : `<div class="call-box">
     <span class="call-box-label">Call agendada</span>
     <span class="call-box-valor">${esc(lead.data_call || 'a agendar')}</span>
-  </div>
+  </div>`}
 
   <div class="hero-contatos">
     <div class="hc-item"><div class="hc-label">E-mail</div><div class="hc-valor">${esc(lead.email || '—')}</div></div>

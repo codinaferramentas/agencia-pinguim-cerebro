@@ -232,13 +232,20 @@ async function gerarPdf(urlHtml: string | null): Promise<Uint8Array | null> {
 // ============================================================
 async function processar(job: any, forcar: boolean): Promise<Record<string, unknown>> {
   const bookingId = job.booking_id;
+  const origemMentoria = job.origem === 'mentoria-grupo';
   const log = (m: string) => console.log(`[worker][${bookingId.slice(0, 8)}] ${m}`);
 
-  // sanity: booking ainda está confirmado? (lead pode ter cancelado)
-  const { data: bkAtual } = await sbPub.from('bookings').select('status, starts_at').eq('id', bookingId).maybeSingle();
-  if (!bkAtual || bkAtual.status !== 'confirmed') {
-    await atualizarAnalise(bookingId, { status: 'failed', etapa: 'cancelado', error_message: `booking ${bkAtual?.status || 'sumiu'} — não vale análise`, finished_at: new Date().toISOString() });
-    return { booking_id: bookingId, resultado: 'cancelado' };
+  // sanity só pro circuito comercial-365 (tem booking no CloserFlow que pode
+  // ser cancelado). A fonte mentoria-grupo NÃO tem booking — usa o starts_at
+  // (null) da própria linha e nunca é "cancelada" por aqui.
+  let startsAt: string | null = job.starts_at || null;
+  if (!origemMentoria) {
+    const { data: bkAtual } = await sbPub.from('bookings').select('status, starts_at').eq('id', bookingId).maybeSingle();
+    if (!bkAtual || bkAtual.status !== 'confirmed') {
+      await atualizarAnalise(bookingId, { status: 'failed', etapa: 'cancelado', error_message: `booking ${bkAtual?.status || 'sumiu'} — não vale análise`, finished_at: new Date().toISOString() });
+      return { booking_id: bookingId, resultado: 'cancelado' };
+    }
+    startsAt = bkAtual.starts_at;
   }
 
   // a) formulário
@@ -329,7 +336,7 @@ async function processar(job: any, forcar: boolean): Promise<Record<string, unkn
     instagram,
     nicho,
     faturamento,
-    data_call: fmtDataCall(bkAtual.starts_at),
+    data_call: origemMentoria ? 'Sem call agendada — time entra em contato' : fmtDataCall(startsAt),
     form_recebido: !!form,
   };
   const geradoEm = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }).format(new Date());
@@ -343,7 +350,8 @@ async function processar(job: any, forcar: boolean): Promise<Record<string, unkn
   await atualizarAnalise(bookingId, { etapa: 'drive' });
   const folderId = (await getConfig('drive_folder_id'))!;
   const gToken = await accessTokenGoogle();
-  const base = nomeArquivoSeguro(`${lead.nome} - ${lead.telefone || 'sem-telefone'} - ${fmtDataArquivo(bkAtual.starts_at)}`);
+  const sufixoOrigem = origemMentoria ? ' - mentoria-grupo' : '';
+  const base = nomeArquivoSeguro(`${lead.nome} - ${lead.telefone || 'sem-telefone'} - ${fmtDataArquivo(startsAt)}${sufixoOrigem}`);
 
   const [urlHtmlBook, urlHtmlCliente] = await Promise.all([
     subirHtmlStorage(htmlBook, `${bookingId}/book-consultor.html`),
