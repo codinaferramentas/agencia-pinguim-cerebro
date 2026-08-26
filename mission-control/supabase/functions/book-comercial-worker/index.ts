@@ -44,6 +44,34 @@ const sbPub = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession:
 const sbPin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false }, db: { schema: 'pinguim' } });
 
 // ============================================================
+// Encadeamento da fila (carga histórica em rajada)
+// ============================================================
+// Quando o Yay!Forms despeja ~40 formulários de uma vez, cada webhook
+// grava o lead como 'pending' mas NÃO processa na hora (senão seriam 40
+// análises paralelas estourando OpenAI/Apify). Em vez disso, o worker
+// processa 1 por vez e, ao terminar, dispara a PRÓXIMA invocação se
+// ainda houver fila. Resultado: rajada instantânea → processamento
+// sequencial (~1 lead/min), sem estourar limite nenhum.
+async function haFilaPendente(excetoBookingId: string): Promise<boolean> {
+  const dezMinAtras = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const { count } = await sbPin
+    .from('book_analises')
+    .select('booking_id', { count: 'exact', head: true })
+    .or(`status.eq.pending,and(status.eq.failed,tentativas.lt.${MAX_TENTATIVAS}),and(status.eq.processing,updated_at.lt.${dezMinAtras})`)
+    .neq('booking_id', excetoBookingId);
+  return (count || 0) > 0;
+}
+
+function dispararProximo(): void {
+  // fire-and-forget: acorda outra invocação pra pegar o próximo da fila
+  fetch(`${SUPABASE_URL}/functions/v1/book-comercial-worker`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_ROLE}`, 'x-internal-token': SERVICE_ROLE },
+    body: JSON.stringify({ encadeado: true }),
+  }).catch(() => { /* a varredura de 15min é a rede de segurança */ });
+}
+
+// ============================================================
 // Helpers
 // ============================================================
 function fmtDataCall(startsAt: string | null): string {
@@ -138,6 +166,18 @@ async function claimJob(bookingIdForcado: string | null, forcar: boolean): Promi
     await atualizarAnalise(data.booking_id, { status: 'processing', started_at: new Date().toISOString(), tentativas: (data.tentativas || 0) + 1, error_message: null });
     return { ...data, tentativas: (data.tentativas || 0) + 1 };
   }
+
+  // LOCK global leve: se já existe um job em 'processing' ATIVO (mexido nos
+  // últimos 4min), outro worker está rodando — desiste pra não processar 2 em
+  // paralelo. Serializa a fila durante uma carga em rajada. (jobs 'processing'
+  // parados >4min são considerados travados e podem ser retomados abaixo.)
+  const quatroMinAtras = new Date(Date.now() - 4 * 60 * 1000).toISOString();
+  const { count: ativos } = await sbPin
+    .from('book_analises')
+    .select('booking_id', { count: 'exact', head: true })
+    .eq('status', 'processing')
+    .gte('updated_at', quatroMinAtras);
+  if ((ativos || 0) > 0) return null;
 
   const dezMinAtras = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const { data: candidatos } = await sbPin
@@ -429,6 +469,8 @@ serve(async (req) => {
 
     try {
       const resultado = await processar(job, !!body.forcar);
+      // se ainda há fila, acorda a próxima invocação (carga em rajada)
+      if (await haFilaPendente(job.booking_id)) dispararProximo();
       return jsonRespTool({ ok: true, sincronizados, ...resultado });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -466,6 +508,8 @@ serve(async (req) => {
           }
         } catch (_) { /* planilha é secundária no caminho de erro */ }
       }
+      // mesmo com falha, segue a fila (não trava a carga num lead ruim)
+      if (await haFilaPendente(job.booking_id)) dispararProximo();
       return jsonRespTool({ ok: false, booking_id: job.booking_id, erro: msg, tentativa: job.tentativas, max: MAX_TENTATIVAS }, 500);
     }
   } catch (e) {

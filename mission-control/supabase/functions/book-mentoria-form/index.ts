@@ -122,12 +122,15 @@ serve(async (req) => {
       if (eIns) throw new Error('analise insert: ' + eIns.message);
     }
 
-    // 3) dispara o worker na hora (async; erro aqui não invalida a captura)
+    // 3) acorda a FILA do worker (sem booking_id específico) — ele pega 1 job
+    // por vez e auto-encadeia. Numa carga histórica de ~40 formulários em
+    // rajada, todos entram como 'pending' instantâneo mas são processados em
+    // sequência (~1/min), sem 40 análises paralelas estourando OpenAI/Apify.
     fetch(`${SUPABASE_URL}/functions/v1/book-comercial-worker`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_ROLE}`, 'x-internal-token': SERVICE_ROLE },
-      body: JSON.stringify({ booking_id: bookingId }),
-    }).catch((e) => console.error('[book-mentoria-form] disparo worker:', e.message));
+      body: JSON.stringify({ carga: true }),
+    }).catch((e) => console.error('[book-mentoria-form] acordar fila:', e.message));
 
     console.log(`[book-mentoria-form] OK | ig=@${instagram} | email=${campos.email} | booking=${bookingId} | novo=${!existente}`);
     return jsonResp({ ok: true, booking_id: bookingId, origem: ORIGEM, ja_existia: !!existente, campos_extraidos: { ...campos, instagram } });
