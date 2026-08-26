@@ -37,6 +37,7 @@ const CANAL_FALLBACK = '1372556339578011701'; // #novo-grupo-pinguim (só se DM 
 const DESTINOS_DM = [
   '1077338884981133413', // Codina
   '1205120597433122846', // Ingrid Nascimento
+  '1210285892489449603', // Fernanda Lisboa
 ];
 const LIMIAR = 3;
 const DEBOUNCE_MIN = 5;
