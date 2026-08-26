@@ -161,7 +161,11 @@ async function linksNaAgendaHoje(inicioDia: Date, fimDia: Date): Promise<Set<str
 
 // ---------- monitor da instância (queda = ninguém recebe alerta de agenda) ----------
 const CANAL_DISCORD = '1372556339578011701'; // #novo-grupo-pinguim (só FALLBACK se DM falhar)
-const MENCOES_QUEDA = ['1077338884981133413', '1205120597433122846']; // Codina + Ingrid
+const MENCOES_QUEDA = [
+  '1077338884981133413', // Codina
+  '1205120597433122846', // Ingrid Nascimento
+  '1210285892489449603', // Fernanda Lisboa
+];
 const REALERTA_MIN = 60; // se seguir caída, repete o alerta a cada 1h
 const CONFIRMACAO_QUEDA_MIN = 3; // espera N min caída antes de alertar (evita spam de soluço)
 
