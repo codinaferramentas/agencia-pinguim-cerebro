@@ -32,7 +32,7 @@ const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   db: { schema: 'pinguim' },
 });
 
-const CANAL_DISCORD = '1372556339578011701'; // #novo-grupo-pinguim
+const CANAL_DISCORD = '1542527780233682984'; // #avisos-de-calls (antes: #novo-grupo-pinguim, trocado 27/08 a pedido do Andre)
 const CONTA_ROBO = 'ferramenta@agenciapinguim.com';
 
 // America/Sao_Paulo é UTC-3 fixo (sem horário de verão desde 2019)
