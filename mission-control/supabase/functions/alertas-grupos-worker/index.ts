@@ -34,7 +34,9 @@ const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 
 const BOARD = '4HP5oboa';
 const CONTA_ROBO = 'ferramenta@agenciapinguim.com';
-const AGENDA_CONFIRMACAO = 'contato@agenciapinguim.com';
+// O evento que confirma o disparo pode viver em qualquer uma das agendas
+// (lição 27/08: encontro do ELO fica na agenda ciclo, não só na contato@)
+const AGENDAS_CONFIRMACAO = ['contato@agenciapinguim.com', 'proalt.agenda@gmail.com', 'ciclo.agendas@gmail.com'];
 const TZ_OFFSET_MS = -3 * 3600 * 1000; // America/Sao_Paulo (sem horário de verão desde 2019)
 const LISTAS_DIA = ['', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', '']; // index = getUTCDay do relógio BRT
 // dia citado na seção DISPARO -> lista de origem + índice do dia (getUTCDay)
@@ -86,8 +88,11 @@ interface CardParsed {
 }
 
 function secao(desc: string, nome: string): string {
-  // pega o texto entre **NOME** e o próximo **CABEÇALHO** (ou fim)
-  const re = new RegExp(`\\*\\*${nome}\\*\\*([\\s\\S]*?)(?=\\n\\*\\*[A-ZÀ-Ú]|$)`, 'i');
+  // pega o texto entre **NOME** e o próximo cabeçalho OFICIAL (ou fim).
+  // Só os 4 cabeçalhos conhecidos delimitam seção — negrito no meio da
+  // mensagem é conteúdo (lição 27/08: card sem blockquote com "**Durante
+  // 1 hora**" no início de linha cortava a MENSAGEM ali).
+  const re = new RegExp(`\\*\\*${nome}\\*\\*([\\s\\S]*?)(?=\\n\\*\\*(?:PÚBLICO|PUBLICO|DISPARO|TIPO|MENSAGEM)\\*\\*|$)`, 'i');
   const m = desc.match(re);
   return m ? m[1].trim() : '';
 }
@@ -142,19 +147,21 @@ async function linksNaAgendaHoje(inicioDia: Date, fimDia: Date): Promise<Set<str
   });
   const tj = await tr.json();
   if (!tr.ok) throw new Error(`token Google: ${tj.error}`);
-  const params = new URLSearchParams({
-    singleEvents: 'true', maxResults: '100',
-    timeMin: inicioDia.toISOString(), timeMax: fimDia.toISOString(),
-  });
-  const r = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(AGENDA_CONFIRMACAO)}/events?${params}`,
-    { headers: { Authorization: `Bearer ${tj.access_token}` } },
-  );
-  const j = await r.json();
-  if (!r.ok) throw new Error(`agenda: ${j.error?.message}`);
   const links = new Set<string>();
-  for (const e of j.items || []) {
-    for (const l of (`${e.description || ''} ${e.location || ''}`).match(/https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]+/g) || []) links.add(l);
+  for (const agenda of AGENDAS_CONFIRMACAO) {
+    const params = new URLSearchParams({
+      singleEvents: 'true', maxResults: '100',
+      timeMin: inicioDia.toISOString(), timeMax: fimDia.toISOString(),
+    });
+    const r = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(agenda)}/events?${params}`,
+      { headers: { Authorization: `Bearer ${tj.access_token}` } },
+    );
+    const j = await r.json();
+    if (!r.ok) throw new Error(`agenda ${agenda}: ${j.error?.message}`);
+    for (const e of j.items || []) {
+      for (const l of (`${e.description || ''} ${e.location || ''}`).match(/https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]+/g) || []) links.add(l);
+    }
   }
   return links;
 }
@@ -451,7 +458,7 @@ serve(async (req) => {
         const jidFinal = modoTeste ? cfg!.jid_grupo_teste : dest.jid;
         const statusAgenda = isAvulso ? '📌 avulso — dispensa agenda'
           : agendaOk ? '✅ evento confirmado na agenda'
-          : '⚠️ SEM evento na agenda (em produção NÃO enviaria)';
+          : `⚠️ nenhum evento HOJE (nas 3 agendas) tem o link deste grupo na DESCRIÇÃO — em produção NÃO enviaria`;
         const texto = modoTeste
           ? `🧪 *[TESTE — destino real: ${dest.nome}]*\n${statusAgenda}${manual ? '\n🔁 reenvio manual' : ''}\n———\n${card.mensagem}`
           : card.mensagem;
