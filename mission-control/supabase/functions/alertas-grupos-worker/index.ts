@@ -148,6 +148,7 @@ async function linksNaAgendaHoje(inicioDia: Date, fimDia: Date): Promise<Set<str
   const tj = await tr.json();
   if (!tr.ok) throw new Error(`token Google: ${tj.error}`);
   const links = new Set<string>();
+  const titulos: string[] = [];
   for (const agenda of AGENDAS_CONFIRMACAO) {
     const params = new URLSearchParams({
       singleEvents: 'true', maxResults: '100',
@@ -161,9 +162,37 @@ async function linksNaAgendaHoje(inicioDia: Date, fimDia: Date): Promise<Set<str
     if (!r.ok) throw new Error(`agenda ${agenda}: ${j.error?.message}`);
     for (const e of j.items || []) {
       for (const l of (`${e.description || ''} ${e.location || ''}`).match(/https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]+/g) || []) links.add(l);
+      if (e.summary) titulos.push(e.summary);
     }
   }
-  return links;
+  return { links, titulos };
+}
+
+// ---------- casamento card ↔ evento pelo TÍTULO ----------
+// Regra oficial (Andre 28/08): recorrente dispara se o ENCONTRO EXISTE na
+// agenda do dia. O robô identifica o encontro comparando o título do card com
+// o título do evento (o time já nomeia igual). Link do grupo na descrição do
+// evento é OPCIONAL — se estiver, também confirma (via `links`), mas ninguém
+// precisa manter.
+function tokens(s: string): string[] {
+  return s.toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')  // remove acentos (diacríticos combinantes)
+    .replace(/\d{1,2}:\d{2}/g, ' ')                    // remove horários
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(' ')
+    .filter(w => w.length >= 3);
+}
+
+function tituloBate(nomeCard: string, titulosEventos: string[]): boolean {
+  const tCard = [...new Set(tokens(nomeCard))];
+  if (!tCard.length) return false;
+  for (const te of titulosEventos) {
+    const tEv = new Set(tokens(te));
+    const emComum = tCard.filter(w => tEv.has(w)).length;
+    // ≥60% das palavras do card presentes no título do evento = mesmo encontro
+    if (emComum / tCard.length >= 0.6) return true;
+  }
+  return false;
 }
 
 // ---------- monitor da instância (queda = ninguém recebe alerta de agenda) ----------
@@ -387,7 +416,7 @@ serve(async (req) => {
     }
 
     // agenda de confirmação (1 leitura por tick)
-    let linksAgenda: Set<string> | null = null;
+    let agendaHoje: { links: Set<string>; titulos: string[] } | null = null;
 
     for (const { parsed: card, manual } of cards) {
       const pulo = (motivo: string) => log.pulados.push({ card: card.nome, lista: card.lista, motivo });
@@ -422,9 +451,12 @@ serve(async (req) => {
       const isAvulso = card.lista === 'Avulso';
       let agendaOk = true;
       if (!manual && !isAvulso) {
-        if (!linksAgenda) linksAgenda = await linksNaAgendaHoje(inicioDia, fimDia);
-        agendaOk = card.links.some(l => linksAgenda!.has(l));
-        if (!agendaOk && !modoTeste) { pulo('sem evento na agenda contato@ com o link do grupo'); continue; }
+        if (!agendaHoje) agendaHoje = await linksNaAgendaHoje(inicioDia, fimDia);
+        // O encontro existe hoje? Casa pelo TÍTULO (regra oficial) ou pelo
+        // link do grupo na descrição do evento (reforço opcional).
+        agendaOk = tituloBate(card.nome, agendaHoje.titulos)
+          || card.links.some(l => agendaHoje!.links.has(l));
+        if (!agendaOk && !modoTeste) { pulo('nenhum evento HOJE na agenda com título parecido com o do card'); continue; }
       }
 
       const enviadosNesteCard: string[] = [];
@@ -458,7 +490,7 @@ serve(async (req) => {
         const jidFinal = modoTeste ? cfg!.jid_grupo_teste : dest.jid;
         const statusAgenda = isAvulso ? '📌 avulso — dispensa agenda'
           : agendaOk ? '✅ evento confirmado na agenda'
-          : `⚠️ nenhum evento HOJE (nas 3 agendas) tem o link deste grupo na DESCRIÇÃO — em produção NÃO enviaria`;
+          : `⚠️ nenhum evento HOJE (nas 3 agendas) com título parecido com o do card — em produção NÃO enviaria`;
         const texto = modoTeste
           ? `🧪 *[TESTE — destino real: ${dest.nome}]*\n${statusAgenda}${manual ? '\n🔁 reenvio manual' : ''}\n———\n${card.mensagem}`
           : card.mensagem;
