@@ -327,7 +327,7 @@ serve(async (req) => {
           remetente_jid: remetenteJid,
           remetente_nome: remetenteNome,
           remetente_telefone: telefone || null,
-          texto: texto.slice(0, 4000),
+          texto, // completo, sem corte — é a matéria-prima da fase 2
           categoria, score, padroes: quais,
           respondeu_jid: ctx.respondeuJid || null,
           mencionados: ctx.mencionados,
@@ -372,8 +372,15 @@ serve(async (req) => {
         linhas.push(`**ADM respondido:** ${admNome || 'ADM'}${admTel ? ` (${fmtTel(admTel)})` : ''}`);
         if (ctx.citada) linhas.push(`**Msg do ADM:** "${ctx.citada.slice(0, 120).replace(/\n/g, ' ')}"`);
       }
-      linhas.push('', texto.slice(0, 500).split('\n').map((l) => `> ${l}`).join('\n'));
-      const alerta = linhas.join('\n');
+      // Discord aceita no máx 2000 chars/mensagem. O trecho usa todo o espaço
+      // que sobrar do cabeçalho; se ainda cortar, avisa que o completo está no banco.
+      const AVISO_CORTE = '\n> ✂️ *(mensagem maior que o limite do Discord — texto completo gravado no banco)*';
+      const cabecalho = linhas.join('\n');
+      const orcamento = 1990 - cabecalho.length - AVISO_CORTE.length - 2;
+      let trecho = texto.split('\n').map((l) => `> ${l}`).join('\n');
+      const cortou = trecho.length > orcamento;
+      if (cortou) trecho = trecho.slice(0, orcamento) + AVISO_CORTE;
+      const alerta = `${cabecalho}\n\n${trecho}`;
 
       try {
         await avisarResponsaveis(alerta);
