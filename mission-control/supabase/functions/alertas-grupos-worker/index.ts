@@ -459,8 +459,40 @@ serve(async (req) => {
         if (!agendaOk && !modoTeste) { pulo('nenhum evento HOJE na agenda com título parecido com o do card'); continue; }
       }
 
+      // BLINDAGEM 31/08 (manual): tira o card da lista ANTES de enviar. Se o
+      // move falhar, NÃO envia — card preso na "🔁 Enviar Agora" dispararia a
+      // cada minuto (loop). Próximo tick tenta o move de novo, sem enviar nada.
+      if (manual && !dryRun) {
+        try {
+          const destinoLista = card.diaSemana ? MAPA_DIA[card.diaSemana.toLowerCase()]?.lista : null;
+          const lDest = listas.find(x => x.name === (destinoLista || 'Concluidos'));
+          if (!lDest) throw new Error(`lista destino "${destinoLista || 'Concluidos'}" não encontrada`);
+          await trello(`cards/${card.id}?idList=${lDest.id}`, { method: 'PUT' });
+        } catch (e) {
+          pulo(`envio manual ABORTADO por segurança — não consegui tirar o card da lista antes (${e instanceof Error ? e.message : e})`);
+          continue;
+        }
+      }
+
       const enviadosNesteCard: string[] = [];
       for (const dest of destinos) {
+        // BLINDAGEM 31/08 (freio de emergência): máx 3 envios pro MESMO grupo
+        // em 10 min, não importa a origem. Estourou → corta e avisa por DM.
+        const desde = new Date(agora.getTime() - 10 * 60000).toISOString();
+        const { count: recentes } = await sb.from('disparos_grupos_whatsapp')
+          .select('id', { count: 'exact', head: true })
+          .eq('grupo_jid', dest.jid).gte('enviado_em', desde).neq('status', 'erro');
+        if ((recentes ?? 0) >= 3) {
+          log.pulados.push({ card: card.nome, motivo: `🛑 FREIO: já houve ${recentes} envios pro grupo ${dest.nome} nos últimos 10min — bloqueado` });
+          if (!dryRun) {
+            const ultimoFreio = cfg?.freio_ultimo_alerta ? new Date(cfg.freio_ultimo_alerta).getTime() : 0;
+            if (agora.getTime() - ultimoFreio > 30 * 60000) {
+              await avisarResponsaveis(`🛑 **FREIO DE EMERGÊNCIA ativado** — o robô ia passar de 3 mensagens pro grupo **${dest.nome}** em 10 minutos e foi BLOQUEADO automaticamente. Nenhum envio extra saiu. Verifiquem o quadro do Trello (card duplicado ou preso?). 🤖`).catch(() => {});
+              await sb.from('alertas_grupos_config').update({ freio_ultimo_alerta: agora.toISOString() }).eq('id', 1);
+            }
+          }
+          continue;
+        }
         if (dryRun) {
           const { data: ja } = await sb.from('disparos_grupos_whatsapp').select('id')
             .eq('card_id', card.id).eq('grupo_jid', dest.jid).eq('data_ref', dataBRT).eq('tipo', 'automatico').maybeSingle();
@@ -525,11 +557,8 @@ serve(async (req) => {
         const l = listas.find(x => x.name === nomeLista);
         if (l) await trello(`cards/${card.id}?idList=${l.id}`, { method: 'PUT' });
       };
+      // (manual já foi movido ANTES do envio — blindagem 31/08)
       if (card.lista === 'Avulso') await mover('Concluidos');
-      else if (manual) {
-        const destinoLista = card.diaSemana ? MAPA_DIA[card.diaSemana.toLowerCase()]?.lista : null;
-        await mover(destinoLista || 'Concluidos');
-      }
     }
 
     // ---------- Reserva: card ali NUNCA dispara (bloqueio consciente do time).
