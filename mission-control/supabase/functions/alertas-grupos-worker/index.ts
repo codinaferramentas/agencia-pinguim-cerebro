@@ -48,6 +48,14 @@ const MARCA_LOG = '🤖'; // prefixo dos comentários do robô (usado na rotaç�
 const MAX_LOGS_POR_CARD = 4;
 const ATRASO_MAX_MIN = 55; // até quanto tempo depois do horário ainda dispara
 
+// Impressão digital da mensagem (pro freio distinguir copy igual de copy nova).
+// Normaliza espaços pra pegar cópias "iguais na prática".
+async function hashMsg(texto: string): Promise<string> {
+  const limpo = texto.replace(/\s+/g, ' ').trim().toLowerCase();
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(limpo));
+  return Array.from(new Uint8Array(buf)).slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 function brt(d: Date): Date { return new Date(d.getTime() + TZ_OFFSET_MS); }
 function horaBRT(d: Date): string {
   const b = brt(d);
@@ -474,20 +482,23 @@ serve(async (req) => {
         }
       }
 
+      const msgHash = await hashMsg(card.mensagem);
       const enviadosNesteCard: string[] = [];
       for (const dest of destinos) {
-        // BLINDAGEM 31/08 (freio de emergência): máx 3 envios pro MESMO grupo
-        // em 10 min, não importa a origem. Estourou → corta e avisa por DM.
+        // BLINDAGEM (freio de emergência, refinado 01/09): bloqueia só a MESMA
+        // COPY repetida pro mesmo grupo (o loop perigoso do dia 31). Copy
+        // DIFERENTE passa sempre — "10min antes", "ao vivo", "cadê você" são
+        // mensagens distintas e legítimas, mesmo 1 por minuto (Andre 01/09).
         const desde = new Date(agora.getTime() - 10 * 60000).toISOString();
-        const { count: recentes } = await sb.from('disparos_grupos_whatsapp')
+        const { count: repetidas } = await sb.from('disparos_grupos_whatsapp')
           .select('id', { count: 'exact', head: true })
-          .eq('grupo_jid', dest.jid).gte('enviado_em', desde).neq('status', 'erro');
-        if ((recentes ?? 0) >= 3) {
-          log.pulados.push({ card: card.nome, motivo: `🛑 FREIO: já houve ${recentes} envios pro grupo ${dest.nome} nos últimos 10min — bloqueado` });
+          .eq('grupo_jid', dest.jid).eq('msg_hash', msgHash).gte('enviado_em', desde).neq('status', 'erro');
+        if ((repetidas ?? 0) >= 1) {
+          log.pulados.push({ card: card.nome, motivo: `🛑 FREIO: a MESMA mensagem já foi pro grupo ${dest.nome} nos últimos 10min — bloqueado (anti-loop)` });
           if (!dryRun) {
             const ultimoFreio = cfg?.freio_ultimo_alerta ? new Date(cfg.freio_ultimo_alerta).getTime() : 0;
             if (agora.getTime() - ultimoFreio > 30 * 60000) {
-              await avisarResponsaveis(`🛑 **FREIO DE EMERGÊNCIA ativado** — o robô ia passar de 3 mensagens pro grupo **${dest.nome}** em 10 minutos e foi BLOQUEADO automaticamente. Nenhum envio extra saiu. Verifiquem o quadro do Trello (card duplicado ou preso?). 🤖`).catch(() => {});
+              await avisarResponsaveis(`🛑 **FREIO ANTI-LOOP ativado** — a mesma mensagem ia repetir no grupo **${dest.nome}** em menos de 10 min e foi BLOQUEADA. Copy diferente não é afetada. Confiram o quadro (card duplicado?). 🤖`).catch(() => {});
               await sb.from('alertas_grupos_config').update({ freio_ultimo_alerta: agora.toISOString() }).eq('id', 1);
             }
           }
@@ -504,7 +515,7 @@ serve(async (req) => {
           const { error: insErr } = await sb.from('disparos_grupos_whatsapp').insert({
             card_id: card.id, card_nome: card.nome, grupo_jid: dest.jid, grupo_nome: dest.nome,
             data_ref: dataBRT, horario_previsto: card.hora, tipo: 'automatico',
-            modo: modoTeste ? 'teste' : 'producao', agenda_confirmada: agendaOk,
+            modo: modoTeste ? 'teste' : 'producao', agenda_confirmada: agendaOk, msg_hash: msgHash,
           });
           if (insErr) {
             if (String(insErr.code) !== '23505') throw new Error(`trava: ${insErr.message}`);
@@ -514,7 +525,7 @@ serve(async (req) => {
           await sb.from('disparos_grupos_whatsapp').insert({
             card_id: card.id, card_nome: card.nome, grupo_jid: dest.jid, grupo_nome: dest.nome,
             data_ref: dataBRT, horario_previsto: horaBRT(agora), tipo: 'manual',
-            modo: modoTeste ? 'teste' : 'producao', agenda_confirmada: agendaOk,
+            modo: modoTeste ? 'teste' : 'producao', agenda_confirmada: agendaOk, msg_hash: msgHash,
           });
         }
 
