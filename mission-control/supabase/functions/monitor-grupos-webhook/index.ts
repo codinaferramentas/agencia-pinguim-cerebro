@@ -61,6 +61,7 @@ interface Grupo {
   jid: string; nome: string; ativo: boolean;
   admins: string[]; admins_atualizado_em: string | null;
   participantes: Record<string, Participante>;
+  discord_canal_id: string | null;
 }
 interface Padrao { categoria: string; re: RegExp; peso: number; descricao: string }
 let _grupos: { at: number; mapa: Map<string, Grupo> } | null = null;
@@ -69,7 +70,7 @@ let _padroes: { at: number; lista: Padrao[] } | null = null;
 async function grupos(): Promise<Map<string, Grupo>> {
   if (_grupos && Date.now() - _grupos.at < CACHE_TTL_MS) return _grupos.mapa;
   const { data, error } = await sb.from('monitor_grupos')
-    .select('jid, nome, ativo, admins, admins_atualizado_em, participantes').eq('ativo', true);
+    .select('jid, nome, ativo, admins, admins_atualizado_em, participantes, discord_canal_id').eq('ativo', true);
   if (error) throw new Error(`ler monitor_grupos: ${error.message}`);
   const mapa = new Map<string, Grupo>();
   for (const g of data ?? []) mapa.set(g.jid, g as Grupo);
@@ -198,6 +199,19 @@ async function postarDiscord(bot: string, canalId: string, conteudo: string) {
     body: JSON.stringify({ content: conteudo, allowed_mentions: { parse: ['users'] }, flags: 4 }),
   });
   if (!r.ok) throw new Error(`Discord ${r.status}: ${(await r.text()).slice(0, 150)}`);
+}
+
+// Destino primário: canal do grupo no Discord (tag por produto). Sem canal
+// configurado ou post falhou → DM do trio (nenhum alerta pode se perder).
+async function enviarAlerta(grupo: Grupo, conteudo: string) {
+  if (grupo.discord_canal_id) {
+    try {
+      const bot = await getChave('DISCORD_BOT_TOKEN', 'monitor-grupos-webhook');
+      await postarDiscord(bot, grupo.discord_canal_id, conteudo);
+      return;
+    } catch (_) { /* cai na DM */ }
+  }
+  await avisarResponsaveis(conteudo);
 }
 
 async function avisarResponsaveis(conteudo: string) {
@@ -383,7 +397,7 @@ serve(async (req) => {
       const alerta = `${cabecalho}\n\n${trecho}`;
 
       try {
-        await avisarResponsaveis(alerta);
+        await enviarAlerta(grupo, alerta);
         await sb.from('monitor_grupos_mensagens').update({ alertado_em: new Date().toISOString() }).eq('id', linhaId);
       } catch (e) {
         await sb.from('monitor_grupos_mensagens').update({ alerta_suprimido: `discord: ${String(e).slice(0, 180)}` }).eq('id', linhaId);
