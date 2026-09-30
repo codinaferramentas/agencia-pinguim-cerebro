@@ -546,9 +546,17 @@ serve(async (req) => {
             // Evolution se recuperar entre as tentativas. Enviado/enviando não mexe.
             const { data: existente } = await sb.from('disparos_grupos_whatsapp')
               .select('status, tentativas, enviado_em').eq('card_id', card.id).eq('grupo_jid', dest.jid).eq('data_ref', dataBRT).maybeSingle();
-            if (existente?.status !== 'erro' || (existente?.tentativas ?? 0) >= 5) {
-              continue; // já enviado, ou estourou 5 tentativas → desiste (avisa por DM abaixo)
+            if (existente?.status !== 'erro' || (existente?.tentativas ?? 0) >= 2) {
+              continue; // já enviado, ou estourou 2 tentativas → desiste (avisa por DM abaixo)
             }
+            // Se JÁ houve um disparo MANUAL deste card+grupo hoje (alguém resolveu
+            // pela lista "Enviar Agora"), NÃO retenta — senão manda dobrado
+            // (lição 30/09: retry reenviou algo que a Fê já tinha mandado manual).
+            const { count: jaManual } = await sb.from('disparos_grupos_whatsapp')
+              .select('id', { count: 'exact', head: true })
+              .eq('card_id', card.id).eq('grupo_jid', dest.jid).eq('data_ref', dataBRT)
+              .eq('tipo', 'manual').eq('status', 'enviado');
+            if ((jaManual ?? 0) >= 1) { continue; }
             // espaça: só retenta se a última tentativa foi há ≥50s (1 por tick)
             const ultTent = existente.enviado_em ? new Date(existente.enviado_em).getTime() : 0;
             if (agora.getTime() - ultTent < 50 * 1000) continue;
@@ -592,8 +600,8 @@ serve(async (req) => {
           const tent = atual?.[0]?.tentativas ?? 1;
           log.disparos.push({ card: card.nome, grupo: dest.nome, manual, enviado: false, erro: msg, tentativa: tent });
           // Estourou as 3 tentativas → NÃO retenta mais; avisa por DM (não fica silencioso)
-          if (tent >= 5 && !dryRun) {
-            await avisarResponsaveis(`⚠️ **Falha ao enviar no grupo ${dest.nome}** após 5 tentativas em 5 minutos (erro Evolution: ${msg.slice(0, 80)}). Card "${card.nome}". A mensagem NÃO saiu nesse grupo — reenvie manual pela lista "🔁 Enviar Agora" se ainda fizer sentido. 🤖`).catch(() => {});
+          if (tent >= 2 && !dryRun) {
+            await avisarResponsaveis(`⚠️ **Falha ao enviar no grupo ${dest.nome}** após 2 tentativas (erro Evolution: ${msg.slice(0, 80)}). Card "${card.nome}". A mensagem NÃO saiu nesse grupo — reenvie manual pela lista "🔁 Enviar Agora" se ainda fizer sentido. 🤖`).catch(() => {});
           }
         }
       }
