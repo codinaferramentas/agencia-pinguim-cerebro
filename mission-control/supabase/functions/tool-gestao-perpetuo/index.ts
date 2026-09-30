@@ -12,6 +12,7 @@
 //  - buscar_usuario: { termo } → GET /members?search= (max 20)
 //  - criar_usuario:  { email, full_name, phone?, documento? } → POST /members
 //                    (senha padrão da Curseduca, grupo 74). 409/já-existe = ok.
+//  - remover_acesso: { user_id } → DELETE /members/{id}/groups/74 (tira do grupo)
 // ============================================================
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
@@ -96,6 +97,19 @@ async function actCriarUsuario(body: any) {
   return jsonRespTool({ ok: true, user_id: String(j.id ?? j.uuid ?? '') });
 }
 
+async function actRemoverAcesso(body: any) {
+  const memberId = String(body.user_id || '').trim();
+  if (!memberId) return jsonRespTool({ ok: false, erro: 'user_id obrigatorio' }, 400);
+  const { api, tok } = await chaves();
+  const r = await fetch(`${CURSEDUCA_BASE}/members/${memberId}/groups/${GRUPO_PERPETUO}`, {
+    method: 'DELETE', headers: headers(api, tok),
+  });
+  if (r.status === 401 || r.status === 403) return jsonRespTool({ ok: false, erro: 'token Curseduca expirado/inválido' }, 502);
+  // 404 = já não estava no grupo → idempotente, conta como sucesso
+  if (!r.ok && r.status !== 404) return jsonRespTool({ ok: false, erro: `remover: ${r.status} ${(await r.text()).slice(0, 150)}` }, r.status);
+  return jsonRespTool({ ok: true });
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsTool });
   const authOk = await requireAuthTool(req);
@@ -110,6 +124,7 @@ serve(async (req) => {
     switch (action) {
       case 'buscar_usuario': return await actBuscarUsuario(body);
       case 'criar_usuario': return await actCriarUsuario(body);
+      case 'remover_acesso': return await actRemoverAcesso(body);
       default: return jsonRespTool({ ok: false, erro: `action desconhecida: ${action}` }, 400);
     }
   } catch (e) {
