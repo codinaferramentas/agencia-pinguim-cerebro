@@ -50,6 +50,8 @@ const FEATURE_KEYS = [
   'access_templates',
   'access_stories',
   'access_analysis',
+  'access_ganchos',
+  'access_nicho_nutricao',
 ];
 
 let _siriusKeyCache: { key: string; expira: number } | null = null;
