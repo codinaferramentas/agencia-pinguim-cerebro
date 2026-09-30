@@ -540,7 +540,21 @@ serve(async (req) => {
           });
           if (insErr) {
             if (String(insErr.code) !== '23505') throw new Error(`trava: ${insErr.message}`);
-            continue; // já disparado hoje — trava segurou
+            // Já existe registro pra card+grupo+dia. Se for ERRO da Evolution
+            // (502/timeout) e ainda tem tentativa, RETRY (Andre 30/09, opção B).
+            // Enviado/enviando = trava normal, não mexe.
+            const { data: existente } = await sb.from('disparos_grupos_whatsapp')
+              .select('status, tentativas').eq('card_id', card.id).eq('grupo_jid', dest.jid).eq('data_ref', dataBRT).maybeSingle();
+            if (existente?.status !== 'erro' || (existente?.tentativas ?? 0) >= 3) {
+              continue; // já enviado, ou estourou 3 tentativas → desiste (avisa por DM abaixo)
+            }
+            // marca como tentando de novo (evita 2 ticks retentarem juntos)
+            const { data: travouRetry } = await sb.from('disparos_grupos_whatsapp')
+              .update({ status: 'enviando', tentativas: (existente.tentativas ?? 0) + 1 })
+              .eq('card_id', card.id).eq('grupo_jid', dest.jid).eq('data_ref', dataBRT).eq('status', 'erro')
+              .select('id');
+            if (!travouRetry || !travouRetry.length) continue; // outro tick pegou
+            log.disparos.push({ card: card.nome, grupo: dest.nome, retry: (existente.tentativas ?? 0) + 1 });
           }
         } else {
           await sb.from('disparos_grupos_whatsapp').insert({
@@ -565,11 +579,18 @@ serve(async (req) => {
           enviadosNesteCard.push(dest.nome);
           log.disparos.push({ card: card.nome, grupo: dest.nome, manual, enviado: true, modo: log.modo });
         } catch (e) {
-          // NÃO reenvia sozinho: timeout não garante que não enviou (regra do Andre)
+          // Erro da Evolution → marca 'erro'; o próximo tick RETENTA (até 3x).
           const msg = e instanceof Error ? e.message : String(e);
-          await sb.from('disparos_grupos_whatsapp').update({ status: 'erro', erro: msg })
-            .eq('card_id', card.id).eq('grupo_jid', dest.jid).eq('data_ref', dataBRT).eq('status', 'enviando');
-          log.disparos.push({ card: card.nome, grupo: dest.nome, manual, enviado: false, erro: msg });
+          const { data: atual } = await sb.from('disparos_grupos_whatsapp')
+            .update({ status: 'erro', erro: msg })
+            .eq('card_id', card.id).eq('grupo_jid', dest.jid).eq('data_ref', dataBRT).eq('status', 'enviando')
+            .select('tentativas');
+          const tent = atual?.[0]?.tentativas ?? 1;
+          log.disparos.push({ card: card.nome, grupo: dest.nome, manual, enviado: false, erro: msg, tentativa: tent });
+          // Estourou as 3 tentativas → NÃO retenta mais; avisa por DM (não fica silencioso)
+          if (tent >= 3 && !dryRun) {
+            await avisarResponsaveis(`⚠️ **Falha ao enviar no grupo ${dest.nome}** após 3 tentativas (erro Evolution: ${msg.slice(0, 80)}). Card "${card.nome}". A mensagem NÃO saiu nesse grupo — reenvie manual pela lista "🔁 Enviar Agora" se ainda fizer sentido. 🤖`).catch(() => {});
+          }
         }
       }
 
