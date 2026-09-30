@@ -540,17 +540,21 @@ serve(async (req) => {
           });
           if (insErr) {
             if (String(insErr.code) !== '23505') throw new Error(`trava: ${insErr.message}`);
-            // Já existe registro pra card+grupo+dia. Se for ERRO da Evolution
-            // (502/timeout) e ainda tem tentativa, RETRY (Andre 30/09, opção B).
-            // Enviado/enviando = trava normal, não mexe.
+            // Já existe registro pra card+grupo+dia. Se for ERRO da Evolution e
+            // ainda tem tentativa, RETRY ESPAÇADO (Andre 30/09 opção B, ajustado):
+            // 1 tentativa POR MINUTO (não 3 coladas), até 5x — dá tempo da
+            // Evolution se recuperar entre as tentativas. Enviado/enviando não mexe.
             const { data: existente } = await sb.from('disparos_grupos_whatsapp')
-              .select('status, tentativas').eq('card_id', card.id).eq('grupo_jid', dest.jid).eq('data_ref', dataBRT).maybeSingle();
-            if (existente?.status !== 'erro' || (existente?.tentativas ?? 0) >= 3) {
-              continue; // já enviado, ou estourou 3 tentativas → desiste (avisa por DM abaixo)
+              .select('status, tentativas, enviado_em').eq('card_id', card.id).eq('grupo_jid', dest.jid).eq('data_ref', dataBRT).maybeSingle();
+            if (existente?.status !== 'erro' || (existente?.tentativas ?? 0) >= 5) {
+              continue; // já enviado, ou estourou 5 tentativas → desiste (avisa por DM abaixo)
             }
-            // marca como tentando de novo (evita 2 ticks retentarem juntos)
+            // espaça: só retenta se a última tentativa foi há ≥50s (1 por tick)
+            const ultTent = existente.enviado_em ? new Date(existente.enviado_em).getTime() : 0;
+            if (agora.getTime() - ultTent < 50 * 1000) continue;
+            // marca como tentando de novo + carimba o horário (evita 2 ticks juntos)
             const { data: travouRetry } = await sb.from('disparos_grupos_whatsapp')
-              .update({ status: 'enviando', tentativas: (existente.tentativas ?? 0) + 1 })
+              .update({ status: 'enviando', tentativas: (existente.tentativas ?? 0) + 1, enviado_em: agora.toISOString() })
               .eq('card_id', card.id).eq('grupo_jid', dest.jid).eq('data_ref', dataBRT).eq('status', 'erro')
               .select('id');
             if (!travouRetry || !travouRetry.length) continue; // outro tick pegou
@@ -588,8 +592,8 @@ serve(async (req) => {
           const tent = atual?.[0]?.tentativas ?? 1;
           log.disparos.push({ card: card.nome, grupo: dest.nome, manual, enviado: false, erro: msg, tentativa: tent });
           // Estourou as 3 tentativas → NÃO retenta mais; avisa por DM (não fica silencioso)
-          if (tent >= 3 && !dryRun) {
-            await avisarResponsaveis(`⚠️ **Falha ao enviar no grupo ${dest.nome}** após 3 tentativas (erro Evolution: ${msg.slice(0, 80)}). Card "${card.nome}". A mensagem NÃO saiu nesse grupo — reenvie manual pela lista "🔁 Enviar Agora" se ainda fizer sentido. 🤖`).catch(() => {});
+          if (tent >= 5 && !dryRun) {
+            await avisarResponsaveis(`⚠️ **Falha ao enviar no grupo ${dest.nome}** após 5 tentativas em 5 minutos (erro Evolution: ${msg.slice(0, 80)}). Card "${card.nome}". A mensagem NÃO saiu nesse grupo — reenvie manual pela lista "🔁 Enviar Agora" se ainda fizer sentido. 🤖`).catch(() => {});
           }
         }
       }
