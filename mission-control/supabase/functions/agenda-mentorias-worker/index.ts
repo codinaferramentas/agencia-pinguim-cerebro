@@ -239,18 +239,41 @@ function montarResumo(eventos: Evento[], agora: Date): string {
 // Conflito = dois eventos alertáveis de AGENDAS DIFERENTES com horário
 // sobreposto (os consultores atendem as 3 agendas; não podem estar em duas
 // calls ao mesmo tempo). Dedup por par de eventos.
+// E-mails que são da AGÊNCIA (consultores/time) — só eles contam pra conflito.
+// Aluno (gmail/hotmail pessoal do comprador) e robô genérico são ignorados.
+const DOMINIOS_AGENCIA = ['@agenciapinguim.com', '.agenciapinguim@gmail.com'];
+const IGNORAR_CONSULTOR = new Set([
+  'ferramenta@agenciapinguim.com', 'contato@agenciapinguim.com',
+  'cs@agenciapinguim.com', 'automacoes@agenciapinguim.com',
+]);
+function consultoresDe(ev: Evento): Set<string> {
+  const set = new Set<string>();
+  for (const p of ev.participantes) {
+    const email = (p.email || '').toLowerCase();
+    if (!email || IGNORAR_CONSULTOR.has(email)) continue;
+    // é da agência? (domínio ou padrão nome.agenciapinguim@gmail.com)
+    if (DOMINIOS_AGENCIA.some(d => email.includes(d))) set.add(email);
+  }
+  return set;
+}
+
 function detectarConflitos(eventos: Evento[]): { id: string; inicio: Date; a: Evento; b: Evento }[] {
   const conflitos: { id: string; inicio: Date; a: Evento; b: Evento }[] = [];
   for (let i = 0; i < eventos.length; i++) {
     for (let j = i + 1; j < eventos.length; j++) {
       const a = eventos[i], b = eventos[j];
-      // Sobreposição vale tanto entre agendas diferentes quanto DENTRO da mesma
-      // agenda (cada agenda atende 1 consultor por vez — Andre 17/ago). Dois
-      // eventos no mesmo horário na mesma agenda = erro que precisa remarcar.
       const fimA = a.fim ?? new Date(a.inicio.getTime() + 3600_000);  // sem fim → assume 1h
       const fimB = b.fim ?? new Date(b.inicio.getTime() + 3600_000);
       const sobrepoe = a.inicio < fimB && b.inicio < fimA;
       if (!sobrepoe) continue;
+      // CONFLITO REAL = o MESMO CONSULTOR em 2 eventos ao mesmo tempo (Andre 02/10).
+      // Dois encontros simultâneos de consultores DIFERENTES (ex: Fernanda no ELO +
+      // Rafael no Taurus) é atendimento em paralelo NORMAL, não conflito. Antes o
+      // detector acusava qualquer sobreposição → falso positivo quase diário.
+      const consultoresA = consultoresDe(a);
+      const consultoresB = consultoresDe(b);
+      const mesmoConsultor = [...consultoresA].some(c => consultoresB.has(c));
+      if (!mesmoConsultor) continue;
       const id = [a.evento_id, b.evento_id].sort().join('+');
       conflitos.push({ id, inicio: new Date(Math.max(a.inicio.getTime(), b.inicio.getTime())), a, b });
     }
