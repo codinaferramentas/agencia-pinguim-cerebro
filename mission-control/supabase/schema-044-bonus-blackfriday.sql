@@ -125,3 +125,30 @@ select cron.schedule(
   '* * * * *',
   $$select pinguim.disparar_edge_function('bonus-blackfriday-worker')$$
 );
+
+-- ------------------------------------------------------------------------
+-- Entrada 2 (2026-10-15): webhook da Hotmart. A Hotmart confirmou que dá pra
+-- cadastrar webhook no combo. O webhook libera na hora; a leitura do Dash
+-- continua como rede de segurança. As duas entradas caem na MESMA outbox
+-- (transacao única) → nunca libera em dobro.
+--
+-- Log de TODA chamada recebida (diagnóstico): mostra como a Hotmart manda o
+-- combo (id do combo vs produtos de dentro) e guarda o hottok recebido até
+-- ele ser gravado no cofre como HOTMART_HOTTOK_COMBO_BF. Só service_role lê.
+-- ------------------------------------------------------------------------
+create table if not exists pinguim.bonus_bf_webhook_log (
+  id              uuid primary key default gen_random_uuid(),
+  recebido_em     timestamptz not null default now(),
+  evento          text,
+  produto_id      bigint,
+  produto_nome    text,
+  oferta          text,
+  transacao       text,
+  comprador_email text,
+  hottok_ok       boolean,          -- null = cofre ainda sem hottok (modo captura)
+  hottok_recebido text,             -- guardado só enquanto o cofre não tem o hottok
+  acao            text,             -- enfileirado | ignorado:<motivo> | captura | recusado
+  payload         jsonb not null
+);
+create index if not exists idx_bonus_bf_webhook_log_recebido on pinguim.bonus_bf_webhook_log (recebido_em desc);
+alter table pinguim.bonus_bf_webhook_log enable row level security;

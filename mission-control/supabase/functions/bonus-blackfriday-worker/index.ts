@@ -8,11 +8,11 @@
 //   2. Sirius (Supabase ryyingyyzgzsbnkugfpa)  → plano CICLO + 12 flags, 2 anos
 //   3. Elo    (Supabase hqyyxtyvfjnkpjtcydgj)  → plano Elo, vigência 2 anos
 //
-// NÃO é webhook: a Hotmart não aceita webhook pra combo (só por produto
-// isolado). O Dash já recebe TODA venda da conta em tempo real
-// (hotmart_transactions) — esta edge roda a cada 1 min (cron bonus-bf-combo),
-// lê do Dash as vendas aprovadas do combo e libera. Mesmo padrão do
-// crm-sync-vendas (marca d'água + sobreposição).
+// DUAS entradas, mesma fila (transação única → nunca libera em dobro):
+//   1. webhook da Hotmart cadastrado no combo → libera na hora (exige hottok)
+//   2. cron a cada 1 min (bonus-bf-combo) lê do Dash as vendas aprovadas do
+//      combo → rede de segurança se o webhook falhar ou atrasar. Mesmo padrão
+//      do crm-sync-vendas (marca d'água + sobreposição).
 //
 // Garantias:
 //   - outbox pinguim.bonus_bf_outbox: venda lida = venda gravada, nada se perde
@@ -23,8 +23,8 @@
 //
 // ESCOPO v1: só concede. Reembolso/chargeback = revogação manual via CRM.
 // Schema: schema-044-bonus-blackfriday.sql
-// Deploy: Management API, verify_jwt=false (auth feita aqui por requireAuthTool;
-//         o cron chama com a service role via disparar_edge_function).
+// Deploy: Management API, verify_jwt=false. Auth feita aqui: webhook → hottok
+//         (HOTMART_HOTTOK_COMBO_BF); cron/manual → requireAuthTool (service role).
 // ========================================================================
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
@@ -561,15 +561,141 @@ async function alertarDiscord(texto: string): Promise<void> {
 }
 
 // ========================================================================
-// Handler (cron a cada 1 min; também pode ser chamado manualmente)
+// Fila: reivindica e processa uma linha (usado pelo cron e pelo webhook)
+// ========================================================================
+async function processarId(id: string): Promise<'concluido' | 'pendente' | 'pulado'> {
+  const { data: claim, error } = await sb.rpc('bonus_bf_claim', { p_id: id });
+  if (error) throw new Error('claim: ' + error.message);
+  const row = Array.isArray(claim) ? claim[0] : claim;
+  if (!row) return 'pulado'; // outro tick já está com ela
+  try {
+    const r = await processarLinha(row);
+    return r.concluido ? 'concluido' : 'pendente';
+  } catch (e) {
+    await sb.from('bonus_bf_outbox').update({
+      status: 'erro', ultimo_erro: msg(e).slice(0, 500),
+      tentativas: (row.tentativas ?? 0) + 1, atualizado_em: new Date().toISOString(),
+    }).eq('id', row.id);
+    return 'pendente';
+  }
+}
+
+// ========================================================================
+// ENTRADA 1 — webhook da Hotmart (libera na hora)
+//   Segurança: o endpoint é público, então SÓ libera com o hottok certo
+//   (HOTMART_HOTTOK_COMBO_BF no cofre). Enquanto o cofre não tiver o hottok,
+//   roda em MODO CAPTURA: registra a chamada (com o hottok recebido) e não
+//   libera nada — a leitura do Dash continua cobrindo as vendas.
+//   Toda chamada vai pro pinguim.bonus_bf_webhook_log (diagnóstico).
+//   Responde 200 depois de registrar (a Hotmart não precisa reenviar).
+// ========================================================================
+const EVENTOS_CONCEDE = ['PURCHASE_APPROVED', 'PURCHASE_COMPLETE', 'PURCHASE_COMPLETED'];
+
+function pick(obj: any, ...paths: string[]): string {
+  for (const path of paths) {
+    let v = obj;
+    for (const k of path.split('.')) v = v?.[k];
+    if (v != null && String(v).trim() !== '') return String(v).trim();
+  }
+  return '';
+}
+
+function iguaisSemVazarTempo(a: string, b: string): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}
+
+function pareceWebhookHotmart(body: any): boolean {
+  return !!body && typeof body === 'object' && Object.keys(body).length > 0
+    && !!(body.event || body.data?.purchase || body.data?.buyer || body.hottok);
+}
+
+async function receberWebhook(req: Request, body: any): Promise<Response> {
+  const evento = pick(body, 'event').toUpperCase();
+  const produtoId = Number(pick(body, 'data.product.id', 'prod')) || null;
+  const produtoNome = pick(body, 'data.product.name', 'prod_name') || null;
+  const oferta = pick(body, 'data.purchase.offer.code', 'off') || null;
+  const transacao = pick(body, 'data.purchase.transaction', 'transaction') || null;
+  const buyer = body?.data?.buyer ?? {};
+  const email = (pick(buyer, 'email') || pick(body, 'email')).toLowerCase() || null;
+
+  const hottokRecebido = req.headers.get('x-hotmart-hottok') || pick(body, 'hottok');
+  let hottokCofre = '';
+  try { hottokCofre = await getChave('HOTMART_HOTTOK_COMBO_BF', CONSUMIDOR, { fallbackEnv: false }); } catch { /* ainda não configurado */ }
+  const hottokOk = hottokCofre ? iguaisSemVazarTempo(hottokRecebido, hottokCofre) : null;
+
+  const log = async (acao: string) => {
+    await sb.from('bonus_bf_webhook_log').insert({
+      evento, produto_id: produtoId, produto_nome: produtoNome, oferta, transacao,
+      comprador_email: email, hottok_ok: hottokOk,
+      hottok_recebido: hottokCofre ? null : (hottokRecebido || null),
+      acao, payload: body,
+    });
+  };
+
+  if (hottokOk === false) { await log('recusado:hottok'); return jsonRespTool({ ok: false, erro: 'hottok inválido' }, 401); }
+  if (hottokOk === null) {
+    await log('captura');
+    return jsonRespTool({ ok: true, modo: 'captura', nota: 'registrado; a liberação pelo webhook liga quando o hottok estiver no cofre' });
+  }
+
+  const ehCombo = (produtoId !== null && PRODUTOS_COMBO.includes(produtoId)) || (!!oferta && OFERTAS_COMBO.includes(oferta));
+  if (!ehCombo) { await log('ignorado:outro_produto'); return jsonRespTool({ ok: true, ignorado: 'outro_produto', produto: produtoId }); }
+  if (!EVENTOS_CONCEDE.includes(evento)) { await log(`ignorado:evento_${evento || 'vazio'}`); return jsonRespTool({ ok: true, ignorado: 'evento', evento }); }
+  if (!transacao || !email) { await log('ignorado:sem_transacao_ou_email'); return jsonRespTool({ ok: true, ignorado: 'sem_transacao_ou_email' }); }
+
+  const dataMs = Number(pick(body, 'data.purchase.approved_date', 'data.purchase.order_date'));
+  // mesma forma que a linha do Dash (compradorDaLinha lê payload.hotmart_buyers)
+  const linha = {
+    transacao,
+    produto_hotmart: produtoId,
+    oferta_id: oferta,
+    dash_status: pick(body, 'data.purchase.status').toLowerCase() || evento.toLowerCase(),
+    data_compra: dataMs > 0 ? new Date(dataMs).toISOString() : null,
+    comprador_nome: pick(buyer, 'name') || null,
+    comprador_email: email,
+    comprador_tel: pick(buyer, 'checkout_phone', 'phone') || null,
+    comprador_doc: pick(buyer, 'document') || null,
+    payload: {
+      origem: 'webhook',
+      hotmart_buyers: {
+        name: pick(buyer, 'name'), email,
+        phone: pick(buyer, 'phone'), checkout_phone: pick(buyer, 'checkout_phone'),
+        checkout_phone_code: pick(buyer, 'checkout_phone_code'), document: pick(buyer, 'document'),
+      },
+      webhook: body,
+    },
+  };
+  const { error } = await sb.from('bonus_bf_outbox').upsert(linha, { onConflict: 'transacao', ignoreDuplicates: true });
+  if (error) { await log('erro:outbox'); throw new Error('outbox: ' + error.message); }
+  await log('enfileirado');
+
+  const { data: row } = await sb.from('bonus_bf_outbox').select('id,status').eq('transacao', transacao).single();
+  if (!row) throw new Error('outbox: linha não encontrada após inserir');
+  if (row.status === 'concluido') return jsonRespTool({ ok: true, status: 'concluido', ja_processado: true });
+  const r = await processarId(row.id);
+  return jsonRespTool({ ok: true, status: r, transacao });
+}
+
+// ========================================================================
+// ENTRADA 2 — cron a cada 1 min: lê o Dash (rede de segurança) e drena a
+// fila (inclui retry do que o webhook não conseguiu concluir).
 // ========================================================================
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsTool });
-  if (!(await requireAuthTool(req))) return jsonRespTool({ ok: false, erro: 'nao autorizado' }, 401);
   if (req.method !== 'POST') return jsonRespTool({ ok: false, erro: 'Use POST' }, 405);
 
   const t0 = Date.now();
+  let body: any = {};
+  try { body = await req.json(); } catch { body = {}; }
+
   try {
+    if (pareceWebhookHotmart(body)) return await receberWebhook(req, body);
+
+    if (!(await requireAuthTool(req))) return jsonRespTool({ ok: false, erro: 'nao autorizado' }, 401);
+
     const leitura = await lerDash();
 
     const { data: candidatos } = await sb.from('bonus_bf_outbox')
@@ -580,21 +706,8 @@ serve(async (req) => {
 
     const trabalhador = async () => {
       while (fila.length && Date.now() - t0 < ORCAMENTO_MS) {
-        const { id } = fila.shift()!;
-        const { data: claim, error } = await sb.rpc('bonus_bf_claim', { p_id: id });
-        if (error) throw new Error('claim: ' + error.message);
-        const row = Array.isArray(claim) ? claim[0] : claim;
-        if (!row) { pulados++; continue; }
-        try {
-          const r = await processarLinha(row);
-          r.concluido ? concluidos++ : pendentes++;
-        } catch (e) {
-          pendentes++;
-          await sb.from('bonus_bf_outbox').update({
-            status: 'erro', ultimo_erro: msg(e).slice(0, 500),
-            tentativas: (row.tentativas ?? 0) + 1, atualizado_em: new Date().toISOString(),
-          }).eq('id', row.id);
-        }
+        const r = await processarId(fila.shift()!.id);
+        if (r === 'concluido') concluidos++; else if (r === 'pendente') pendentes++; else pulados++;
       }
     };
     await Promise.all(Array.from({ length: CONCORRENCIA }, trabalhador));
