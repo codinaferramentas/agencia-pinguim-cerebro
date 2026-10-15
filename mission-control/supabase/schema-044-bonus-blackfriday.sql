@@ -1,119 +1,108 @@
 -- ========================================================================
 -- schema-044-bonus-blackfriday.sql
 -- ========================================================================
--- Operação Black Friday: UMA venda Hotmart numa oferta-bônus libera acesso,
--- de presente, em QUATRO programas nossos:
---   1. ProAlt      (Supabase vdrlvflludyqkyhfoiwb)  → plano "Completo"
---   2. Elo         (Supabase hqyyxtyvfjnkpjtcydgj)  → role "aluno", plano "Elo"
---   3. Sirius      (Supabase ryyingyyzgzsbnkugfpa)  → plano cheio + 10 flags access_*
---   4. Perpétuo    (Curseduca grupo 74)             → membro POST /members
+-- Combo Black (Hotmart produto 8729703): cada venda aprovada do combo libera,
+-- de presente, acesso em TRÊS programas:
+--   1. Escola do Perpétuo (Curseduca turma 74)  → validade 10 anos
+--   2. Sirius (Supabase ryyingyyzgzsbnkugfpa)   → plano CICLO + 12 flags, 2 anos
+--   3. Elo    (Supabase hqyyxtyvfjnkpjtcydgj)   → plano Elo, vigência 2 anos
 --
--- Mesma arquitetura, testada, do hotmart-planilha-worker (schema-036/037):
--- OUTBOX EFÊMERO + rastreio SEPARADO por destino + cron de retry */5.
+-- Por que NÃO é webhook: a Hotmart não deixa cadastrar webhook pra combo (os
+-- webhooks são por produto isolado). Mas o Dash já recebe TODA venda Hotmart
+-- da conta em tempo real (hotmart_transactions). Então a edge
+-- bonus-blackfriday-worker roda a cada 1 min, lê do Dash as vendas aprovadas
+-- do combo desde a última marca d'água e libera.
 --
--- Fluxo (edge bonus-blackfriday-worker):
---   Hotmart dispara webhook → edge recebe
---     1. (opcional) valida hottok
---     2. INSERT nesta tabela (status 'pendente') — NADA se perde a partir daqui
---     3. tenta liberar nos 4 destinos (caminho feliz). Cada destino idempotente
---        por email (reenvio de webhook / retry NÃO duplica). Cada um marca seu
---        próprio flag *_ok antes de tentar o próximo.
---     4. todos os 4 ok → status 'concluido' (NÃO apaga — vira auditoria).
---        Faltou algum → status 'erro', fica pro cron reprocessar só o que faltou.
+-- Fluxo (a cada minuto):
+--   1. lê bonus_bf_estado.ultima_marca
+--   2. busca no Dash: produto do combo + status approved/completed +
+--      updated_at >= marca - 15 min (sobreposição: venda gravada atrasada não escapa)
+--   3. INSERT na outbox (on conflict transacao do nothing) — NADA se perde
+--   4. avança a marca
+--   5. pra cada linha pendente: claim atômico → libera os 3 destinos →
+--      status 'concluido' (fica como auditoria) ou 'erro' (próximo minuto refaz
+--      só o destino que faltou)
 --
--- Diferente do planilha-outbox, esta tabela é AUDITORIA PERMANENTE além de
--- outbox: mesmo depois de tudo liberado a linha PERMANECE (status 'concluido')
--- pra você ver no CRM "quem ganhou o quê". Só linhas 100% concluídas param de
--- ser reprocessadas; nada é apagado. (Decisão André 2026-09-29: registrar tudo.)
+-- Regra de ouro: NUNCA encurtar validade nem rebaixar plano de quem já é aluno.
 -- ========================================================================
 
 create table if not exists pinguim.bonus_bf_outbox (
-  id             uuid primary key default gen_random_uuid(),
+  id               uuid primary key default gen_random_uuid(),
 
-  -- identificação da venda (pra auditoria e busca no CRM)
-  oferta_id      text,                    -- data.purchase.offer.code do webhook
-  transacao      text,                    -- id da transação Hotmart (idempotência de linha)
-  comprador_nome text,
-  comprador_email text,
-  comprador_tel  text,
-  comprador_doc  text,
+  -- venda (vem do Dash)
+  transacao        text not null unique,      -- transaction_code Hotmart (HP...)
+  produto_hotmart  bigint,                    -- hotmart_product_id que casou
+  oferta_id        text,
+  dash_status      text,                      -- approved / completed
+  data_compra      timestamptz,
+  comprador_nome   text,
+  comprador_email  text,
+  comprador_tel    text,
+  comprador_doc    text,
+  payload          jsonb not null,            -- linha crua do Dash (auditoria/reprocesso)
 
-  -- payload cru da Hotmart, pra reprocessar e auditar
-  payload        jsonb not null,
+  -- pendente=nova | processando=claim em voo | concluido=3 destinos ok |
+  -- erro=falta destino (reprocessa) | dead=estourou tentativas (fora do retry)
+  status           text not null default 'pendente'
+                   check (status in ('pendente', 'processando', 'concluido', 'erro', 'dead')),
+  ultimo_erro      text,
+  tentativas       int not null default 0,
 
-  -- pendente=novo | processando=claim em voo | concluido=4 destinos ok |
-  -- erro=falha parcial reprocessável | dead=terminal (lixo/captura ou estourou
-  -- MAX_TENTATIVAS; fora do índice de retry, não gira mais)
-  status         text not null default 'pendente'
-                 check (status in ('pendente', 'processando', 'concluido', 'erro', 'dead')),
-
-  ultimo_erro    text,
-  tentativas     int not null default 0,
-
-  -- ---- rastreio SEPARADO por destino (o coração do retry parcial) ----
-  -- null/false = ainda não feito; true = liberado. O retry só refaz o que
-  -- está false. Assim ProAlt já liberado nunca é recriado quando a Sirius cai.
-  proalt_ok      boolean not null default false,
-  elo_ok         boolean not null default false,
-  sirius_ok      boolean not null default false,
-  perpetuo_ok    boolean not null default false,
-
-  -- id/erro por destino (auditoria + diagnóstico sem cruzar destinos)
-  proalt_user_id   text,
-  proalt_erro      text,
-  elo_user_id      text,
-  elo_erro         text,
-  sirius_user_id   text,
-  sirius_erro      text,
+  -- rastreio SEPARADO por destino: o retry só refaz o que está false.
+  -- *_resultado: criado | adicionado | estendido | mantido (já tinha ≥ o bônus)
+  perpetuo_ok        boolean not null default false,
   perpetuo_member_id text,
-  perpetuo_erro    text,
+  perpetuo_resultado text,
+  perpetuo_erro      text,
 
-  criado_em      timestamptz not null default now(),
-  atualizado_em  timestamptz not null default now()
+  sirius_ok          boolean not null default false,
+  sirius_user_id     text,
+  sirius_resultado   text,
+  sirius_erro        text,
+
+  elo_ok             boolean not null default false,
+  elo_user_id        text,
+  elo_resultado      text,
+  elo_erro           text,
+
+  criado_em        timestamptz not null default now(),
+  atualizado_em    timestamptz not null default now()
 );
 
 comment on table pinguim.bonus_bf_outbox is
-  'Bônus Black Friday: 1 venda Hotmart → acesso em ProAlt+Elo+Sirius+Perpétuo. '
-  'Outbox + auditoria permanente (linha fica como concluido). '
-  'Rastreio por destino: retry refaz só o que falhou. Edge: bonus-blackfriday-worker.';
+  'Combo Black (Hotmart 8729703): venda aprovada lida do Dash → acesso Escola 10a + Sirius 2a + Elo 2a. '
+  'Outbox + auditoria permanente. Edge: bonus-blackfriday-worker (cron 1 min).';
 
-comment on column pinguim.bonus_bf_outbox.proalt_ok is
-  'ProAlt liberado (plano Completo). Retry não recria se true.';
-comment on column pinguim.bonus_bf_outbox.elo_ok is
-  'Elo liberado (aluno). Retry não recria se true.';
-comment on column pinguim.bonus_bf_outbox.sirius_ok is
-  'Sirius liberado (plano cheio + flags). Retry não recria se true.';
-comment on column pinguim.bonus_bf_outbox.perpetuo_ok is
-  'Perpétuo/Curseduca grupo 74 liberado. Retry não recria se true.';
-
--- Índice pro cron pegar só o que falta (pendente/erro/processando-preso).
--- Linhas 'concluido' (a maioria, no regime normal) ficam fora do índice → barato.
 create index if not exists idx_bonus_bf_pendente
   on pinguim.bonus_bf_outbox (status, criado_em)
   where status in ('pendente', 'erro', 'processando');
 
--- Idempotência de LINHA por transação: reenvio do MESMO webhook não cria
--- 2ª linha (o UPSERT na edge usa isto). transacao pode ser null em testes,
--- por isso índice parcial só onde não-nulo.
-create unique index if not exists uq_bonus_bf_transacao
-  on pinguim.bonus_bf_outbox (transacao)
-  where transacao is not null;
+create index if not exists idx_bonus_bf_email
+  on pinguim.bonus_bf_outbox (comprador_email);
 
 -- Squad Cyber: RLS ligada, sem policies — só service_role acessa.
 alter table pinguim.bonus_bf_outbox enable row level security;
 
 -- ------------------------------------------------------------------------
--- CLAIM ATÔMICO — impede que webhook e cron (ou dois ticks do cron) processem
--- a MESMA linha ao mesmo tempo, o que dispararia liberação duplicada nos 4
--- sistemas. Um único caller "ganha" a linha; os outros recebem 0 rows e pulam.
---
--- Reivindica a linha marcando status='processando' SÓ se ela estiver
--- 'pendente'/'erro' OU presa em 'processando' há mais de p_stale_seg (watchdog:
--- se um processo morreu no meio, a linha volta a ser reivindicável). O UPDATE
--- condicional é atômico no Postgres — dois callers concorrentes, só um casa a
--- cláusula WHERE e recebe a linha de volta.
+-- Marca d'água da leitura do Dash (1 linha só).
 -- ------------------------------------------------------------------------
-create or replace function pinguim.bonus_bf_claim(p_id uuid, p_stale_seg int default 120)
+create table if not exists pinguim.bonus_bf_estado (
+  id             int primary key default 1 check (id = 1),
+  ultima_marca   timestamptz not null default '2026-10-01T00:00:00Z',
+  ultima_rodada  timestamptz,
+  itens_ultima   int,
+  atualizado_em  timestamptz not null default now()
+);
+insert into pinguim.bonus_bf_estado (id) values (1) on conflict (id) do nothing;
+alter table pinguim.bonus_bf_estado enable row level security;
+
+-- ------------------------------------------------------------------------
+-- CLAIM ATÔMICO — dois ticks do cron (ou um tick lento) nunca processam a
+-- mesma linha ao mesmo tempo. O UPDATE condicional é atômico: só um caller
+-- casa o WHERE e recebe a linha. Linha presa em 'processando' há mais de
+-- p_stale_seg volta a ser reivindicável (processo morreu no meio).
+-- ------------------------------------------------------------------------
+create or replace function pinguim.bonus_bf_claim(p_id uuid, p_stale_seg int default 180)
 returns setof pinguim.bonus_bf_outbox
 language sql
 as $$
@@ -127,24 +116,12 @@ as $$
   returning *;
 $$;
 
-comment on function pinguim.bonus_bf_claim(uuid, int) is
-  'Reivindica atomicamente uma linha da outbox pra processamento (status→processando). '
-  'Devolve a linha se ganhou o claim, nada se outro processo já a tem. Watchdog reivindica '
-  'linhas presas em processando há mais de p_stale_seg (default 120s).';
-
 -- ------------------------------------------------------------------------
--- Cron de retry: a cada 5 min reprocessa 'pendente'/'erro' que sobraram
--- (algum Supabase fora do ar, token Curseduca expirado, rate limit...).
--- No regime normal a edge já concluiu tudo no webhook → cron não faz nada.
---
--- disparar_edge_function só manda body {} → a edge distingue os modos pelo
--- FORMATO do body (mesma convenção do hotmart-planilha-worker):
---   • body vazio {}                → modo RETRY  (reprocessa a outbox)
---   • body com venda (buyer/...)   → modo WEBHOOK (venda nova)
---   • body não reconhecido         → modo CAPTURA (teste Hotmart, grava cru)
+-- Cron: a cada 1 min (mesma cadência do crm-sync-vendas, que lê o mesmo Dash).
+-- cron.schedule com o mesmo nome substitui o job (re-rodar este arquivo é seguro).
 -- ------------------------------------------------------------------------
 select cron.schedule(
-  'bonus-bf-retry',
-  '*/5 * * * *',
+  'bonus-bf-combo',
+  '* * * * *',
   $$select pinguim.disparar_edge_function('bonus-blackfriday-worker')$$
 );
