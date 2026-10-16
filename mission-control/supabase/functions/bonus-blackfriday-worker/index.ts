@@ -7,6 +7,8 @@
 //   1. Escola do Perpétuo (Curseduca turma 74) → validade 10 anos
 //   2. Sirius (Supabase ryyingyyzgzsbnkugfpa)  → plano CICLO + 12 flags, 2 anos
 //   3. Elo    (Supabase hqyyxtyvfjnkpjtcydgj)  → plano Elo, vigência 2 anos
+// e registra o comprador na planilha "Alunos ELO/ProAlt", aba black26 (lista
+// pro time entrar em contato).
 //
 // DUAS entradas, mesma fila (transação única → nunca libera em dobro):
 //   1. webhook da Hotmart cadastrado no combo → libera na hora (exige hottok)
@@ -89,6 +91,12 @@ const CURSEDUCA = {
   base: 'https://prof.curseduca.pro',
   turma: 74,                 // "Escola do Perpétuo: Plano Black (Black 2025)"
   tag: 'combo-black',
+};
+
+// Lista do time: planilha "Alunos ELO/ProAlt" (a mesma do hotmart-planilha-worker), aba black26
+const PLANILHA = {
+  id: '1bJjWFTD5qn5o1SkvAAeMaFb4Ravcx2ozDITI7q1lZ4c',
+  aba: 'black26',
 };
 
 const DISCORD_CANAL_ALERTA = '1372556339578011701'; // #novo-grupo-pinguim
@@ -486,7 +494,97 @@ async function lerDash(): Promise<{ lidas: number; novas: number }> {
 }
 
 // ========================================================================
-// Processamento de uma linha (já reivindicada). Os 3 destinos rodam em
+// DESTINO 4 — Planilha "Alunos ELO/ProAlt", aba black26 (lista pro time).
+//   Mesmo formato do hotmart-planilha-worker: A Data | B Nome | C Documento |
+//   D Email | E DDD | F Telefone (G+ são preenchidas à mão pelo time).
+//   O combo tem aba fixa (não roteia por oferta como ProAlt/Elo).
+//   Idempotente: se o email já está na coluna D, não duplica a linha.
+//   OAuth Google = mesmas chaves do cofre que o hotmart-planilha-worker usa.
+// ========================================================================
+const _tokGoogle = { token: '', expira: 0 };
+async function tokenGoogle(): Promise<string> {
+  if (_tokGoogle.token && _tokGoogle.expira > Date.now() + 5 * 60_000) return _tokGoogle.token;
+  const [cid, sec, rt] = await Promise.all([
+    getChave('GOOGLE_OAUTH_CLIENT_ID', CONSUMIDOR),
+    getChave('GOOGLE_OAUTH_CLIENT_SECRET', CONSUMIDOR),
+    getChave('GOOGLE_OAUTH_REFRESH', CONSUMIDOR),
+  ]);
+  const r = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: cid, client_secret: sec, refresh_token: rt, grant_type: 'refresh_token' }),
+  });
+  if (!r.ok) throw new Error(`Google OAuth ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  const j = await r.json();
+  _tokGoogle.token = j.access_token;
+  _tokGoogle.expira = Date.now() + (parseInt(j.expires_in, 10) || 3600) * 1000;
+  return j.access_token;
+}
+
+// "DD/MM/AAAA HH:MM:SS" em BRT (UTC-3 fixo), igual às outras abas.
+function dataBR(iso: string | null): string {
+  const t = iso ? new Date(iso).getTime() : Date.now();
+  const d = new Date(t - 3 * 3600_000);
+  const p = (x: number) => String(x).padStart(2, '0');
+  return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+}
+
+// Linha inserida por append não herda o formato da coluna: sem isto a Data
+// aparece como número serial (46310,74455). Aplica "dd/mm/yyyy hh:mm:ss" na
+// coluna A (sem o cabeçalho) — idempotente, mesmo truque do hotmart-planilha-worker.
+// Não é fatal: a venda já entrou; só a exibição da data ficaria errada.
+let _sheetIdAba: number | null = null;
+async function formatarColunaData(base: string, H: Record<string, string>): Promise<void> {
+  try {
+    if (_sheetIdAba === null) {
+      const r = await fetch(`${base}?fields=sheets.properties(title,sheetId)`, { headers: H });
+      const j = await r.json();
+      const aba = (j.sheets || []).find((s: any) => s.properties?.title === PLANILHA.aba);
+      if (!aba) return;
+      _sheetIdAba = aba.properties.sheetId;
+    }
+    const r = await fetch(`${base}:batchUpdate`, {
+      method: 'POST', headers: H,
+      body: JSON.stringify({ requests: [{ repeatCell: {
+        range: { sheetId: _sheetIdAba, startColumnIndex: 0, endColumnIndex: 1, startRowIndex: 1 },
+        cell: { userEnteredFormat: { numberFormat: { type: 'DATE_TIME', pattern: 'dd/mm/yyyy hh:mm:ss' } } },
+        fields: 'userEnteredFormat.numberFormat',
+      } }] }),
+    });
+    if (!r.ok) console.warn('formatar Data black26', r.status, (await r.text()).slice(0, 150));
+  } catch (e) { console.warn('formatar Data black26', msg(e)); }
+}
+
+// Escritas na mesma aba em paralelo (CONCORRENCIA linhas) passam por aqui uma
+// de cada vez: a checagem "email já está?" e o append não se atropelam.
+let _filaPlanilha: Promise<unknown> = Promise.resolve();
+
+async function registrarPlanilha(row: any, c: Comprador): Promise<{ resultado: string }> {
+  const tarefa = _filaPlanilha.then(async () => {
+    const token = await tokenGoogle();
+    const H = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const base = `https://sheets.googleapis.com/v4/spreadsheets/${PLANILHA.id}`;
+    const faixa = (r: string) => encodeURIComponent(`'${PLANILHA.aba}'!${r}`);
+
+    const rD = await fetch(`${base}/values/${faixa('D:D')}`, { headers: H });
+    if (!rD.ok) throw new Error(`Sheets ler aba ${PLANILHA.aba} ${rD.status}: ${(await rD.text()).slice(0, 200)}`);
+    const emails = ((await rD.json()).values || []).map((v: string[]) => String(v[0] || '').trim().toLowerCase());
+    if (emails.includes(c.email)) return { resultado: 'mantido' };
+
+    const linha = [dataBR(row.data_compra), c.nome, c.documento, c.email, c.ddd, c.telefone];
+    const rA = await fetch(`${base}/values/${faixa('A1')}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
+      method: 'POST', headers: H, body: JSON.stringify({ majorDimension: 'ROWS', values: [linha] }),
+    });
+    if (!rA.ok) throw new Error(`Sheets append ${PLANILHA.aba} ${rA.status}: ${(await rA.text()).slice(0, 200)}`);
+    await formatarColunaData(base, H);
+    return { resultado: 'adicionado' };
+  });
+  _filaPlanilha = tarefa.catch(() => {});
+  return await tarefa;
+}
+
+// ========================================================================
+// Processamento de uma linha (já reivindicada). Os 4 destinos rodam em
 // paralelo e cada um falha sozinho; só os que estão false são tentados.
 // ========================================================================
 async function processarLinha(row: any): Promise<{ concluido: boolean; faltam: string[] }> {
@@ -516,6 +614,11 @@ async function processarLinha(row: any): Promise<{ concluido: boolean; faltam: s
           + 'Renove `CURSEDUCA_ACCESS_TOKEN` no cofre. Detalhe: ' + msg(e).slice(0, 180));
       }
     }));
+  }
+  if (!row.planilha_ok) {
+    tarefas.push(registrarPlanilha(row, c).then((r) => {
+      Object.assign(patch, { planilha_ok: true, planilha_resultado: r.resultado, planilha_erro: null });
+    }).catch((e) => { faltam.push('planilha'); patch.planilha_erro = msg(e).slice(0, 300); }));
   }
   if (!row.sirius_ok) {
     tarefas.push(liberarSirius(c).then((r) => {

@@ -152,3 +152,12 @@ create table if not exists pinguim.bonus_bf_webhook_log (
 );
 create index if not exists idx_bonus_bf_webhook_log_recebido on pinguim.bonus_bf_webhook_log (recebido_em desc);
 alter table pinguim.bonus_bf_webhook_log enable row level security;
+
+-- ------------------------------------------------------------------------
+-- Destino 4 (2026-10-16): planilha "Alunos ELO/ProAlt", aba black26 — lista
+-- dos compradores do combo pro time. Mesmo rastreio por destino dos outros.
+-- ------------------------------------------------------------------------
+alter table pinguim.bonus_bf_outbox
+  add column if not exists planilha_ok        boolean not null default false,
+  add column if not exists planilha_resultado text,   -- adicionado | mantido (email já estava na aba)
+  add column if not exists planilha_erro      text;
