@@ -52,3 +52,6 @@ update pinguim.bot_template set corpo = 'Oi{{nome}}! Sou o assistente da equipe.
 Responda só com o número.', descricao = 'Menu geral (primeira mensagem do aluno)', atualizado_em = now()
 where slug = 'menu_principal';
 update pinguim.bot_template set corpo = 'Não entendi. Responda só com o número de uma das opções acima.', atualizado_em = now() where slug = 'invalida';
+
+-- equipe: quem some das listas do CRM (Renata saiu, 20/10)
+insert into pinguim.bot_config (chave, valor) values ('equipe_ocultos', '["6737ceeb-b6b4-49c0-a532-4e6f41232e28"]'::jsonb) on conflict (chave) do update set valor = excluded.valor, atualizado_em = now();
