@@ -27,6 +27,12 @@
 //  - adicionar_creditos: { user_id, amount, reason }
 //  - desativar:         { user_id } → plan_status='cancelled'
 //  - excluir:           { user_id } → DELETE auth + profile (cuidado: irreversivel)
+//
+//  Desafios (check-in só vale pra quem está em content_challenge_participants):
+//  - listar_desafios:    { termo? } → desafios com datas, status, criador, nº participantes
+//  - desafios_usuario:   { user_id } → desafios da pessoa + nº de check-ins
+//  - adicionar_desafios: { user_id, challenge_ids[] } → inclui (sem duplicar) + liga access_challenges
+//  - remover_desafio:    { user_id, challenge_id } → apaga check-ins dela + participação
 // ============================================================
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
@@ -382,6 +388,107 @@ async function actExcluir(body: any) {
 }
 
 // ============================================================
+// DESAFIOS (content_challenges / content_challenge_participants)
+// A pessoa só participa (faz check-in) se estiver na tabela de participantes.
+// Remover = mesmo que o "sair do desafio" do app: apaga os check-ins dela
+// naquele desafio e depois a participação.
+// ============================================================
+
+function statusDesafio(inicio: string, fim: string): 'futuro' | 'ativo' | 'encerrado' {
+  const hoje = new Date().toISOString().slice(0, 10);
+  if (hoje < String(inicio).slice(0, 10)) return 'futuro';
+  if (hoje > String(fim).slice(0, 10)) return 'encerrado';
+  return 'ativo';
+}
+
+async function nomesPorUserId(ids: string[]): Promise<Record<string, string>> {
+  const unicos = [...new Set(ids.filter(Boolean))];
+  const mapa: Record<string, string> = {};
+  for (let i = 0; i < unicos.length; i += 80) {
+    const lote = unicos.slice(i, i + 80).map((id) => `"${id}"`).join(',');
+    const r = await siriusREST('GET', `/profiles?select=user_id,nome,email&user_id=in.(${lote})`);
+    if (r.ok && Array.isArray(r.data)) for (const p of r.data) mapa[p.user_id] = p.nome || p.email || '';
+  }
+  return mapa;
+}
+
+async function actListarDesafios(body: any) {
+  const termo = String(body.termo || '').trim();
+  let path = `/content_challenges?select=id,title,start_date,end_date,creator_id,content_challenge_participants(count)&order=start_date.desc&limit=500`;
+  if (termo) path += `&title=ilike.*${encodeURIComponent(termo)}*`;
+  const r = await siriusREST('GET', path);
+  if (!r.ok) return jsonRespTool({ ok: false, erro: 'listar_desafios: ' + r.erro }, 500);
+  const criadores = await nomesPorUserId((r.data || []).map((d: any) => d.creator_id));
+  const desafios = (r.data || []).map((d: any) => ({
+    id: d.id, titulo: d.title, inicio: d.start_date, fim: d.end_date,
+    status: statusDesafio(d.start_date, d.end_date),
+    criador: criadores[d.creator_id] || null,
+    participantes: d.content_challenge_participants?.[0]?.count ?? 0,
+  }));
+  return jsonRespTool({ ok: true, total: desafios.length, desafios });
+}
+
+async function actDesafiosUsuario(body: any) {
+  const user_id = String(body.user_id || '').trim();
+  if (!user_id) return jsonRespTool({ ok: false, erro: 'user_id obrigatorio' }, 400);
+  const r = await siriusREST('GET',
+    `/content_challenge_participants?select=id,joined_at,challenge_id,content_challenges(title,start_date,end_date)&user_id=eq.${user_id}&order=joined_at.desc`);
+  if (!r.ok) return jsonRespTool({ ok: false, erro: 'desafios_usuario: ' + r.erro }, 500);
+  const parts = r.data || [];
+  // check-ins por participação (1 query só)
+  const contagem: Record<string, number> = {};
+  if (parts.length) {
+    const ids = parts.map((p: any) => `"${p.id}"`).join(',');
+    const rc = await siriusREST('GET', `/content_challenge_checkins?select=participant_id&participant_id=in.(${ids})&limit=10000`);
+    if (rc.ok && Array.isArray(rc.data)) for (const c of rc.data) contagem[c.participant_id] = (contagem[c.participant_id] || 0) + 1;
+  }
+  const desafios = parts.map((p: any) => ({
+    participacao_id: p.id, desafio_id: p.challenge_id, entrou_em: p.joined_at,
+    titulo: p.content_challenges?.title || '(desafio removido)',
+    inicio: p.content_challenges?.start_date || null, fim: p.content_challenges?.end_date || null,
+    status: p.content_challenges ? statusDesafio(p.content_challenges.start_date, p.content_challenges.end_date) : 'encerrado',
+    checkins: contagem[p.id] || 0,
+  }));
+  return jsonRespTool({ ok: true, desafios });
+}
+
+async function actAdicionarDesafios(body: any) {
+  const user_id = String(body.user_id || '').trim();
+  const ids: string[] = Array.isArray(body.challenge_ids) ? body.challenge_ids.map(String).filter(Boolean) : [];
+  if (!user_id || !ids.length) return jsonRespTool({ ok: false, erro: 'user_id e challenge_ids obrigatorios' }, 400);
+
+  // já participa? (não duplica)
+  const lista = ids.map((id) => `"${id}"`).join(',');
+  const rj = await siriusREST('GET', `/content_challenge_participants?select=challenge_id&user_id=eq.${user_id}&challenge_id=in.(${lista})`);
+  const ja = new Set((rj.ok && Array.isArray(rj.data) ? rj.data : []).map((x: any) => x.challenge_id));
+  const novos = ids.filter((id) => !ja.has(id));
+  if (novos.length) {
+    const ri = await siriusREST('POST', `/content_challenge_participants`, novos.map((challenge_id) => ({ challenge_id, user_id })));
+    if (!ri.ok) return jsonRespTool({ ok: false, erro: 'adicionar_desafios: ' + ri.erro }, 500);
+  }
+  // sem a flag a pessoa nem vê a área de Desafios no app → liga junto
+  const rf = await siriusREST('PATCH', `/profiles?user_id=eq.${user_id}&access_challenges=is.false`, { access_challenges: true }, 'return=representation');
+  const ligouFlag = rf.ok && Array.isArray(rf.data) && rf.data.length > 0;
+  return jsonRespTool({ ok: true, adicionados: novos.length, ja_participava: ids.length - novos.length, ligou_flag_desafios: ligouFlag });
+}
+
+async function actRemoverDesafio(body: any) {
+  const user_id = String(body.user_id || '').trim();
+  const challenge_id = String(body.challenge_id || '').trim();
+  if (!user_id || !challenge_id) return jsonRespTool({ ok: false, erro: 'user_id e challenge_id obrigatorios' }, 400);
+  const rp = await siriusREST('GET', `/content_challenge_participants?select=id&user_id=eq.${user_id}&challenge_id=eq.${challenge_id}`);
+  if (!rp.ok) return jsonRespTool({ ok: false, erro: 'remover_desafio: ' + rp.erro }, 500);
+  const partIds = (rp.data || []).map((p: any) => p.id);
+  if (!partIds.length) return jsonRespTool({ ok: true, removido: false, nota: 'não participava' });
+  const lista = partIds.map((id: string) => `"${id}"`).join(',');
+  const rc = await siriusREST('DELETE', `/content_challenge_checkins?participant_id=in.(${lista})`, undefined, 'return=representation');
+  if (!rc.ok) return jsonRespTool({ ok: false, erro: 'apagar check-ins: ' + rc.erro }, 500);
+  const rd = await siriusREST('DELETE', `/content_challenge_participants?id=in.(${lista})`);
+  if (!rd.ok) return jsonRespTool({ ok: false, erro: 'remover participação: ' + rd.erro }, 500);
+  return jsonRespTool({ ok: true, removido: true, checkins_apagados: Array.isArray(rc.data) ? rc.data.length : 0 });
+}
+
+// ============================================================
 // Router
 // ============================================================
 serve(async (req) => {
@@ -410,6 +517,10 @@ serve(async (req) => {
       case 'adicionar_creditos': return await actAdicionarCreditos(body);
       case 'desativar': return await actDesativar(body);
       case 'excluir': return await actExcluir(body);
+      case 'listar_desafios': return await actListarDesafios(body);
+      case 'desafios_usuario': return await actDesafiosUsuario(body);
+      case 'adicionar_desafios': return await actAdicionarDesafios(body);
+      case 'remover_desafio': return await actRemoverDesafio(body);
       default: return jsonRespTool({ ok: false, erro: `action desconhecida: ${action}` }, 400);
     }
   } catch (e) {
