@@ -40,3 +40,15 @@ update pinguim.bot_template set corpo = 'Não consegui liberar seu acesso ao {{a
 
 Protocolo: #{{protocolo}}', descricao = 'Acesso: bot não conseguiu (vira chamado)', atualizado_em = now()
 where slug = 'acesso_sem_conta';
+
+-- v3 (20/10): menu em qualquer horário, humano = opção 4 no menu principal
+update pinguim.bot_template set corpo = 'Oi{{nome}}! Sou o assistente da equipe. Posso te ajudar com:
+
+1 - Acesso (app ou área de membros)
+2 - Cancelamento
+3 - Aulas
+4 - Falar com uma pessoa
+
+Responda só com o número.', descricao = 'Menu geral (primeira mensagem do aluno)', atualizado_em = now()
+where slug = 'menu_principal';
+update pinguim.bot_template set corpo = 'Não entendi. Responda só com o número de uma das opções acima.', atualizado_em = now() where slug = 'invalida';
