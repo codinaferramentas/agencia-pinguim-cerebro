@@ -39,7 +39,9 @@ language sql stable as $fn$
       coalesce(b.current_step, b.status) situacao, b.price valor, b.payment_due_date vencimento,
       b.installments parcelas, b.payment_url link, b.made_effective_at quando
     from pinguim.crm_boleto b, cli
+    -- qualquer email do cliente (principal ou antigo) ou o CPF
     where (cli.email_canon is not null and lower(b.buyer_email) = cli.email_canon)
+       or lower(b.buyer_email) in (select valor from pinguim.crm_cliente_identidade i where i.cliente_id = p_cliente and i.tipo = 'email')
        or (cli.cpf is not null and regexp_replace(coalesce(b.buyer_document,''),'[^0-9]','','g') = cli.cpf)
   )
   select * from compras

@@ -34,11 +34,14 @@ language sql stable as $fn$
   ),
   -- boleto tambem dedup pela raiz do sale_id (se houver retentativa) — na pratica sale_id ja e unico por venda,
   -- mas agrupamos defensivamente por (cliente, product_name) pegando o maior valor.
+  -- boleto liga ao cliente por QUALQUER email dele (identidades): troca de email principal não solta boleto antigo
   bol as (
-    select distinct c.cliente_id, count(*) n, coalesce(sum(b.price),0) val
+    select coalesce(i.cliente_id, c.cliente_id) cliente_id, count(*) n, coalesce(sum(b.price),0) val
     from pinguim.crm_boleto b
-    join pinguim.crm_cliente c on c.email_canon = lower(b.buyer_email)
-    group by c.cliente_id
+    left join pinguim.crm_cliente_identidade i on i.tipo = 'email' and i.valor = lower(b.buyer_email)
+    left join pinguim.crm_cliente c on c.email_canon = lower(b.buyer_email)
+    where coalesce(i.cliente_id, c.cliente_id) is not null
+    group by 1
   ),
   uni as (
     select cliente_id from comp

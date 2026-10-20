@@ -58,3 +58,6 @@ insert into pinguim.bot_config (chave, valor) values ('equipe_ocultos', '["6737c
 
 -- responsável de cancelamento com nome completo (20/10)
 update pinguim.bot_rota set responsavel_nome='Luiz Guilherme Cota' where responsavel_nome='Luiz Guilherme'; update pinguim.crm_chamado set responsavel_nome='Luiz Guilherme Cota' where responsavel_nome='Luiz Guilherme';
+
+-- Danubia saiu (20/10)
+update pinguim.bot_config set valor = (select to_jsonb(array(select distinct x from jsonb_array_elements_text(valor || '["38d7de34-2426-45b2-a986-322e9be89b2d"]'::jsonb) x))), atualizado_em=now() where chave='equipe_ocultos'; update pinguim.bot_rota set usuarios = array_remove(usuarios, '38d7de34-2426-45b2-a986-322e9be89b2d'::uuid); update pinguim.bot_instancia set dono_usuario_id=null, dono_nome=null where dono_usuario_id='38d7de34-2426-45b2-a986-322e9be89b2d';
