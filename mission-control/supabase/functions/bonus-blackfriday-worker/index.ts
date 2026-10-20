@@ -603,8 +603,9 @@ async function processarLinha(row: any): Promise<{ concluido: boolean; faltam: s
   const tarefas: Promise<void>[] = [];
 
   if (!row.perpetuo_ok) {
-    tarefas.push(liberarEscola(c, row.perpetuo_member_id || null).then((r) => {
+    tarefas.push(liberarEscola(c, row.perpetuo_member_id || null).then(async (r) => {
       Object.assign(patch, { perpetuo_ok: true, perpetuo_member_id: r.memberId, perpetuo_resultado: r.resultado, perpetuo_erro: null });
+      await refletirNoCrm('waid_escola_perpetuo', c, r.memberId, 'Plano Black', r.resultado === 'mantido' ? null : maisAnos(ANOS_ESCOLA));
     }).catch(async (e) => {
       faltam.push('escola');
       patch.perpetuo_erro = msg(e).slice(0, 300);
@@ -621,13 +622,15 @@ async function processarLinha(row: any): Promise<{ concluido: boolean; faltam: s
     }).catch((e) => { faltam.push('planilha'); patch.planilha_erro = msg(e).slice(0, 300); }));
   }
   if (!row.sirius_ok) {
-    tarefas.push(liberarSirius(c).then((r) => {
+    tarefas.push(liberarSirius(c).then(async (r) => {
       Object.assign(patch, { sirius_ok: true, sirius_user_id: r.userId, sirius_resultado: r.resultado, sirius_erro: null });
+      await refletirNoCrm('sirius', c, r.userId, r.resultado === 'mantido' ? null : 'CICLO', r.resultado === 'mantido' ? null : maisAnos(ANOS_SIRIUS));
     }).catch((e) => { faltam.push('sirius'); patch.sirius_erro = msg(e).slice(0, 300); }));
   }
   if (!row.elo_ok) {
-    tarefas.push(liberarElo(c).then((r) => {
+    tarefas.push(liberarElo(c).then(async (r) => {
       Object.assign(patch, { elo_ok: true, elo_user_id: r.userId, elo_resultado: r.resultado, elo_erro: null });
+      await refletirNoCrm('elo', c, r.userId, r.resultado === 'criado' ? 'Elo' : null, r.resultado === 'mantido' ? null : maisAnos(ANOS_ELO));
     }).catch((e) => { faltam.push('elo'); patch.elo_erro = msg(e).slice(0, 300); }));
   }
 
@@ -650,6 +653,27 @@ async function processarLinha(row: any): Promise<{ concluido: boolean; faltam: s
   }
   await sb.from('bonus_bf_outbox').update(patch).eq('id', row.id);
   return { concluido, faltam };
+}
+
+// Reflete o acesso na ficha do CRM 360 NA HORA (tabela pinguim.crm_acesso_app,
+// a mesma que o botão "Liberar acesso" do CRM grava via crm_acesso_registrar).
+// Sem isto o card só mostra o acesso depois do sync diário das 04:00 BRT
+// (crm-sync-perfis / crm-sync-waid). Best-effort: falha aqui não desfaz a
+// liberação — o sync diário corrige. plano/vigência null = não mexe no que há.
+async function refletirNoCrm(app: string, c: Comprador, idNoApp: string, plano: string | null, vigencia: string | null): Promise<void> {
+  try {
+    const { data: clienteId, error } = await sb.rpc('crm_acesso_registrar', {
+      p_app: app, p_email: c.email, p_nome: c.nome || c.email,
+      p_tel: c.telefone ? `${c.ddd}${c.telefone}` : null,
+      p_id_no_app: idNoApp || null, p_plano: plano, p_cliente_id: null,
+    });
+    if (error) throw new Error(error.message);
+    if (vigencia && clienteId) {
+      await sb.from('crm_acesso_app').update({ vigencia_ate: vigencia }).eq('cliente_id', clienteId).eq('app', app);
+    }
+  } catch (e) {
+    console.warn('refletirNoCrm', app, c.email, msg(e));
+  }
 }
 
 async function alertarDiscord(texto: string): Promise<void> {

@@ -137,12 +137,35 @@ async function resolverCliente(b: any): Promise<string | null> {
     if (data) return data.cliente_id;
   }
 
-  // cliente inedito: cria ficha + identidades (documento = identificador FORTE)
-  const { data: novo, error } = await sb.from('crm_cliente')
-    .insert({ nome: b.name || null, cpf: doc, tel_canon: tc, email_canon: email || null })
-    .select('cliente_id').single();
-  if (error || !novo) { console.error('cria cliente', error?.message); return null; }
-  const cid = novo.cliente_id;
+  // a ficha pode ter email/telefone canônico SEM a linha de identidade (fichas
+  // antigas). Sem este passo o insert abaixo estoura uq_crm_cliente_email e a
+  // compra fica órfã (cliente_id null) — 9 casos até 2026-10-20.
+  let cid: string | null = null;
+  if (email) {
+    const { data } = await sb.from('crm_cliente').select('cliente_id').eq('email_canon', email).limit(1).maybeSingle();
+    cid = data?.cliente_id ?? null;
+  }
+  if (!cid && tc) {
+    const { data } = await sb.from('crm_cliente').select('cliente_id').eq('tel_canon', tc).limit(1).maybeSingle();
+    cid = data?.cliente_id ?? null;
+  }
+
+  if (!cid) {
+    // cliente inedito: cria ficha + identidades (documento = identificador FORTE)
+    const { data: novo, error } = await sb.from('crm_cliente')
+      .insert({ nome: b.name || null, cpf: doc, tel_canon: tc, email_canon: email || null })
+      .select('cliente_id').single();
+    if (error || !novo) {
+      // corrida: outra rodada criou a ficha com este email no meio do caminho
+      if (email) {
+        const { data } = await sb.from('crm_cliente').select('cliente_id').eq('email_canon', email).limit(1).maybeSingle();
+        cid = data?.cliente_id ?? null;
+      }
+      if (!cid) { console.error('cria cliente', error?.message); return null; }
+    } else {
+      cid = novo.cliente_id;
+    }
+  }
 
   const idents = [];
   if (email) idents.push({ cliente_id: cid, tipo: 'email', valor: email, confianca: 'forte', origem: 'hotmart' });
