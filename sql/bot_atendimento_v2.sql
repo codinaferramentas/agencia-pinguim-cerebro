@@ -55,3 +55,6 @@ update pinguim.bot_template set corpo = 'Não entendi. Responda só com o númer
 
 -- equipe: quem some das listas do CRM (Renata saiu, 20/10)
 insert into pinguim.bot_config (chave, valor) values ('equipe_ocultos', '["6737ceeb-b6b4-49c0-a532-4e6f41232e28"]'::jsonb) on conflict (chave) do update set valor = excluded.valor, atualizado_em = now();
+
+-- responsável de cancelamento com nome completo (20/10)
+update pinguim.bot_rota set responsavel_nome='Luiz Guilherme Cota' where responsavel_nome='Luiz Guilherme'; update pinguim.crm_chamado set responsavel_nome='Luiz Guilherme Cota' where responsavel_nome='Luiz Guilherme';
