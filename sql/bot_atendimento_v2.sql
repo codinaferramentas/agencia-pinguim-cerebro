@@ -395,3 +395,16 @@ select t, e from (values ('humano','atendente'),
   ('aulas','gravacao'),('aulas','link da aula'),('aulas','cade a aula'),('aulas','onde fica a aula'),
   ('aulas','onde encontro a aula'),('aulas','nao achei a aula'),('aulas','procurando uma aula'),('aulas','procurando a aula')) v(t, e)
 where not exists (select 1 from pinguim.bot_gatilho g where g.trilha = v.t and g.expressao = v.e);
+
+-- 21/10 (André): "boa noite" caía na trava de 12h do menu e o bot ficava calado. Saudação/pedido de ajuda
+-- agora SEMPRE recebe o menu (máx 1 a cada 30 min) e o menu abre com Bom dia/Boa tarde/Boa noite (fuso SP).
+alter table pinguim.bot_gatilho drop constraint if exists bot_gatilho_trilha_check;
+alter table pinguim.bot_gatilho add constraint bot_gatilho_trilha_check
+  check (trilha in ('acesso','cancelamento','aulas','humano','negacao','saudacao'));
+insert into pinguim.bot_gatilho (trilha, expressao)
+select 'saudacao', e from (values ('oi'),('oii'),('ola'),('opa'),('bom dia'),('boa tarde'),('boa noite'),('ajuda'),('preciso de ajuda'),
+  ('quero ajuda'),('me ajuda'),('suporte'),('alguem pode me ajudar'),('tem alguem ai')) v(e)
+where not exists (select 1 from pinguim.bot_gatilho g where g.trilha = 'saudacao' and g.expressao = v.e);
+update pinguim.bot_config set valor = valor || '{"menu_saudacao_min": 30}'::jsonb where chave = 'regras';
+update pinguim.bot_template set atualizado_em = now(), corpo = regexp_replace(corpo, '^Oi\{\{nome\}\}!', '{{saudacao}}{{nome}}!')
+ where slug = 'menu_principal';
