@@ -101,3 +101,51 @@ update pinguim.bot_template set corpo = 'Não consegui entender sua mensagem, ma
 
 Protocolo: #{{protocolo}}', atualizado_em = now() where slug = 'nao_classificado';
 update pinguim.bot_template set corpo = 'Não entendi. Responda só com o número de uma das opções acima, ou 0 pra falar com uma pessoa.', atualizado_em = now() where slug = 'invalida';
+
+-- textos sem gíria (21/10, pedido do Andre: "pegar", "pra", "a gente" ficam informais demais)
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Oi{{nome}}! Seu atendimento #{{protocolo}} já está com a nossa equipe. Assim que ele for finalizado, você vai ser avisado aqui mesmo, nesta conversa. É só aguardar.' where slug = 'aguarde_chamado';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Pronto! Abri um chamado para a nossa equipe liberar seu acesso à área de membros do {{area}} (email {{email}}).
+
+É só aguardar: assim que o acesso for liberado, você vai ser avisado aqui mesmo, nesta conversa.
+
+Protocolo: #{{protocolo}}' where slug = 'acesso_hotmart_aberto';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Pronto! Sua senha do {{app}} voltou para a senha padrão.
+
+Login: {{email}}
+Senha: {{senha}}
+
+Entre e troque a senha no seu perfil. Se precisar de ajuda, é só responder aqui.' where slug = 'acesso_resetado';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Pronto! Criei seu acesso ao {{app}}.
+
+Login: {{email}}
+Senha: {{senha}}
+
+Entre e troque a senha no seu perfil. Se precisar de ajuda, é só responder aqui.' where slug = 'acesso_criado';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Não consegui liberar seu acesso ao {{app}} automaticamente. Já abri um chamado para a nossa equipe ({{responsavel}}) resolver, e você vai ser avisado aqui mesmo, nesta conversa.
+
+Protocolo: #{{protocolo}}' where slug = 'acesso_sem_conta';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Não entendi. Responda só com o número de uma das opções acima, ou 0 para falar com uma pessoa.' where slug = 'invalida';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Não encontrei esse email no nosso cadastro. Já encaminhei seu caso para a nossa equipe ({{responsavel}}), que vai responder você aqui mesmo, nesta conversa.
+
+Protocolo: #{{protocolo}}' where slug = 'nao_identificado';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Para liberar seu acesso ao {{app}}, envie em uma mensagem o email que você usou na compra.' where slug = 'pede_email_acesso';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Para liberar seu acesso à área de membros do {{area}}, envie em uma mensagem o email que você usou na compra.' where slug = 'pede_email_hotmart';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Não encontrei seu número no nosso cadastro. Envie em uma mensagem o email que você usou na compra.' where slug = 'pede_email';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Não encontrei um email nessa mensagem. Envie só o email que você usou na compra (por exemplo: nome@gmail.com).
+
+Se preferir falar com uma pessoa, responda 0.' where slug = 'invalida_email';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Não consegui entender sua mensagem, mas não se preocupe{{nome}}: a nossa equipe ({{responsavel}}) vai falar com você aqui mesmo, nesta conversa. É só aguardar.
+
+Protocolo: #{{protocolo}}' where slug = 'nao_classificado';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Me conte em uma mensagem: qual curso e qual aula você não está conseguindo acessar?' where slug = 'aulas_pede';
+select slug from pinguim.bot_template where corpo ~* '\m(pra|pegar|a gente|me manda)\M' order by slug;
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Anotado! A nossa equipe ({{responsavel}}) vai verificar e responder você aqui mesmo, nesta conversa.
+
+Protocolo: #{{protocolo}}' where slug = 'aulas_aberto';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Recebi seu pedido de cancelamento. A nossa equipe ({{responsavel}}) vai analisar e responder você aqui mesmo, nesta conversa.
+
+Protocolo: #{{protocolo}}' where slug = 'cancel_aberto';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Certo, já chamei a nossa equipe ({{responsavel}}). Em breve alguém vai responder você aqui mesmo, nesta conversa.
+
+Protocolo: #{{protocolo}}' where slug = 'humano_aberto';
+update pinguim.bot_template set corpo = replace(corpo, 'Pra recuperar', 'Para recuperar') where slug = 'acesso_hotmart';
