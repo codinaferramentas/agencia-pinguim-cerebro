@@ -155,3 +155,50 @@ insert into pinguim.bot_template (slug, descricao, corpo) values
   ('em_atendimento', 'Aviso quando alguém da equipe assume o chamado ({{atendente}} = primeiro nome)',
    'Oi{{nome}}! Seu atendimento #{{protocolo}} já está em andamento: {{atendente}}, da nossa equipe, começou a cuidar do seu caso. Assim que ele for finalizado, você vai ser avisado aqui mesmo, nesta conversa.')
 on conflict (slug) do nothing;
+
+-- 21/10: Escola do Perpétuo sai de "apps" e vai pra "área de membros" (automática, senha padrão Escola@10);
+-- ProAlt/Elo na Hotmart = chamado. Textos com artigo certo ({{ao_app}}/{{do_app}}). Liberado Hotmart = senha da Hotmart.
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Vamos resolver seu acesso{{nome}}. É acesso a qual?
+
+1 - Um dos nossos apps (ProAlt, Elo, Sirius)
+2 - Área de membros (Escola do Perpétuo, ProAlt ou Elo)
+0 - Falar com uma pessoa
+
+Responda só com o número.' where slug = 'acesso_tipo';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Qual app?
+
+1 - ProAlt
+2 - Elo
+3 - Sirius
+0 - Falar com uma pessoa
+
+Responda só com o número.' where slug = 'acesso_app';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Qual área de membros?
+
+1 - Escola do Perpétuo
+2 - ProAlt
+3 - Elo
+0 - Falar com uma pessoa
+
+Responda só com o número.' where slug = 'hotmart_area';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Para liberar seu acesso {{ao_app}}, envie em uma mensagem o email que você usou na compra.' where slug = 'pede_email_acesso';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Pronto! Sua senha {{do_app}} voltou para a senha padrão.
+
+Login: {{email}}
+Senha: {{senha}}
+
+Entre e troque a senha no seu perfil. Se precisar de ajuda, é só responder aqui.' where slug = 'acesso_resetado';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Pronto! Criei seu acesso {{ao_app}}.
+
+Login: {{email}}
+Senha: {{senha}}
+
+Entre e troque a senha no seu perfil. Se precisar de ajuda, é só responder aqui.' where slug = 'acesso_criado';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Não consegui liberar seu acesso {{ao_app}} automaticamente. Já abri um chamado para a nossa equipe ({{responsavel}}) resolver, e você vai ser avisado aqui mesmo, nesta conversa.
+
+Protocolo: #{{protocolo}}' where slug = 'acesso_sem_conta';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Oi{{nome}}! Seu acesso à área de membros do {{area}} foi liberado.
+
+Para entrar, use o email da compra ({{email}}) e a mesma senha que você cadastrou na Hotmart quando fez a compra. Se não lembrar a senha, use a opção "Esqueci minha senha" na tela de login da Hotmart.
+
+Se tiver qualquer dificuldade, é só responder aqui. Protocolo #{{protocolo}}.' where slug = 'resolvido_acesso_hotmart';
