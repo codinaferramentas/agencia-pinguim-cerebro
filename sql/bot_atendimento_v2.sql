@@ -327,3 +327,71 @@ update pinguim.bot_template set atualizado_em = now(), corpo = 'Não consegui co
 Já abri um chamado para a nossa equipe ({{responsavel}}) concluir o seu pedido e responder você aqui mesmo, nesta conversa.
 
 Protocolo: #{{protocolo}}' where slug = 'cancel_reemb_falhou';
+
+-- 21/10 (André): trilha de AULAS. Menu por conteúdo → gravação (prazo de 3 dias; Mentoria → Escola, resto → Hotmart)
+-- ou "como achar a aula" (vídeo da Fernanda por área: cole o link no texto aulas_video_*; sem link o bot pergunta e abre chamado)
+-- ou aula por tema (chamado Rafa e Jairo com os produtos do aluno + dica da Escola). "ATENDENTE" chama uma pessoa a qualquer hora.
+insert into pinguim.bot_template (slug, descricao, corpo) values
+  ('aulas_area', 'Aulas: qual conteúdo',
+   'Sobre qual conteúdo é a sua dúvida?
+
+1 - ProAlt
+2 - Elo
+3 - Escola do Perpétuo
+4 - Mentoria (Taurus, Lyra, Orion)
+5 - Desafio ou imersão
+6 - Procuro uma aula sobre um tema e não sei onde está
+0 - Falar com uma pessoa
+
+Responda só com o número.'),
+  ('aulas_tipo', 'Aulas ProAlt/Elo: gravação ou aula da área de membros ({{area}})',
+   'É sobre:
+
+1 - A gravação de um encontro ao vivo (aula com convidado ou encontro da turma)
+2 - Encontrar uma aula na área de membros do {{area}}
+0 - Falar com uma pessoa
+
+Responda só com o número.'),
+  ('aulas_grav_quando', 'Gravação: já passaram 3 dias do encontro?',
+   'O encontro ao vivo aconteceu há mais de 3 dias?
+
+1 - Sim, já passaram 3 dias
+2 - Não, foi há menos de 3 dias
+0 - Falar com uma pessoa
+
+Responda só com o número.'),
+  ('aulas_grav_aguarde', 'Gravação: menos de 3 dias, aguardar ({{local}})',
+   'As gravações são publicadas em até 3 dias depois do encontro, {{local}}. Por favor, aguarde esse prazo e confira lá.
+
+Se depois disso a gravação ainda não estiver disponível, escreva ATENDENTE aqui que a nossa equipe vai ajudar você.'),
+  ('aulas_grav_passou', 'Gravação: já passaram 3 dias, conferir na área de membros ({{local}})',
+   'A gravação já deve estar disponível {{local}}. Dê uma olhada por lá.
+
+Se não encontrar, escreva ATENDENTE aqui que a nossa equipe vai ajudar você.'),
+  ('aulas_qual', 'Aulas: sem vídeo de ajuda cadastrado, pergunta qual aula',
+   'Me conte em uma mensagem qual aula você está procurando.'),
+  ('aulas_tema', 'Aulas: procura por tema',
+   'Me conte em uma mensagem o tema da aula que você procura (por exemplo: rastreamento de anúncios).'),
+  ('pede_email_aulas', 'Aulas: número não identificado, pede o email',
+   'Para a nossa equipe localizar a aula certa para você, envie em uma mensagem o email que você usou na compra.'),
+  ('aulas_video_proalt', 'Vídeo "como encontrar uma aula" no ProAlt. Troque COLE_O_LINK_AQUI pelo link (sem link, o bot pergunta qual aula e abre chamado)',
+   'Gravamos um vídeo curto mostrando como encontrar uma aula na área de membros do ProAlt: COLE_O_LINK_AQUI
+
+Se mesmo assim não encontrar, escreva ATENDENTE aqui.'),
+  ('aulas_video_elo', 'Vídeo "como encontrar uma aula" no Elo. Troque COLE_O_LINK_AQUI pelo link (sem link, o bot pergunta qual aula e abre chamado)',
+   'Gravamos um vídeo curto mostrando como encontrar uma aula na área de membros do Elo: COLE_O_LINK_AQUI
+
+Se mesmo assim não encontrar, escreva ATENDENTE aqui.'),
+  ('aulas_video_perpetuo', 'Vídeo "como encontrar uma aula" na Escola do Perpétuo. Troque COLE_O_LINK_AQUI pelo link (também vai como dica na aula por tema)',
+   'Gravamos um vídeo curto mostrando como encontrar uma aula na Escola do Perpétuo: COLE_O_LINK_AQUI
+
+Se mesmo assim não encontrar, escreva ATENDENTE aqui.')
+on conflict (slug) do update set corpo = excluded.corpo, descricao = excluded.descricao, atualizado_em = now();
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Anotado! A nossa equipe ({{responsavel}}) vai localizar a aula e responder você aqui mesmo, nesta conversa.{{dica}}
+
+Protocolo: #{{protocolo}}' where slug = 'aulas_aberto';
+insert into pinguim.bot_gatilho (trilha, expressao)
+select t, e from (values ('humano','atendente'),
+  ('aulas','gravacao'),('aulas','link da aula'),('aulas','cade a aula'),('aulas','onde fica a aula'),
+  ('aulas','onde encontro a aula'),('aulas','nao achei a aula'),('aulas','procurando uma aula'),('aulas','procurando a aula')) v(t, e)
+where not exists (select 1 from pinguim.bot_gatilho g where g.trilha = v.t and g.expressao = v.e);
