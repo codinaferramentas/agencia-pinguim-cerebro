@@ -61,3 +61,29 @@ update pinguim.bot_rota set responsavel_nome='Luiz Guilherme Cota' where respons
 
 -- Danubia saiu (20/10)
 update pinguim.bot_config set valor = (select to_jsonb(array(select distinct x from jsonb_array_elements_text(valor || '["38d7de34-2426-45b2-a986-322e9be89b2d"]'::jsonb) x))), atualizado_em=now() where chave='equipe_ocultos'; update pinguim.bot_rota set usuarios = array_remove(usuarios, '38d7de34-2426-45b2-a986-322e9be89b2d'::uuid); update pinguim.bot_instancia set dono_usuario_id=null, dono_nome=null where dono_usuario_id='38d7de34-2426-45b2-a986-322e9be89b2d';
+
+-- área de membros (Hotmart): pergunta a área, pede email, abre chamado; aviso ao aluno quando a equipe resolve (21/10)
+insert into pinguim.bot_template (slug, descricao, corpo) values
+  ('hotmart_area', 'Área de membros: qual?',
+   'Qual área de membros?
+
+1 - ProAlt
+2 - Elo
+0 - Falar com uma pessoa
+
+Responda só com o número.'),
+  ('pede_email_hotmart', 'Área de membros: pede o email da compra',
+   'Pra liberar seu acesso à área de membros do {{area}}, me manda em uma mensagem o email que você usou na compra.'),
+  ('acesso_hotmart_aberto', 'Área de membros: chamado aberto pra equipe',
+   'Pronto! Abri um chamado pra nossa equipe liberar seu acesso à área de membros do {{area}} (email {{email}}).
+
+É só aguardar aqui mesmo: assim que liberarmos, a gente te avisa nesta conversa.
+
+Protocolo: #{{protocolo}}'),
+  ('resolvido_padrao', 'Aviso quando a equipe fecha o chamado (padrão)',
+   'Oi{{nome}}! Seu atendimento #{{protocolo}} foi concluído pela nossa equipe. Se precisar de mais alguma coisa, é só responder aqui.'),
+  ('resolvido_acesso_hotmart', 'Aviso quando a equipe libera a área de membros',
+   'Oi{{nome}}! Seu acesso à área de membros do {{area}} foi liberado. É só entrar com o email {{email}}.
+
+Se tiver qualquer dificuldade, responda aqui. Protocolo #{{protocolo}}.')
+on conflict (slug) do nothing;
