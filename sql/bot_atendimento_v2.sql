@@ -251,3 +251,29 @@ Protocolo: #{{protocolo}}'),
 
 Protocolo: #{{protocolo}}')
 on conflict (slug) do update set corpo = excluded.corpo, descricao = excluded.descricao, atualizado_em = now();
+
+-- 21/10 (André): dentro dos 7 dias o BOT reembolsa, depois da confirmação do aluno
+-- (só quando o número do WhatsApp é um telefone do cadastro dono da compra; senão vai pro Luiz).
+insert into pinguim.bot_template (slug, descricao, corpo) values
+  ('cancel_reemb_confirma', 'Cancelamento na garantia: confirmação final antes do bot reembolsar',
+   'A sua compra está dentro do prazo de garantia de 7 dias, então você tem direito ao reembolso.
+
+{{compra}}
+
+Atenção: depois de confirmado, o reembolso não pode ser desfeito.
+
+1 - Sim, quero o reembolso
+2 - Prefiro falar com um atendente antes
+
+Responda só com o número.'),
+  ('cancel_reembolsado', 'Cancelamento: bot solicitou o reembolso na Hotmart',
+   'Pronto{{nome}}. O reembolso da compra {{produto}} ({{valor}}) foi solicitado à Hotmart.
+
+O valor volta pela mesma forma de pagamento usada na compra. O prazo para aparecer depende do meio de pagamento e é definido pela Hotmart.
+
+Se precisar de mais alguma coisa, é só responder aqui. Protocolo: #{{protocolo}}'),
+  ('cancel_reemb_falhou', 'Cancelamento: reembolso automático falhou, chamado aberto',
+   'Não consegui concluir o reembolso automaticamente. Já abri um chamado para a nossa equipe ({{responsavel}}) concluir o seu pedido e responder você aqui mesmo, nesta conversa.
+
+Protocolo: #{{protocolo}}')
+on conflict (slug) do update set corpo = excluded.corpo, descricao = excluded.descricao, atualizado_em = now();
