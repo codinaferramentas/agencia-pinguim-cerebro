@@ -149,3 +149,9 @@ update pinguim.bot_template set atualizado_em = now(), corpo = 'Certo, já chame
 
 Protocolo: #{{protocolo}}' where slug = 'humano_aberto';
 update pinguim.bot_template set corpo = replace(corpo, 'Pra recuperar', 'Para recuperar') where slug = 'acesso_hotmart';
+
+-- aviso quando alguém da equipe assume o chamado (Aberto → Em atendimento), 1 vez por chamado (21/10)
+insert into pinguim.bot_template (slug, descricao, corpo) values
+  ('em_atendimento', 'Aviso quando alguém da equipe assume o chamado ({{atendente}} = primeiro nome)',
+   'Oi{{nome}}! Seu atendimento #{{protocolo}} já está em andamento: {{atendente}}, da nossa equipe, começou a cuidar do seu caso. Assim que ele for finalizado, você vai ser avisado aqui mesmo, nesta conversa.')
+on conflict (slug) do nothing;
