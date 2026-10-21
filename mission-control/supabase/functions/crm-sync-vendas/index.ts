@@ -83,6 +83,7 @@ Deno.serve(async (req: Request) => {
         cliente_id: clienteId,
         origem: 'hotmart',
         id_externo: idExterno,
+        transaction_code: idExterno, // reembolso e bot de cancelamento usam esta coluna (trigger trg_crm_compra_tx também preenche)
         produto_id: t.product_id,
         produto_nome: t.hotmart_products?.name || null, // resolve o nome na hora (senão vira UUID na tela)
         valor_brl: t.price_value ?? null,

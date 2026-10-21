@@ -202,3 +202,52 @@ update pinguim.bot_template set atualizado_em = now(), corpo = 'Oi{{nome}}! Seu 
 Para entrar, use o email da compra ({{email}}) e a mesma senha que você cadastrou na Hotmart quando fez a compra. Se não lembrar a senha, use a opção "Esqueci minha senha" na tela de login da Hotmart.
 
 Se tiver qualquer dificuldade, é só responder aqui. Protocolo #{{protocolo}}.' where slug = 'resolvido_acesso_hotmart';
+
+-- 21/10: trilha de CANCELAMENTO (regra André): sempre pede o email da compra → mostra a(s) compra(s)
+-- (produto, valor, data, transação) → aluno confirma → até 7 dias = na garantia; mais de 7 = mensagem
+-- amigável + análise interna. Nos dois casos abre chamado pro Luiz Guilherme (quem reembolsa é ele, pelo CRM).
+insert into pinguim.bot_template (slug, descricao, corpo) values
+  ('pede_email_cancel', 'Cancelamento: pede o email da compra',
+   'Para localizar a sua compra, envie em uma mensagem o email que você usou na compra.'),
+  ('cancel_confirma', 'Cancelamento: 1 compra encontrada, pede confirmação ({{compra}})',
+   'Encontrei esta compra no seu email:
+
+{{compra}}
+
+É desta compra que você quer o cancelamento?
+
+1 - Sim
+2 - Não, é outra compra
+0 - Falar com uma pessoa
+
+Responda só com o número.'),
+  ('cancel_lista', 'Cancelamento: várias compras, escolher ({{lista}})',
+   'Encontrei estas compras no seu email:
+
+{{lista}}
+
+Qual delas você quer cancelar? Responda só com o número.
+Se não for nenhuma delas, responda 0 para falar com uma pessoa.'),
+  ('cancel_dentro', 'Cancelamento dentro dos 7 dias de garantia',
+   'Recebi seu pedido de cancelamento{{nome}}.
+
+{{compra}}
+
+A compra foi feita em {{data_compra}}, dentro do prazo de garantia de 7 dias. A nossa equipe ({{responsavel}}) vai dar andamento ao seu pedido e responder você aqui mesmo, nesta conversa.
+
+Protocolo: #{{protocolo}}'),
+  ('cancel_fora', 'Cancelamento depois dos 7 dias de garantia (mensagem amigável + análise interna)',
+   'Recebi seu pedido de cancelamento{{nome}}.
+
+{{compra}}
+
+O prazo de garantia para reembolso é de 7 dias a partir da data da compra. A sua compra foi feita em {{data_compra}} e hoje é {{hoje}}: já se passaram {{dias}} dias.
+
+Mesmo assim, encaminhei o seu pedido para uma análise interna da nossa equipe ({{responsavel}}). Seu chamado foi aberto e você vai receber mais informações aqui mesmo, nesta conversa.
+
+Protocolo: #{{protocolo}}'),
+  ('cancel_outra', 'Cancelamento: aluno disse que não é a compra encontrada / nenhuma compra no email',
+   'Certo{{nome}}. Abri um chamado para a nossa equipe ({{responsavel}}) localizar a sua compra e responder você aqui mesmo, nesta conversa.
+
+Protocolo: #{{protocolo}}')
+on conflict (slug) do update set corpo = excluded.corpo, descricao = excluded.descricao, atualizado_em = now();
