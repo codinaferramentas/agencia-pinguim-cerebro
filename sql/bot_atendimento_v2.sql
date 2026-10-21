@@ -87,3 +87,17 @@ Protocolo: #{{protocolo}}'),
 
 Se tiver qualquer dificuldade, responda aqui. Protocolo #{{protocolo}}.')
 on conflict (slug) do nothing;
+
+-- textos mais humanos (21/10, teste do Andre): erro no passo do email, escalada e lembrete de aguardar
+insert into pinguim.bot_template (slug, descricao, corpo) values
+  ('invalida_email', 'Pediu email e a mensagem não tem email',
+   'Não encontrei um email nessa mensagem. Me manda só o email que você usou na compra (por exemplo: nome@gmail.com).
+
+Se preferir falar com uma pessoa, responda 0.'),
+  ('aguarde_chamado', 'Aluno escreveu com chamado aberto e a equipe ainda não respondeu (máx 1 a cada 4h)',
+   'Oi{{nome}}! Seu atendimento #{{protocolo}} já está com a nossa equipe. Assim que alguém pegar, vai te responder aqui mesmo, nesta conversa. É só aguardar.')
+on conflict (slug) do nothing;
+update pinguim.bot_template set corpo = 'Não consegui entender sua mensagem, mas não se preocupe{{nome}}: o pessoal da nossa equipe ({{responsavel}}) vai falar com você aqui mesmo, nesta conversa. É só aguardar.
+
+Protocolo: #{{protocolo}}', atualizado_em = now() where slug = 'nao_classificado';
+update pinguim.bot_template set corpo = 'Não entendi. Responda só com o número de uma das opções acima, ou 0 pra falar com uma pessoa.', atualizado_em = now() where slug = 'invalida';
