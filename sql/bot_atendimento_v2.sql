@@ -277,3 +277,53 @@ Se precisar de mais alguma coisa, é só responder aqui. Protocolo: #{{protocolo
 
 Protocolo: #{{protocolo}}')
 on conflict (slug) do update set corpo = excluded.corpo, descricao = excluded.descricao, atualizado_em = now();
+
+-- 21/10 (André): cancelar VÁRIAS compras de uma vez ("1, 3" ou "TODAS"), ex.: produto + order bumps (HP…C1/C2/C3).
+-- Textos neutros para 1 ou várias; {{compra}} = bloco (várias = lista + total); {{frase_prazo}} e {{aviso_fora}} montados no código.
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Encontrei estas compras no seu email:
+
+{{lista}}
+
+Qual delas você quer cancelar? Responda com o número.
+Se forem várias, envie os números separados por vírgula (exemplo: 1, 3) ou escreva TODAS.
+Se não for nenhuma delas, responda 0 para falar com uma pessoa.' where slug = 'cancel_lista';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Recebi seu pedido de cancelamento{{nome}}.
+
+{{compra}}
+
+O pedido está dentro do prazo de garantia de 7 dias. A nossa equipe ({{responsavel}}) vai dar andamento e responder você aqui mesmo, nesta conversa.
+
+Protocolo: #{{protocolo}}' where slug = 'cancel_dentro';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Recebi seu pedido de cancelamento{{nome}}.
+
+{{compra}}
+
+O prazo de garantia para reembolso é de 7 dias a partir da data da compra. {{frase_prazo}}
+
+Mesmo assim, encaminhei o seu pedido para uma análise interna da nossa equipe ({{responsavel}}). Seu chamado foi aberto e você vai receber mais informações aqui mesmo, nesta conversa.
+
+Protocolo: #{{protocolo}}' where slug = 'cancel_fora';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Dentro do prazo de garantia de 7 dias, você tem direito ao reembolso de:
+
+{{compra}}{{aviso_fora}}
+
+Atenção: depois de confirmado, o reembolso não pode ser desfeito.
+
+1 - Sim, quero o reembolso
+2 - Prefiro falar com um atendente antes
+
+Responda só com o número.' where slug = 'cancel_reemb_confirma';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Pronto{{nome}}. O reembolso foi solicitado à Hotmart:
+
+{{compra}}
+
+O valor volta pela mesma forma de pagamento usada na compra. O prazo para aparecer depende do meio de pagamento e é definido pela Hotmart.
+
+Se precisar de mais alguma coisa, é só responder aqui. Protocolo: #{{protocolo}}' where slug = 'cancel_reembolsado';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Não consegui concluir o reembolso automaticamente de:
+
+{{compra}}
+
+Já abri um chamado para a nossa equipe ({{responsavel}}) concluir o seu pedido e responder você aqui mesmo, nesta conversa.
+
+Protocolo: #{{protocolo}}' where slug = 'cancel_reemb_falhou';
