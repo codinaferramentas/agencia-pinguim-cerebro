@@ -408,3 +408,8 @@ where not exists (select 1 from pinguim.bot_gatilho g where g.trilha = 'saudacao
 update pinguim.bot_config set valor = valor || '{"menu_saudacao_min": 30}'::jsonb where chave = 'regras';
 update pinguim.bot_template set atualizado_em = now(), corpo = regexp_replace(corpo, '^Oi\{\{nome\}\}!', '{{saudacao}}{{nome}}!')
  where slug = 'menu_principal';
+
+-- 22/10: "tarde"/"noite" sozinhos também são saudação (André mandou "tarde" e o bot calou)
+insert into pinguim.bot_gatilho (trilha, expressao)
+select 'saudacao', e from (values ('tarde'), ('noite')) v(e)
+where not exists (select 1 from pinguim.bot_gatilho g where g.trilha = 'saudacao' and g.expressao = v.e);
