@@ -116,3 +116,23 @@ $$);
 
 -- 22/10: link do ProAlt confirmado pelo André (aula R4jAb5adOa = "2-O que NÃO é Low Ticket") → área ligada
 update pinguim.club_area set ativo = true, observacao = 'Link conferido 22/10 com o exemplo do André (aula R4jAb5adOa).' where id = 'proalt';
+
+-- 22/10 (André): gravação com mais de 3 dias (ProAlt/Elo) → o bot busca na área. Não achou → recado de atendente.
+insert into pinguim.bot_template (slug, descricao, corpo) values
+  ('aulas_grav_pede', 'Gravação (mais de 3 dias): pede o encontro ou convidado para buscar',
+   'Qual encontro você procura? Escreva o tema ou o nome do convidado (por exemplo: TikTok Shop ou Pri Cavichi).'),
+  ('aulas_grav_nao_achou', 'Gravação com mais de 3 dias não encontrada na busca',
+   'Já se passaram mais de 3 dias do encontro e não encontrei essa gravação na área de membros. Escreva ATENDENTE que a nossa equipe vai verificar para você.')
+on conflict (slug) do update set corpo = excluded.corpo, descricao = excluded.descricao, atualizado_em = now();
+insert into pinguim.bot_template (slug, descricao, corpo) values
+  ('pede_email_grav_busca', 'Gravação (mais de 3 dias): pede o email da compra',
+   'Para procurar a gravação na sua área de membros, envie em uma mensagem o email que você usou na compra.'),
+  ('aulas_grav_resultado', 'Gravação: encontradas ({{lista}} = até 3 com módulo e link)',
+   'Encontrei estas gravações:
+
+{{lista}}
+
+Se não for nenhuma delas, responda NÃO ou escreva o tema com outras palavras.'),
+  ('aulas_grav_nada', 'Gravação: nada encontrado na 1ª tentativa',
+   'Não encontrei uma gravação com essas palavras. Tente escrever de outro jeito: o tema do encontro ou o nome do convidado.')
+on conflict (slug) do update set corpo = excluded.corpo, descricao = excluded.descricao, atualizado_em = now();
