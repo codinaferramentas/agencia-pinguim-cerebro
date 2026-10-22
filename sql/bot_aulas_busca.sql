@@ -106,3 +106,10 @@ on conflict (slug) do update set corpo = excluded.corpo, descricao = excluded.de
 -- "aula"/"aulas" sozinho abre a trilha de aulas (cancelamento vem antes: "cancelar a aula" segue pro cancelamento)
 insert into pinguim.bot_gatilho (trilha, expressao)
 select 'aulas', 'aula' where not exists (select 1 from pinguim.bot_gatilho where trilha = 'aulas' and expressao = 'aula');
+
+-- atualização diária do catálogo: 6h SP (9h UTC). O token é lido do banco na hora (não fica no texto do job).
+select cron.schedule('bot-aulas-sync', '0 9 * * *', $$
+  select net.http_get(
+    url := 'https://crm-pinguim.vercel.app/api/bot/aulas-sync?t=' || (select valor#>>'{}' from pinguim.bot_config where chave = 'webhook_token'),
+    timeout_milliseconds := 300000);
+$$);
