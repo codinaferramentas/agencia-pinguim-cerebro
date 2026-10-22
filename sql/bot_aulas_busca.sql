@@ -113,3 +113,6 @@ select cron.schedule('bot-aulas-sync', '0 9 * * *', $$
     url := 'https://crm-pinguim.vercel.app/api/bot/aulas-sync?t=' || (select valor#>>'{}' from pinguim.bot_config where chave = 'webhook_token'),
     timeout_milliseconds := 300000);
 $$);
+
+-- 22/10: link do ProAlt confirmado pelo André (aula R4jAb5adOa = "2-O que NÃO é Low Ticket") → área ligada
+update pinguim.club_area set ativo = true, observacao = 'Link conferido 22/10 com o exemplo do André (aula R4jAb5adOa).' where id = 'proalt';
