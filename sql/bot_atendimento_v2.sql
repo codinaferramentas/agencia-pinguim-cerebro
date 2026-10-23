@@ -413,3 +413,12 @@ update pinguim.bot_template set atualizado_em = now(), corpo = regexp_replace(co
 insert into pinguim.bot_gatilho (trilha, expressao)
 select 'saudacao', e from (values ('tarde'), ('noite')) v(e)
 where not exists (select 1 from pinguim.bot_gatilho g where g.trilha = 'saudacao' and g.expressao = v.e);
+
+-- 23/10: garantia POR PRODUTO no cancelamento. Hotmart: 124 produtos com 7 dias, 2 com 15 (900 Ganchos Virais, Sirius Lab).
+-- Chave = nome do produto normalizado (minúsculo, sem acento). Produto fora da lista = 7 dias.
+insert into pinguim.bot_config (chave, valor) values ('garantia_por_produto', '{"900 ganchos virais": 15, "sirius lab": 15}'::jsonb)
+on conflict (chave) do update set valor = excluded.valor, atualizado_em = now();
+update pinguim.bot_template set atualizado_em = now(), corpo = replace(corpo, 'prazo de garantia de 7 dias', 'prazo de garantia de {{prazo}}')
+ where slug in ('cancel_dentro', 'cancel_reemb_confirma');
+update pinguim.bot_template set atualizado_em = now(), corpo = replace(corpo, 'O prazo de garantia para reembolso é de 7 dias', 'O prazo de garantia para reembolso é de {{prazo}}')
+ where slug = 'cancel_fora';
