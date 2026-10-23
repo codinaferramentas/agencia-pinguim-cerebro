@@ -167,3 +167,8 @@ update pinguim.bot_template set atualizado_em = now(), corpo = 'Essas eram todas
 0 - Falar com uma pessoa
 
 Ou escreva o tema com outras palavras.' where slug = 'aulas_sem_mais';
+
+-- 23/10: Escola do Perpétuo entra na busca (Curseduca). Texto sem compra com artigo certo ({{do_app}}: "do ProAlt" / "da Escola do Perpétuo")
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Não encontrei o seu acesso {{do_app}} no email {{email}}. Abri um chamado para a nossa equipe ({{responsavel}}) verificar e responder você aqui mesmo, nesta conversa.
+
+Protocolo: #{{protocolo}}' where slug = 'aulas_sem_compra';
