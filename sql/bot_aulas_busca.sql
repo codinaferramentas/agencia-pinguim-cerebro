@@ -136,3 +136,34 @@ Se não for nenhuma delas, responda NÃO ou escreva o tema com outras palavras.'
   ('aulas_grav_nada', 'Gravação: nada encontrado na 1ª tentativa',
    'Não encontrei uma gravação com essas palavras. Tente escrever de outro jeito: o tema do encontro ou o nome do convidado.')
 on conflict (slug) do update set corpo = excluded.corpo, descricao = excluded.descricao, atualizado_em = now();
+
+-- 23/10 (André): resultados em blocos de 5 com MAIS ({{total}}, {{faixa}}, {{mais}} montados no código)
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Encontrei {{total}} sobre isso{{faixa}}:
+
+{{lista}}
+
+{{mais}}Se não for nenhuma delas, responda NÃO ou escreva o tema com outras palavras.' where slug = 'aulas_resultado';
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Encontrei {{total}} sobre isso{{faixa}}:
+
+{{lista}}
+
+{{mais}}Se não for nenhuma delas, responda NÃO ou escreva o tema com outras palavras.' where slug = 'aulas_grav_resultado';
+insert into pinguim.bot_template (slug, descricao, corpo) values
+  ('aulas_sem_mais', 'Busca de aula: aluno pediu MAIS, mas já viu todas',
+   'Essas eram todas as que encontrei. Se não for nenhuma delas, responda NÃO ou escreva o tema com outras palavras.')
+on conflict (slug) do update set corpo = excluded.corpo, descricao = excluded.descricao, atualizado_em = now();
+
+-- 23/10 (André): opções do resultado por número (1 ver mais · 2 nenhuma · 0 pessoa); aulas com marcador
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Encontrei {{total}} sobre isso{{faixa}}:
+
+{{lista}}
+
+{{opcoes}}
+
+Ou escreva o tema com outras palavras.' where slug in ('aulas_resultado', 'aulas_grav_resultado');
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Essas eram todas as que encontrei.
+
+2 - Não é nenhuma delas
+0 - Falar com uma pessoa
+
+Ou escreva o tema com outras palavras.' where slug = 'aulas_sem_mais';
