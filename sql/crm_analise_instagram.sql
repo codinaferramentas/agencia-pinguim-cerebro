@@ -19,3 +19,6 @@ alter table pinguim.crm_analise_ig enable row level security;
 -- usuário do Sirius que assina os pedidos (requested_by precisa existir em auth.users do Sirius e ser admin)
 insert into pinguim.bot_config (chave, valor) values ('analise_ig', '{"sirius_user_id": null}'::jsonb)
 on conflict (chave) do nothing;
+
+-- 23/10 (André autorizou): assinatura técnica = conta do Sirius "Pedro Aredes - Especialista em Inteligência Artificial"
+-- (admin; já assinava 276 das últimas 300 análises). O user_id foi gravado em bot_config.analise_ig.sirius_user_id.
