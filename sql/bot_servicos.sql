@@ -110,3 +110,10 @@ Protocolo: #{{protocolo}}'),
 
 Protocolo: #{{protocolo}}')
 on conflict (slug) do update set corpo = excluded.corpo, descricao = excluded.descricao, atualizado_em = now();
+
+-- aviso automático do PDF da análise pedida pelo bot: a cada 2 min (token lido do banco na hora)
+select cron.schedule('bot-analise-avisar', '*/2 * * * *', $$
+  select net.http_get(
+    url := 'https://crm-pinguim.vercel.app/api/bot/analise-avisar?t=' || (select valor#>>'{}' from pinguim.bot_config where chave = 'webhook_token'),
+    timeout_milliseconds := 60000);
+$$);
