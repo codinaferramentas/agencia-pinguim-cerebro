@@ -414,10 +414,19 @@ serve(async (req) => {
       // sair — soluço curto reconecta em silêncio, ninguém é incomodado.
       const tinhaAlertado = !!cfg.instancia_ultimo_alerta;
       if (tinhaAlertado && !dryRun) {
-        await avisarResponsaveis(`✅ **Evolution reconectada** — a instância da Ingrid está ON. Disparos de agenda voltam ao normal (o que ficou pendente dentro da janela de 55 min ainda sai). 🤖`);
+        await avisarResponsaveis(`✅ **Evolution reconectada** — a instância da Ingrid está ON. Os disparos voltam SÓ PRA FRENTE: o que já passou do horário enquanto a instância estava fora NÃO será enviado (passou, passou). 🤖`);
       }
       if (!dryRun) {
-        await sb.from('alertas_grupos_config').update({ instancia_status: 'open', instancia_caiu_em: null, instancia_ultimo_alerta: null, atualizado_em: agora.toISOString() }).eq('id', 1);
+        // Marca a hora da reconexão. Disparos com horário ANTERIOR a isso NÃO
+        // saem — "sempre pra frente da hora que voltou, nunca antes" (Andre 27/10).
+        // Só grava reconectou_em se tinha caído de verdade (teve alerta); soluço
+        // curto que reconecta sozinho não bloqueia nada.
+        await sb.from('alertas_grupos_config').update({
+          instancia_status: 'open', instancia_caiu_em: null, instancia_ultimo_alerta: null,
+          reconectou_em: tinhaAlertado ? agora.toISOString() : cfg.reconectou_em,
+          atualizado_em: agora.toISOString(),
+        }).eq('id', 1);
+        if (tinhaAlertado) cfg.reconectou_em = agora.toISOString(); // usa já neste tick
       }
       log.instancia_recuperada = tinhaAlertado ? 'com aviso' : 'soluço curto — silêncio';
     }
@@ -457,6 +466,18 @@ serve(async (req) => {
         const atrasoMin = (agora.getTime() - alvoMs) / 60000;
         if (atrasoMin < 0) { pulo(`ainda não é ${card.hora}`); continue; }
         if (atrasoMin > ATRASO_MAX_MIN) { pulo(`janela passou (${card.hora})`); continue; }
+        // "Sempre pra frente da hora que voltou" (Andre 27/10): se a Evolution
+        // caiu e reconectou HOJE, cards cujo horário é ANTERIOR à reconexão NÃO
+        // saem — passou enquanto estava fora = passou, não dispara retroativo.
+        // (só vale pra reconexão de hoje; na virada do dia a regra não bloqueia).
+        if (cfg?.reconectou_em) {
+          const recon = new Date(cfg.reconectou_em).getTime();
+          const reconHoje = recon >= inicioDia.getTime() && recon < fimDia.getTime();
+          if (reconHoje && alvoMs < recon) {
+            pulo(`horário (${card.hora}) é anterior à reconexão da Evolution — não dispara retroativo`);
+            continue;
+          }
+        }
       }
 
       // resolve grupos
