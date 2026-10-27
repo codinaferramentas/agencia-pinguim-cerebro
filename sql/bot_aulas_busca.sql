@@ -172,3 +172,21 @@ Ou escreva o tema com outras palavras.' where slug = 'aulas_sem_mais';
 update pinguim.bot_template set atualizado_em = now(), corpo = 'Não encontrei o seu acesso {{do_app}} no email {{email}}. Abri um chamado para a nossa equipe ({{responsavel}}) verificar e responder você aqui mesmo, nesta conversa.
 
 Protocolo: #{{protocolo}}' where slug = 'aulas_sem_compra';
+
+-- 27/10 (André): no resultado, "2 - Procurar com outras palavras" (até 3 buscas) em vez de abrir chamado na 1ª
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Encontrei {{total}} sobre isso{{faixa}}:
+
+{{lista}}
+
+{{opcoes}}' where slug in ('aulas_resultado', 'aulas_grav_resultado');
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Essas eram todas as que encontrei.
+
+2 - Procurar com outras palavras
+0 - Falar com uma pessoa' where slug = 'aulas_sem_mais';
+insert into pinguim.bot_template (slug, descricao, corpo) values
+  ('aulas_outra_palavra', 'Busca de aula: aluno vai tentar com outras palavras',
+   'Certo! Escreva o tema de outro jeito: uma palavra diferente, o nome do curso ou do professor.'),
+  ('aulas_grav_outra_palavra', 'Busca de gravação: aluno vai tentar com outras palavras',
+   'Certo! Escreva de outro jeito: o tema do encontro ou o nome do convidado.')
+on conflict (slug) do update set corpo = excluded.corpo, descricao = excluded.descricao, atualizado_em = now();
+update pinguim.bot_template set atualizado_em = now(), corpo = 'Não encontrei uma aula com essas palavras. Tente de outro jeito: uma palavra diferente, o nome do curso ou do professor.' where slug = 'aulas_busca_nada';
