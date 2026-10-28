@@ -38,3 +38,7 @@ Protocolo: #{{protocolo}}'),
 
 Se precisar de mais alguma coisa, é só responder aqui.')
 on conflict (slug) do update set corpo = excluded.corpo, descricao = excluded.descricao, atualizado_em = now();
+
+-- 28/10 (André): "mentorias e encontros" em vez de "consultorias e encontros"
+update pinguim.bot_template set atualizado_em = now(), corpo = replace(corpo, '6 - Minha agenda (consultorias e encontros)', '6 - Minha agenda (mentorias e encontros)') where slug = 'menu_principal';
+update pinguim.bot_rota set descricao = 'Agenda de mentorias e encontros' where tipo = 'agenda';
