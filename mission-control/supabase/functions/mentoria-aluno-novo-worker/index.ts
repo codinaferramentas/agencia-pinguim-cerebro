@@ -25,7 +25,7 @@ const REPETIDO_DIAS = 60;     // mesmo email + mesma mentoria em 60 dias = 1 avi
 // America/Sao_Paulo = UTC-3 fixo
 const sp = (iso: string) => new Date(new Date(iso).getTime() - 3 * 3600e3);
 const p2 = (n: number) => String(n).padStart(2, '0');
-const saudacao = (iso: string) => { const h = sp(iso).getUTCHours(); return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'; };
+const saudacao = () => { const h = sp(new Date().toISOString()).getUTCHours(); return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'; };
 const quando = (iso: string) => { const d = sp(iso); return `${p2(d.getUTCDate())}/${p2(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} às ${p2(d.getUTCHours())}h${p2(d.getUTCMinutes())}`; };
 
 function telefone(b: any): string {
@@ -40,7 +40,8 @@ function telefone(b: any): string {
 
 function mensagem(produto: string, b: any, dataIso: string, marcar: string[]): string {
   return [
-    `${saudacao(dataIso)}, equipe! 🎉`,
+    '━━━━━━━━━━━━━━━━━━━━━━━━',
+    `${saudacao()}, equipe! 🎉`,
     `**Eba, mais um aluno para a nossa ${produto}!** 🚀`,
     '',
     `👤 **Nome:** ${String(b.name || '').trim()}`,
@@ -55,7 +56,27 @@ function mensagem(produto: string, b: any, dataIso: string, marcar: string[]): s
   ].join('\n');
 }
 
-async function rodar(dryRun: boolean) {
+const GRUPO_MENTORIA = /taurus|orion|lyra|lira|mastermind|mentoria|express/i;
+async function jaEraAluno(t: any, email: string, produtoIds: string[], dash: { url: string; key: string }): Promise<string | null> {
+  const dataIso = t.approved_date || t.purchase_date;
+  if (t.buyer_id) {
+    const r = await fetch(`${dash.url}/rest/v1/hotmart_transactions?select=transaction_code,purchase_date,hotmart_products!inner(hotmart_product_id,name)`
+      + `&buyer_id=eq.${t.buyer_id}&hotmart_products.hotmart_product_id=in.(${produtoIds.join(',')})`
+      + `&status=in.(approved,complete,completed)&purchase_date=lt.${encodeURIComponent(t.purchase_date)}&limit=1`,
+      { headers: { apikey: dash.key, Authorization: `Bearer ${dash.key}` } });
+    const ant = r.ok ? await r.json() : [];
+    if (ant.length) return `já pagou mentoria antes: ${ant[0].hotmart_products?.name} em ${String(ant[0].purchase_date).slice(0, 10)}`;
+  }
+  if (!email) return null;
+  const { data: idn } = await sb.from('crm_cliente_identidade').select('cliente_id').eq('tipo', 'email').eq('valor', email).limit(1);
+  const cid = idn?.[0]?.cliente_id;
+  if (!cid) return null;
+  const { data: gp } = await sb.from('crm_grupo_presenca').select('grupo_nome, entrou_visto_em').eq('cliente_id', cid).lt('entrou_visto_em', dataIso);
+  const g = (gp || []).find((x: any) => GRUPO_MENTORIA.test(x.grupo_nome || ''));
+  return g ? `já estava no grupo ${g.grupo_nome} desde ${String(g.entrou_visto_em).slice(0, 10)}` : null;
+}
+
+async function rodar(dryRun: boolean, testeDm = false) {
   const { data: cfg } = await sb.from('mentoria_aviso_config').select('*').eq('id', 1).single();
   if (!cfg?.ativo && !dryRun) return { ativo: false };
   const produtos: Record<string, string> = cfg.produtos || {};
@@ -63,7 +84,7 @@ async function rodar(dryRun: boolean) {
 
   const dashUrl = await getChave('DASHBOARD_URL', CONSUMIDOR);
   const dashKey = await getChave('DASHBOARD_SERVICE_ROLE_KEY', CONSUMIDOR);
-  const sel = 'transaction_code,status,recurrence_number,purchase_date,approved_date,'
+  const sel = 'transaction_code,buyer_id,status,recurrence_number,purchase_date,approved_date,'
     + 'hotmart_products!inner(hotmart_product_id,name),hotmart_buyers(name,email,phone,checkout_phone,checkout_phone_code)';
   const url = `${dashUrl}/rest/v1/hotmart_transactions?select=${encodeURIComponent(sel)}`
     + `&hotmart_products.hotmart_product_id=in.(${Object.keys(produtos).join(',')})`
@@ -78,7 +99,21 @@ async function rodar(dryRun: boolean) {
     : { data: [] };
   const vistos = new Set((ja || []).map((x: any) => x.transacao));
   const novas = txs.filter((t: any) => !vistos.has(t.transaction_code));
-  if (dryRun) return { desde, candidatas: txs.length, novas: novas.map((t: any) => `${t.purchase_date} ${produtos[t.hotmart_products.hotmart_product_id]} ${t.hotmart_buyers?.email}`) };
+  if (testeDm) { // manda as 2 últimas no privado do Codina, sem marcar ninguém, pra conferir o visual
+    const bot = await getChave('DISCORD_BOT_TOKEN', CONSUMIDOR);
+    const dm = await (await fetch('https://discord.com/api/v10/users/@me/channels', { method: 'POST', headers: { Authorization: `Bot ${bot}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient_id: '1077338884981133413' }) })).json();
+    for (const t of txs.slice(-2)) {
+      await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, { method: 'POST', headers: { Authorization: `Bot ${bot}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: mensagem(produtos[t.hotmart_products.hotmart_product_id], t.hotmart_buyers || {}, t.approved_date || t.purchase_date, cfg.marcar), allowed_mentions: { parse: [] } }) });
+      await new Promise((ok) => setTimeout(ok, 1200));
+    }
+    return { teste_dm: 2 };
+  }
+  if (dryRun) {
+    const lista = [];
+    for (const t of txs) lista.push(`${t.purchase_date} ${produtos[t.hotmart_products.hotmart_product_id]} ${t.hotmart_buyers?.email} → ${(await jaEraAluno(t, String(t.hotmart_buyers?.email || '').toLowerCase(), Object.keys(produtos), { url: dashUrl, key: dashKey })) || 'NOVO'}${vistos.has(t.transaction_code) ? ' (já avisado)' : ''}`);
+    return { desde, lista };
+  }
 
   const bot = novas.length ? await getChave('DISCORD_BOT_TOKEN', CONSUMIDOR) : '';
   const res = { enviados: 0, pulados: 0, erros: 0 };
@@ -96,6 +131,11 @@ async function rodar(dryRun: boolean) {
     // mesma pessoa, mesma mentoria, já avisada há pouco (ex.: comprou 2x por erro) → não repete
     const { data: rep } = await sb.from('mentoria_aviso').select('transacao').eq('email', email).eq('produto', produto)
       .eq('status', 'enviado').gte('data_compra', new Date(new Date(dataIso).getTime() - REPETIDO_DIAS * 864e5).toISOString()).limit(1);
+    const antigo = await jaEraAluno(t, email, Object.keys(produtos), { url: dashUrl, key: dashKey });
+    if (antigo) {
+      await sb.from('mentoria_aviso').update({ status: 'pulado', erro: antigo }).eq('transacao', t.transaction_code);
+      res.pulados++; continue;
+    }
     if (email && rep?.length) {
       await sb.from('mentoria_aviso').update({ status: 'pulado', erro: `já avisado (${rep[0].transacao})` }).eq('transacao', t.transaction_code);
       res.pulados++; continue;
@@ -128,7 +168,7 @@ serve(async (req) => {
   let body: any = {};
   try { body = await req.json(); } catch (_) { /* corpo vazio do cron */ }
   try {
-    return new Response(JSON.stringify(await rodar(!!body.dry_run)), { headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify(await rodar(!!body.dry_run, !!body.teste_dm)), { headers: { 'Content-Type': 'application/json' } });
   } catch (e) {
     return new Response(JSON.stringify({ erro: String((e as Error).message || e) }), { status: 500 });
   }
