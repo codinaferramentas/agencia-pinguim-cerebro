@@ -48,6 +48,15 @@ const MARCA_LOG = '🤖'; // prefixo dos comentários do robô (usado na rotaç�
 const MAX_LOGS_POR_CARD = 4;
 const ATRASO_MAX_MIN = 55; // até quanto tempo depois do horário ainda dispara
 
+// Link colado do Google Agenda vem embrulhado: google.com/url?q=<URL_REAL>&sa=...
+// Devolve a URL real decodificada. Qualquer outra URL passa intacta.
+function desembrulhaGoogle(u: string): string {
+  if (!/^https?:\/\/(?:www\.)?google\.com\/url\?/i.test(u)) return u;
+  const m = u.match(/[?&]q=([^&]+)/i);
+  if (!m) return u;
+  try { return decodeURIComponent(m[1]); } catch { return m[1]; }
+}
+
 // Impressão digital da mensagem (pro freio distinguir copy igual de copy nova).
 // Normaliza espaços pra pegar cópias "iguais na prática".
 async function hashMsg(texto: string): Promise<string> {
@@ -129,7 +138,14 @@ function parseCard(c: { id: string; name: string; desc: string }, lista: string)
     .join('\n').trim();
   // markdown Trello -> WhatsApp: [texto](url) -> texto (url) | **negrito** -> *negrito*
   msg = msg
-    .replace(/\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_m, t, u) => (t === u || !t) ? u : `${t}: ${u}`)
+    .replace(/\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_m, t, u) => {
+      // Desembrulha link do Google Calendar: google.com/url?q=<URL_REAL>&... -> URL_REAL
+      // (lição 06/nov: card colado do Google Agenda vinha com o Zoom no texto e o
+      // wrapper do Google na url → saíam DOIS links. Desembrulhar faz texto==url.)
+      const url = desembrulhaGoogle(u);
+      const texto = desembrulhaGoogle(t);
+      return (texto === url || !texto) ? url : `${texto}: ${url}`;
+    })
     .replace(/\*\*(.+?)\*\*/g, '*$1*');
 
   return {
