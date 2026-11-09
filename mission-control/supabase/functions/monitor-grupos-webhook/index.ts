@@ -398,17 +398,22 @@ async function fecharAtendimento(grupo: Grupo, r: {
     status: 'respondida', adm_jid: r.admJid, adm_nome: r.admNome || null,
     resposta_texto: r.texto, resposta_msg_id: r.msgId, respondido_em: r.quando,
     tempo_resposta_seg: seg, como_respondeu: como,
-  }).eq('id', alvo.id).eq('status', 'pendente').select('id');
+  }).eq('id', alvo.id).eq('status', 'pendente').select('id, numero, tempo_util_seg');
   if (!fechado || fechado.length === 0) return; // outro ADM fechou antes
 
   const aluno = `${alvo.aluno_nome || 'sem nome'}${alvo.aluno_telefone ? ` (${fmtTel(alvo.aluno_telefone)})` : ''}`;
+  // tempo útil (seg-sex 9h-18h, calculado por trigger no banco); corrido só quando difere
+  const util = fechado[0].tempo_util_seg ?? seg;
+  const tempo = util === 0 ? 'fora do horário de atendimento'
+    : Math.abs(util - seg) < 60 ? fmtDuracao(seg) : `${fmtDuracao(util)} úteis (${fmtDuracao(seg)} corridos)`;
   const post = [
     '━━━━━━━━━━━━━━━━━━━━',
-    `✅ **PERGUNTA RESPONDIDA** · ${grupo.nome}`,
-    `**Aluno:** ${aluno} · ${horaIsoBRT(alvo.perguntado_em)}`,
+    `✅ **RESPONDIDA** · \`A-${String(fechado[0].numero).padStart(4, '0')}\` · ${grupo.nome}`,
+    '',
+    `**Aluno:** ${aluno} · ${horaIsoBRT(alvo.perguntado_em)}${alvo.fora_horario ? ' · 🌙 fora do horário' : ''}`,
     citar(alvo.pergunta_texto, 750),
     '',
-    `**Resposta de ${r.admNome || 'ADM'}** · ${horaIsoBRT(r.quando)} · ⏱️ ${fmtDuracao(seg)}`,
+    `**Resposta de ${r.admNome || 'ADM'}** · ${horaIsoBRT(r.quando)} · ⏱️ ${tempo}`,
     citar(r.texto, 850),
   ].join('\n').slice(0, 1990);
   try {

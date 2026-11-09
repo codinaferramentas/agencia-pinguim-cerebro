@@ -1,18 +1,23 @@
 // ========================================================================
 // Edge Function: monitor-atendimento-resumo
-// Fechamento diário do atendimento nos grupos de alunos (schema-045).
+// Painel CS no Discord (schema-045 + schema-046). Dois modos:
 //
-// Cron 8h BRT (job monitor-atendimento-resumo). Olha as perguntas do DIA
-// ANTERIOR em pinguim.monitor_atendimentos e posta no destino de
-// atendimento (monitor_atendimento_config: canal ou DM):
-//   · perguntas / respondidas por ADM / pendentes
-//   · tempo de resposta médio, mediano e o mais lento
-//   · quebra por grupo
-//   · lista das pendentes (marca quando um colega respondeu no grupo)
-//   · pendentes de dias anteriores que seguem abertas
+// 1. Fechamento diário (cron job monitor-atendimento-resumo, 8h BRT, corpo
+//    vazio): solicitações do DIA ANTERIOR em pinguim.monitor_atendimentos.
+//      · msg 1 = painel geral: totais, tempo de resposta em horas ÚTEIS
+//        (config: seg-sex 9h-18h), fora do horário, canais com cor, ADMs
+//      · msgs seguintes = 1 bloco por canal (grupo ou número privado) que
+//        tem pendência, cada solicitação com código A-0000
+//    Cor do canal: 🟢 nada pendente · 🟡 pendente dentro do SLA ·
+//                  🔴 pendente há mais de sla_min minutos úteis
+//
+// 2. Alerta de SLA ({modo:'sla'}, cron monitor-atendimento-sla 10 em 10 min):
+//    pendentes que passaram de sla_min úteis sem resposta de ADM → 1 msg
+//    consolidada por rodada. Cada solicitação alerta uma vez só.
 //
 // Body opcional: { dia: 'AAAA-MM-DD' } → fecha esse dia (teste/reprocesso).
 //                { dry_run: true }      → devolve o texto sem postar.
+// Destino: pinguim.monitor_atendimento_config (canal_id ou DM).
 // ========================================================================
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
@@ -25,7 +30,9 @@ const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SE
 });
 const TZ_OFFSET_MS = -3 * 3600 * 1000; // America/Sao_Paulo
 const DIAS_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+const LIMITE_MSG = 1900; // Discord aceita 2000
 
+// ---------- formatação ----------
 function fmtDuracao(seg: number): string {
   const min = Math.max(1, Math.round(seg / 60));
   if (min < 60) return `${min} min`;
@@ -35,14 +42,14 @@ function fmtDuracao(seg: number): string {
   return hr ? `${d}d ${hr}h` : `${d}d`;
 }
 
+function brt(iso: string): Date { return new Date(new Date(iso).getTime() + TZ_OFFSET_MS); }
 function hhmm(iso: string): string {
-  const d = new Date(new Date(iso).getTime() + TZ_OFFSET_MS);
+  const d = brt(iso);
   return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
 }
-
-function ddmm(iso: string): string {
-  const d = new Date(new Date(iso).getTime() + TZ_OFFSET_MS);
-  return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+function ddmmhh(iso: string): string {
+  const d = brt(iso);
+  return `${DIAS_SEMANA[d.getUTCDay()]} ${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')} ${hhmm(iso)}`;
 }
 
 function fmtTel(tel: string): string {
@@ -59,29 +66,54 @@ function umaLinha(t: string, max: number): string {
   return s.length > max ? s.slice(0, max) + '…' : s;
 }
 
+const codigo = (a: any) => `\`A-${String(a.numero).padStart(4, '0')}\``;
+const aluno = (a: any) => `${a.aluno_nome || 'sem nome'}${a.aluno_telefone ? ` (${fmtTel(a.aluno_telefone)})` : ''}`;
+const nomeCanal = (a: any) => `${a.canal_tipo === 'privado' ? '📱 ' : ''}${a.grupo_nome || a.grupo_jid}`;
+
+// junta linhas em mensagens de até LIMITE_MSG, sem quebrar um item no meio
+function empacotar(itens: string[]): string[] {
+  const partes: string[] = [];
+  let atual = '';
+  for (const it of itens) {
+    if (atual && (atual + '\n' + it).length > LIMITE_MSG) { partes.push(atual); atual = it; }
+    else atual = atual ? `${atual}\n${it}` : it;
+  }
+  if (atual) partes.push(atual);
+  return partes;
+}
+
+// ---------- dados ----------
+async function config() {
+  const { data } = await sb.from('monitor_atendimento_config').select('*').eq('id', 1).maybeSingle();
+  if (!data) throw new Error('monitor_atendimento_config vazia');
+  return data;
+}
+
+async function segundosUteis(ini: string, fim: string): Promise<number> {
+  const { data, error } = await sb.rpc('monitor_segundos_uteis', { p_ini: ini, p_fim: fim });
+  if (error) throw new Error(`segundos úteis: ${error.message}`);
+  return Number(data) || 0;
+}
+
 // dia BRT 'AAAA-MM-DD' → [início, fim) em UTC
 function janela(dia: string): [string, string] {
   const ini = new Date(`${dia}T03:00:00.000Z`);
   return [ini.toISOString(), new Date(ini.getTime() + 86400 * 1000).toISOString()];
 }
-
 function ontemBRT(): string {
   return new Date(Date.now() + TZ_OFFSET_MS - 86400 * 1000).toISOString().slice(0, 10);
 }
 
 // colega (não-ADM, não o próprio aluno) deu reply no aluno depois da pergunta
-async function colegasResponderam(pend: any[]): Promise<Set<string>> {
-  const resp = new Set<string>();
-  for (const a of pend) {
-    const { data } = await sb.from('monitor_grupos_mensagens').select('id')
-      .eq('grupo_jid', a.grupo_jid).eq('respondeu_jid', a.aluno_jid).eq('eh_admin', false)
-      .neq('remetente_jid', a.aluno_jid).gte('criado_em', a.perguntado_em).limit(1);
-    if (data && data.length > 0) resp.add(a.id);
-  }
-  return resp;
+async function colegaRespondeu(a: any): Promise<boolean> {
+  const { data } = await sb.from('monitor_grupos_mensagens').select('id')
+    .eq('grupo_jid', a.grupo_jid).eq('respondeu_jid', a.aluno_jid).eq('eh_admin', false)
+    .neq('remetente_jid', a.aluno_jid).gte('criado_em', a.perguntado_em).limit(1);
+  return !!(data && data.length > 0);
 }
 
-async function montar(dia: string): Promise<string[]> {
+// ---------- modo 1: fechamento diário ----------
+async function montarPainel(dia: string, cfg: any): Promise<string[]> {
   const [ini, fim] = janela(dia);
   const { data, error } = await sb.from('monitor_atendimentos').select('*')
     .gte('perguntado_em', ini).lt('perguntado_em', fim).order('perguntado_em');
@@ -89,67 +121,117 @@ async function montar(dia: string): Promise<string[]> {
   const todos = data ?? [];
   const resp = todos.filter((a) => a.status === 'respondida');
   const pend = todos.filter((a) => a.status === 'pendente');
+  const agora = new Date().toISOString();
+  const slaSeg = cfg.sla_min * 60;
 
-  const { count: antigas } = await sb.from('monitor_atendimentos').select('id', { count: 'exact', head: true })
+  // pendente estourou o SLA? (tempo útil desde a pergunta até agora)
+  const estourou = new Set<string>();
+  for (const a of pend) if (await segundosUteis(a.perguntado_em, agora) >= slaSeg) estourou.add(a.id);
+
+  const { count: acumulado } = await sb.from('monitor_atendimentos').select('id', { count: 'exact', head: true })
     .eq('status', 'pendente').lt('perguntado_em', ini)
     .gte('perguntado_em', new Date(new Date(ini).getTime() - 7 * 86400 * 1000).toISOString());
 
   const dt = new Date(`${dia}T12:00:00Z`);
-  const titulo = `${String(dt.getUTCDate()).padStart(2, '0')}/${String(dt.getUTCMonth() + 1).padStart(2, '0')} (${DIAS_SEMANA[dt.getUTCDay()]})`;
-  const linhas: string[] = [
-    '━━━━━━━━━━━━━━━━━━━━',
-    `📋 **FECHAMENTO DO ATENDIMENTO — ${titulo}** · grupos de alunos`,
-    '',
+  const isodow = dt.getUTCDay() === 0 ? 7 : dt.getUTCDay();
+  const diaUtil = (cfg.dias_uteis || []).includes(isodow);
+  const titulo = `${DIAS_SEMANA[dt.getUTCDay()]} ${String(dt.getUTCDate()).padStart(2, '0')}/${String(dt.getUTCMonth() + 1).padStart(2, '0')}`;
+
+  const painel: string[] = [
+    '━━━━━━━━━━━━━━━━━━━━━━━━',
+    `📋 **PAINEL CS — fechamento de ${titulo}**`,
   ];
+  if (!diaUtil) painel.push(`🗓️ *Dia sem expediente — o tempo de resposta só começa a contar no próximo dia útil às ${cfg.hora_ini}h.*`);
+  painel.push('');
+
   if (todos.length === 0) {
-    linhas.push('Nenhuma pergunta de aluno detectada no dia.');
+    painel.push('Nenhuma solicitação de aluno no dia.');
   } else {
     const pct = Math.round((resp.length / todos.length) * 100);
-    linhas.push(`❓ Perguntas: **${todos.length}** · ✅ Respondidas por ADM: **${resp.length}** (${pct}%) · ⏳ Pendentes: **${pend.length}**`);
+    painel.push(`📨 Solicitações: **${todos.length}**   ✅ Respondidas: **${resp.length}** (${pct}%)   ⏳ Pendentes: **${pend.length}**`);
+    const uteis = resp.map((a) => a.tempo_util_seg || 0).filter((t) => t > 0).sort((a, b) => a - b);
+    if (uteis.length > 0) {
+      const media = uteis.reduce((s, t) => s + t, 0) / uteis.length;
+      painel.push(`⏱️ Tempo de resposta (horário de atendimento): médio **${fmtDuracao(media)}** · mais lento **${fmtDuracao(uteis[uteis.length - 1])}**`);
+    }
+    const fora = todos.filter((a) => a.fora_horario).length;
+    if (fora > 0) painel.push(`🌙 ${fora} chegaram fora do horário (seg–sex ${cfg.hora_ini}h–${cfg.hora_fim}h)`);
+
+    // canais: pior cor primeiro, depois volume
+    const canais = new Map<string, { nome: string; t: number; r: number; p: number; vermelho: boolean }>();
+    for (const a of todos) {
+      const c = canais.get(a.grupo_jid) ?? { nome: nomeCanal(a), t: 0, r: 0, p: 0, vermelho: false };
+      c.t++;
+      if (a.status === 'respondida') c.r++; else { c.p++; if (estourou.has(a.id)) c.vermelho = true; }
+      canais.set(a.grupo_jid, c);
+    }
+    const cor = (c: any) => c.p === 0 ? '🟢' : c.vermelho ? '🔴' : '🟡';
+    const peso = (c: any) => c.p === 0 ? 2 : c.vermelho ? 0 : 1;
+    const ordenados = [...canais.values()].sort((a, b) => peso(a) - peso(b) || b.t - a.t);
+    painel.push('', '**CANAIS**');
+    for (const c of ordenados) {
+      painel.push(`${cor(c)} **${c.nome}** — ${c.t} · ✅ ${c.r}${c.p ? ` · ⏳ ${c.p}` : ''}`);
+    }
+
     if (resp.length > 0) {
-      const tempos = resp.map((a) => a.tempo_resposta_seg || 0).sort((a, b) => a - b);
-      const media = tempos.reduce((s, t) => s + t, 0) / tempos.length;
-      const mediana = tempos[Math.floor(tempos.length / 2)];
-      linhas.push(`⏱️ Tempo de resposta: médio **${fmtDuracao(media)}** · mediano **${fmtDuracao(mediana)}** · mais lento **${fmtDuracao(tempos[tempos.length - 1])}**`);
       const porAdm: Record<string, number> = {};
       for (const a of resp) porAdm[a.adm_nome || 'ADM'] = (porAdm[a.adm_nome || 'ADM'] || 0) + 1;
-      linhas.push(`🙋 Quem respondeu: ${Object.entries(porAdm).sort((a, b) => b[1] - a[1]).map(([n, c]) => `${n} ${c}`).join(' · ')}`);
+      painel.push('', `🙋 Quem respondeu: ${Object.entries(porAdm).sort((a, b) => b[1] - a[1]).map(([n, c]) => `${n} ${c}`).join(' · ')}`);
     }
-    const porGrupo: Record<string, { t: number; r: number }> = {};
-    for (const a of todos) {
-      const g = (porGrupo[a.grupo_nome || a.grupo_jid] ??= { t: 0, r: 0 });
-      g.t++; if (a.status === 'respondida') g.r++;
-    }
-    linhas.push('', '**Por grupo:**');
-    for (const [g, v] of Object.entries(porGrupo).sort((a, b) => b[1].t - a[1].t)) {
-      linhas.push(`• ${g}: ${v.t} (✅ ${v.r} · ⏳ ${v.t - v.r})`);
-    }
-    if (pend.length > 0) {
-      const colega = await colegasResponderam(pend);
-      linhas.push('', `**⏳ Pendentes (${pend.length})** — sem resposta de ADM em reply/@:`);
-      pend.forEach((a, i) => {
-        const quem = `${a.aluno_nome || 'sem nome'}${a.aluno_telefone ? ` (${fmtTel(a.aluno_telefone)})` : ''}`;
-        const tag = colega.has(a.id) ? ' · 💬 colega respondeu' : '';
-        linhas.push(`${i + 1}. **[${a.grupo_nome}]** ${quem} · ${hhmm(a.perguntado_em)}${tag}`, `   > ${umaLinha(a.pergunta_texto, 220)}`);
-      });
-    }
+    painel.push(`🔴 = pendente há mais de ${fmtDuracao(slaSeg)} úteis`);
   }
-  if (antigas && antigas > 0) linhas.push('', `📌 Pendentes de dias anteriores (últimos 7 dias) ainda abertas: **${antigas}**`);
+  if (acumulado && acumulado > 0) painel.push(`📌 Acumulado sem resposta dos 7 dias anteriores: **${acumulado}**`);
 
-  // Discord: 2000 chars por mensagem → quebra por linha
-  const partes: string[] = [];
-  let atual = '';
-  for (const l of linhas) {
-    if ((atual + '\n' + l).length > 1900) { partes.push(atual); atual = l; }
-    else atual = atual ? `${atual}\n${l}` : l;
+  const mensagens = empacotar(painel);
+
+  // um bloco por canal com pendência (mesma ordem do painel)
+  const porCanal = new Map<string, any[]>();
+  for (const a of pend) porCanal.set(a.grupo_jid, [...(porCanal.get(a.grupo_jid) ?? []), a]);
+  const blocos = [...porCanal.values()].sort((x, y) =>
+    Number(y.some((a) => estourou.has(a.id))) - Number(x.some((a) => estourou.has(a.id))) || y.length - x.length);
+  for (const lista of blocos) {
+    const vermelho = lista.some((a) => estourou.has(a.id));
+    const itens: string[] = [
+      '━━━━━━━━━━━━━━━━━━━━━━━━',
+      `${vermelho ? '🔴' : '🟡'} **${nomeCanal(lista[0])}** — ${lista.length} pendente${lista.length > 1 ? 's' : ''}`,
+    ];
+    for (const a of lista) {
+      const tags = [hhmm(a.perguntado_em)];
+      if (a.fora_horario) tags.push('🌙 fora do horário');
+      if (await colegaRespondeu(a)) tags.push('💬 colega respondeu');
+      itens.push('', `${codigo(a)} · ${aluno(a)} · ${tags.join(' · ')}`, `> ${umaLinha(a.pergunta_texto, 260)}`);
+    }
+    mensagens.push(...empacotar(itens));
   }
-  if (atual) partes.push(atual);
-  return partes;
+  return mensagens;
 }
 
-async function postar(partes: string[]) {
-  const { data: cfg } = await sb.from('monitor_atendimento_config').select('*').eq('id', 1).maybeSingle();
-  if (!cfg || !cfg.resumo_ativo) return 'resumo desativado';
+// ---------- modo 2: alerta de SLA ----------
+async function montarAlertaSla(cfg: any): Promise<{ mensagens: string[]; ids: string[] }> {
+  if (!cfg.alerta_sla_ativo) return { mensagens: [], ids: [] };
+  const agora = new Date().toISOString();
+  const desde = new Date(Math.max(new Date(cfg.sla_desde).getTime(), Date.now() - 3 * 86400 * 1000)).toISOString();
+  const { data } = await sb.from('monitor_atendimentos').select('*')
+    .eq('status', 'pendente').is('alerta_sla_em', null).gte('perguntado_em', desde).order('perguntado_em');
+  const vencidos: any[] = [];
+  for (const a of data ?? []) {
+    const util = await segundosUteis(a.perguntado_em, agora);
+    if (util >= cfg.sla_min * 60) vencidos.push(a);
+  }
+  if (vencidos.length === 0) return { mensagens: [], ids: [] };
+  const itens: string[] = [
+    '━━━━━━━━━━━━━━━━━━━━━━━━',
+    `⏰ **SEM RESPOSTA HÁ MAIS DE ${fmtDuracao(cfg.sla_min * 60).toUpperCase()} ÚTEIS** (${vencidos.length})`,
+  ];
+  for (const a of vencidos) {
+    itens.push('', `${codigo(a)} · **${nomeCanal(a)}** · ${aluno(a)} · perguntou ${ddmmhh(a.perguntado_em)}`,
+      `> ${umaLinha(a.pergunta_texto, 260)}`);
+  }
+  return { mensagens: empacotar(itens), ids: vencidos.map((a) => a.id) };
+}
+
+// ---------- discord ----------
+async function postar(cfg: any, mensagens: string[]) {
   const bot = await getChave('DISCORD_BOT_TOKEN', 'monitor-atendimento-resumo');
   const h = { Authorization: `Bot ${bot}`, 'Content-Type': 'application/json' };
   const destinos: string[] = [];
@@ -162,14 +244,14 @@ async function postar(partes: string[]) {
   }
   if (destinos.length === 0) throw new Error('nenhum destino Discord disponível');
   for (const canal of destinos) {
-    for (const p of partes) {
+    for (const m of mensagens) {
       const r = await fetch(`https://discord.com/api/v10/channels/${canal}/messages`, {
-        method: 'POST', headers: h, body: JSON.stringify({ content: p, allowed_mentions: { parse: [] }, flags: 4 }),
+        method: 'POST', headers: h, body: JSON.stringify({ content: m, allowed_mentions: { parse: [] }, flags: 4 }),
       });
       if (!r.ok) throw new Error(`Discord ${r.status}: ${(await r.text()).slice(0, 150)}`);
     }
   }
-  return `postado em ${destinos.length} destino(s)`;
+  return `${mensagens.length} msg(s) em ${destinos.length} destino(s)`;
 }
 
 serve(async (req) => {
@@ -180,11 +262,23 @@ serve(async (req) => {
   if (role !== 'service_role') return new Response(JSON.stringify({ erro: 'Só service_role' }), { status: 401 });
   let body: any = {};
   try { body = await req.json(); } catch (_) { /* corpo vazio do cron */ }
+  const json = (o: unknown) => new Response(JSON.stringify(o), { headers: { 'Content-Type': 'application/json' } });
   try {
+    const cfg = await config();
+
+    if (body.modo === 'sla') {
+      const { mensagens, ids } = await montarAlertaSla(cfg);
+      if (body.dry_run || mensagens.length === 0) return json({ modo: 'sla', vencidos: ids.length, mensagens });
+      const resultado = await postar(cfg, mensagens);
+      await sb.from('monitor_atendimentos').update({ alerta_sla_em: new Date().toISOString() }).in('id', ids);
+      return json({ modo: 'sla', vencidos: ids.length, resultado });
+    }
+
     const dia = /^\d{4}-\d{2}-\d{2}$/.test(body.dia || '') ? body.dia : ontemBRT();
-    const partes = await montar(dia);
-    if (body.dry_run) return new Response(JSON.stringify({ dia, partes }), { headers: { 'Content-Type': 'application/json' } });
-    return new Response(JSON.stringify({ dia, resultado: await postar(partes) }), { headers: { 'Content-Type': 'application/json' } });
+    const mensagens = await montarPainel(dia, cfg);
+    if (body.dry_run) return json({ dia, mensagens });
+    if (!cfg.resumo_ativo) return json({ dia, resultado: 'resumo desativado' });
+    return json({ dia, resultado: await postar(cfg, mensagens) });
   } catch (e) {
     return new Response(JSON.stringify({ erro: String((e as Error).message || e) }), { status: 500 });
   }
