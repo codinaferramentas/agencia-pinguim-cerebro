@@ -286,12 +286,12 @@ function perguntaSemDirecao(texto: string, respondeuJid: string, mencionados: st
 // ---------- atendimento: pergunta → resposta do ADM (schema-045) ----------
 const AGRUPAR_MIN = 30;        // msgs seguidas do mesmo aluno = 1 atendimento
 const RESPOSTA_JANELA_D = 3;   // reply sem msg exata citada fecha atendimento de até 3 dias
-interface ConfigAtend { ativo: boolean; canal_id: string | null; dm_user_ids: string[] }
+interface ConfigAtend { ativo: boolean; canal_id: string | null; dm_user_ids: string[]; postar_respondidas: boolean }
 let _cfgAtend: { at: number; cfg: ConfigAtend | null } | null = null;
 
 async function configAtendimento(): Promise<ConfigAtend | null> {
   if (_cfgAtend && Date.now() - _cfgAtend.at < CACHE_TTL_MS) return _cfgAtend.cfg;
-  const { data } = await sb.from('monitor_atendimento_config').select('ativo, canal_id, dm_user_ids').eq('id', 1).maybeSingle();
+  const { data } = await sb.from('monitor_atendimento_config').select('ativo, canal_id, dm_user_ids, postar_respondidas').eq('id', 1).maybeSingle();
   _cfgAtend = { at: Date.now(), cfg: (data as ConfigAtend) ?? null };
   return _cfgAtend.cfg;
 }
@@ -422,6 +422,8 @@ async function concluirAtendimento(cfg: ConfigAtend, alvo: any, canalNome: strin
     `**Resposta de ${r.admNome || 'ADM'}** · ${horaIsoBRT(r.quando)} · ⏱️ ${tempo}`,
     citar(r.texto, 850),
   ].join('\n').slice(0, 1990);
+  // Q&A fica sempre no banco (base de FAQ); post no Discord só se ligado
+  if (!cfg.postar_respondidas) return;
   try {
     await enviarAtendimento(cfg, post);
     await sb.from('monitor_atendimentos').update({ postado_em: new Date().toISOString() }).eq('id', alvo.id);
