@@ -37,3 +37,8 @@ on conflict (instancia) do update set canal_nome = excluded.canal_nome, atendent
 alter table pinguim.monitor_atendimentos drop constraint if exists monitor_atendimentos_como_respondeu_check;
 alter table pinguim.monitor_atendimentos add constraint monitor_atendimentos_como_respondeu_check
   check (como_respondeu in ('reply','mencao','privado'));
+
+-- Post de "respondida" em tempo real vira opcional (feedback Andre 09/11:
+-- com o privado o canal viraria bola de neve). Q&A continua no banco = FAQ.
+alter table pinguim.monitor_atendimento_config
+  add column if not exists postar_respondidas boolean not null default false;
