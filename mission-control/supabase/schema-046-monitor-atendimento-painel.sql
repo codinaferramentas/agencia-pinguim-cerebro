@@ -15,7 +15,7 @@ alter table pinguim.monitor_atendimento_config
   add column if not exists dias_uteis int[] not null default '{1,2,3,4,5}',  -- isodow (1=seg)
   add column if not exists hora_ini int not null default 9,
   add column if not exists hora_fim int not null default 18,
-  add column if not exists sla_min int not null default 120,
+  add column if not exists sla_min int not null default 240,
   add column if not exists alerta_sla_ativo boolean not null default true,
   add column if not exists sla_desde timestamptz not null default now();     -- não alerta backlog antigo
 comment on column pinguim.monitor_atendimento_config.sla_min is
@@ -118,5 +118,5 @@ begin
 end $$;
 revoke all on function pinguim.disparar_monitor_sla() from public, anon, authenticated;
 
--- 09/11: 2 checkpoints/dia útil 11h e 15h BRT (era */10 — bola de neve)
-select cron.schedule('monitor-atendimento-sla', '0 14,18 * * 1-5', $$select pinguim.disparar_monitor_sla()$$);
+-- 09/11: SLA 4h úteis (sla_min=240) e 2 checkpoints/dia útil 13h e 17h BRT (era */10)
+select cron.schedule('monitor-atendimento-sla', '0 16,20 * * 1-5', $$select pinguim.disparar_monitor_sla()$$);
