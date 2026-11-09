@@ -17,6 +17,10 @@
 //   5. flagou e autor NÃO é admin do grupo → DM Discord (Codina + Ingrid)
 //      · admins em cache jsonb no grupo (refresh lazy a cada 6h)
 //      · debounce 5 min por autor+grupo (não spamma DM em rajada)
+//   6. ATENDIMENTO (schema-045): pergunta de aluno abre linha em
+//      monitor_atendimentos; ADM respondendo (reply citando o aluno ou @)
+//      fecha e posta pergunta+resposta+tempo no destino de atendimento.
+//      Mensagens do próprio número da instância (fromMe) contam como ADM.
 //
 // Teste (com token válido): body { "teste_classificar": "texto..." }
 // → devolve a classificação sem gravar nem alertar.
@@ -253,7 +257,7 @@ function extrairTexto(msg: any): string {
 }
 
 // contextInfo: quem a mensagem responde (reply) e quem ela marca (@)
-function extrairContexto(msg: any): { respondeuJid: string; mencionados: string[]; citada: string } {
+function extrairContexto(msg: any): { respondeuJid: string; respondeuMsgId: string; mencionados: string[]; citada: string } {
   const m = msg?.message ?? {};
   const ci = m.extendedTextMessage?.contextInfo
     ?? m.imageMessage?.contextInfo
@@ -264,6 +268,7 @@ function extrairContexto(msg: any): { respondeuJid: string; mencionados: string[
   const citada = (q.conversation ?? q.extendedTextMessage?.text ?? q.imageMessage?.caption ?? '').toString();
   return {
     respondeuJid: (ci.participant ?? '').toString(),
+    respondeuMsgId: (ci.stanzaId ?? '').toString(),
     mencionados: Array.isArray(ci.mentionedJid) ? ci.mentionedJid : [],
     citada,
   };
@@ -276,6 +281,142 @@ function perguntaSemDirecao(texto: string, respondeuJid: string, mencionados: st
   const semUrl = texto.replace(/https?:\/\/\S+/g, '');
   if (/@\d{6,}/.test(semUrl)) return false; // marcação que veio só no texto
   return semUrl.includes('?');
+}
+
+// ---------- atendimento: pergunta → resposta do ADM (schema-045) ----------
+const AGRUPAR_MIN = 30;        // msgs seguidas do mesmo aluno = 1 atendimento
+const RESPOSTA_JANELA_D = 3;   // reply sem msg exata citada fecha atendimento de até 3 dias
+interface ConfigAtend { ativo: boolean; canal_id: string | null; dm_user_ids: string[] }
+let _cfgAtend: { at: number; cfg: ConfigAtend | null } | null = null;
+
+async function configAtendimento(): Promise<ConfigAtend | null> {
+  if (_cfgAtend && Date.now() - _cfgAtend.at < CACHE_TTL_MS) return _cfgAtend.cfg;
+  const { data } = await sb.from('monitor_atendimento_config').select('ativo, canal_id, dm_user_ids').eq('id', 1).maybeSingle();
+  _cfgAtend = { at: Date.now(), cfg: (data as ConfigAtend) ?? null };
+  return _cfgAtend.cfg;
+}
+
+function ehPerguntaAtendimento(categoria: string | null, texto: string): boolean {
+  if (!categoria) return false;
+  if (categoria === 'resposta_adm') return texto.replace(/https?:\/\/\S+/g, '').includes('?');
+  return true;
+}
+
+async function abrirAtendimento(grupo: Grupo, m: {
+  jid: string; nome: string; tel: string; categoria: string; texto: string; msgId: string; quando: string;
+}) {
+  const desde = new Date(new Date(m.quando).getTime() - AGRUPAR_MIN * 60 * 1000).toISOString();
+  const { data: aberto } = await sb.from('monitor_atendimentos')
+    .select('id, pergunta_texto, pergunta_msg_ids')
+    .eq('grupo_jid', grupo.jid).eq('aluno_jid', m.jid).eq('status', 'pendente')
+    .gte('ultima_msg_em', desde).order('ultima_msg_em', { ascending: false }).limit(1);
+  if (aberto && aberto.length > 0) {
+    const a = aberto[0];
+    await sb.from('monitor_atendimentos').update({
+      pergunta_texto: `${a.pergunta_texto}\n${m.texto}`,
+      pergunta_msg_ids: [...(a.pergunta_msg_ids || []), m.msgId],
+      ultima_msg_em: m.quando,
+    }).eq('id', a.id);
+    return;
+  }
+  await sb.from('monitor_atendimentos').insert({
+    grupo_jid: grupo.jid, grupo_nome: grupo.nome,
+    aluno_jid: m.jid, aluno_nome: m.nome || null, aluno_telefone: m.tel || null,
+    categoria: m.categoria, pergunta_texto: m.texto, pergunta_msg_ids: [m.msgId],
+    perguntado_em: m.quando, ultima_msg_em: m.quando,
+  });
+}
+
+function fmtDuracao(seg: number): string {
+  const min = Math.max(1, Math.round(seg / 60));
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60), r = min % 60;
+  if (h < 24) return r ? `${h}h${String(r).padStart(2, '0')}` : `${h}h`;
+  const d = Math.floor(h / 24), hr = h % 24;
+  return hr ? `${d}d ${hr}h` : `${d}d`;
+}
+
+function citar(texto: string, max: number): string {
+  const t = texto.length > max ? texto.slice(0, max) + '…' : texto;
+  return t.split('\n').map((l) => `> ${l}`).join('\n');
+}
+
+function horaIsoBRT(iso: string): string {
+  const d = new Date(new Date(iso).getTime() + TZ_OFFSET_MS);
+  return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+}
+
+async function enviarAtendimento(cfg: ConfigAtend, conteudo: string) {
+  const bot = await getChave('DISCORD_BOT_TOKEN', 'monitor-grupos-webhook');
+  if (cfg.canal_id) { await postarDiscord(bot, cfg.canal_id, conteudo); return; }
+  let ok = 0;
+  for (const userId of cfg.dm_user_ids || []) {
+    const r = await fetch('https://discord.com/api/v10/users/@me/channels', {
+      method: 'POST',
+      headers: { Authorization: `Bot ${bot}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient_id: userId }),
+    });
+    if (!r.ok) continue;
+    try { await postarDiscord(bot, (await r.json()).id, conteudo); ok++; } catch (_) { /* tenta o próximo */ }
+  }
+  if (ok === 0) throw new Error('nenhuma DM entregue');
+}
+
+// ADM respondeu (reply citando aluno ou @aluno) → fecha o atendimento pendente
+// e posta pergunta + resposta. Prioridade: msg exata citada > reply ao aluno > @aluno.
+async function fecharAtendimento(grupo: Grupo, r: {
+  admJid: string; admNome: string; texto: string; msgId: string; quando: string;
+  respondeuJid: string; respondeuMsgId: string; mencionados: string[];
+}) {
+  const cfg = await configAtendimento();
+  if (!cfg || !cfg.ativo) return;
+  const desde = new Date(new Date(r.quando).getTime() - RESPOSTA_JANELA_D * 86400 * 1000).toISOString();
+  let alvo: any = null, como: 'reply' | 'mencao' = 'reply';
+  if (r.respondeuMsgId) {
+    const { data } = await sb.from('monitor_atendimentos').select('*')
+      .eq('grupo_jid', grupo.jid).eq('status', 'pendente')
+      .contains('pergunta_msg_ids', [r.respondeuMsgId]).limit(1);
+    alvo = data?.[0] ?? null;
+  }
+  const porAluno = async (jid: string) => {
+    const { data } = await sb.from('monitor_atendimentos').select('*')
+      .eq('grupo_jid', grupo.jid).eq('aluno_jid', jid).eq('status', 'pendente')
+      .gte('ultima_msg_em', desde).order('ultima_msg_em', { ascending: false }).limit(1);
+    return data?.[0] ?? null;
+  };
+  if (!alvo && r.respondeuJid) alvo = await porAluno(r.respondeuJid);
+  if (!alvo) {
+    for (const jid of r.mencionados) {
+      alvo = await porAluno(jid);
+      if (alvo) { como = 'mencao'; break; }
+    }
+  }
+  if (!alvo) return;
+
+  const seg = Math.max(0, Math.round((new Date(r.quando).getTime() - new Date(alvo.perguntado_em).getTime()) / 1000));
+  const { data: fechado } = await sb.from('monitor_atendimentos').update({
+    status: 'respondida', adm_jid: r.admJid, adm_nome: r.admNome || null,
+    resposta_texto: r.texto, resposta_msg_id: r.msgId, respondido_em: r.quando,
+    tempo_resposta_seg: seg, como_respondeu: como,
+  }).eq('id', alvo.id).eq('status', 'pendente').select('id');
+  if (!fechado || fechado.length === 0) return; // outro ADM fechou antes
+
+  const aluno = `${alvo.aluno_nome || 'sem nome'}${alvo.aluno_telefone ? ` (${fmtTel(alvo.aluno_telefone)})` : ''}`;
+  const post = [
+    '━━━━━━━━━━━━━━━━━━━━',
+    `✅ **PERGUNTA RESPONDIDA** · ${grupo.nome}`,
+    `**Aluno:** ${aluno} · ${horaIsoBRT(alvo.perguntado_em)}`,
+    citar(alvo.pergunta_texto, 750),
+    '',
+    `**Resposta de ${r.admNome || 'ADM'}** · ${horaIsoBRT(r.quando)} · ⏱️ ${fmtDuracao(seg)}`,
+    citar(r.texto, 850),
+  ].join('\n').slice(0, 1990);
+  try {
+    await enviarAtendimento(cfg, post);
+    await sb.from('monitor_atendimentos').update({ postado_em: new Date().toISOString() }).eq('id', alvo.id);
+  } catch (e) {
+    await sb.from('monitor_atendimentos').update({ postar_erro: String(e).slice(0, 200) }).eq('id', alvo.id);
+  }
 }
 
 // ---------- handler ----------
@@ -307,7 +448,7 @@ serve(async (req) => {
     try {
       const key = item?.key ?? {};
       const grupoJid = key.remoteJid as string;
-      if (!grupoJid || !grupoJid.endsWith('@g.us') || key.fromMe) continue;
+      if (!grupoJid || !grupoJid.endsWith('@g.us')) continue;
       const mapa = await grupos();
       const grupo = mapa.get(grupoJid);
       if (!grupo) continue;
@@ -315,10 +456,33 @@ serve(async (req) => {
       const texto = extrairTexto(item);
       if (!texto) continue;
 
+      const ts = Number(item.messageTimestamp) || null;
+      const quando = ts ? new Date(ts * 1000).toISOString() : new Date().toISOString();
+      const ctx = extrairContexto(item);
+
+      // fromMe = o próprio número da instância (ADM do grupo) falando.
+      // Não é aluno: não classifica nem alerta — só grava e, se for reply/@,
+      // pode fechar um atendimento.
+      if (key.fromMe) {
+        const meuJid = (key.participant || body?.sender || 'instancia') as string;
+        const meuNome = (item.pushName || 'ADM (número monitor)') as string;
+        const { data: ins } = await sb.from('monitor_grupos_mensagens').upsert({
+          grupo_jid: grupoJid, grupo_nome: grupo.nome, message_id: key.id || crypto.randomUUID(),
+          remetente_jid: meuJid, remetente_nome: meuNome, eh_admin: true, texto,
+          respondeu_jid: ctx.respondeuJid || null, respondeu_msg_id: ctx.respondeuMsgId || null,
+          mencionados: ctx.mencionados, msg_timestamp: ts ? quando : null,
+        }, { onConflict: 'grupo_jid,message_id', ignoreDuplicates: true }).select('id');
+        if (ins && ins.length > 0 && (ctx.respondeuJid || ctx.mencionados.length > 0)) {
+          await fecharAtendimento(grupo, {
+            admJid: meuJid, admNome: meuNome, texto, msgId: key.id || '', quando,
+            respondeuJid: ctx.respondeuJid, respondeuMsgId: ctx.respondeuMsgId, mencionados: ctx.mencionados,
+          }).catch((e) => console.error('atendimento (fromMe) falhou:', e));
+        }
+        continue;
+      }
+
       const remetenteJid = (key.participant || key.participantAlt || '') as string;
       const remetenteNome = (item.pushName || '') as string;
-      const ts = Number(item.messageTimestamp) || null;
-      const ctx = extrairContexto(item);
       await garantirParticipantes(grupo, remetenteJid);
       const telefone = resolverTelefone(grupo, remetenteJid, (key.participantAlt || '') as string);
 
@@ -344,6 +508,7 @@ serve(async (req) => {
           texto, // completo, sem corte — é a matéria-prima da fase 2
           categoria, score, padroes: quais,
           respondeu_jid: ctx.respondeuJid || null,
+          respondeu_msg_id: ctx.respondeuMsgId || null,
           mencionados: ctx.mencionados,
           msg_timestamp: ts ? new Date(ts * 1000).toISOString() : null,
         }, { onConflict: 'grupo_jid,message_id', ignoreDuplicates: true })
@@ -351,15 +516,33 @@ serve(async (req) => {
       if (errIns) throw new Error(`insert: ${errIns.message}`);
       if (!inserida || inserida.length === 0) continue; // duplicada
       processadas++;
+      const linhaId = inserida[0].id;
+
+      // ADM respondendo aluno (reply/@) → pode fechar atendimento
+      if ((ctx.respondeuJid || ctx.mencionados.length > 0) && await ehAdmin(grupo, remetenteJid)) {
+        await sb.from('monitor_grupos_mensagens').update({ eh_admin: true }).eq('id', linhaId);
+        await fecharAtendimento(grupo, {
+          admJid: remetenteJid, admNome: remetenteNome || await resolverNome(grupo, remetenteJid),
+          texto, msgId: key.id || '', quando,
+          respondeuJid: ctx.respondeuJid, respondeuMsgId: ctx.respondeuMsgId, mencionados: ctx.mencionados,
+        }).catch((e) => console.error('atendimento (adm) falhou:', e));
+      }
+
       if (!categoria) continue;
       flagadas++;
-      const linhaId = inserida[0].id;
 
       // admin do grupo chacoalhando não é reclamação de aluno
       const admin = await ehAdmin(grupo, remetenteJid);
       if (admin) {
         await sb.from('monitor_grupos_mensagens').update({ eh_admin: true, alerta_suprimido: 'admin' }).eq('id', linhaId);
         continue;
+      }
+
+      // pergunta de aluno → abre/agrupa atendimento (independe do debounce do alerta)
+      if (ehPerguntaAtendimento(categoria, texto)) {
+        await abrirAtendimento(grupo, {
+          jid: remetenteJid, nome: remetenteNome, tel: telefone, categoria, texto, msgId: key.id || '', quando,
+        }).catch((e) => console.error('abrir atendimento falhou:', e));
       }
 
       // debounce: mesmo autor+grupo alertado nos últimos N min → não repete DM

@@ -70,3 +70,14 @@ Mentoria Lyra · TAURUS MASTER · TAURUS MASTER | AVISOS · TAURUS LT · TAURUS 
 - Aba no Mission Control com as flagadas + botão "falso positivo" (vira `ativo=false`/ajuste de peso).
 - LLM **só** nas mensagens de score ambíguo (1–2), padrão enriquecedor plugável.
 - Relatório semanal por categoria/grupo → detectar falha de processo recorrente.
+
+## Atendimento: pergunta → resposta do ADM (schema-045, 09/11/2026)
+
+Roda em paralelo ao alerta por produto (que não mudou).
+
+- **Abre atendimento**: pergunta de aluno flagada (`pedido_ajuda` / `reclamacao` / `chateado_risco`, ou `resposta_adm` com "?"). Mensagens do mesmo aluno no mesmo grupo em até 30 min = o mesmo atendimento. Tabela `pinguim.monitor_atendimentos`.
+- **Fecha**: ADM dá reply citando a mensagem do aluno (ou outra msg dele, até 3 dias) ou marca o aluno com @. Mensagens do próprio número da instância (fromMe) agora contam como ADM. Mensagem de ADM sem reply/@ NÃO fecha (medido: quase nunca é resposta àquela pergunta).
+- **Ao fechar**: posta pergunta + resposta + tempo de resposta no destino.
+- **Fechamento diário**: edge `monitor-atendimento-resumo`, cron job 58 às 8h BRT, sobre o dia anterior: perguntas, respondidas, pendentes (lista, com "colega respondeu"), tempo médio/mediano/mais lento, por grupo, por ADM. Teste: POST `{dia:'AAAA-MM-DD', dry_run:true}` com service_role.
+- **Destino**: `pinguim.monitor_atendimento_config` (`canal_id` NULL = DM pros `dm_user_ids`, hoje só Codina). Virar tag: `update pinguim.monitor_atendimento_config set canal_id = '<id>';`
+- Backfill: 14 dias de histórico (186 atendimentos, 38 respondidos), marcados `postar_erro = 'backfill histórico (não postado)'`.
