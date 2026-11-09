@@ -392,7 +392,13 @@ async function fecharAtendimento(grupo: Grupo, r: {
     }
   }
   if (!alvo) return;
+  await concluirAtendimento(cfg, alvo, grupo.nome, como, r);
+}
 
+// fecha (se ainda pendente) e posta pergunta + resposta + tempo no Painel CS
+async function concluirAtendimento(cfg: ConfigAtend, alvo: any, canalNome: string, como: string, r: {
+  admJid: string; admNome: string; texto: string; msgId: string; quando: string;
+}) {
   const seg = Math.max(0, Math.round((new Date(r.quando).getTime() - new Date(alvo.perguntado_em).getTime()) / 1000));
   const { data: fechado } = await sb.from('monitor_atendimentos').update({
     status: 'respondida', adm_jid: r.admJid, adm_nome: r.admNome || null,
@@ -408,7 +414,7 @@ async function fecharAtendimento(grupo: Grupo, r: {
     : Math.abs(util - seg) < 60 ? fmtDuracao(seg) : `${fmtDuracao(util)} úteis (${fmtDuracao(seg)} corridos)`;
   const post = [
     '━━━━━━━━━━━━━━━━━━━━',
-    `✅ **RESPONDIDA** · \`A-${String(fechado[0].numero).padStart(4, '0')}\` · ${grupo.nome}`,
+    `✅ **RESPONDIDA** · \`A-${String(fechado[0].numero).padStart(4, '0')}\` · ${canalNome}`,
     '',
     `**Aluno:** ${aluno} · ${horaIsoBRT(alvo.perguntado_em)}${alvo.fora_horario ? ' · 🌙 fora do horário' : ''}`,
     citar(alvo.pergunta_texto, 750),
@@ -422,6 +428,112 @@ async function fecharAtendimento(grupo: Grupo, r: {
   } catch (e) {
     await sb.from('monitor_atendimentos').update({ postar_erro: String(e).slice(0, 200) }).eq('id', alvo.id);
   }
+}
+
+// ---------- atendimento no PRIVADO dos números de CS (schema-047) ----------
+// Grupos são lidos só pela instância principal; as demais também estão nos
+// grupos e contariam em dobro.
+const INSTANCIA_GRUPOS = 'elo_1775155882289';
+interface Instancia { instancia: string; canal_nome: string; atendente: string; telefone: string | null; monitora_privado: boolean }
+let _instancias: { at: number; mapa: Map<string, Instancia> } | null = null;
+
+async function instancias(): Promise<Map<string, Instancia>> {
+  if (_instancias && Date.now() - _instancias.at < CACHE_TTL_MS) return _instancias.mapa;
+  const { data } = await sb.from('monitor_instancias').select('instancia, canal_nome, atendente, telefone, monitora_privado');
+  const mapa = new Map<string, Instancia>();
+  for (const i of data ?? []) mapa.set(i.instancia, i as Instancia);
+  _instancias = { at: Date.now(), mapa };
+  return mapa;
+}
+
+// mídia sem legenda também é pedido no privado (aluno manda muito áudio)
+function extrairMidia(msg: any): string {
+  const m = msg?.message ?? {};
+  if (m.audioMessage) return '[áudio]';
+  if (m.imageMessage) return '[imagem]';
+  if (m.videoMessage) return '[vídeo]';
+  if (m.documentMessage || m.documentWithCaptionMessage) return '[documento]';
+  return ''; // figurinha, reação, protocolo etc. não contam
+}
+
+// "obrigado", "ok", "👍" sozinhos não abrem atendimento
+const PALAVRAS_ACK = new Set(['ok', 'okay', 'oks', 'okk', 'obrigado', 'obrigada', 'obrigadao', 'obrigadaa', 'obg', 'brigado',
+  'brigada', 'valeu', 'vlw', 'blz', 'beleza', 'show', 'perfeito', 'top', 'certo', 'entendi', 'combinado', 'ta', 'bom',
+  'otimo', 'muito', 'mt', 'mto', 'sim', 'amem', 'kkk', 'kkkk', 'kkkkk', 'rs', 'rsrs', 'de', 'nada', 'tudo', 'joia', 'massa',
+  'demais', 'maravilha', 'ah', 'aah', 'tbm', 'tambem', 'gratidao', 'grata', 'grato', 'deus', 'abencoe', 'te', 'e', 'pra', 'voce', 'vc']);
+function ehSoAgradecimento(texto: string): boolean {
+  const t = normalizar(texto).replace(/[\p{Extended_Pictographic}️‍!.,;:)(❤]/gu, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return true; // só emoji/pontuação
+  const palavras = t.split(' ');
+  return palavras.length <= 6 && palavras.every((p) => PALAVRAS_ACK.has(p));
+}
+
+// telefones da equipe: ADMs de qualquer grupo monitorado + números de atendimento
+async function telefonesEquipe(): Promise<Set<string>> {
+  const tels = new Set<string>();
+  for (const g of (await grupos()).values()) {
+    for (const p of Object.values(g.participantes || {})) if (p.adm && p.tel) tels.add(p.tel);
+  }
+  for (const i of (await instancias()).values()) if (i.telefone) tels.add(i.telefone);
+  return tels;
+}
+
+async function tratarPrivado(inst: Instancia, item: any) {
+  const key = item?.key ?? {};
+  const contatoJid = String(key.remoteJid || '');
+  const midia = extrairMidia(item);
+  const texto = extrairTexto(item) || midia;
+  if (!texto) return;
+  const ts = Number(item.messageTimestamp) || null;
+  const quando = ts ? new Date(ts * 1000).toISOString() : new Date().toISOString();
+  const canalId = `privado:${inst.instancia}`;
+  const alt = String(key.remoteJidAlt || key.senderPn || '');
+  const tel = contatoJid.endsWith('@s.whatsapp.net') ? soDigitos(contatoJid) : alt.endsWith('@s.whatsapp.net') ? soDigitos(alt) : '';
+  const msgId = key.id || crypto.randomUUID();
+
+  const { data: ins } = await sb.from('monitor_grupos_mensagens').upsert({
+    grupo_jid: canalId, grupo_nome: inst.canal_nome, message_id: msgId,
+    remetente_jid: key.fromMe ? inst.instancia : contatoJid,
+    remetente_nome: key.fromMe ? inst.atendente : (item.pushName || null),
+    remetente_telefone: key.fromMe ? inst.telefone : (tel || null),
+    eh_admin: !!key.fromMe, texto, msg_timestamp: ts ? quando : null,
+  }, { onConflict: 'grupo_jid,message_id', ignoreDuplicates: true }).select('id');
+  if (!ins || ins.length === 0) return; // duplicada
+
+  const cfg = await configAtendimento();
+  if (!cfg || !cfg.ativo) return;
+  const { data: abertos } = await sb.from('monitor_atendimentos').select('*')
+    .eq('grupo_jid', canalId).eq('aluno_jid', contatoJid).eq('status', 'pendente')
+    .order('perguntado_em', { ascending: false }).limit(1);
+  const aberto = abertos?.[0] ?? null;
+
+  // atendente respondeu na conversa → fecha
+  if (key.fromMe) {
+    if (aberto) {
+      await concluirAtendimento(cfg, aberto, `📱 ${inst.canal_nome}`, 'privado', {
+        admJid: inst.instancia, admNome: inst.atendente, texto, msgId, quando,
+      });
+    }
+    return;
+  }
+
+  // contato escreveu: soma no aberto ou abre um novo
+  if (aberto) {
+    await sb.from('monitor_atendimentos').update({
+      pergunta_texto: `${aberto.pergunta_texto}\n${texto}`,
+      pergunta_msg_ids: [...(aberto.pergunta_msg_ids || []), msgId],
+      ultima_msg_em: quando,
+    }).eq('id', aberto.id);
+    return;
+  }
+  if (ehSoAgradecimento(texto)) return;
+  if (tel && (await telefonesEquipe()).has(tel)) return;
+  await sb.from('monitor_atendimentos').insert({
+    grupo_jid: canalId, grupo_nome: inst.canal_nome, canal_tipo: 'privado',
+    aluno_jid: contatoJid, aluno_nome: item.pushName || null, aluno_telefone: tel || null,
+    categoria: 'privado', pergunta_texto: texto, pergunta_msg_ids: [msgId],
+    perguntado_em: quando, ultima_msg_em: quando,
+  });
 }
 
 // ---------- handler ----------
@@ -453,7 +565,17 @@ serve(async (req) => {
     try {
       const key = item?.key ?? {};
       const grupoJid = key.remoteJid as string;
-      if (!grupoJid || !grupoJid.endsWith('@g.us')) continue;
+      if (!grupoJid) continue;
+      const instanciaNome = String(body?.instance || '');
+
+      // conversa privada (1:1) num número de atendimento cadastrado
+      if (grupoJid.endsWith('@s.whatsapp.net') || grupoJid.endsWith('@lid')) {
+        const inst = (await instancias()).get(instanciaNome);
+        if (inst && inst.monitora_privado) await tratarPrivado(inst, item);
+        continue;
+      }
+      if (!grupoJid.endsWith('@g.us')) continue; // status, canal, broadcast
+      if (instanciaNome && instanciaNome !== INSTANCIA_GRUPOS) continue; // grupos só pela instância principal
       const mapa = await grupos();
       const grupo = mapa.get(grupoJid);
       if (!grupo) continue;
