@@ -155,7 +155,7 @@ async function montarPainel(dia: string, cfg: any): Promise<string[]> {
       painel.push(`⏱️ Tempo de resposta (horário de atendimento): médio **${fmtDuracao(media)}** · mais lento **${fmtDuracao(uteis[uteis.length - 1])}**`);
     }
     const fora = todos.filter((a) => a.fora_horario).length;
-    if (fora > 0) painel.push(`🌙 ${fora} chegaram fora do horário (seg–sex ${cfg.hora_ini}h–${cfg.hora_fim}h)`);
+    if (fora > 0) painel.push(`🌙 ${fora} ${fora === 1 ? "chegou" : "chegaram"} fora do horário (seg–sex ${cfg.hora_ini}h–${cfg.hora_fim}h)`);
 
     // canais: pior cor primeiro, depois volume
     const canais = new Map<string, { nome: string; t: number; r: number; p: number; vermelho: boolean }>();
