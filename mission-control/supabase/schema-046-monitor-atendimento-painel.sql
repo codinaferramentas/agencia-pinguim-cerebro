@@ -118,4 +118,5 @@ begin
 end $$;
 revoke all on function pinguim.disparar_monitor_sla() from public, anon, authenticated;
 
-select cron.schedule('monitor-atendimento-sla', '*/10 * * * *', $$select pinguim.disparar_monitor_sla()$$);
+-- 09/11: 2 checkpoints/dia útil 11h e 15h BRT (era */10 — bola de neve)
+select cron.schedule('monitor-atendimento-sla', '0 14,18 * * 1-5', $$select pinguim.disparar_monitor_sla()$$);
