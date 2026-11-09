@@ -81,3 +81,11 @@ Roda em paralelo ao alerta por produto (que não mudou).
 - **Fechamento diário**: edge `monitor-atendimento-resumo`, cron job 58 às 8h BRT, sobre o dia anterior: perguntas, respondidas, pendentes (lista, com "colega respondeu"), tempo médio/mediano/mais lento, por grupo, por ADM. Teste: POST `{dia:'AAAA-MM-DD', dry_run:true}` com service_role.
 - **Destino**: `pinguim.monitor_atendimento_config` (`canal_id` NULL = DM pros `dm_user_ids`, hoje só Codina). Virar tag: `update pinguim.monitor_atendimento_config set canal_id = '<id>';`
 - Backfill: 14 dias de histórico (186 atendimentos, 38 respondidos), marcados `postar_erro = 'backfill histórico (não postado)'`.
+
+## Painel CS — privado dos números de atendimento (schema-047/048, 09/11/2026)
+
+- Instâncias em `pinguim.monitor_instancias` (Ingrid = elo_1775155882289, Fernanda Lisboa; "Equipe CS" quando conectar). Desligar = `monitora_privado = false`.
+- **Só aluno**: `pinguim.monitor_classificar_contato(tel)` → `equipe` (ADM de grupo ou número de CS) | `aluno` (CRM `crm_cliente_identidade` tel ou membro de grupo `crm_grupo_presenca` — pega Pix que só está no grupo) | `desconhecido`. Só `aluno` é gravado e vira atendimento; o resto nem grava.
+- Abre quando o aluno escreve algo além de cumprimento/agradecimento ("oi", "bom dia", "obrigado" esperam; o "oi" anterior entra junto quando a dúvida chega). Fecha quando a atendente responde na conversa.
+- Grupos lidos só pela instância principal. Post de "respondida" no Discord desligado por padrão (`postar_respondidas`); Q&A fica no banco.
+- Painel: SLA 4h úteis (`sla_min`), alerta 13h e 17h dias úteis (cron job 59), fechamento 8h (job 58). Canal `#painel-cs` 1569426033793437808.

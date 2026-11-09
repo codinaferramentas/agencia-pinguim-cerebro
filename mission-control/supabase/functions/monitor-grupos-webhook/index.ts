@@ -470,14 +470,29 @@ function ehSoAgradecimento(texto: string): boolean {
   return palavras.length <= 6 && palavras.every((p) => PALAVRAS_ACK.has(p));
 }
 
-// telefones da equipe: ADMs de qualquer grupo monitorado + números de atendimento
-async function telefonesEquipe(): Promise<Set<string>> {
-  const tels = new Set<string>();
-  for (const g of (await grupos()).values()) {
-    for (const p of Object.values(g.participantes || {})) if (p.adm && p.tel) tels.add(p.tel);
-  }
-  for (const i of (await instancias()).values()) if (i.telefone) tels.add(i.telefone);
-  return tels;
+// "oi", "bom dia", "tudo bem?" sozinhos esperam a próxima msg pra abrir
+const PALAVRAS_SAUDACAO = new Set(['oi', 'oii', 'oiii', 'ola', 'opa', 'eai', 'e', 'ai', 'bom', 'boa', 'dia', 'tarde', 'noite',
+  'tudo', 'td', 'bem', 'bom', 'joia', 'como', 'vai', 'voce', 'vc', 'esta', 'ta', 'tudo', 'certo', 'querida', 'querido', 'amiga', 'amigo']);
+function ehSoSaudacao(texto: string, atendente: string): boolean {
+  const nomes = normalizar(atendente).split(' ');
+  const t = normalizar(texto).replace(/[\p{Extended_Pictographic}️‍!.,;:?)(❤]/gu, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return true;
+  const palavras = t.split(' ');
+  return palavras.length <= 8 && palavras.every((p) => PALAVRAS_SAUDACAO.has(p) || nomes.includes(p));
+}
+
+// equipe | aluno | desconhecido (schema-048). Só 'aluno' vira atendimento;
+// os outros nem são gravados (conversa pessoal/de equipe não entra).
+const _classe = new Map<string, { at: number; classe: string }>();
+async function classificarContato(tel: string): Promise<string> {
+  if (!tel) return 'desconhecido';
+  const c = _classe.get(tel);
+  if (c && Date.now() - c.at < 10 * 60 * 1000) return c.classe;
+  const { data, error } = await sb.rpc('monitor_classificar_contato', { p_tel: tel });
+  if (error) throw new Error(`classificar contato: ${error.message}`);
+  const classe = String(data || 'desconhecido');
+  _classe.set(tel, { at: Date.now(), classe });
+  return classe;
 }
 
 async function tratarPrivado(inst: Instancia, item: any) {
@@ -492,6 +507,9 @@ async function tratarPrivado(inst: Instancia, item: any) {
   const alt = String(key.remoteJidAlt || key.senderPn || '');
   const tel = contatoJid.endsWith('@s.whatsapp.net') ? soDigitos(contatoJid) : alt.endsWith('@s.whatsapp.net') ? soDigitos(alt) : '';
   const msgId = key.id || crypto.randomUUID();
+
+  // só conversa com ALUNO entra — equipe e desconhecidos nem são gravados
+  if (await classificarContato(tel) !== 'aluno') return;
 
   const { data: ins } = await sb.from('monitor_grupos_mensagens').upsert({
     grupo_jid: canalId, grupo_nome: inst.canal_nome, message_id: msgId,
@@ -528,13 +546,26 @@ async function tratarPrivado(inst: Instancia, item: any) {
     }).eq('id', aberto.id);
     return;
   }
-  if (ehSoAgradecimento(texto)) return;
-  if (tel && (await telefonesEquipe()).has(tel)) return;
+  if (ehSoAgradecimento(texto) || ehSoSaudacao(texto, inst.atendente)) return; // fica gravada, não abre
+
+  // abriu: puxa o "oi/bom dia" que veio antes (última 1h, depois da última resposta)
+  const { data: ultimo } = await sb.from('monitor_atendimentos').select('respondido_em')
+    .eq('grupo_jid', canalId).eq('aluno_jid', contatoJid).eq('status', 'respondida')
+    .order('respondido_em', { ascending: false }).limit(1);
+  const corte = new Date(Math.max(Date.now() - 3600 * 1000,
+    ultimo?.[0]?.respondido_em ? new Date(ultimo[0].respondido_em).getTime() : 0)).toISOString();
+  const { data: antes } = await sb.from('monitor_grupos_mensagens').select('message_id, texto, msg_timestamp, criado_em')
+    .eq('grupo_jid', canalId).eq('remetente_jid', contatoJid).neq('message_id', msgId)
+    .gt('criado_em', corte).order('criado_em');
+  const previas = antes ?? [];
   await sb.from('monitor_atendimentos').insert({
     grupo_jid: canalId, grupo_nome: inst.canal_nome, canal_tipo: 'privado',
     aluno_jid: contatoJid, aluno_nome: item.pushName || null, aluno_telefone: tel || null,
-    categoria: 'privado', pergunta_texto: texto, pergunta_msg_ids: [msgId],
-    perguntado_em: quando, ultima_msg_em: quando,
+    categoria: 'privado',
+    pergunta_texto: [...previas.map((m) => m.texto), texto].join('\n'),
+    pergunta_msg_ids: [...previas.map((m) => m.message_id), msgId],
+    perguntado_em: previas[0]?.msg_timestamp || previas[0]?.criado_em || quando,
+    ultima_msg_em: quando,
   });
 }
 
