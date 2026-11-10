@@ -303,12 +303,68 @@ async function avisarResponsaveis(conteudo: string, imagemPng?: Uint8Array | nul
 }
 
 // ---------- evolution ----------
-async function enviarWhats(jid: string, texto: string) {
-  const [base, inst, tok] = await Promise.all([
-    getChave('EVOLUTION_API_URL', 'alertas-grupos-worker'),
+// Resolve a instância+token Evolution de um grupo. Se o grupo tem
+// `instancia_override` (ex: grupos ELO → Fernanda), usa a instância nomeada;
+// senão, usa a padrão (Ingrid). As chaves do override seguem o padrão
+// <OVERRIDE> + "_TOKEN" no cofre (ex: EVOLUTION_INSTANCE_ELO_FERNANDA[_TOKEN]).
+async function instanciaDoGrupo(override: string | null): Promise<{ inst: string; tok: string }> {
+  if (override) {
+    const [inst, tok] = await Promise.all([
+      getChave(override, 'alertas-grupos-worker'),
+      getChave(`${override}_TOKEN`, 'alertas-grupos-worker'),
+    ]);
+    return { inst, tok };
+  }
+  const [inst, tok] = await Promise.all([
     getChave('EVOLUTION_INSTANCE_ALERTAS_GRUPOS', 'alertas-grupos-worker'),
     getChave('EVOLUTION_INSTANCE_ALERTAS_GRUPOS_TOKEN', 'alertas-grupos-worker'),
   ]);
+  return { inst, tok };
+}
+
+// ---------- responsável pelo disparo = quem mexeu por último no card ----------
+// (Andre 10/11) A última pessoa que moveu/editou o card dispara pelo próprio
+// número. André Codina NÃO conta — é também a conta do token do robô (todo
+// move automático Avulso→Concluidos sai no nome dele) — nem ferramenta@.
+const EXCLUIR_RESPONSAVEL_IDS = new Set(['6a8da7f2f80104613cbfe7cc']); // André Codina - Equipe Sirius (robô)
+const EXCLUIR_RESPONSAVEL_NOME = /andr[eé]\s*codina|ferramenta/i;
+
+async function responsavelDoCard(
+  cardId: string,
+  mapa: Map<string, { nome: string; instancia_chave: string }>,
+): Promise<{ nome: string; chave: string | null } | null> {
+  const acts = await trello(`cards/${cardId}/actions?filter=updateCard,createCard,copyCard&limit=50`) as any[];
+  for (const a of acts) { // Trello devolve do mais recente pro mais antigo
+    const mid = a.idMemberCreator || '';
+    const nome = a.memberCreator?.fullName || '';
+    const user = a.memberCreator?.username || '';
+    if (EXCLUIR_RESPONSAVEL_IDS.has(mid) || EXCLUIR_RESPONSAVEL_NOME.test(nome) || EXCLUIR_RESPONSAVEL_NOME.test(user)) continue;
+    const r = mapa.get(mid);
+    return { nome: r?.nome || nome, chave: r?.instancia_chave ?? null }; // sem instância cadastrada → cai no padrão
+  }
+  return null; // só o robô/André mexeu → regra do grupo/padrão
+}
+
+// Grupos em que uma instância está (cache por execução) — o responsável só
+// dispara se o número dele estiver no grupo; senão cai na instância padrão.
+const gruposPorInstancia = new Map<string, Set<string> | null>();
+async function gruposDaInstancia(chave: string): Promise<Set<string> | null> {
+  if (gruposPorInstancia.has(chave)) return gruposPorInstancia.get(chave)!;
+  let set: Set<string> | null = null;
+  try {
+    const base = await getChave('EVOLUTION_API_URL', 'alertas-grupos-worker');
+    const { inst, tok } = await instanciaDoGrupo(chave);
+    const r = await fetch(`${base.replace(/\/$/, '')}/group/fetchAllGroups/${encodeURIComponent(inst)}?getParticipants=false`, { headers: { apikey: tok } });
+    const j = await r.json().catch(() => []);
+    if (r.ok && Array.isArray(j)) set = new Set(j.map((x: any) => x.id));
+  } catch (_) { /* não deu pra checar → null (confia no responsável) */ }
+  gruposPorInstancia.set(chave, set);
+  return set;
+}
+
+async function enviarWhats(jid: string, texto: string, override: string | null = null) {
+  const base = await getChave('EVOLUTION_API_URL', 'alertas-grupos-worker');
+  const { inst, tok } = await instanciaDoGrupo(override);
   const url = `${base.replace(/\/$/, '')}/message/sendText/${inst}`;
   let r = await fetch(url, {
     method: 'POST', headers: { 'Content-Type': 'application/json', apikey: tok },
@@ -446,7 +502,11 @@ serve(async (req) => {
       }
       log.instancia_recuperada = tinhaAlertado ? 'com aviso' : 'soluço curto — silêncio';
     }
-    const { data: grupos } = await sb.from('grupos_whatsapp_alertas').select('nome, link_convite, jid_evolution').eq('ativo', true);
+    const { data: grupos } = await sb.from('grupos_whatsapp_alertas').select('nome, link_convite, jid_evolution, instancia_override').eq('ativo', true);
+    // responsáveis (membro Trello → instância) — quem mexeu por último dispara
+    const { data: resps } = await sb.from('alertas_responsaveis').select('trello_member_id, nome, instancia_chave').eq('ativo', true);
+    const mapaResp = new Map((resps || []).map(r => [r.trello_member_id, { nome: r.nome, instancia_chave: r.instancia_chave }]));
+    gruposPorInstancia.clear();
     const porLink = new Map((grupos || []).map(g => [g.link_convite, g]));
 
     // trello: listas e cards de hoje + avulso + enviar agora
@@ -497,11 +557,11 @@ serve(async (req) => {
       }
 
       // resolve grupos
-      const destinos: { nome: string; jid: string }[] = [];
+      const destinos: { nome: string; jid: string; override: string | null }[] = [];
       const desconhecidos: string[] = [];
       for (const link of card.links) {
         const g = porLink.get(link);
-        if (g?.jid_evolution) destinos.push({ nome: g.nome, jid: g.jid_evolution });
+        if (g?.jid_evolution) destinos.push({ nome: g.nome, jid: g.jid_evolution, override: g.instancia_override ?? null });
         else desconhecidos.push(link);
       }
       if (!destinos.length) { pulo(`nenhum link cadastrado no de-para (${desconhecidos.length} desconhecido/s)`); continue; }
@@ -518,6 +578,13 @@ serve(async (req) => {
         agendaOk = tituloBate(card.nome, agendaHoje.titulos)
           || card.links.some(l => agendaHoje!.links.has(l));
         if (!agendaOk && !modoTeste) { pulo('nenhum evento HOJE na agenda com título parecido com o do card'); continue; }
+      }
+
+      // Quem mexeu por último no card (fora André/robô) = responsável pelo
+      // disparo. Calculado ANTES de o robô mover o card (Enviar Agora/Avulso).
+      let resp: { nome: string; chave: string | null } | null = null;
+      if (!modoTeste) {
+        try { resp = await responsavelDoCard(card.id, mapaResp); } catch (_) { resp = null; }
       }
 
       // BLINDAGEM 31/08 (manual): tira o card da lista ANTES de enviar. Se o
@@ -562,10 +629,21 @@ serve(async (req) => {
           }
           continue;
         }
+        // Por qual número sai: (1) quem mexeu por último no card, se o número
+        // dele está no grupo; (2) regra do grupo (ELO → Fernanda); (3) padrão.
+        let chaveUsada: string | null = dest.override;
+        let via = dest.override ? 'regra do grupo' : 'padrão';
+        if (resp?.chave) {
+          const gs = await gruposDaInstancia(resp.chave);
+          if (!gs || gs.has(dest.jid)) { chaveUsada = resp.chave; via = `último a mexer: ${resp.nome}`; }
+          else via = `${resp.nome} não está no grupo → ${via}`;
+        }
+        const chaveEfetiva = chaveUsada || 'EVOLUTION_INSTANCE_ALERTAS_GRUPOS';
+        const nomeInst = [...mapaResp.values()].find(v => v.instancia_chave === chaveEfetiva)?.nome || chaveEfetiva;
         if (dryRun) {
           const { data: ja } = await sb.from('disparos_grupos_whatsapp').select('id')
             .eq('card_id', card.id).eq('grupo_jid', dest.jid).eq('data_ref', dataBRT).eq('tipo', 'automatico').maybeSingle();
-          log.disparos.push({ card: card.nome, grupo: dest.nome, manual, agenda_ok: agendaOk, enviaria: manual || !ja, modo: log.modo });
+          log.disparos.push({ card: card.nome, grupo: dest.nome, manual, agenda_ok: agendaOk, enviaria: manual || !ja, modo: log.modo, sai_por: modoTeste ? 'padrão (teste)' : nomeInst, via });
           continue;
         }
         // TRAVA (automático): insert antes do envio; unique segura duplicata
@@ -622,11 +700,14 @@ serve(async (req) => {
           ? `🧪 *[TESTE — destino real: ${dest.nome}]*\n${statusAgenda}${manual ? '\n🔁 reenvio manual' : ''}\n———\n${card.mensagem}`
           : card.mensagem;
         try {
-          await enviarWhats(jidFinal, texto);
-          await sb.from('disparos_grupos_whatsapp').update({ status: 'enviado' })
+          // produção: sai pelo responsável/regra do grupo; modo teste: instância
+          // padrão no grupo de teste (o responsável pode não estar lá)
+          await enviarWhats(jidFinal, texto, modoTeste ? null : chaveUsada);
+          await sb.from('disparos_grupos_whatsapp')
+            .update({ status: 'enviado', instancia_usada: modoTeste ? 'padrão (teste)' : nomeInst, responsavel: resp?.nome ?? null })
             .eq('card_id', card.id).eq('grupo_jid', dest.jid).eq('data_ref', dataBRT).eq('status', 'enviando');
-          enviadosNesteCard.push(dest.nome);
-          log.disparos.push({ card: card.nome, grupo: dest.nome, manual, enviado: true, modo: log.modo });
+          enviadosNesteCard.push(modoTeste ? dest.nome : `${dest.nome} (via ${nomeInst})`);
+          log.disparos.push({ card: card.nome, grupo: dest.nome, manual, enviado: true, modo: log.modo, sai_por: nomeInst, via });
         } catch (e) {
           // Erro da Evolution → marca 'erro'; o próximo tick RETENTA (até 3x).
           const msg = e instanceof Error ? e.message : String(e);
