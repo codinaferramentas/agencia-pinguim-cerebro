@@ -50,3 +50,7 @@ insert into pinguim.crm_call_mentoria_config (id) values (1) on conflict do noth
 
 -- cron (ligar depois do teste): a cada 15 min
 -- select cron.schedule('mentoria-call-raiox-worker', '*/15 * * * *', $$select pinguim.disparar_edge_function('mentoria-call-raiox-worker')$$);
+
+-- 10/11: email e WhatsApp do aluno no aviso e no Doc (CRM primeiro; telefone das compras do Dash se o convite usou email fora do CRM)
+alter table pinguim.crm_call_mentoria add column if not exists aluno_email text;
+alter table pinguim.crm_call_mentoria add column if not exists aluno_telefone text; -- só dígitos, DDD + número

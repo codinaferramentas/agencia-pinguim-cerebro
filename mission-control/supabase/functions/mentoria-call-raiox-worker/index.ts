@@ -125,7 +125,7 @@ function docHtml(c: any): string {
 <p style="font-size:8pt;color:#555555;letter-spacing:1px">RAIO-X DA MENTORIA · ${esc(c.titulo.split('|')[0].trim()).toUpperCase()} · USO INTERNO</p>
 <h1 style="font-family:Arial;font-size:22pt;margin:0">${esc(r.nome_do_aluno)}</h1>
 <p style="color:#555555">com ${esc(r.nome_do_mentor)} · ${esc(data)}, ${hora}${c.duracao_min ? ` · ${c.duracao_min} min` : ''}</p>
-<table style="border-collapse:collapse;width:100%"><tr>${celula('Aluno', a.nome || r.nome_do_aluno)}${celula('Email', a.email || (c.emails_convite || []).join(', '))}${celula('Telefone', a.telefone || 'não encontrado no CRM')}</tr>
+<table style="border-collapse:collapse;width:100%"><tr>${celula('Aluno', a.nome || r.nome_do_aluno)}${celula('Email', c.aluno_email || a.email || (c.emails_convite || []).join(', '))}${celula('WhatsApp', c.aluno_telefone ? telFmt(c.aluno_telefone) : (a.telefone || 'não encontrado'))}</tr>
 <tr>${celula('Mentor', r.nome_do_mentor)}${celula('Call', c.titulo)}${celula('Produtos', (a.produtos || []).join(', ') || 'não encontrado no CRM')}</tr></table>
 <p style="font-size:13pt"><b>${esc(r.tema_principal)}</b></p><p>${esc(r.resumo)}</p>
 <table style="border-collapse:collapse;width:100%"><tr>${celula('Momento do negócio', r.momento_do_negocio || '—')}${celula('Objetivo principal', r.objetivo_principal || '—')}${celula('Desafio da semana', r.desafio_da_semana || '—')}</tr></table>
@@ -150,14 +150,89 @@ async function alunoPorEmails(emails: string[]) {
     const { data: idn } = await sb.from('crm_cliente_identidade').select('cliente_id').eq('tipo', 'email').eq('valor', e).limit(1);
     const cid = idn?.[0]?.cliente_id;
     if (!cid) continue;
-    const { data: cli } = await sb.from('crm_cliente').select('nome, email_canon, tel_canon').eq('cliente_id', cid).maybeSingle();
-    const { data: comp } = await sb.from('crm_compra').select('produto_nome').eq('cliente_id', cid).in('status', ['approved', 'complete', 'completed']);
-    const t = String(cli?.tel_canon || '');
-    return { cliente_id: cid, nome: cli?.nome, email: cli?.email_canon || e,
-      telefone: t.length >= 10 ? `(${t.slice(0, 2)}) ${t.slice(2, t.length - 4)}-${t.slice(-4)}` : t,
-      produtos: [...new Set((comp || []).map((x: any) => x.produto_nome))] };
+    return await alunoPorCliente(cid, e);
   }
   return null;
+}
+async function alunoPorCliente(cid: string, emailPadrao?: string) {
+  const { data: cli } = await sb.from('crm_cliente').select('nome, email_canon, tel_canon').eq('cliente_id', cid).maybeSingle();
+  const { data: comp } = await sb.from('crm_compra').select('produto_nome').eq('cliente_id', cid).in('status', ['approved', 'complete', 'completed']);
+  return { cliente_id: cid, nome: cli?.nome, email: cli?.email_canon || emailPadrao || null, telefone: String(cli?.tel_canon || ''),
+    produtos: [...new Set((comp || []).map((x: any) => x.produto_nome))] };
+}
+
+// convite com email fora do CRM: tenta quem FALOU na call (fora os mentores), mas só aceita quem é
+// participante de mentoria no CRM (ex.: Deivid foi o convidado; Victor Darido é o aluno do Orion)
+const normNome = (s: string) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+async function alunoPorFalantes(falas: Record<string, number>, mentores: string[]) {
+  const nomes = Object.keys(falas).filter((n) => !mentores.includes(n) && !/presentation|apresenta/i.test(n)).sort((a, b) => falas[b] - falas[a]);
+  for (const n of nomes) {
+    const { data: achados } = await sb.rpc('crm_buscar', { p_q: n, p_limit: 5 });
+    for (const c of achados || []) {
+      const nc = normNome(c.nome), nn = normNome(n);
+      if (nc !== nn && !nc.startsWith(nn + ' ')) continue;
+      const { data: mp } = await sb.from('crm_mentoria_participante').select('mentoria').eq('cliente_id', c.cliente_id).not('mentoria', 'ilike', 'proalt%').limit(1);
+      if (!mp?.length) continue;
+      return { ...(await alunoPorCliente(c.cliente_id, c.email_canon)), falante: n };
+    }
+  }
+  return null;
+}
+
+// email + WhatsApp para o mentor chamar o aluno: CRM primeiro; se o convite usou um email fora do CRM,
+// procura o telefone nas compras do Dash pelo mesmo email (André 10/11: "às vezes eles precisam chamar no WhatsApp")
+async function contatoAluno(emails: string[], aluno: any): Promise<{ email: string | null; telefone: string | null }> {
+  const email = aluno?.email || emails[0] || null;
+  let dig = String(aluno?.telefone || '').replace(/\D/g, '');
+  if (!dig && emails.length) {
+    try {
+      const [u, k] = await Promise.all([getChave('DASHBOARD_URL', CONSUMIDOR), getChave('DASHBOARD_SERVICE_ROLE_KEY', CONSUMIDOR)]);
+      const r = await fetch(`${u}/rest/v1/hotmart_buyers?select=phone,checkout_phone,checkout_phone_code&email=in.(${emails.map((e) => `"${e}"`).join(',')})&limit=5`,
+        { headers: { apikey: k, Authorization: `Bearer ${k}` } });
+      for (const b of r.ok ? await r.json() : []) { dig = String(b.checkout_phone || b.phone || '').replace(/\D/g, ''); if (dig) break; }
+    } catch (_) { /* sem telefone */ }
+  }
+  if (dig.startsWith('55') && dig.length >= 12) dig = dig.slice(2);
+  if (dig.length === 10 && /[6-9]/.test(dig[2])) dig = dig.slice(0, 2) + '9' + dig.slice(2); // celular antigo sem o 9
+  return { email, telefone: dig.length === 10 || dig.length === 11 ? dig : null };
+}
+const telFmt = (d: string) => `(${d.slice(0, 2)}) ${d.slice(2, d.length - 4)}-${d.slice(-4)}`;
+const pdfDownload = (url: string | null) => { const id = String(url || '').match(/\/d\/([^/]+)/)?.[1]; return id ? `https://drive.google.com/uc?export=download&id=${id}` : url; };
+
+// aviso no Discord a partir do registro gravado (usado na geração e no "reavisar"); apaga o aviso antigo se houver
+async function avisarDiscord(cfg: any, c: any): Promise<string | null> {
+  const bot = await getChave('DISCORD_BOT_TOKEN', CONSUMIDOR);
+  const D = { Authorization: `Bot ${bot}`, 'Content-Type': 'application/json' };
+  if (c.discord_msg_id) await fetch(`https://discord.com/api/v10/channels/${cfg.canal_id}/messages/${c.discord_msg_id}`, { method: 'DELETE', headers: D }).catch(() => {});
+  const r = c.raio;
+  const ini = new Date(c.inicio);
+  const data = ini.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' });
+  const hora = ini.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
+  const idMentor = c.mentor_nome ? cfg.mentores?.[c.mentor_nome] : null;
+  const programa = String(c.titulo || '').split('|')[0].trim();
+  const nAlertas = r.sinais_de_alerta?.length || 0;
+  const linhas = [
+    '​',
+    `## 📋 ${r.nome_do_aluno || c.aluno_nome}`,
+    `**${programa}** · ${data} às ${hora}${c.duracao_min ? ` · ${c.duracao_min} min` : ''} · com ${idMentor ? `<@${idMentor}>` : c.mentor_nome || r.nome_do_mentor}`,
+    '',
+    c.cliente_id && c.aluno_nome && normNome(c.aluno_nome) !== normNome(r.nome_do_aluno) ? `📇 **Ficha no CRM:** ${c.aluno_nome}` : '',
+    `📧 **Email:** ${c.aluno_email || 'não encontrado'}`,
+    `📱 **WhatsApp:** ${c.aluno_telefone ? `${telFmt(c.aluno_telefone)} · [chamar no WhatsApp](<https://wa.me/55${c.aluno_telefone}>)` : 'não encontrado'}`,
+    c.cliente_id ? '' : '🔎 *Aluno não encontrado no CRM pelo email do convite.*',
+    '',
+    `🎯 **Tema:** ${r.tema_principal}`,
+    `✅ ${r.plano_de_acao_do_aluno?.length || 0} ação(ões) combinada(s) com o aluno${nAlertas ? `  ·  ⚠️ ${nAlertas} sinal(is) de alerta` : ''}`,
+    '',
+    '**Arquivos da call**',
+    `📄 [Abrir o raio-X completo](<${c.doc_url}>)`,
+    `⬇️ [Baixar o PDF](<${pdfDownload(c.pdf_url)}>)`,
+    c.gravacao_url ? `🎥 [Assistir à gravação](<${c.gravacao_url}>)` : '',
+    '​',
+  ].filter((l, i, a) => l !== '' || (a[i - 1] !== '' && a[i - 1] !== undefined));
+  const d = await fetch(`https://discord.com/api/v10/channels/${cfg.canal_id}/messages`, { method: 'POST', headers: D,
+    body: JSON.stringify({ content: linhas.join('\n').slice(0, 1990), allowed_mentions: { users: idMentor ? [idMentor] : [] } }) });
+  return (await d.json().catch(() => ({})))?.id || null;
 }
 
 // ---------------- uma call ----------------
@@ -203,45 +278,58 @@ async function processarPasta(tok: string, cfg: any, pasta: any, dryRun: boolean
   const falas: Record<string, number> = {};
   for (const x of transcricao.matchAll(/^([^:\n]{3,40}): /gm)) falas[x[1].trim()] = (falas[x[1].trim()] || 0) + 1;
   const mentor = Object.keys(cfg.mentores || {}).filter((n) => falas[n]).sort((a, b) => falas[b] - falas[a])[0] || null;
-  const aluno = await alunoPorEmails(externos);
+  const aluno = (await alunoPorEmails(externos)) || (await alunoPorFalantes(falas, Object.keys(cfg.mentores || {})));
+  const contato = await contatoAluno(externos, aluno);
   if (dryRun) return `faria: ${titulo} · mentor ${mentor || '?'} · aluno ${aluno?.nome || 'não achado no CRM (' + externos.join(', ') + ')'}`;
 
   const quando = inicio.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   const { raio, tokens, custo } = await gerarRaio(cfg.modelo, titulo, quando, notas, transcricao);
-  const call = { ...reg, raio, aluno, mentor_nome: mentor || raio.nome_do_mentor };
+  const call = { ...reg, raio, aluno, mentor_nome: mentor || raio.nome_do_mentor, aluno_email: contato.email, aluno_telefone: contato.telefone };
   const nome = `Raio-X da mentoria · ${raio.nome_do_aluno} · ${m[4]}-${m[3]}-${m[2]}`;
   const gdoc = await subir(tok, pasta.id, nome, docHtml(call), 'text/html', 'application/vnd.google-apps.document');
   const pdfR = await fetch(`https://www.googleapis.com/drive/v3/files/${gdoc.id}/export?mimeType=application/pdf`, { headers: { Authorization: `Bearer ${tok}` } });
   const pdf = await subir(tok, pasta.id, nome + '.pdf', new Uint8Array(await pdfR.arrayBuffer()), 'application/pdf');
 
-  let discordId: string | null = null;
-  if (cfg.aviso_discord) {
-    const idMentor = mentor ? cfg.mentores[mentor] : null;
-    const dataBR = `${m[4]}/${m[3]} às ${m[5]}h${m[6]}`;
-    const alertas = raio.sinais_de_alerta.length ? ` · ⚠️ ${raio.sinais_de_alerta.length} sinal(is) de alerta` : '';
-    const texto = ['━━━━━━━━━━━━━━━━━━━━━━━━',
-      `📋 **Raio-X pronto: ${titulo}**`,
-      `${dataBR}${idMentor ? ` · com <@${idMentor}>` : mentor ? ` · com ${mentor}` : ''}${reg.duracao_min ? ` · ${reg.duracao_min} min` : ''}`,
-      '',
-      `**${raio.tema_principal}**`,
-      `✅ ${raio.plano_de_acao_do_aluno.length} ação(ões) combinada(s) com o aluno${alertas}`,
-      aluno ? '' : `🔎 Aluno não encontrado no CRM pelo email do convite (${externos.join(', ')}). Vincule pela aba Calls de mentoria.`,
-      '',
-      `📄 [Abrir o raio-X](<${gdoc.webViewLink}>) · [PDF](<${pdf.webViewLink}>) · [Gravação](<${reg.gravacao_url}>)`,
-    ].filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n');
-    const bot = await getChave('DISCORD_BOT_TOKEN', CONSUMIDOR);
-    const d = await fetch(`https://discord.com/api/v10/channels/${cfg.canal_id}/messages`, { method: 'POST',
-      headers: { Authorization: `Bot ${bot}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: texto.slice(0, 1990), allowed_mentions: { users: idMentor ? [idMentor] : [] } }) });
-    discordId = (await d.json().catch(() => ({})))?.id || null;
-  }
-  await gravar({ status: 'ok', motivo: null, mentor_nome: call.mentor_nome, cliente_id: aluno?.cliente_id || null, aluno_nome: aluno?.nome || raio.nome_do_aluno,
-    raio, doc_url: gdoc.webViewLink, pdf_url: pdf.webViewLink, discord_msg_id: discordId, modelo: cfg.modelo, tokens, custo_usd: +custo.toFixed(4) });
+  const final = { ...reg, status: 'ok', motivo: null, mentor_nome: call.mentor_nome, cliente_id: aluno?.cliente_id || null, aluno_nome: aluno?.nome || raio.nome_do_aluno,
+    aluno_email: contato.email, aluno_telefone: contato.telefone,
+    raio, doc_url: gdoc.webViewLink, pdf_url: pdf.webViewLink, discord_msg_id: null as string | null, modelo: cfg.modelo, tokens, custo_usd: +custo.toFixed(4) };
+  if (cfg.aviso_discord) final.discord_msg_id = await avisarDiscord(cfg, final);
+  await gravar(final);
   return `ok: ${titulo} (US$ ${custo.toFixed(2)})`;
 }
 
 async function rodar(body: any) {
   const { data: cfg } = await sb.from('crm_call_mentoria_config').select('*').eq('id', 1).single();
+  // vincular: liga uma call à ficha certa do CRM (quando o email do convite não bate) e refaz o aviso
+  if (body.vincular) {
+    const { id, cliente_id } = body.vincular;
+    const { data: c } = await sb.from('crm_call_mentoria').select('*').eq('id', id).single();
+    const a = await alunoPorCliente(cliente_id);
+    const ct = await contatoAluno([], a);
+    Object.assign(c, { cliente_id, aluno_nome: a.nome, aluno_email: ct.email, aluno_telefone: ct.telefone });
+    if (cfg.aviso_discord && body.reavisar !== false) c.discord_msg_id = await avisarDiscord(cfg, c);
+    await sb.from('crm_call_mentoria').update({ cliente_id, aluno_nome: c.aluno_nome, aluno_email: c.aluno_email, aluno_telefone: c.aluno_telefone,
+      discord_msg_id: c.discord_msg_id, atualizado_em: new Date().toISOString() }).eq('id', id);
+    return { vinculado: `${c.titulo} → ${a.nome} (${ct.telefone || 'sem WhatsApp'})` };
+  }
+  // reavisar: refaz o aviso no Discord das calls já prontas (apaga o antigo), completando email/WhatsApp se faltavam
+  if (body.reavisar) {
+    let q = sb.from('crm_call_mentoria').select('*').eq('status', 'ok').order('inicio');
+    if (body.de) q = q.gte('inicio', body.de);
+    const { data: prontas } = await q;
+    const out: string[] = [];
+    for (const c of prontas || []) {
+      if (!c.aluno_email || !c.aluno_telefone) {
+        const ct = await contatoAluno(c.emails_convite || [], c.cliente_id ? await alunoPorEmails(c.emails_convite || []) : null);
+        c.aluno_email = c.aluno_email || ct.email; c.aluno_telefone = c.aluno_telefone || ct.telefone;
+      }
+      const id = await avisarDiscord(cfg, c);
+      await sb.from('crm_call_mentoria').update({ discord_msg_id: id, aluno_email: c.aluno_email, aluno_telefone: c.aluno_telefone, atualizado_em: new Date().toISOString() }).eq('id', c.id);
+      out.push(`${c.titulo} → reavisado (${c.aluno_telefone ? 'com WhatsApp' : 'sem WhatsApp'})`);
+      await new Promise((ok) => setTimeout(ok, 1200));
+    }
+    return { reavisados: out };
+  }
   const manual = !!(body.de || body.pasta_id);
   if (!cfg.ativo && !manual && !body.dry_run) return { ativo: false };
   const tok = await tokenGoogle();
