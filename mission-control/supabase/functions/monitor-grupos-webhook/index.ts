@@ -495,17 +495,58 @@ async function classificarContato(tel: string): Promise<string> {
   return classe;
 }
 
+// ---------- filtro de IA do privado (schema-049) ----------
+// Confirmação ("feito", "respondi"), agradecimento e papo não são pedido.
+// Testado em 11 casos reais/sintéticos (11/11). Modelo de classificação = mini.
+const PROMPT_FILTRO = `Você filtra mensagens que alunos mandam no WhatsApp PRIVADO da equipe de atendimento (CS) de uma escola de marketing digital (cursos, mentorias, comunidade). Decida se o que o aluno escreveu EXIGE resposta ou ação da equipe.
+
+precisa_resposta = true quando há: dúvida; pedido de ajuda; problema de acesso, pagamento, cobrança ou reembolso; pedido de reagendar, adiar, cancelar ou trocar algo; reclamação ou insatisfação; pedido de informação; relato que pede retorno, opinião ou orientação.
+
+precisa_resposta = false quando é só: cumprimento; agradecimento; confirmação de que fez o que foi pedido ("feito", "respondi", "preenchi", "já salvei"); aviso que não pede nada de volta; conversa social; emoji; resposta que encerra um assunto.
+
+Leia a conversa inteira: se a atendente pediu algo e o aluno só confirmou, é false. Se houver qualquer pergunta ou pedido explícito do aluno, é true.
+
+Responda só JSON: {"precisa_resposta": true|false, "motivo": "até 10 palavras", "resumo": "o pedido em 1 frase curta começando pelo verbo, sem sujeito (ex.: 'Pede para adiar o onboarding'); vazio se false"}`;
+
+async function filtrarPedido(canalId: string, contato: string): Promise<{ filtro: string; motivo: string; resumo: string }> {
+  try {
+    const { data } = await sb.from('monitor_grupos_mensagens').select('eh_admin, texto, criado_em')
+      .eq('grupo_jid', canalId).or(`remetente_jid.eq."${contato}",respondeu_jid.eq."${contato}"`)
+      .order('criado_em', { ascending: false }).limit(12);
+    const conversa = (data ?? []).reverse()
+      .map((m) => `${m.eh_admin ? 'ATENDENTE' : 'ALUNO'} (${horaIsoBRT(m.criado_em)}): ${m.texto.slice(0, 600)}`).join('\n');
+    const key = await getChave('OPENAI_API_KEY', 'monitor-grupos-webhook');
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-5.4-mini', response_format: { type: 'json_object' },
+        messages: [{ role: 'system', content: PROMPT_FILTRO }, { role: 'user', content: `Conversa (mais antiga primeiro):\n${conversa}` }],
+      }),
+    });
+    if (!r.ok) throw new Error(`OpenAI ${r.status}`);
+    const o = JSON.parse((await r.json()).choices[0].message.content);
+    return { filtro: o.precisa_resposta ? 'pedido' : 'sem_pedido', motivo: String(o.motivo || '').slice(0, 200), resumo: String(o.resumo || '').slice(0, 300) };
+  } catch (e) {
+    console.error('filtro IA falhou:', e);
+    return { filtro: 'erro', motivo: String(e).slice(0, 200), resumo: '' }; // melhor sobrar que sumir pedido
+  }
+}
+
 async function tratarPrivado(inst: Instancia, item: any) {
   const key = item?.key ?? {};
-  const contatoJid = String(key.remoteJid || '');
   const midia = extrairMidia(item);
   const texto = extrairTexto(item) || midia;
   if (!texto) return;
   const ts = Number(item.messageTimestamp) || null;
   const quando = ts ? new Date(ts * 1000).toISOString() : new Date().toISOString();
   const canalId = `privado:${inst.instancia}`;
-  const alt = String(key.remoteJidAlt || key.senderPn || '');
-  const tel = contatoJid.endsWith('@s.whatsapp.net') ? soDigitos(contatoJid) : alt.endsWith('@s.whatsapp.net') ? soDigitos(alt) : '';
+  // o mesmo contato chega como @lid ou @s.whatsapp.net conforme o evento:
+  // a chave da conversa é o TELEFONE (resposta da atendente acha a conversa certa)
+  const jid = String(key.remoteJid || ''), alt = String(key.remoteJidAlt || key.senderPn || '');
+  const tel = jid.endsWith('@s.whatsapp.net') ? soDigitos(jid) : alt.endsWith('@s.whatsapp.net') ? soDigitos(alt) : '';
+  if (!tel) return;
+  const contato = `${tel}@s.whatsapp.net`;
   const msgId = key.id || crypto.randomUUID();
 
   // só conversa com ALUNO entra — equipe e desconhecidos nem são gravados
@@ -513,54 +554,66 @@ async function tratarPrivado(inst: Instancia, item: any) {
 
   const { data: ins } = await sb.from('monitor_grupos_mensagens').upsert({
     grupo_jid: canalId, grupo_nome: inst.canal_nome, message_id: msgId,
-    remetente_jid: key.fromMe ? inst.instancia : contatoJid,
+    remetente_jid: key.fromMe ? inst.instancia : contato,
     remetente_nome: key.fromMe ? inst.atendente : (item.pushName || null),
-    remetente_telefone: key.fromMe ? inst.telefone : (tel || null),
+    remetente_telefone: key.fromMe ? inst.telefone : tel,
+    respondeu_jid: key.fromMe ? contato : null, // msg da atendente: com quem é a conversa
     eh_admin: !!key.fromMe, texto, msg_timestamp: ts ? quando : null,
   }, { onConflict: 'grupo_jid,message_id', ignoreDuplicates: true }).select('id');
   if (!ins || ins.length === 0) return; // duplicada
 
   const cfg = await configAtendimento();
   if (!cfg || !cfg.ativo) return;
+  // aberto = pendente, ou descartado pela IA que ninguém respondeu ainda
   const { data: abertos } = await sb.from('monitor_atendimentos').select('*')
-    .eq('grupo_jid', canalId).eq('aluno_jid', contatoJid).eq('status', 'pendente')
+    .eq('grupo_jid', canalId).eq('aluno_jid', contato)
+    .or('status.eq.pendente,and(status.eq.descartada,respondido_em.is.null)')
     .order('perguntado_em', { ascending: false }).limit(1);
   const aberto = abertos?.[0] ?? null;
 
-  // atendente respondeu na conversa → fecha
+  // atendente escreveu na conversa → fecha
   if (key.fromMe) {
-    if (aberto) {
+    if (aberto?.status === 'pendente') {
       await concluirAtendimento(cfg, aberto, `📱 ${inst.canal_nome}`, 'privado', {
         admJid: inst.instancia, admNome: inst.atendente, texto, msgId, quando,
       });
+    } else if (aberto) {
+      await sb.from('monitor_atendimentos').update({ respondido_em: quando, adm_nome: inst.atendente }).eq('id', aberto.id);
     }
     return;
   }
 
-  // contato escreveu: soma no aberto ou abre um novo
+  // aluno escreveu: sem nada aberto, cumprimento/agradecimento sozinho nem chega na IA
+  if (!aberto && (ehSoAgradecimento(texto) || ehSoSaudacao(texto, inst.atendente))) return;
+
+  const f = await filtrarPedido(canalId, contato);
+  const status = f.filtro === 'sem_pedido' ? 'descartada' : 'pendente';
+  const classificacao = { status, filtro: f.filtro, filtro_motivo: f.motivo, resumo: f.resumo || null };
+
   if (aberto) {
     await sb.from('monitor_atendimentos').update({
+      ...classificacao,
       pergunta_texto: `${aberto.pergunta_texto}\n${texto}`,
       pergunta_msg_ids: [...(aberto.pergunta_msg_ids || []), msgId],
       ultima_msg_em: quando,
     }).eq('id', aberto.id);
     return;
   }
-  if (ehSoAgradecimento(texto) || ehSoSaudacao(texto, inst.atendente)) return; // fica gravada, não abre
 
-  // abriu: puxa o "oi/bom dia" que veio antes (última 1h, depois da última resposta)
-  const { data: ultimo } = await sb.from('monitor_atendimentos').select('respondido_em')
-    .eq('grupo_jid', canalId).eq('aluno_jid', contatoJid).eq('status', 'respondida')
-    .order('respondido_em', { ascending: false }).limit(1);
+  // abriu: puxa o "oi/bom dia" que veio antes (última 1h, depois da última msg da atendente)
+  const { data: ultAtend } = await sb.from('monitor_grupos_mensagens').select('criado_em')
+    .eq('grupo_jid', canalId).eq('respondeu_jid', contato).eq('eh_admin', true)
+    .order('criado_em', { ascending: false }).limit(1);
   const corte = new Date(Math.max(Date.now() - 3600 * 1000,
-    ultimo?.[0]?.respondido_em ? new Date(ultimo[0].respondido_em).getTime() : 0)).toISOString();
+    ultAtend?.[0]?.criado_em ? new Date(ultAtend[0].criado_em).getTime() : 0)).toISOString();
   const { data: antes } = await sb.from('monitor_grupos_mensagens').select('message_id, texto, msg_timestamp, criado_em')
-    .eq('grupo_jid', canalId).eq('remetente_jid', contatoJid).neq('message_id', msgId)
+    .eq('grupo_jid', canalId).eq('remetente_jid', contato).neq('message_id', msgId)
     .gt('criado_em', corte).order('criado_em');
   const previas = antes ?? [];
   await sb.from('monitor_atendimentos').insert({
+    ...classificacao,
     grupo_jid: canalId, grupo_nome: inst.canal_nome, canal_tipo: 'privado',
-    aluno_jid: contatoJid, aluno_nome: item.pushName || null, aluno_telefone: tel || null,
+    aluno_jid: contato, aluno_nome: item.pushName || null, aluno_telefone: tel,
     categoria: 'privado',
     pergunta_texto: [...previas.map((m) => m.texto), texto].join('\n'),
     pergunta_msg_ids: [...previas.map((m) => m.message_id), msgId],

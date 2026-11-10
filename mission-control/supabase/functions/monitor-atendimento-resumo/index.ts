@@ -66,6 +66,10 @@ function umaLinha(t: string, max: number): string {
   return s.length > max ? s.slice(0, max) + '…' : s;
 }
 
+// privado: o resumo da IA (o pedido em 1 frase); grupo: o texto do aluno
+const textoItem = (a: any) => a.canal_tipo === 'privado' && a.resumo
+  ? `**${a.resumo}**  _"${umaLinha(a.pergunta_texto, 140)}"_`
+  : umaLinha(a.pergunta_texto, 260);
 const codigo = (a: any) => `\`A-${String(a.numero).padStart(4, '0')}\``;
 const aluno = (a: any) => `${a.aluno_nome || 'sem nome'}${a.aluno_telefone ? ` (${fmtTel(a.aluno_telefone)})` : ''}`;
 const nomeCanal = (a: any) => `${a.canal_tipo === 'privado' ? '📱 ' : ''}${a.grupo_nome || a.grupo_jid}`;
@@ -118,7 +122,9 @@ async function montarPainel(dia: string, cfg: any): Promise<string[]> {
   const { data, error } = await sb.from('monitor_atendimentos').select('*')
     .gte('perguntado_em', ini).lt('perguntado_em', fim).order('perguntado_em');
   if (error) throw new Error(`ler atendimentos: ${error.message}`);
-  const todos = data ?? [];
+  // descartada = IA do privado viu que não era pedido (confirmação, agradecimento…)
+  const filtradas = (data ?? []).filter((a) => a.status === 'descartada');
+  const todos = (data ?? []).filter((a) => a.status !== 'descartada');
   const resp = todos.filter((a) => a.status === 'respondida');
   const pend = todos.filter((a) => a.status === 'pendente');
   const agora = new Date().toISOString();
@@ -180,6 +186,11 @@ async function montarPainel(dia: string, cfg: any): Promise<string[]> {
     }
     painel.push(`🔴 = pendente há mais de ${fmtDuracao(slaSeg)} úteis`);
   }
+  if (filtradas.length > 0) {
+    const porCanal: Record<string, number> = {};
+    for (const a of filtradas) porCanal[nomeCanal(a)] = (porCanal[nomeCanal(a)] || 0) + 1;
+    painel.push(`🤖 Filtradas pela IA (não eram pedido — confirmação, agradecimento, conversa): ${Object.entries(porCanal).map(([n, c]) => `${n} ${c}`).join(' · ')}`);
+  }
   if (acumulado && acumulado > 0) painel.push(`📌 Acumulado sem resposta dos 7 dias anteriores: **${acumulado}**`);
 
   const mensagens = empacotar(painel);
@@ -198,8 +209,8 @@ async function montarPainel(dia: string, cfg: any): Promise<string[]> {
     for (const a of lista) {
       const tags = [hhmm(a.perguntado_em)];
       if (a.fora_horario) tags.push('🌙 fora do horário');
-      if (await colegaRespondeu(a)) tags.push('💬 colega respondeu');
-      itens.push('', `${codigo(a)} · ${aluno(a)} · ${tags.join(' · ')}`, `> ${umaLinha(a.pergunta_texto, 260)}`);
+      if (a.canal_tipo !== 'privado' && await colegaRespondeu(a)) tags.push('💬 colega respondeu');
+      itens.push('', `${codigo(a)} · ${aluno(a)} · ${tags.join(' · ')}`, `> ${textoItem(a)}`);
     }
     mensagens.push(...empacotar(itens));
   }
@@ -225,7 +236,7 @@ async function montarAlertaSla(cfg: any): Promise<{ mensagens: string[]; ids: st
   ];
   for (const a of vencidos) {
     itens.push('', `${codigo(a)} · **${nomeCanal(a)}** · ${aluno(a)} · perguntou ${ddmmhh(a.perguntado_em)}`,
-      `> ${umaLinha(a.pergunta_texto, 260)}`);
+      `> ${textoItem(a)}`);
   }
   return { mensagens: empacotar(itens), ids: vencidos.map((a) => a.id) };
 }
