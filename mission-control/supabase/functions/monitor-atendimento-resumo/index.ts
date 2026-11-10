@@ -189,7 +189,7 @@ async function montarPainel(dia: string, cfg: any): Promise<string[]> {
   if (filtradas.length > 0) {
     const porCanal: Record<string, number> = {};
     for (const a of filtradas) porCanal[nomeCanal(a)] = (porCanal[nomeCanal(a)] || 0) + 1;
-    painel.push(`🤖 Filtradas pela IA (não eram pedido — confirmação, agradecimento, conversa): ${Object.entries(porCanal).map(([n, c]) => `${n} ${c}`).join(' · ')}`);
+    painel.push(`🤖 Filtradas pela IA (não eram pedido pra equipe — pergunta pra turma, confirmação, conversa): ${Object.entries(porCanal).map(([n, c]) => `${n} ${c}`).join(' · ')}`);
   }
   if (acumulado && acumulado > 0) painel.push(`📌 Acumulado sem resposta dos 7 dias anteriores: **${acumulado}**`);
 

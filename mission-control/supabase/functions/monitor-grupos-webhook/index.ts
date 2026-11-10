@@ -302,24 +302,71 @@ function ehPerguntaAtendimento(categoria: string | null, texto: string): boolean
   return true;
 }
 
+// filtro de IA nos grupos: pergunta pra EQUIPE vira pendência; pergunta aberta
+// pra turma ("alguém usa...", "vocês conhecem...") fica 'descartada' — mas se
+// um ADM responder, conta como respondida normalmente (fecharAtendimento).
+// Testado em 23 casos reais de 09/11/2026 (14 equipe / 9 turma).
+const PROMPT_GRUPO = `Você filtra mensagens de alunos em GRUPOS de WhatsApp de uma escola de marketing digital (mentorias e cursos de tráfego pago, low ticket, páginas de venda). Nos grupos os alunos conversam entre si e a equipe (mentores e ADMs) também responde. Decida se a mensagem é um pedido que a EQUIPE precisa atender.
+
+para_equipe = true quando: dúvida sobre o curso, a mentoria, o método ou as aulas; pedido de ajuda técnica ou com a estratégia do próprio aluno (campanha, página, oferta); problema de acesso, plataforma, pagamento ou bônus; pergunta dirigida ao mentor ou à equipe; reclamação.
+
+para_equipe = false quando: pergunta aberta pra turma pedindo indicação ou experiência dos colegas ("alguém conhece...", "vocês usam...", "quem aqui...", "alguém tem contato de..."); pedido de opinião dos colegas sobre criativo ou página; conversa social; comentário sem pergunta.
+
+Em caso de dúvida real, prefira true.
+
+Responda só JSON: {"para_equipe": true|false, "motivo": "até 10 palavras"}`;
+
+async function filtrarGrupo(grupo: Grupo, texto: string, antesDe: string): Promise<{ filtro: string; motivo: string }> {
+  try {
+    const { data } = await sb.from('monitor_grupos_mensagens').select('texto')
+      .eq('grupo_jid', grupo.jid).lt('criado_em', antesDe).order('criado_em', { ascending: false }).limit(3);
+    const contexto = (data ?? []).reverse().map((m) => m.texto.slice(0, 200)).join(' / ') || '-';
+    const key = await getChave('OPENAI_API_KEY', 'monitor-grupos-webhook');
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-5.4-mini', response_format: { type: 'json_object' },
+        messages: [{ role: 'system', content: PROMPT_GRUPO },
+          { role: 'user', content: `Grupo: ${grupo.nome}
+Mensagens anteriores no grupo (contexto): ${contexto}
+
+MENSAGEM DO ALUNO: ${texto.slice(0, 1500)}` }],
+      }),
+    });
+    if (!r.ok) throw new Error(`OpenAI ${r.status}`);
+    const o = JSON.parse((await r.json()).choices[0].message.content);
+    return { filtro: o.para_equipe ? 'pedido' : 'turma', motivo: String(o.motivo || '').slice(0, 200) };
+  } catch (e) {
+    console.error('filtro IA (grupo) falhou:', e);
+    return { filtro: 'erro', motivo: String(e).slice(0, 200) }; // melhor sobrar que sumir pedido
+  }
+}
+
 async function abrirAtendimento(grupo: Grupo, m: {
   jid: string; nome: string; tel: string; categoria: string; texto: string; msgId: string; quando: string;
 }) {
   const desde = new Date(new Date(m.quando).getTime() - AGRUPAR_MIN * 60 * 1000).toISOString();
   const { data: aberto } = await sb.from('monitor_atendimentos')
     .select('id, pergunta_texto, pergunta_msg_ids')
-    .eq('grupo_jid', grupo.jid).eq('aluno_jid', m.jid).eq('status', 'pendente')
+    .eq('grupo_jid', grupo.jid).eq('aluno_jid', m.jid).in('status', ['pendente', 'descartada']).is('respondido_em', null)
     .gte('ultima_msg_em', desde).order('ultima_msg_em', { ascending: false }).limit(1);
-  if (aberto && aberto.length > 0) {
-    const a = aberto[0];
+  const a = aberto?.[0] ?? null;
+  const textoTotal = a ? `${a.pergunta_texto}
+${m.texto}` : m.texto;
+  const f = await filtrarGrupo(grupo, textoTotal, m.quando);
+  const classificacao = { status: f.filtro === 'turma' ? 'descartada' : 'pendente', filtro: f.filtro, filtro_motivo: f.motivo };
+  if (a) {
     await sb.from('monitor_atendimentos').update({
-      pergunta_texto: `${a.pergunta_texto}\n${m.texto}`,
+      ...classificacao,
+      pergunta_texto: textoTotal,
       pergunta_msg_ids: [...(a.pergunta_msg_ids || []), m.msgId],
       ultima_msg_em: m.quando,
     }).eq('id', a.id);
     return;
   }
   await sb.from('monitor_atendimentos').insert({
+    ...classificacao,
     grupo_jid: grupo.jid, grupo_nome: grupo.nome,
     aluno_jid: m.jid, aluno_nome: m.nome || null, aluno_telefone: m.tel || null,
     categoria: m.categoria, pergunta_texto: m.texto, pergunta_msg_ids: [m.msgId],
@@ -374,13 +421,13 @@ async function fecharAtendimento(grupo: Grupo, r: {
   let alvo: any = null, como: 'reply' | 'mencao' = 'reply';
   if (r.respondeuMsgId) {
     const { data } = await sb.from('monitor_atendimentos').select('*')
-      .eq('grupo_jid', grupo.jid).eq('status', 'pendente')
+      .eq('grupo_jid', grupo.jid).in('status', ['pendente', 'descartada']).is('respondido_em', null)
       .contains('pergunta_msg_ids', [r.respondeuMsgId]).limit(1);
     alvo = data?.[0] ?? null;
   }
   const porAluno = async (jid: string) => {
     const { data } = await sb.from('monitor_atendimentos').select('*')
-      .eq('grupo_jid', grupo.jid).eq('aluno_jid', jid).eq('status', 'pendente')
+      .eq('grupo_jid', grupo.jid).eq('aluno_jid', jid).in('status', ['pendente', 'descartada']).is('respondido_em', null)
       .gte('ultima_msg_em', desde).order('ultima_msg_em', { ascending: false }).limit(1);
     return data?.[0] ?? null;
   };
@@ -404,7 +451,7 @@ async function concluirAtendimento(cfg: ConfigAtend, alvo: any, canalNome: strin
     status: 'respondida', adm_jid: r.admJid, adm_nome: r.admNome || null,
     resposta_texto: r.texto, resposta_msg_id: r.msgId, respondido_em: r.quando,
     tempo_resposta_seg: seg, como_respondeu: como,
-  }).eq('id', alvo.id).eq('status', 'pendente').select('id, numero, tempo_util_seg');
+  }).eq('id', alvo.id).in('status', ['pendente', 'descartada']).is('respondido_em', null).select('id, numero, tempo_util_seg');
   if (!fechado || fechado.length === 0) return; // outro ADM fechou antes
 
   const aluno = `${alvo.aluno_nome || 'sem nome'}${alvo.aluno_telefone ? ` (${fmtTel(alvo.aluno_telefone)})` : ''}`;
