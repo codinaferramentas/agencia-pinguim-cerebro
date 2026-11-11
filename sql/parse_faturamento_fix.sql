@@ -19,6 +19,8 @@ begin
     begin
       if m ~ '^[0-9]{1,3}(,[0-9]{3})+$' then
         n := replace(m, ',', '')::numeric;                       -- 1,760,000 (milhar americano)
+      elsif m ~ '^[0-9]{1,3}(\.[0-9]{3})+\.[0-9]{2}$' then
+        n := (replace(left(m, length(m) - 3), '.', '') || '.' || right(m, 2))::numeric; -- 500.000.00 = 500 mil com centavos
       else
         n := replace(replace(m, '.', ''), ',', '.')::numeric;   -- 1.760.000 / 10.000,50 (padrão BR)
       end if;
