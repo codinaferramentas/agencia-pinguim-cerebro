@@ -57,6 +57,11 @@ function desembrulhaGoogle(u: string): string {
   try { return decodeURIComponent(m[1]); } catch { return m[1]; }
 }
 
+// O texto parece um endereço? (meet.google.com/x, http://..., www.zoom.us/j/1...)
+function pareceLink(t: string): boolean {
+  return /^(https?:\/\/)?(www\.)?([a-z0-9-]+\.)+[a-z]{2,}(:\d+)?([\/?#]\S*)?$/i.test(t.trim());
+}
+
 // Impressão digital da mensagem (pro freio distinguir copy igual de copy nova).
 // Normaliza espaços pra pegar cópias "iguais na prática".
 async function hashMsg(texto: string): Promise<string> {
@@ -143,8 +148,12 @@ function parseCard(c: { id: string; name: string; desc: string }, lista: string)
       // (lição 06/nov: card colado do Google Agenda vinha com o Zoom no texto e o
       // wrapper do Google na url → saíam DOIS links. Desembrulhar faz texto==url.)
       const url = desembrulhaGoogle(u);
-      const texto = desembrulhaGoogle(t);
-      return (texto === url || !texto) ? url : `${texto}: ${url}`;
+      const texto = desembrulhaGoogle(t).trim();
+      // BLINDAGEM (11/nov): se o texto do link JÁ É um endereço (com ou sem
+      // http/https/www, barra no fim etc.), mostra só o link. Texto + link
+      // juntos só quando o texto é frase ("Clique aqui"). Antes, variações como
+      // [meet.google.com/x](http://meet.google.com/x) saíam duplicadas.
+      return (!texto || pareceLink(texto)) ? url : `${texto}: ${url}`;
     })
     .replace(/\*\*(.+?)\*\*/g, '*$1*');
 
