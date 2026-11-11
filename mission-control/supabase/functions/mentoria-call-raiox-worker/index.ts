@@ -123,7 +123,7 @@ function docHtml(c: any): string {
   const a = c.aluno || {};
   return `<html><head><meta charset="utf-8"></head><body style="font-family:Arial;font-size:10.5pt;color:#111111">
 <p style="font-size:8pt;color:#555555;letter-spacing:1px">RAIO-X DA MENTORIA · ${esc(c.titulo.split('|')[0].trim()).toUpperCase()} · USO INTERNO</p>
-<h1 style="font-family:Arial;font-size:22pt;margin:0">${esc(r.nome_do_aluno)}</h1>
+<h1 style="font-family:Arial;font-size:22pt;margin:0">${esc(a.nome || r.nome_do_aluno)}</h1>${a.nome && normNome(a.nome) !== normNome(r.nome_do_aluno) ? `<p style="color:#555555;margin:0">na call: ${esc(r.nome_do_aluno)}</p>` : ""}
 <p style="color:#555555">com ${esc(r.nome_do_mentor)} · ${esc(data)}, ${hora}${c.duracao_min ? ` · ${c.duracao_min} min` : ''}</p>
 <table style="border-collapse:collapse;width:100%"><tr>${celula('Aluno', a.nome || r.nome_do_aluno)}${celula('Email', c.aluno_email || a.email || (c.emails_convite || []).join(', '))}${celula('WhatsApp', c.aluno_telefone ? telFmt(c.aluno_telefone) : (a.telefone || 'não encontrado'))}</tr>
 <tr>${celula('Mentor', r.nome_do_mentor)}${celula('Call', c.titulo)}${celula('Produtos', (a.produtos || []).join(', ') || 'não encontrado no CRM')}</tr></table>
@@ -213,10 +213,11 @@ async function avisarDiscord(cfg: any, c: any): Promise<string | null> {
   const nAlertas = r.sinais_de_alerta?.length || 0;
   const linhas = [
     '​',
-    `## 📋 ${r.nome_do_aluno || c.aluno_nome}`,
+    // com ficha, o nome principal é SEMPRE o do CRM (é o que acha na busca de Clientes); o do Meet vira "na call" (André 11/11)
+    `## 📋 ${c.cliente_id && c.aluno_nome ? c.aluno_nome : r.nome_do_aluno}`,
     `**${programa}** · ${data} às ${hora}${c.duracao_min ? ` · ${c.duracao_min} min` : ''} · com ${idMentor ? `<@${idMentor}>` : c.mentor_nome || r.nome_do_mentor}`,
     '',
-    c.cliente_id && c.aluno_nome && normNome(c.aluno_nome) !== normNome(r.nome_do_aluno) ? `📇 **Ficha no CRM:** ${c.aluno_nome}` : '',
+    c.cliente_id && c.aluno_nome && normNome(c.aluno_nome) !== normNome(r.nome_do_aluno) ? `🎙️ **Na call:** ${r.nome_do_aluno}` : '',
     `📧 **Email:** ${c.aluno_email || 'não encontrado'}`,
     `📱 **WhatsApp:** ${c.aluno_telefone ? `${telFmt(c.aluno_telefone)} · [chamar no WhatsApp](<https://wa.me/55${c.aluno_telefone}>)` : 'não encontrado'}`,
     c.cliente_id ? '' : '🔎 *Aluno não encontrado no CRM pelo email do convite.*',
@@ -285,7 +286,7 @@ async function processarPasta(tok: string, cfg: any, pasta: any, dryRun: boolean
   const quando = inicio.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   const { raio, tokens, custo } = await gerarRaio(cfg.modelo, titulo, quando, notas, transcricao);
   const call = { ...reg, raio, aluno, mentor_nome: mentor || raio.nome_do_mentor, aluno_email: contato.email, aluno_telefone: contato.telefone };
-  const nome = `Raio-X da mentoria · ${raio.nome_do_aluno} · ${m[4]}-${m[3]}-${m[2]}`;
+  const nome = `Raio-X da mentoria · ${aluno?.nome || raio.nome_do_aluno} · ${m[4]}-${m[3]}-${m[2]}`;
   const gdoc = await subir(tok, pasta.id, nome, docHtml(call), 'text/html', 'application/vnd.google-apps.document');
   const pdfR = await fetch(`https://www.googleapis.com/drive/v3/files/${gdoc.id}/export?mimeType=application/pdf`, { headers: { Authorization: `Bearer ${tok}` } });
   const pdf = await subir(tok, pasta.id, nome + '.pdf', new Uint8Array(await pdfR.arrayBuffer()), 'application/pdf');
@@ -300,6 +301,33 @@ async function processarPasta(tok: string, cfg: any, pasta: any, dryRun: boolean
 
 async function rodar(body: any) {
   const { data: cfg } = await sb.from('crm_call_mentoria_config').select('*').eq('id', 1).single();
+  // refazer_docs: remonta Doc + PDF das calls prontas a partir do raio-X guardado (sem OpenAI), apaga os antigos e refaz o aviso
+  if (body.refazer_docs) {
+    const tok = await tokenGoogle();
+    let q = sb.from('crm_call_mentoria').select('*').eq('status', 'ok').order('inicio');
+    if (body.id) q = q.eq('id', body.id);
+    const { data: prontas } = await q;
+    const out: string[] = [];
+    for (const c of prontas || []) {
+      const aluno = c.cliente_id ? await alunoPorCliente(c.cliente_id) : null;
+      const call = { ...c, aluno };
+      const d = new Date(c.inicio).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }).split('/');
+      const nome = `Raio-X da mentoria · ${aluno?.nome || c.raio.nome_do_aluno} · ${d[0]}-${d[1]}-${d[2]}`;
+      const gdoc = await subir(tok, c.pasta_id, nome, docHtml(call), 'text/html', 'application/vnd.google-apps.document');
+      const pdfR = await fetch(`https://www.googleapis.com/drive/v3/files/${gdoc.id}/export?mimeType=application/pdf`, { headers: { Authorization: `Bearer ${tok}` } });
+      const pdf = await subir(tok, c.pasta_id, nome + '.pdf', new Uint8Array(await pdfR.arrayBuffer()), 'application/pdf');
+      for (const u of [c.doc_url, c.pdf_url]) { // apaga os arquivos antigos (criados pelo robô)
+        const id = String(u || '').match(/\/d\/([^/]+)/)?.[1];
+        if (id) await fetch(`https://www.googleapis.com/drive/v3/files/${id}?supportsAllDrives=true`, { method: 'DELETE', headers: { Authorization: `Bearer ${tok}` } }).catch(() => {});
+      }
+      Object.assign(c, { doc_url: gdoc.webViewLink, pdf_url: pdf.webViewLink, aluno_nome: aluno?.nome || c.aluno_nome });
+      if (cfg.aviso_discord) c.discord_msg_id = await avisarDiscord(cfg, c);
+      await sb.from('crm_call_mentoria').update({ doc_url: c.doc_url, pdf_url: c.pdf_url, aluno_nome: c.aluno_nome, discord_msg_id: c.discord_msg_id, atualizado_em: new Date().toISOString() }).eq('id', c.id);
+      out.push(`${c.titulo} → ${nome}`);
+      await new Promise((ok) => setTimeout(ok, 1200));
+    }
+    return { refeitos: out };
+  }
   // vincular: liga uma call à ficha certa do CRM (quando o email do convite não bate) e refaz o aviso
   if (body.vincular) {
     const { id, cliente_id } = body.vincular;
@@ -307,10 +335,11 @@ async function rodar(body: any) {
     const a = await alunoPorCliente(cliente_id);
     const ct = await contatoAluno([], a);
     Object.assign(c, { cliente_id, aluno_nome: a.nome, aluno_email: ct.email, aluno_telefone: ct.telefone });
-    if (cfg.aviso_discord && body.reavisar !== false) c.discord_msg_id = await avisarDiscord(cfg, c);
     await sb.from('crm_call_mentoria').update({ cliente_id, aluno_nome: c.aluno_nome, aluno_email: c.aluno_email, aluno_telefone: c.aluno_telefone,
-      discord_msg_id: c.discord_msg_id, atualizado_em: new Date().toISOString() }).eq('id', id);
-    return { vinculado: `${c.titulo} → ${a.nome} (${ct.telefone || 'sem WhatsApp'})` };
+      atualizado_em: new Date().toISOString() }).eq('id', id);
+    // refaz Doc + PDF + aviso já com o nome e o contato da ficha
+    const refeito = await rodar({ refazer_docs: true, id });
+    return { vinculado: `${c.titulo} → ${a.nome} (${ct.telefone || 'sem WhatsApp'})`, ...refeito };
   }
   // reavisar: refaz o aviso no Discord das calls já prontas (apaga o antigo), completando email/WhatsApp se faltavam
   if (body.reavisar) {
