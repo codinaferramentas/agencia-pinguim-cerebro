@@ -314,7 +314,8 @@ async function montarResumoGrupos(dia: string): Promise<string[]> {
   for (const l of ordenadas) saida.push('', `**${l.nome}** — ${l.msgs} msg${l.msgs === 1 ? '' : 's'}`, partes(l));
   const parados = (grupos ?? []).filter((g) => !ordenadas.some((l) => l.nome === g.nome)).map((g) => g.nome);
   if (parados.length) saida.push('', `💤 Sem mensagem de aluno: ${parados.join(' · ')}`);
-  saida.push('', '_Detalhe de cada reclamação, crítica, sugestão e elogio: na tag de cada produto. Pendências e tempo de resposta: #painel-cs._');
+  // vai pro time todo: NÃO citar o #painel-cs (monitoramento interno de tempo de resposta)
+  saida.push('', '_O detalhe de cada pergunta, reclamação, crítica, sugestão e elogio está na tag de cada mentoria._');
   return empacotar(saida);
 }
 
