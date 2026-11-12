@@ -49,6 +49,7 @@ create table if not exists pinguim.acesso_area_config (
 alter table pinguim.acesso_area_config enable row level security;
 insert into pinguim.acesso_area_config (id) values (1) on conflict do nothing;
 
--- crons (ligar depois do teste aprovado):
--- select cron.schedule('acesso-areas-coletar', '*/10 * * * *', $$select pinguim.disparar_edge_function('acesso-areas-worker')$$);
+-- PRODUÇÃO desde 12/11/2026 (aval do André e da Fernanda/Ingrid): ativo=true, modo_teste=false, canal #liberacao-de-acessos
+-- update pinguim.acesso_area_config set ativo=true, modo_teste=false, canal_alerta_id='1570505108461199461' where id=1;
+select cron.schedule('acesso-areas-worker', '*/10 * * * *', $$select pinguim.disparar_edge_function('acesso-areas-worker')$$);
 -- diário 8h SP = 11h UTC: o worker sabe que é a rodada diária pelo horário (8h00–8h09 SP)
