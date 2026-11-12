@@ -479,6 +479,102 @@ async function concluirAtendimento(cfg: ConfigAtend, alvo: any, canalNome: strin
   }
 }
 
+// ---------- feedback do aluno sobre a EMPRESA (schema-051) ----------
+// Etapa 1 (mini, toda msg de aluno): acha candidatos. Etapa 2 (5.5): confirma
+// com checklist. Calibrado em 385 msgs reais: 65 → 23 → 8, 8/8 certos.
+const PROMPT_FEEDBACK = `Você lê mensagens de alunos em GRUPOS de WhatsApp de uma escola de marketing digital (mentorias e cursos: ProAlt, Taurus, Orion, Lyra, Elo). O objetivo é a EMPRESA melhorar seus processos. Você só procura FEEDBACK DO ALUNO SOBRE A EMPRESA.
+
+O alvo do feedback precisa ser a empresa: as aulas, lives, encontros e gravações; o método e o conteúdo do curso; os mentores e a equipe (Pedro, Micha, Luiz, Fernanda, Ingrid, Rafael, suporte); a plataforma, app, área de membros e ferramentas da empresa; avisos, comunicação, prazos, entregas, organização.
+
+ATENÇÃO — a maior parte das mensagens desses grupos é aluno comentando o trabalho de OUTRO ALUNO (página, criativo, copy, vídeo, oferta, headline, gancho) ou dando conselho a um colega ("tenta X", "pesquisa Y", "achei sua copy..."). Isso é SEMPRE "nenhum", mesmo que soe como crítica, sugestão ou elogio. Se a mensagem responde a um COLEGA, desconfie: quase sempre é "nenhum".
+
+tipo:
+- "reclamacao": problema que aconteceu com ele por causa da empresa (não foi avisado, perdeu acesso, não recebeu, atraso, desorganização, cobrança, falta de suporte, conteúdo que não encontra).
+- "critica": opinião negativa sobre aula, conteúdo, método, formato ou decisão da empresa.
+- "sugestao": pede ou propõe algo novo/melhor À EMPRESA (aula sobre X, treinamento, horário, funcionalidade, formato).
+- "elogio": elogio à aula, encontro, mentor, equipe, suporte ou ferramenta da empresa; ou resultado que ele atribui ao método/curso/ferramenta da empresa.
+- "nenhum": todo o resto (dúvidas, conversa, feedback entre colegas, problemas com Meta/Hotmart/Google sem culpa da empresa, "top", "obrigado", piada).
+
+Na dúvida, "nenhum".
+
+Responda só JSON: {"tipo": "reclamacao|critica|sugestao|elogio|nenhum"}`;
+
+const PROMPT_FEEDBACK_CONFIRMA = `Você é o revisor final de um monitor de feedback. Uma escola de marketing digital (marcas: ProAlt, Taurus, Orion, Lyra, Elo; mentores Pedro Aredes, Micha Menezes, Luiz; equipe Fernanda, Ingrid, Rafael, suporte) quer saber o que os alunos acham DELA, para melhorar processos. Um filtro anterior marcou a mensagem abaixo como possível feedback. Confirme ou rejeite.
+
+Responda as perguntas, nessa ordem:
+1. Quem é o ALVO da mensagem? (a empresa / um colega aluno / uma empresa de fora como Meta, Instagram, Hotmart, Google, Claude, ChatGPT / o próprio negócio do aluno / ninguém)
+2. Se o alvo NÃO é a empresa → tipo "nenhum".
+3. Agradecimento curto ("obrigado", "top", "valeu", "acesso voltou, obrigada") → "nenhum".
+4. Piada ou ironia sem conteúdo → "nenhum".
+5. Pergunta de dúvida comum sem queixa → "nenhum".
+6. Se o alvo é a empresa: "reclamacao" (problema que ele sofreu: acesso, aviso, entrega, atraso, não encontra conteúdo), "critica" (opinião negativa sobre aula/método/decisão), "sugestao" (pede/propõe algo novo à empresa), "elogio" (elogio concreto à aula, mentor, equipe, suporte, ferramenta da empresa, ou resultado atribuído ao método).
+
+Responda só JSON: {"alvo": "...", "tipo": "reclamacao|critica|sugestao|elogio|nenhum", "sobre": "aula|conteudo|metodo|mentor|equipe|suporte|comunicacao|plataforma|evento|resultado|outro", "resumo": "1 frase curta começando pelo verbo, sem sujeito; vazio se nenhum"}`;
+
+const ROTULOS_FEEDBACK: Record<string, string> = {
+  reclamacao: '📣 **RECLAMAÇÃO DE ALUNO**',
+  critica: '🗯️ **CRÍTICA DE ALUNO**',
+  sugestao: '💡 **SUGESTÃO DE ALUNO**',
+  elogio: '👏 **ELOGIO DE ALUNO**',
+};
+const SOBRE_LEGIVEL: Record<string, string> = {
+  aula: 'aula', conteudo: 'conteúdo', metodo: 'método', mentor: 'mentor', equipe: 'equipe', suporte: 'suporte',
+  comunicacao: 'comunicação', plataforma: 'plataforma', evento: 'evento', resultado: 'resultado', outro: 'outro',
+};
+
+async function chamarOpenAI(modelo: string, sistema: string, usuario: string): Promise<any> {
+  const key = await getChave('OPENAI_API_KEY', 'monitor-grupos-webhook');
+  const r = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: modelo, response_format: { type: 'json_object' },
+      messages: [{ role: 'system', content: sistema }, { role: 'user', content: usuario }] }),
+  });
+  if (!r.ok) throw new Error(`OpenAI ${modelo} ${r.status}`);
+  return JSON.parse((await r.json()).choices[0].message.content);
+}
+
+async function analisarFeedback(grupo: Grupo, linhaId: string, m: {
+  texto: string; quando: string; nome: string; tel: string; jid: string; respondeuJid: string; postar: boolean;
+}) {
+  const { data: cfg } = await sb.from('monitor_atendimento_config').select('feedback_ativo').eq('id', 1).maybeSingle();
+  if (!cfg?.feedback_ativo) return;
+  const { data: antes } = await sb.from('monitor_grupos_mensagens').select('remetente_nome, texto')
+    .eq('grupo_jid', grupo.jid).lt('criado_em', m.quando).order('criado_em', { ascending: false }).limit(3);
+  const ctxMsgs = (antes ?? []).reverse().map((p) => `${(p.remetente_nome || '').slice(0, 25)}: ${p.texto.replace(/\s+/g, ' ').slice(0, 160)}`).join(' || ') || '-';
+  const resp = !m.respondeuJid ? 'ninguém' : await ehAdmin(grupo, m.respondeuJid) ? 'um ADM/mentor da equipe' : 'um COLEGA (outro aluno)';
+  const entrada = `Grupo: ${grupo.nome}\nMensagens anteriores no grupo: ${ctxMsgs}\nEsta mensagem responde a: ${resp}\n\nMENSAGEM DO ALUNO (${m.nome || 'aluno'}): ${m.texto.slice(0, 1500)}`;
+
+  const e1 = await chamarOpenAI('gpt-5.4-mini', PROMPT_FEEDBACK, entrada);
+  if (!e1?.tipo || e1.tipo === 'nenhum') return;
+  const e2 = await chamarOpenAI('gpt-5.5', PROMPT_FEEDBACK_CONFIRMA, entrada);
+  if (!ROTULOS_FEEDBACK[e2?.tipo]) return;
+
+  await sb.from('monitor_grupos_mensagens').update({
+    feedback_tipo: e2.tipo, feedback_sobre: String(e2.sobre || 'outro').slice(0, 40), feedback_resumo: String(e2.resumo || '').slice(0, 300),
+  }).eq('id', linhaId);
+  if (!m.postar) return; // já foi como alerta de pedido/reclamação
+
+  // mesmo aluno, mesmo grupo, mesmo tipo em 30 min = 1 post (msgs em sequência)
+  const desde = new Date(new Date(m.quando).getTime() - 30 * 60 * 1000).toISOString();
+  const { data: recente } = await sb.from('monitor_grupos_mensagens').select('id')
+    .eq('grupo_jid', grupo.jid).eq('remetente_jid', m.jid).eq('feedback_tipo', e2.tipo)
+    .gte('feedback_postado_em', desde).limit(1);
+  if (recente && recente.length > 0) return;
+
+  const linhas = [
+    '━━━━━━━━━━━━━━━━━━━━',
+    `${ROTULOS_FEEDBACK[e2.tipo]} · ${grupo.nome}`,
+    '',
+    `**Quem:** ${m.nome || 'sem nome'} (${m.tel ? fmtTel(m.tel) : 'número não identificado'}) · ${horaIsoBRT(m.quando)}`,
+    `**Sobre:** ${SOBRE_LEGIVEL[e2.sobre] || 'outro'}`,
+    `**Resumo:** ${e2.resumo}`,
+    citar(m.texto, 1200),
+  ];
+  await enviarAlerta(grupo, linhas.join('\n').slice(0, 1990));
+  await sb.from('monitor_grupos_mensagens').update({ feedback_postado_em: new Date().toISOString() }).eq('id', linhaId);
+}
+
 // ---------- atendimento no PRIVADO dos números de CS (schema-047) ----------
 // Grupos são lidos só pela instância principal; as demais também estão nos
 // grupos e contariam em dobro.
@@ -786,6 +882,15 @@ serve(async (req) => {
           texto, msgId: key.id || '', quando,
           respondeuJid: ctx.respondeuJid, respondeuMsgId: ctx.respondeuMsgId, mencionados: ctx.mencionados,
         }).catch((e) => console.error('atendimento (adm) falhou:', e));
+      }
+
+      // feedback sobre a empresa (reclamação/crítica/sugestão/elogio) → tag do produto.
+      // Msg flagada já vai como alerta abaixo: grava o feedback, não posta 2x.
+      if (texto.length >= 12 && !await ehAdmin(grupo, remetenteJid)) {
+        await analisarFeedback(grupo, linhaId, {
+          texto, quando, nome: remetenteNome, tel: telefone, jid: remetenteJid,
+          respondeuJid: ctx.respondeuJid, postar: !categoria,
+        }).catch((e) => console.error('feedback falhou:', e));
       }
 
       if (!categoria) continue;
