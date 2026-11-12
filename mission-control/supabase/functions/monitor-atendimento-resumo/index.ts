@@ -242,6 +242,82 @@ async function montarAlertaSla(cfg: any): Promise<{ mensagens: string[]; ids: st
 }
 
 // ---------- discord ----------
+// ---------- modo 3: fechamento dos GRUPOS (schema-052) ----------
+// Visão de VOLUME do dia anterior pro time: mensagens, perguntas, reclamações,
+// críticas, sugestões, elogios — por grupo. Sem detalhe (detalhe = tags do
+// produto; pendência = #painel-cs).
+async function montarResumoGrupos(dia: string): Promise<string[]> {
+  const [ini, fim] = janela(dia);
+  const { data: grupos } = await sb.from('monitor_grupos').select('jid, nome, participantes').eq('ativo', true);
+  const ehAdm = (g: any, jid: string) => !!(g?.participantes || {})[jid]?.adm;
+  const porJid = new Map((grupos ?? []).map((g) => [g.jid, g]));
+
+  // mensagens do dia (paginado: dia cheio passa de 1000)
+  const msgs: any[] = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await sb.from('monitor_grupos_mensagens')
+      .select('grupo_jid, remetente_jid, eh_admin, categoria, feedback_tipo')
+      .like('grupo_jid', '%@g.us').gte('criado_em', ini).lt('criado_em', fim).range(de, de + 999);
+    if (error) throw new Error(`ler mensagens: ${error.message}`);
+    msgs.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  const { data: perguntas } = await sb.from('monitor_atendimentos').select('grupo_jid, status')
+    .eq('canal_tipo', 'grupo').gte('perguntado_em', ini).lt('perguntado_em', fim);
+
+  type Linha = { nome: string; msgs: number; perg: number; equipe: number; reclamacao: number; critica: number; sugestao: number; elogio: number; risco: number };
+  const linhas = new Map<string, Linha>();
+  const linha = (jid: string) => {
+    if (!linhas.has(jid)) linhas.set(jid, { nome: porJid.get(jid)?.nome || jid, msgs: 0, perg: 0, equipe: 0, reclamacao: 0, critica: 0, sugestao: 0, elogio: 0, risco: 0 });
+    return linhas.get(jid)!;
+  };
+  for (const m of msgs) {
+    if (m.eh_admin || ehAdm(porJid.get(m.grupo_jid), m.remetente_jid)) continue; // só aluno
+    const l = linha(m.grupo_jid);
+    l.msgs++;
+    if (m.feedback_tipo && m.feedback_tipo in l) (l as any)[m.feedback_tipo]++;
+    if (m.categoria === 'chateado_risco') l.risco++;
+  }
+  for (const p of perguntas ?? []) {
+    const l = linha(p.grupo_jid);
+    l.perg++;
+    if (p.status !== 'descartada') l.equipe++;
+  }
+
+  const tot = [...linhas.values()].reduce((t, l) => {
+    for (const k of ['msgs', 'perg', 'equipe', 'reclamacao', 'critica', 'sugestao', 'elogio', 'risco'] as const) t[k] += l[k];
+    return t;
+  }, { msgs: 0, perg: 0, equipe: 0, reclamacao: 0, critica: 0, sugestao: 0, elogio: 0, risco: 0 });
+
+  const dt = new Date(`${dia}T12:00:00Z`);
+  const titulo = `${DIAS_SEMANA[dt.getUTCDay()]} ${String(dt.getUTCDate()).padStart(2, '0')}/${String(dt.getUTCMonth() + 1).padStart(2, '0')}`;
+  const partes = (l: typeof tot) => [
+    `❓ ${l.perg} pergunta${l.perg === 1 ? '' : 's'}${l.perg ? ` (${l.equipe} pra equipe)` : ''}`,
+    l.reclamacao ? `📣 ${l.reclamacao} reclamaç${l.reclamacao === 1 ? 'ão' : 'ões'}` : '',
+    l.critica ? `🗯️ ${l.critica} crítica${l.critica === 1 ? '' : 's'}` : '',
+    l.sugestao ? `💡 ${l.sugestao} sugest${l.sugestao === 1 ? 'ão' : 'ões'}` : '',
+    l.elogio ? `👏 ${l.elogio} elogio${l.elogio === 1 ? '' : 's'}` : '',
+    l.risco ? `🚨 ${l.risco} risco de cancelamento` : '',
+  ].filter(Boolean).join(' · ');
+
+  const saida: string[] = [
+    '━━━━━━━━━━━━━━━━━━━━━━━━',
+    `📊 **FECHAMENTO DOS GRUPOS — ${titulo}**`,
+    '',
+    `💬 **${tot.msgs}** mensagens de alunos`,
+    `❓ Perguntas: **${tot.perg}** (${tot.equipe} pra equipe, ${tot.perg - tot.equipe} pra turma)`,
+    `📣 Reclamações: **${tot.reclamacao}** · 🗯️ Críticas: **${tot.critica}** · 💡 Sugestões: **${tot.sugestao}** · 👏 Elogios: **${tot.elogio}**${tot.risco ? ` · 🚨 Risco de cancelamento: **${tot.risco}**` : ''}`,
+    '',
+    '**POR GRUPO** (mais movimentado primeiro)',
+  ];
+  const ordenadas = [...linhas.values()].filter((l) => l.msgs > 0 || l.perg > 0).sort((a, b) => b.msgs - a.msgs);
+  for (const l of ordenadas) saida.push('', `**${l.nome}** — ${l.msgs} msg${l.msgs === 1 ? '' : 's'}`, partes(l));
+  const parados = (grupos ?? []).filter((g) => !ordenadas.some((l) => l.nome === g.nome)).map((g) => g.nome);
+  if (parados.length) saida.push('', `💤 Sem mensagem de aluno: ${parados.join(' · ')}`);
+  saida.push('', '_Detalhe de cada reclamação, crítica, sugestão e elogio: na tag de cada produto. Pendências e tempo de resposta: #painel-cs._');
+  return empacotar(saida);
+}
+
 async function postar(cfg: any, mensagens: string[]) {
   const bot = await getChave('DISCORD_BOT_TOKEN', 'monitor-atendimento-resumo');
   const h = { Authorization: `Bot ${bot}`, 'Content-Type': 'application/json' };
@@ -276,6 +352,15 @@ serve(async (req) => {
   const json = (o: unknown) => new Response(JSON.stringify(o), { headers: { 'Content-Type': 'application/json' } });
   try {
     const cfg = await config();
+
+    if (body.modo === 'grupos') {
+      const dia = /^\d{4}-\d{2}-\d{2}$/.test(body.dia || '') ? body.dia : ontemBRT();
+      const mensagens = await montarResumoGrupos(dia);
+      if (body.dry_run) return json({ modo: 'grupos', dia, mensagens });
+      if (!cfg.resumo_grupos_ativo) return json({ modo: 'grupos', resultado: 'desativado' });
+      // destino próprio: canal do time quando aprovado; até lá, DM (dm_user_ids)
+      return json({ modo: 'grupos', dia, resultado: await postar({ ...cfg, canal_id: cfg.resumo_grupos_canal_id }, mensagens) });
+    }
 
     if (body.modo === 'sla') {
       const { mensagens, ids } = await montarAlertaSla(cfg);
