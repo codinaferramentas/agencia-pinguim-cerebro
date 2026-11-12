@@ -238,18 +238,34 @@ const MENCOES_QUEDA = [
 const REALERTA_MIN = 60; // se seguir caída, repete o alerta a cada 1h
 const CONFIRMACAO_QUEDA_MIN = 3; // espera N min caída antes de alertar (evita spam de soluço)
 
-async function evolutionCfg() {
+// ---------- DONA do disparo (Andre 12/11, call com o time) ----------
+// Quem dispara é a DONA DO PRODUTO, não importa quem mexeu no card:
+//   Fernanda → produtos do Micha (ELO, Lyra, mentorias individuais do Micha)
+//   Ingrid   → produtos do Pedro (ProAlt, Taurus LT/Master/Plus, Orion)
+// A dona fica no grupo (`grupos_whatsapp_alertas.instancia_override`); grupo
+// sem dona cadastrada cai na Ingrid. FALLBACK: se o número da dona estiver
+// fora do ar (ou o envio por ele falhar), sai pelo número da outra e a dona
+// recebe DM no Discord explicando — melhor sair pelo outro número que não sair.
+const INST_INGRID = 'EVOLUTION_INSTANCE_ALERTAS_GRUPOS';
+const INST_FERNANDA = 'EVOLUTION_INSTANCE_ELO_FERNANDA';
+const DISCORD_DA_INSTANCIA: Record<string, string> = {
+  [INST_INGRID]: '1205120597433122846',   // Ingrid Nascimento
+  [INST_FERNANDA]: '1210285892489449603', // Fernanda Lisboa
+};
+const outraInstancia = (chave: string) => chave === INST_FERNANDA ? INST_INGRID : INST_FERNANDA;
+
+async function evolutionCfg(chave: string = INST_INGRID) {
   const [base, inst, tok] = await Promise.all([
     getChave('EVOLUTION_API_URL', 'alertas-grupos-worker'),
-    getChave('EVOLUTION_INSTANCE_ALERTAS_GRUPOS', 'alertas-grupos-worker'),
-    getChave('EVOLUTION_INSTANCE_ALERTAS_GRUPOS_TOKEN', 'alertas-grupos-worker'),
+    getChave(chave, 'alertas-grupos-worker'),
+    getChave(`${chave}_TOKEN`, 'alertas-grupos-worker'),
   ]);
   return { base: base.replace(/\/$/, ''), inst, tok };
 }
 
-async function estadoInstancia(): Promise<string> {
+async function estadoInstancia(chave: string = INST_INGRID): Promise<string> {
   try {
-    const { base, inst, tok } = await evolutionCfg();
+    const { base, inst, tok } = await evolutionCfg(chave);
     const r = await fetch(`${base}/instance/connectionState/${inst}`, { headers: { apikey: tok } });
     const j = await r.json().catch(() => ({}));
     return j?.instance?.state || `erro-http-${r.status}`;
@@ -331,31 +347,27 @@ async function instanciaDoGrupo(override: string | null): Promise<{ inst: string
   return { inst, tok };
 }
 
-// ---------- responsável pelo disparo = quem mexeu por último no card ----------
-// (Andre 10/11) A última pessoa que moveu/editou o card dispara pelo próprio
-// número. André Codina NÃO conta — é também a conta do token do robô (todo
-// move automático Avulso→Concluidos sai no nome dele) — nem ferramenta@.
-const EXCLUIR_RESPONSAVEL_IDS = new Set(['6a8da7f2f80104613cbfe7cc']); // André Codina - Equipe Sirius (robô)
-const EXCLUIR_RESPONSAVEL_NOME = /andr[eé]\s*codina|ferramenta/i;
-
-async function responsavelDoCard(
-  cardId: string,
-  mapa: Map<string, { nome: string; instancia_chave: string }>,
-): Promise<{ nome: string; chave: string | null } | null> {
-  const acts = await trello(`cards/${cardId}/actions?filter=updateCard,createCard,copyCard&limit=50`) as any[];
-  for (const a of acts) { // Trello devolve do mais recente pro mais antigo
-    const mid = a.idMemberCreator || '';
-    const nome = a.memberCreator?.fullName || '';
-    const user = a.memberCreator?.username || '';
-    if (EXCLUIR_RESPONSAVEL_IDS.has(mid) || EXCLUIR_RESPONSAVEL_NOME.test(nome) || EXCLUIR_RESPONSAVEL_NOME.test(user)) continue;
-    const r = mapa.get(mid);
-    return { nome: r?.nome || nome, chave: r?.instancia_chave ?? null }; // sem instância cadastrada → cai no padrão
+// DM pra dona do grupo quando o disparo saiu pelo número da outra (fallback).
+// Se a DM falhar, avisa no canal marcando a pessoa — nunca fica sem saber.
+async function avisarDona(chaveDona: string, conteudo: string) {
+  const userId = DISCORD_DA_INSTANCIA[chaveDona];
+  if (!userId) return;
+  const bot = await getChave('DISCORD_BOT_TOKEN', 'alertas-grupos-worker');
+  try {
+    const r = await fetch('https://discord.com/api/v10/users/@me/channels', {
+      method: 'POST', headers: { Authorization: `Bot ${bot}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient_id: userId }),
+    });
+    const dm = await r.json();
+    if (!r.ok) throw new Error(`abrir DM: ${r.status}`);
+    await postarDiscord(conteudo, null, dm.id);
+  } catch (_) {
+    await postarDiscord(`<@${userId}> (não consegui te mandar DM — avisando por aqui)\n${conteudo}`, null, CANAL_DISCORD);
   }
-  return null; // só o robô/André mexeu → regra do grupo/padrão
 }
 
-// Grupos em que uma instância está (cache por execução) — o responsável só
-// dispara se o número dele estiver no grupo; senão cai na instância padrão.
+// Grupos em que uma instância está (cache por execução) — o fallback só usa
+// o número da outra se ele estiver no grupo.
 const gruposPorInstancia = new Map<string, Set<string> | null>();
 async function gruposDaInstancia(chave: string): Promise<Set<string> | null> {
   if (gruposPorInstancia.has(chave)) return gruposPorInstancia.get(chave)!;
@@ -366,7 +378,7 @@ async function gruposDaInstancia(chave: string): Promise<Set<string> | null> {
     const r = await fetch(`${base.replace(/\/$/, '')}/group/fetchAllGroups/${encodeURIComponent(inst)}?getParticipants=false`, { headers: { apikey: tok } });
     const j = await r.json().catch(() => []);
     if (r.ok && Array.isArray(j)) set = new Set(j.map((x: any) => x.id));
-  } catch (_) { /* não deu pra checar → null (confia no responsável) */ }
+  } catch (_) { /* não deu pra checar → null (tenta mesmo assim) */ }
   gruposPorInstancia.set(chave, set);
   return set;
 }
@@ -444,8 +456,14 @@ serve(async (req) => {
     }
 
     // ---------- saúde da instância Evolution (sem ela, nenhum aviso sai) ----------
-    const estado = body.simular_queda ? 'close (simulação)' : await estadoInstancia();
+    const [estado, estadoFernanda] = await Promise.all([
+      body.simular_queda ? Promise.resolve('close (simulação)') : estadoInstancia(INST_INGRID),
+      estadoInstancia(INST_FERNANDA),
+    ]);
     log.instancia = estado;
+    log.instancia_fernanda = estadoFernanda;
+    const estadoDe: Record<string, string> = { [INST_INGRID]: estado, [INST_FERNANDA]: estadoFernanda };
+    const fernandaOk = estadoFernanda === 'open';
     if (estado !== 'open') {
       if (cfg?.instancia_status === 'open' && !body.simular_queda) {
         // 1ª vez que vê caída: anota EM SILÊNCIO — pode ser soluço de 30s.
@@ -467,7 +485,10 @@ serve(async (req) => {
           const cabecalho = body.simular_queda ? '🧪 *[TESTE do alerta de queda — a instância está OK, ignora]*\n' : '';
           await avisarResponsaveis(
             `${cabecalho}🚨 **EVOLUTION CAIU — instância da Ingrid (alertas de agenda no WhatsApp)**\n` +
-            `Fora do ar há ${body.simular_queda ? '(simulação)' : Math.round(minCaida) + ' min'} (estado: \`${estado}\`). Enquanto estiver assim, NENHUM aviso sai nos grupos — reconectar é urgente.\n` +
+            `Fora do ar há ${body.simular_queda ? '(simulação)' : Math.round(minCaida) + ' min'} (estado: \`${estado}\`). ` +
+            (fernandaOk
+              ? `Enquanto isso, os avisos dos grupos da Ingrid estão saindo pelo número da Fernanda (fallback) — mas reconectar logo.\n`
+              : `O número da Fernanda TAMBÉM está fora — NENHUM aviso sai nos grupos. Reconectar é urgente.\n`) +
             (qr
               ? `📷 QR de reconexão anexado — **expira em ~40 segundos!** Se não der tempo: WhatsApp da Ingrid → Aparelhos conectados → Conectar aparelho → escanear um QR novo no painel do Evolution (instância elo_1775155882289).`
               : `⚠️ Não consegui gerar o QR automaticamente — reconectar pelo painel do Evolution (instância elo_1775155882289).`) +
@@ -484,10 +505,11 @@ serve(async (req) => {
           log.instancia_obs = `caída há ${minCaida.toFixed(1)}min — ainda aguardando confirmação`;
         }
       }
-      if (!body.simular_queda) {
-        // NÃO processa disparos com a instância caída: as travas ficam
+      if (!body.simular_queda && !fernandaOk) {
+        // Os DOIS números fora: NÃO processa disparos. As travas ficam
         // preservadas e, se reconectar dentro da janela de 55min, tudo sai.
-        log.pulados.push({ motivo: `instância Evolution fora do ar (${estado}) — disparos adiados` });
+        // (Só a Ingrid fora → segue: os grupos dela saem pela Fernanda.)
+        log.pulados.push({ motivo: `as duas instâncias Evolution fora do ar (Ingrid: ${estado} · Fernanda: ${estadoFernanda}) — disparos adiados` });
         return new Response(JSON.stringify({ ok: true, ...log }), { headers: { 'Content-Type': 'application/json' } });
       }
     } else if (cfg?.instancia_status && cfg.instancia_status !== 'open') {
@@ -512,7 +534,7 @@ serve(async (req) => {
       log.instancia_recuperada = tinhaAlertado ? 'com aviso' : 'soluço curto — silêncio';
     }
     const { data: grupos } = await sb.from('grupos_whatsapp_alertas').select('nome, link_convite, jid_evolution, instancia_override').eq('ativo', true);
-    // responsáveis (membro Trello → instância) — quem mexeu por último dispara
+    // nomes das instâncias (chave do cofre → "Fernanda Lisboa"/"Ingrid Nascimento")
     const { data: resps } = await sb.from('alertas_responsaveis').select('trello_member_id, nome, instancia_chave').eq('ativo', true);
     const mapaResp = new Map((resps || []).map(r => [r.trello_member_id, { nome: r.nome, instancia_chave: r.instancia_chave }]));
     gruposPorInstancia.clear();
@@ -589,13 +611,6 @@ serve(async (req) => {
         if (!agendaOk && !modoTeste) { pulo('nenhum evento HOJE na agenda com título parecido com o do card'); continue; }
       }
 
-      // Quem mexeu por último no card (fora André/robô) = responsável pelo
-      // disparo. Calculado ANTES de o robô mover o card (Enviar Agora/Avulso).
-      let resp: { nome: string; chave: string | null } | null = null;
-      if (!modoTeste) {
-        try { resp = await responsavelDoCard(card.id, mapaResp); } catch (_) { resp = null; }
-      }
-
       // BLINDAGEM 31/08 (manual): tira o card da lista ANTES de enviar. Se o
       // move falhar, NÃO envia — card preso na "🔁 Enviar Agora" dispararia a
       // cada minuto (loop). Próximo tick tenta o move de novo, sem enviar nada.
@@ -638,17 +653,27 @@ serve(async (req) => {
           }
           continue;
         }
-        // Por qual número sai: (1) quem mexeu por último no card, se o número
-        // dele está no grupo; (2) regra do grupo (ELO → Fernanda); (3) padrão.
-        let chaveUsada: string | null = dest.override;
-        let via = dest.override ? 'regra do grupo' : 'padrão';
-        if (resp?.chave) {
-          const gs = await gruposDaInstancia(resp.chave);
-          if (!gs || gs.has(dest.jid)) { chaveUsada = resp.chave; via = `último a mexer: ${resp.nome}`; }
-          else via = `${resp.nome} não está no grupo → ${via}`;
+        // Por qual número sai: o da DONA do grupo (produto). Fallback pro número
+        // da outra se o da dona estiver fora do ar — decidido aqui — ou se o
+        // envio por ele já falhou neste card+grupo+dia (decidido no retry).
+        const nomeDe = (k: string) => [...mapaResp.values()].find(v => v.instancia_chave === k)?.nome || k;
+        const chaveDona = dest.override || INST_INGRID;
+        const nomeDona = nomeDe(chaveDona);
+        let chaveUsada = chaveDona;
+        let fallback: string | null = null; // motivo, quando saiu pelo outro número
+        // devolve a chave da outra, se ela puder assumir (no ar + está no grupo)
+        const outraPodeAssumir = async (): Promise<string | null> => {
+          const outra = outraInstancia(chaveDona);
+          if (estadoDe[outra] !== 'open') return null; // a outra também fora → tenta pela dona mesmo
+          const gs = await gruposDaInstancia(outra);
+          return gs && !gs.has(dest.jid) ? null : outra; // a outra não está no grupo → não
+        };
+        if (estadoDe[chaveDona] !== 'open') {
+          const outra = await outraPodeAssumir();
+          if (outra) { chaveUsada = outra; fallback = `número da ${nomeDona} fora do ar (${estadoDe[chaveDona]})`; }
         }
-        const chaveEfetiva = chaveUsada || 'EVOLUTION_INSTANCE_ALERTAS_GRUPOS';
-        const nomeInst = [...mapaResp.values()].find(v => v.instancia_chave === chaveEfetiva)?.nome || chaveEfetiva;
+        let via = fallback ? `fallback: ${fallback}` : `dona do grupo: ${nomeDona}`;
+        let nomeInst = nomeDe(chaveUsada);
         if (dryRun) {
           const { data: ja } = await sb.from('disparos_grupos_whatsapp').select('id')
             .eq('card_id', card.id).eq('grupo_jid', dest.jid).eq('data_ref', dataBRT).eq('tipo', 'automatico').maybeSingle();
@@ -690,7 +715,15 @@ serve(async (req) => {
               .eq('card_id', card.id).eq('grupo_jid', dest.jid).eq('data_ref', dataBRT).eq('status', 'erro')
               .select('id');
             if (!travouRetry || !travouRetry.length) continue; // outro tick pegou
-            log.disparos.push({ card: card.nome, grupo: dest.nome, retry: (existente.tentativas ?? 0) + 1 });
+            // a 1ª tentativa (pelo número da dona) deu erro → a 2ª sai pelo da outra
+            if (!fallback) {
+              const outra = await outraPodeAssumir();
+              if (outra) {
+                chaveUsada = outra; fallback = `o envio pelo número da ${nomeDona} deu erro na 1ª tentativa`;
+                via = `fallback: ${fallback}`; nomeInst = nomeDe(chaveUsada);
+              }
+            }
+            log.disparos.push({ card: card.nome, grupo: dest.nome, retry: (existente.tentativas ?? 0) + 1, sai_por: nomeInst });
           }
         } else {
           await sb.from('disparos_grupos_whatsapp').insert({
@@ -709,14 +742,21 @@ serve(async (req) => {
           ? `🧪 *[TESTE — destino real: ${dest.nome}]*\n${statusAgenda}${manual ? '\n🔁 reenvio manual' : ''}\n———\n${card.mensagem}`
           : card.mensagem;
         try {
-          // produção: sai pelo responsável/regra do grupo; modo teste: instância
-          // padrão no grupo de teste (o responsável pode não estar lá)
+          // produção: sai pelo número da dona (ou da outra, no fallback); modo
+          // teste: instância padrão no grupo de teste
           await enviarWhats(jidFinal, texto, modoTeste ? null : chaveUsada);
           await sb.from('disparos_grupos_whatsapp')
-            .update({ status: 'enviado', instancia_usada: modoTeste ? 'padrão (teste)' : nomeInst, responsavel: resp?.nome ?? null })
+            .update({ status: 'enviado', instancia_usada: modoTeste ? 'padrão (teste)' : (fallback ? `${nomeInst} (fallback)` : nomeInst), responsavel: nomeDona })
             .eq('card_id', card.id).eq('grupo_jid', dest.jid).eq('data_ref', dataBRT).eq('status', 'enviando');
-          enviadosNesteCard.push(modoTeste ? dest.nome : `${dest.nome} (via ${nomeInst})`);
+          enviadosNesteCard.push(modoTeste ? dest.nome : `${dest.nome} (via ${nomeInst}${fallback ? ' — fallback' : ''})`);
           log.disparos.push({ card: card.nome, grupo: dest.nome, manual, enviado: true, modo: log.modo, sai_por: nomeInst, via });
+          if (fallback && !modoTeste) {
+            await avisarDona(chaveDona,
+              `🔁 **Disparo saiu pelo número da ${nomeInst}** (fallback)\n` +
+              `Card "${card.nome}" → grupo **${dest.nome}** às ${horaBRT(agora)}.\n` +
+              `Motivo: ${fallback}. Pra não ficar sem o aviso, foi enviado pelo outro número. 🤖`,
+            ).catch(() => {});
+          }
         } catch (e) {
           // Erro da Evolution → marca 'erro'; o próximo tick RETENTA (até 3x).
           const msg = e instanceof Error ? e.message : String(e);
