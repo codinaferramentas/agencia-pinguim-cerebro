@@ -202,6 +202,11 @@ async function linksNaAgendaHoje(inicioDia: Date, fimDia: Date): Promise<AgendaD
       if (e.summary) eventos.push({ titulo: e.summary, hora: e.start?.dateTime ? horaBRT(new Date(e.start.dateTime)) : 'dia todo' });
     }
   }
+  // Encontros que estão SÓ na agenda pessoal do Micha/Pedro também confirmam o
+  // disparo (lição 13/11: Sabatina da Copa Taurus Black estava só na agenda do
+  // Micha → os cards de 12h na lista Sexta foram pulados). Entram só em
+  // `titulos` (confirmação); `eventos` segue sendo só a agenda da operação.
+  for (const ev of await eventosAgendasPessoais(inicioDia, fimDia).catch(() => [])) titulos.push(ev.titulo);
   return { links, titulos, eventos };
 }
 
@@ -430,8 +435,8 @@ const PRODUTO_INGRID = /taurus|proalt|orion/i;
 const PRODUTO_FERNANDA = /\belo\b|lyra|lo-?fi/i;
 // Agendas pessoais dos experts: encontro de grupo às vezes só existe ali (lição
 // 13/11: "Sabatina de Criativos da Copa Taurus Black" estava só na do Micha).
-// O disparo NÃO lê essas agendas (só as 3 da operação), então a conferência
-// avisa que o encontro precisa ir também pra contato@. Lidas pela conexão luiz@.
+// Desde 13/11 elas também CONFIRMAM o disparo (entram nos títulos da agenda do
+// dia). Lidas pela conexão luiz@.
 const AGENDAS_PESSOAIS: Record<string, string> = { 'micha@agenciapinguim.com': 'Micha', 'pedro@agenciapinguim.com': 'Pedro' };
 const CONTA_AGENDAS_PESSOAIS = 'luiz@agenciapinguim.com';
 
@@ -605,10 +610,14 @@ async function conferirDia(
 
   const pendA: [string, { dona: string; nome: string; horas: string[]; jids: string[] }][] = [];
   for (const [k, x] of semAgenda) {
-    const ultimo = [...x.horas].sort().pop();
-    if (ultimo && ultimo < agoraHHMM) { descartados.push({ item: x.nome, motivo: `último aviso (${ultimo}) já passou` }); continue; }
+    // só os avisos que AINDA vão falhar (horário à frente)
+    x.horas = x.horas.filter(h => h >= agoraHHMM);
+    if (!x.horas.length) { descartados.push({ item: x.nome, motivo: 'os avisos do card já passaram' }); continue; }
     if (jaAlertado.has(k)) { descartados.push({ item: x.nome, motivo: 'já alertado hoje' }); continue; }
-    if (await jaAvisadoNaMao(x.nome, x.jids, x.dona, inicioDia, hashesRobo)) { descartados.push({ item: x.nome, motivo: 'já avisado na mão no grupo' }); continue; }
+    // SEM a trava "já avisaram na mão": aviso manual feito ANTES não cobre os
+    // avisos FUTUROS do card, que vão falhar do mesmo jeito (lição 13/11: a
+    // Ingrid avisou a Sabatina na mão às 9h32, a trava achou "resolvido" e o
+    // card das 12h falhou sem ninguém ser alertado).
     pendA.push([k, x]);
   }
   const pendE: [string, { dona: string; nome: string; hora: string; soPessoal: string | null }][] = [];
@@ -635,9 +644,8 @@ async function conferirDia(
     }
     if (e.length) {
       t += `\n📅 **Está na agenda, mas não tem card no Trello** — nenhum aviso vai sair no grupo:\n`;
-      for (const [, x] of e) t += `• ${x.hora} — ${x.nome}${x.soPessoal ? ` _(está só na agenda pessoal do ${x.soPessoal}, não na agenda contato@)_` : ''}\n`;
+      for (const [, x] of e) t += `• ${x.hora} — ${x.nome}${x.soPessoal ? ` _(na agenda do ${x.soPessoal})_` : ''}\n`;
       t += `Esse encontro precisa de aviso no grupo? Se sim, crie o card na lista de ${listaHoje} (ou em Avulso). Se não precisa, pode desconsiderar.\n`;
-      if (e.some(([, x]) => x.soPessoal)) t += `Atenção: para o card disparar sozinho, o encontro também precisa estar na agenda contato@ com o mesmo nome. Se preferir não mexer na agenda, use a lista Avulso, que dispara sem conferir a agenda.\n`;
     }
     t += `\nO restante dos avisos de hoje segue comigo. 🤖`;
     mensagens.push({
