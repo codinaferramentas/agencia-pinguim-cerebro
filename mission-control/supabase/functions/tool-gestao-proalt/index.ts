@@ -105,7 +105,7 @@ async function actObterUsuario(body: any) {
   const rr = await proaltREST('GET', `/user_roles?user_id=eq.${user_id}&select=role&limit=1`);
   const role = (rr.ok && Array.isArray(rr.data) && rr.data[0]) ? rr.data[0].role : 'user';
 
-  return jsonRespTool({ ok: true, usuario: { ...u, role } });
+  return jsonRespTool({ ok: true, usuario: { ...u, role, ...(await planoDoUsuario(user_id)) } });
 }
 
 async function actCriarUsuario(body: any) {
@@ -152,12 +152,43 @@ async function actCriarUsuario(body: any) {
   // Garantia: espera 500ms pro trigger rodar
   await new Promise((r) => setTimeout(r, 500));
 
+  // O app hoje nasce toda conta em "Sem acesso" (o metadata plan:'Completo' é nome antigo e o trigger ignora).
+  // Quem é criado por aqui é aluno liberado → grava o plano explicitamente (Full, igual compra na Hotmart).
+  const rp = await gravarPlano(user_id, String(body.plan_id || PLANO_FULL));
+  if (!rp.ok) return jsonRespTool({ ok: false, erro: 'conta criada, mas falhou gravar o plano: ' + rp.erro, user_id }, 500);
+
   // Se role != 'user', UPSERT na user_roles (trigger pode ter colocado default)
   if (role !== 'user') {
     await proaltREST('PATCH', `/user_roles?user_id=eq.${user_id}`, { role });
   }
 
   return jsonRespTool({ ok: true, user_id });
+}
+
+// Planos do app ProAlt (public.plans). Full = acesso completo; é o plano da compra na Hotmart.
+const PLANO_FULL = '2cf21005-9c84-4c60-8566-782809edc41b';
+
+async function gravarPlano(user_id: string, plan_id: string) {
+  return await proaltREST('POST', `/user_plans?on_conflict=user_id`, { user_id, plan_id }, 'resolution=merge-duplicates,return=representation');
+}
+
+async function planoDoUsuario(user_id: string) {
+  const r = await proaltREST('GET', `/user_plans?user_id=eq.${user_id}&select=plan_id,plans(name)&limit=1`);
+  const x = r.ok && Array.isArray(r.data) ? r.data[0] : null;
+  return x ? { plan_id: x.plan_id, plano: x.plans?.name || null } : { plan_id: null, plano: null };
+}
+
+// garantir_plano { user_id }: deixa a conta no Full. Full é o maior plano, então nunca rebaixa ninguém.
+async function actGarantirPlano(body: any) {
+  const user_id = String(body.user_id || '').trim();
+  if (!user_id) return jsonRespTool({ ok: false, erro: 'user_id obrigatorio' }, 400);
+  const antes = await planoDoUsuario(user_id);
+  if (antes.plan_id !== PLANO_FULL) {
+    const r = await gravarPlano(user_id, PLANO_FULL);
+    if (!r.ok) return jsonRespTool({ ok: false, erro: 'garantir_plano: ' + r.erro }, 500);
+  }
+  const depois = await planoDoUsuario(user_id);
+  return jsonRespTool({ ok: depois.plan_id === PLANO_FULL, antes: antes.plano, plano: depois.plano, mudou: antes.plan_id !== PLANO_FULL });
 }
 
 async function actAtualizarUsuario(body: any) {
@@ -280,6 +311,7 @@ serve(async (req) => {
       case 'obter_usuario': return await actObterUsuario(body);
       case 'criar_usuario': return await actCriarUsuario(body);
       case 'atualizar_usuario': return await actAtualizarUsuario(body);
+      case 'garantir_plano': return await actGarantirPlano(body);
       case 'resetar_senha': return await actResetarSenha(body);
       case 'trocar_email': return await actTrocarEmail(body);
       case 'excluir': return await actExcluir(body);
