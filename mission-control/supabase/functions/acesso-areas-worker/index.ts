@@ -111,7 +111,7 @@ async function coletarHotmart(cfg: any) {
     const [produto, areas] = cfg.produtos_hotmart[String(t.hotmart_products.hotmart_product_id)];
     const b = t.hotmart_buyers || {};
     out.push({ email: normEmail(b.email), nome: String(b.name || '').trim(), whatsapp: b.checkout_phone || b.phone || null, produto, areas,
-      origem: 'hotmart', referencia: t.transaction_code, anunciado_por: `Hotmart, 1ª parcela em ${dataBR(t.approved_date || t.purchase_date)}` });
+      origem: 'hotmart', referencia: t.transaction_code, data_origem: t.approved_date || t.purchase_date, anunciado_por: `Hotmart, 1ª parcela em ${dataBR(t.approved_date || t.purchase_date)}` });
   }
   return out;
 }
@@ -171,7 +171,7 @@ async function coletarDiscord(cfg: any, dryRun: boolean) {
     for (const p of v.pessoas) {
       const email = normEmail(p.email);
       if (!/^[\w.+-]+@[\w-]+\.[\w.]+$/.test(email)) continue;
-      out.push({ email, nome: p.nome, whatsapp: p.whatsapp || null, produto: v.produto, areas, origem: 'pix-discord', referencia: m.id,
+      out.push({ email, nome: p.nome, whatsapp: p.whatsapp || null, produto: v.produto, areas, origem: 'pix-discord', referencia: m.id, data_origem: m.timestamp,
         referencia_url: `https://discord.com/channels/${m.guild_id || '1083429941300969574'}/${cfg.canal_vendas_id}/${m.id}`,
         anunciado_por: `Discord, ${m.author?.global_name || m.author?.username} em ${dataBR(m.timestamp)}` });
     }
@@ -193,6 +193,11 @@ async function cliente(email: string) {
   const { data } = await sb.from('crm_cliente_identidade').select('cliente_id').eq('tipo', 'email').eq('valor', email).limit(1);
   return data?.[0]?.cliente_id || null;
 }
+async function nomeCrm(cid: string | null) {
+  if (!cid) return null;
+  const { data } = await sb.from('crm_cliente').select('nome').eq('cliente_id', cid).maybeSingle();
+  return data?.nome || null;
+}
 
 // novos: grava e avisa só quem ainda não tem acesso
 async function processarNovos(cfg: any, candidatos: any[], dryRun: boolean) {
@@ -208,7 +213,9 @@ async function processarNovos(cfg: any, candidatos: any[], dryRun: boolean) {
     const status = c.areas.every((a: string) => ok.includes(a)) ? 'liberado' : faltam.length ? 'pendente' : 'coberto';
     if (dryRun) { (status === 'pendente' ? novos : jaTinham).push(status === 'pendente' ? { ...c, faltam } : `${c.email} (${status})`); continue; }
     if (status === 'coberto') continue;
-    await sb.from('acesso_area_pendencia').insert({ ...c, cliente_id: await cliente(c.email), areas_ok: ok, status, ultimo_check_em: new Date().toISOString(),
+    const cid = await cliente(c.email);
+    if (!String(c.nome || '').trim() || c.nome === c.email) c.nome = (await nomeCrm(cid)) || c.nome; // anúncio sem nome → nome do CRM
+    await sb.from('acesso_area_pendencia').insert({ ...c, cliente_id: cid, areas_ok: ok, status, ultimo_check_em: new Date().toISOString(),
       liberado_em: status === 'liberado' ? new Date().toISOString() : null, avisado_em: status === 'pendente' ? new Date().toISOString() : null });
     if (status === 'pendente') novos.push({ ...c, faltam }); else jaTinham.push(c.email);
   }
@@ -227,11 +234,15 @@ async function diario(cfg: any, dryRun: boolean) {
     const faltam = p.areas.filter((a: string) => !ok.includes(a));
     if (!dryRun) await sb.from('acesso_area_pendencia').update({ areas_ok: ok, ultimo_check_em: new Date().toISOString(),
       ...(faltam.length ? {} : { status: 'liberado', liberado_em: new Date().toISOString() }) }).eq('id', p.id);
-    if (faltam.length) ainda.push({ ...p, faltam, dias: Math.floor((Date.now() - new Date(p.criado_em).getTime()) / 864e5) }); else liberados++;
+    if (faltam.length) { // dias contam da venda/anúncio (não de quando entrou na lista), em dias de calendário de SP
+      const desde = new Date(p.data_origem || p.criado_em);
+      const dia = (d: Date) => Date.UTC(sp(d).getUTCFullYear(), sp(d).getUTCMonth(), sp(d).getUTCDate());
+      ainda.push({ ...p, faltam, dias: Math.round((dia(new Date()) - dia(desde)) / 864e5), desde: dataBR(desde.toISOString()) });
+    } else liberados++;
   }
   if (!dryRun) {
     const txt = ainda.length
-      ? `☀️ **Bom dia! Acessos à área de membros AINDA NÃO liberados na Hotmart (${ainda.length})**\n${mencoes(cfg)}\n\n${ainda.map((p) => `${linhaPessoa(p, p.faltam)}\n   ⏳ pendente há ${p.dias} dia(s)`).join('\n\n')}\n\nSe alguém aqui NÃO deve receber acesso, dispense pelo CRM (ficha do aluno → "Dispensar alerta de acesso").`
+      ? `☀️ **Bom dia! Acessos à área de membros AINDA NÃO liberados na Hotmart (${ainda.length})**\n${mencoes(cfg)}\n\n${ainda.sort((a, b) => b.dias - a.dias).map((p) => `${linhaPessoa(p, p.faltam)}\n   ⏳ esperando há **${p.dias} ${p.dias === 1 ? 'dia' : 'dias'}** (desde ${p.desde})`).join('\n\n')}\n\nSe alguém aqui NÃO deve receber acesso, dispense pelo CRM (ficha do aluno → "Dispensar alerta de acesso").`
       : '☀️ Bom dia! ✅ Nenhum acesso à área de membros pendente.';
     await postar(cfg, txt);
   }

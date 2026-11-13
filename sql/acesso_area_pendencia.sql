@@ -53,3 +53,10 @@ insert into pinguim.acesso_area_config (id) values (1) on conflict do nothing;
 -- update pinguim.acesso_area_config set ativo=true, modo_teste=false, canal_alerta_id='1570505108461199461' where id=1;
 select cron.schedule('acesso-areas-worker', '*/10 * * * *', $$select pinguim.disparar_edge_function('acesso-areas-worker')$$);
 -- diário 8h SP = 11h UTC: o worker sabe que é a rodada diária pelo horário (8h00–8h09 SP)
+
+-- 13/11: "pendente há N dias" conta a partir da VENDA/ANÚNCIO, não de quando entrou na lista (saía "0 dias").
+alter table pinguim.acesso_area_pendencia add column if not exists data_origem timestamptz;
+update pinguim.acesso_area_pendencia set data_origem = to_timestamp(((referencia::bigint >> 22) + 1420070400000) / 1000.0)
+  where data_origem is null and origem = 'pix-discord' and referencia ~ '^[0-9]+$';   -- data do anúncio (id do Discord)
+update pinguim.acesso_area_pendencia set data_origem = to_timestamp(substring(anunciado_por from '(\d{2}/\d{2})') || '/2026', 'DD/MM/YYYY') + interval '15 hours'
+  where data_origem is null and origem = 'hotmart';                                     -- data da 1ª parcela
