@@ -643,7 +643,7 @@ async function classificarContato(tel: string): Promise<string> {
 // Testado em 11 casos reais/sintéticos (11/11). Modelo de classificação = mini.
 const PROMPT_FILTRO = `Você filtra mensagens que alunos mandam no WhatsApp PRIVADO da equipe de atendimento (CS) de uma escola de marketing digital (cursos, mentorias, comunidade). Decida se o que o aluno escreveu EXIGE resposta ou ação da equipe.
 
-precisa_resposta = true quando há: dúvida; pedido de ajuda; problema de acesso, pagamento, cobrança ou reembolso; pedido de reagendar, adiar, cancelar ou trocar algo; reclamação ou insatisfação; pedido de informação; relato que pede retorno, opinião ou orientação.
+precisa_resposta = true quando há: dúvida; pedido de ajuda; problema de acesso, pagamento, cobrança ou reembolso; pedido de reagendar, adiar, cancelar ou trocar algo; reclamação ou insatisfação; pedido de informação; relato que pede retorno, opinião ou orientação; dizer que NÃO conseguiu fazer algo ou que algo não funciona ("não consegui", "não tô conseguindo", "deu erro"); dizer que está AGUARDANDO algo da equipe ("aguardo vocês", "fico no aguardo do time") — a equipe está devendo um retorno; recusar ou limitar um horário/data proposto ("de manhã não consigo") — precisa de nova proposta.
 
 precisa_resposta = false quando é só: cumprimento; agradecimento; confirmação de que fez o que foi pedido ("feito", "respondi", "preenchi", "já salvei"); aviso que não pede nada de volta; conversa social; emoji; resposta que encerra um assunto.
 
@@ -656,7 +656,14 @@ async function filtrarPedido(canalId: string, contato: string): Promise<{ filtro
     const { data } = await sb.from('monitor_grupos_mensagens').select('eh_admin, texto, criado_em')
       .eq('grupo_jid', canalId).or(`remetente_jid.eq."${contato}",respondeu_jid.eq."${contato}"`)
       .order('criado_em', { ascending: false }).limit(12);
-    const conversa = (data ?? []).reverse()
+    // regra fixa: áudio/vídeo do aluno depois da última fala da atendente = pedido (a IA não ouve)
+    const recentes = data ?? []; // mais nova primeiro
+    const ultAtendente = recentes.findIndex((m) => m.eh_admin);
+    const doAlunoSemResposta = ultAtendente === -1 ? recentes : recentes.slice(0, ultAtendente);
+    if (doAlunoSemResposta.some((m) => m.texto.includes('[áudio]') || m.texto.includes('[vídeo]'))) {
+      return { filtro: 'pedido', motivo: 'áudio/vídeo sem resposta (IA não ouve)', resumo: 'Mandou áudio/vídeo — ouvir' };
+    }
+    const conversa = [...recentes].reverse()
       .map((m) => `${m.eh_admin ? 'ATENDENTE' : 'ALUNO'} (${horaIsoBRT(m.criado_em)}): ${m.texto.slice(0, 600)}`).join('\n');
     const key = await getChave('OPENAI_API_KEY', 'monitor-grupos-webhook');
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
