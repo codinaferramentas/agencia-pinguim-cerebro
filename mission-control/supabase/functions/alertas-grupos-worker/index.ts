@@ -427,7 +427,38 @@ async function comentarCard(cardId: string, texto: string) {
 // ninguém) ou 'canal' (#novo-grupo-pinguim marcando a dona).
 const CODINA_DISCORD = '1077338884981133413';
 const PRODUTO_INGRID = /taurus|proalt|orion/i;
-const PRODUTO_FERNANDA = /\belo\b|lyra|lo-?fi|micha/i;
+const PRODUTO_FERNANDA = /\belo\b|lyra|lo-?fi/i;
+// Agendas pessoais dos experts: encontro de grupo às vezes só existe ali (lição
+// 13/11: "Sabatina de Criativos da Copa Taurus Black" estava só na do Micha).
+// O disparo NÃO lê essas agendas (só as 3 da operação), então a conferência
+// avisa que o encontro precisa ir também pra contato@. Lidas pela conexão luiz@.
+const AGENDAS_PESSOAIS: Record<string, string> = { 'micha@agenciapinguim.com': 'Micha', 'pedro@agenciapinguim.com': 'Pedro' };
+const CONTA_AGENDAS_PESSOAIS = 'luiz@agenciapinguim.com';
+
+async function eventosAgendasPessoais(inicioDia: Date, fimDia: Date): Promise<{ titulo: string; hora: string; dono: string }[]> {
+  const { data: conexao } = await sb.from('conexoes_google')
+    .select('refresh_token').eq('email_google', CONTA_AGENDAS_PESSOAIS).is('revogado_em', null).limit(1).maybeSingle();
+  if (!conexao) return [];
+  const [cid, csec] = await Promise.all([
+    getChave('GOOGLE_OAUTH_CLIENT_ID', 'alertas-grupos-worker'),
+    getChave('GOOGLE_OAUTH_CLIENT_SECRET', 'alertas-grupos-worker'),
+  ]);
+  const tj = await (await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ refresh_token: conexao.refresh_token, client_id: cid, client_secret: csec, grant_type: 'refresh_token' }),
+  })).json();
+  if (!tj.access_token) return [];
+  const out: { titulo: string; hora: string; dono: string }[] = [];
+  for (const [agenda, dono] of Object.entries(AGENDAS_PESSOAIS)) {
+    const params = new URLSearchParams({ singleEvents: 'true', maxResults: '100', timeMin: inicioDia.toISOString(), timeMax: fimDia.toISOString() });
+    const r = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(agenda)}/events?${params}`, { headers: { Authorization: `Bearer ${tj.access_token}` } });
+    const j = await r.json().catch(() => ({}));
+    for (const e of j.items || []) {
+      if (e.summary && e.status !== 'cancelled') out.push({ titulo: e.summary, hora: e.start?.dateTime ? horaBRT(new Date(e.start.dateTime)) : 'dia todo', dono });
+    }
+  }
+  return out;
+}
 // encontro individual/interno — não tem aviso em grupo, então não exige card
 const ENCONTRO_INDIVIDUAL = /1:1|individual|<>|express|^\s*interno|onboarding(?!\s+em\s+grupo)|\(/i;
 const NOME_DONA: Record<string, string> = { [INST_INGRID]: 'Ingrid', [INST_FERNANDA]: 'Fernanda' };
@@ -471,14 +502,22 @@ async function conferirDia(
     semAgenda.set(chave, it);
   }
 
-  // (b) encontro de grupo na agenda sem card (mesmo encontro em 2 agendas = 1)
-  const semCard = new Map<string, { dona: string; nome: string; hora: string }>();
-  for (const ev of agenda.eventos) {
+  // (b) encontro de grupo na agenda sem card (mesmo encontro em 2 agendas = 1).
+  // Inclui as agendas pessoais do Micha/Pedro; se o encontro está SÓ lá,
+  // marca `soPessoal` (o robô não enxerga — precisa ir pra contato@ também).
+  const chaveEv = (ev: { titulo: string; hora: string }) => `${ev.hora}|${tokens(ev.titulo).join(' ')}`;
+  const naOperacao = new Set(agenda.eventos.map(chaveEv));
+  const pessoais = (await eventosAgendasPessoais(inicioDia, new Date(inicioDia.getTime() + 864e5)).catch(() => []))
+    .filter(ev => !naOperacao.has(chaveEv(ev)));
+  const semCard = new Map<string, { dona: string; nome: string; hora: string; soPessoal: string | null }>();
+  for (const ev of [...agenda.eventos.map(e => ({ ...e, dono: null as string | null })), ...pessoais]) {
     if (ENCONTRO_INDIVIDUAL.test(ev.titulo)) continue;
     const dona = donaDoEvento(ev.titulo);
     if (!dona) continue;
     if (cards.some(c => tituloBate(c.nome, [ev.titulo]))) continue;
-    semCard.set(`${ev.hora}|${tokens(ev.titulo).join(' ')}`, { dona, nome: ev.titulo.trim(), hora: ev.hora });
+    const k = chaveEv(ev);
+    if (semCard.has(k)) continue;
+    semCard.set(k, { dona, nome: ev.titulo.trim(), hora: ev.hora, soPessoal: ev.dono });
   }
 
   const diaFmt = `${listaHoje.toLowerCase()}, ${dataBRT.slice(8, 10)}/${dataBRT.slice(5, 7)}`;
@@ -496,8 +535,9 @@ async function conferirDia(
     }
     if (e.length) {
       t += `\n📅 **Está na agenda, mas não tem card no Trello** — nenhum aviso vai sair no grupo:\n`;
-      for (const x of e) t += `• ${x.hora} — ${x.nome}\n`;
+      for (const x of e) t += `• ${x.hora} — ${x.nome}${x.soPessoal ? ` _(está só na agenda pessoal do ${x.soPessoal}, não na agenda contato@)_` : ''}\n`;
       t += `Esse encontro precisa de aviso no grupo? Se sim, crie o card na lista de ${listaHoje} (ou em Avulso). Se não precisa, pode desconsiderar.\n`;
+      if (e.some(x => x.soPessoal)) t += `Atenção: para o card disparar sozinho, o encontro também precisa estar na agenda contato@ com o mesmo nome. Se preferir não mexer na agenda, use a lista Avulso, que dispara sem conferir a agenda.\n`;
     }
     t += `\nO restante dos avisos de hoje segue comigo. 🤖`;
     mensagens.push({ dona: NOME_DONA[dona], texto: t });
