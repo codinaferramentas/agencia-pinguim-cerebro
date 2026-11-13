@@ -471,11 +471,81 @@ function donaDoEvento(titulo: string): string | null {
   }
   return null;
 }
+// ---------- TRAVA DE SEGURANÇA: já mandaram na mão? (Andre 13/11) ----------
+// Antes de alertar uma pendência, lê as mensagens de HOJE nos grupos daquele
+// encontro. Se alguém já avisou (mensagem com as palavras do título, que não
+// seja um envio do próprio robô), a pendência está RESOLVIDA — não alerta.
+// (Caso real 13/11: a Ingrid viu a Sabatina sem card e mandou na mão às 9h32.)
+const CANAL_AVISOS_CALLS = '1542527780233682984'; // #avisos-de-calls
+const PALAVRAS_GENERICAS = new Set(['com', 'taurus', 'master', 'elo', 'lyra', 'proalt', 'orion', 'para', 'dos', 'das', 'semanal', 'time', 'tecnico', 'encontro', 'hoje', 'mentoria']);
+// produto no título do evento → trecho do nome dos grupos dele
+const PRODUTO_GRUPO: [RegExp, string][] = [
+  [/taurus\s*master/i, 'taurus master'], [/taurus\s*lt/i, 'taurus lt'], [/orion/i, 'orion'],
+  [/proalt/i, 'proalt'], [/\belo\b/i, 'elo'], [/lyra|lo-?fi/i, 'lyra'],
+];
+
+function jidsDoEvento(titulo: string, grupos: { nome: string; jid_evolution: string | null }[]): string[] {
+  for (const t of [titulo.split('|')[0], titulo]) {
+    const p = PRODUTO_GRUPO.find(([re]) => re.test(t));
+    if (p) return grupos.filter(g => g.jid_evolution && g.nome.toLowerCase().includes(p[1])).map(g => g.jid_evolution!);
+  }
+  return [];
+}
+
+// mensagens de hoje dos grupos (cache por execução), lidas pela instância
+// da dona; se ela falhar, pela outra
+const msgsGrupoCache = new Map<string, { texto: string; hash: string }[] | null>();
+async function mensagensDoDia(jid: string, chaveDona: string, inicioDia: Date): Promise<{ texto: string; hash: string }[] | null> {
+  if (msgsGrupoCache.has(jid)) return msgsGrupoCache.get(jid)!;
+  let out: { texto: string; hash: string }[] | null = null;
+  for (const chave of [chaveDona, outraInstancia(chaveDona)]) {
+    try {
+      const { base, inst, tok } = await evolutionCfg(chave);
+      const r = await fetch(`${base}/chat/findMessages/${encodeURIComponent(inst)}`, {
+        method: 'POST', headers: { apikey: tok, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ where: { key: { remoteJid: jid } }, limit: 150 }),
+      });
+      if (!r.ok) continue;
+      const j = await r.json();
+      const recs = j?.messages?.records || j?.records || (Array.isArray(j) ? j : null);
+      if (!Array.isArray(recs)) continue;
+      const desde = inicioDia.getTime() / 1000, ate = desde + 86400;
+      out = [];
+      for (const m of recs) {
+        if (!(m.messageTimestamp >= desde && m.messageTimestamp < ate)) continue;
+        const texto = m.message?.conversation || m.message?.extendedTextMessage?.text
+          || m.message?.imageMessage?.caption || m.message?.videoMessage?.caption || '';
+        if (texto) out.push({ texto, hash: await hashMsg(texto) });
+      }
+      break;
+    } catch (_) { /* tenta a outra instância */ }
+  }
+  msgsGrupoCache.set(jid, out);
+  return out;
+}
+
+// alguém já avisou esse encontro hoje em algum dos grupos? (ignora o que o robô enviou)
+async function jaAvisadoNaMao(
+  titulo: string, jids: string[], chaveDona: string, inicioDia: Date, hashesRobo: Set<string>,
+): Promise<boolean> {
+  const chaves = [...new Set(tokens(titulo))].filter(w => !PALAVRAS_GENERICAS.has(w));
+  if (!chaves.length || !jids.length) return false;
+  for (const jid of jids) {
+    const msgs = await mensagensDoDia(jid, chaveDona, inicioDia);
+    for (const m of msgs || []) {
+      if (hashesRobo.has(m.hash)) continue;
+      const tm = new Set(tokens(m.texto));
+      if (chaves.filter(w => tm.has(w)).length / chaves.length >= 0.6) return true;
+    }
+  }
+  return false;
+}
+
 const semHora = (nome: string) => nome.replace(/^\s*\d{1,2}:\d{2}\s*\|?\s*/, '').replace(/\s*\|\s*/g, ' | ').trim();
 
 async function conferirDia(
   agora: Date, destino: 'codina' | 'canal', soCalcular: boolean,
-  grupos: { link_convite: string; instancia_override: string | null }[],
+  grupos: { nome: string; link_convite: string; jid_evolution: string | null; instancia_override: string | null }[],
 ): Promise<any> {
   const b = brt(agora);
   const dataBRT = b.toISOString().slice(0, 10);
@@ -483,22 +553,26 @@ async function conferirDia(
   if (!listaHoje) return { conferencia: 'fim de semana — nada a conferir' };
   const inicioDia = new Date(`${dataBRT}T03:00:00Z`);
   const agenda = await linksNaAgendaHoje(inicioDia, new Date(inicioDia.getTime() + 864e5));
+  const agoraHHMM = horaBRT(agora);
+  msgsGrupoCache.clear();
 
   const listas = await trello(`boards/${BOARD}/lists`) as any[];
   const l = listas.find(x => x.name === listaHoje);
   const cards = l ? (await trello(`lists/${l.id}/cards?fields=name,desc`) as any[]).map(c => parseCard(c, listaHoje)) : [];
   const donaPorLink = new Map(grupos.map(g => [g.link_convite, g.instancia_override || INST_INGRID]));
+  const jidPorLink = new Map(grupos.map(g => [g.link_convite, g.jid_evolution]));
 
   // (a) card sem agenda — agrupa os avisos do mesmo encontro (09:00/12:00/13:50…)
-  const semAgenda = new Map<string, { dona: string; nome: string; horas: string[] }>();
+  const semAgenda = new Map<string, { dona: string; nome: string; horas: string[]; jids: string[] }>();
   for (const c of cards) {
     if (!c.links.length || !c.mensagem) continue;
     const ok = tituloBate(c.nome, agenda.titulos) || c.links.some(x => agenda.links.has(x));
     if (ok) continue;
     const dona = c.links.map(x => donaPorLink.get(x)).find(Boolean) || INST_INGRID;
-    const chave = `${dona}|${tokens(c.nome).join(' ')}`;
-    const it = semAgenda.get(chave) || { dona, nome: semHora(c.nome), horas: [] };
+    const chave = `card|${tokens(c.nome).join(' ')}`;
+    const it = semAgenda.get(chave) || { dona, nome: semHora(c.nome), horas: [], jids: [] };
     if (c.hora) it.horas.push(c.hora);
+    for (const x of c.links) { const j = jidPorLink.get(x); if (j && !it.jids.includes(j)) it.jids.push(j); }
     semAgenda.set(chave, it);
   }
 
@@ -515,37 +589,73 @@ async function conferirDia(
     const dona = donaDoEvento(ev.titulo);
     if (!dona) continue;
     if (cards.some(c => tituloBate(c.nome, [ev.titulo]))) continue;
-    const k = chaveEv(ev);
+    const k = `ev|${chaveEv(ev)}`;
     if (semCard.has(k)) continue;
     semCard.set(k, { dona, nome: ev.titulo.trim(), hora: ev.hora, soPessoal: ev.dono });
   }
 
+  // ---------- filtros antes de alertar ----------
+  // 1) encontro já começou → alerta não ajuda mais; 2) alguém já avisou na mão
+  // no grupo (TRAVA DE SEGURANÇA); 3) já alertado hoje (1x por pendência).
+  const { data: robo } = await sb.from('disparos_grupos_whatsapp').select('msg_hash').eq('data_ref', dataBRT).not('msg_hash', 'is', null);
+  const hashesRobo = new Set((robo || []).map(r => r.msg_hash as string));
+  const { data: jaFoi } = await sb.from('alertas_conferencia_enviados').select('chave').eq('data_ref', dataBRT);
+  const jaAlertado = new Set((jaFoi || []).map(r => r.chave as string));
+  const descartados: { item: string; motivo: string }[] = [];
+
+  const pendA: [string, { dona: string; nome: string; horas: string[]; jids: string[] }][] = [];
+  for (const [k, x] of semAgenda) {
+    const ultimo = [...x.horas].sort().pop();
+    if (ultimo && ultimo < agoraHHMM) { descartados.push({ item: x.nome, motivo: `último aviso (${ultimo}) já passou` }); continue; }
+    if (jaAlertado.has(k)) { descartados.push({ item: x.nome, motivo: 'já alertado hoje' }); continue; }
+    if (await jaAvisadoNaMao(x.nome, x.jids, x.dona, inicioDia, hashesRobo)) { descartados.push({ item: x.nome, motivo: 'já avisado na mão no grupo' }); continue; }
+    pendA.push([k, x]);
+  }
+  const pendE: [string, { dona: string; nome: string; hora: string; soPessoal: string | null }][] = [];
+  for (const [k, x] of semCard) {
+    if (x.hora !== 'dia todo' && x.hora <= agoraHHMM) { descartados.push({ item: x.nome, motivo: `encontro (${x.hora}) já começou` }); continue; }
+    if (jaAlertado.has(k)) { descartados.push({ item: x.nome, motivo: 'já alertado hoje' }); continue; }
+    if (await jaAvisadoNaMao(x.nome, jidsDoEvento(x.nome, grupos), x.dona, inicioDia, hashesRobo)) { descartados.push({ item: x.nome, motivo: 'já avisado na mão no grupo' }); continue; }
+    pendE.push([k, x]);
+  }
+
   const diaFmt = `${listaHoje.toLowerCase()}, ${dataBRT.slice(8, 10)}/${dataBRT.slice(5, 7)}`;
-  const mensagens: { dona: string; texto: string }[] = [];
+  const saudacao = b.getUTCHours() < 12 ? 'bom dia' : b.getUTCHours() < 18 ? 'boa tarde' : 'boa noite';
+  const mensagens: { dona: string; texto: string; chaves: { chave: string; tipo: string; item: string }[] }[] = [];
   for (const dona of [INST_FERNANDA, INST_INGRID]) {
-    const a = [...semAgenda.values()].filter(x => x.dona === dona);
-    const e = [...semCard.values()].filter(x => x.dona === dona).sort((x, y) => x.hora.localeCompare(y.hora));
+    const a = pendA.filter(([, x]) => x.dona === dona);
+    const e = pendE.filter(([, x]) => x.dona === dona).sort((p, q) => p[1].hora.localeCompare(q[1].hora));
     if (!a.length && !e.length) continue;
     const quem = destino === 'canal' ? `<@${DISCORD_DA_INSTANCIA[dona]}>` : `**@${NOME_DONA[dona]}**`;
-    let t = `${quem}, bom dia! Conferi os avisos de grupo de hoje (${diaFmt}) e encontrei ${a.length + e.length === 1 ? 'um ponto' : 'alguns pontos'} que precisam da sua atenção:\n`;
+    let t = `${quem}, ${saudacao}! Conferi os avisos de grupo de hoje (${diaFmt}) e encontrei ${a.length + e.length === 1 ? 'um ponto' : 'alguns pontos'} que precisam da sua atenção:\n`;
     if (a.length) {
       t += `\n⚠️ **Tem card no Trello, mas o encontro não está na agenda** — estes avisos NÃO vão sair:\n`;
-      for (const x of a) t += `• ${x.nome}${x.horas.length ? ` (avisos das ${x.horas.sort().join(', ')})` : ''}\n`;
+      for (const [, x] of a) t += `• ${x.nome}${x.horas.length ? ` (avisos das ${x.horas.sort().join(', ')})` : ''}\n`;
       t += `Esse encontro vai acontecer hoje? Se sim, coloque na agenda com o mesmo nome do card que eu disparo normalmente, ou envie manual pela lista 🔁 Enviar Agora. Se não vai acontecer, pode desconsiderar.\n`;
     }
     if (e.length) {
       t += `\n📅 **Está na agenda, mas não tem card no Trello** — nenhum aviso vai sair no grupo:\n`;
-      for (const x of e) t += `• ${x.hora} — ${x.nome}${x.soPessoal ? ` _(está só na agenda pessoal do ${x.soPessoal}, não na agenda contato@)_` : ''}\n`;
+      for (const [, x] of e) t += `• ${x.hora} — ${x.nome}${x.soPessoal ? ` _(está só na agenda pessoal do ${x.soPessoal}, não na agenda contato@)_` : ''}\n`;
       t += `Esse encontro precisa de aviso no grupo? Se sim, crie o card na lista de ${listaHoje} (ou em Avulso). Se não precisa, pode desconsiderar.\n`;
-      if (e.some(x => x.soPessoal)) t += `Atenção: para o card disparar sozinho, o encontro também precisa estar na agenda contato@ com o mesmo nome. Se preferir não mexer na agenda, use a lista Avulso, que dispara sem conferir a agenda.\n`;
+      if (e.some(([, x]) => x.soPessoal)) t += `Atenção: para o card disparar sozinho, o encontro também precisa estar na agenda contato@ com o mesmo nome. Se preferir não mexer na agenda, use a lista Avulso, que dispara sem conferir a agenda.\n`;
     }
     t += `\nO restante dos avisos de hoje segue comigo. 🤖`;
-    mensagens.push({ dona: NOME_DONA[dona], texto: t });
+    mensagens.push({
+      dona: NOME_DONA[dona], texto: t,
+      chaves: [...a.map(([k, x]) => ({ chave: k, tipo: 'card_sem_agenda', item: x.nome })), ...e.map(([k, x]) => ({ chave: k, tipo: 'agenda_sem_card', item: x.nome }))],
+    });
   }
 
   if (soCalcular) { /* dry_run: só devolve */ }
   else if (destino === 'canal') {
-    for (const m of mensagens) await postarDiscord(m.texto, null, CANAL_DISCORD);
+    for (const m of mensagens) {
+      // registra ANTES de postar (unique data+chave): 2 execuções juntas não alertam dobrado
+      const { data: novos } = await sb.from('alertas_conferencia_enviados')
+        .upsert(m.chaves.map(c => ({ data_ref: dataBRT, chave: c.chave, tipo: c.tipo, dona: m.dona, item: c.item })), { onConflict: 'data_ref,chave', ignoreDuplicates: true })
+        .select('chave');
+      if (!novos || !novos.length) continue;
+      await postarDiscord(m.texto, null, CANAL_AVISOS_CALLS);
+    }
   } else {
     const bot = await getChave('DISCORD_BOT_TOKEN', 'alertas-grupos-worker');
     const r = await fetch('https://discord.com/api/v10/users/@me/channels', {
@@ -554,15 +664,15 @@ async function conferirDia(
     });
     const dm = await r.json();
     if (!r.ok) throw new Error(`abrir DM Codina: ${r.status}`);
-    const cab = `🧪 **Prévia da conferência card × agenda — ${diaFmt}** (só pra você; no #novo-grupo-pinguim sai marcando a dona)`;
-    if (!mensagens.length) await postarDiscord(`${cab}\n✅ Hoje está tudo certo: todo card tem encontro na agenda e todo encontro de grupo tem card.`, null, dm.id);
+    const cab = `🧪 **Prévia da conferência card × agenda — ${diaFmt}** (só pra você; no #avisos-de-calls sai marcando a dona)`;
+    if (!mensagens.length) await postarDiscord(`${cab}\n✅ Nada pendente agora.`, null, dm.id);
     for (const m of mensagens) await postarDiscord(`${cab}\n———\n${m.texto}`, null, dm.id);
   }
   return {
-    conferencia: diaFmt, destino,
-    card_sem_agenda: [...semAgenda.values()].map(x => ({ ...x, dona: NOME_DONA[x.dona] })),
-    agenda_sem_card: [...semCard.values()].map(x => ({ ...x, dona: NOME_DONA[x.dona] })),
-    mensagens: soCalcular ? mensagens : mensagens.length,
+    conferencia: diaFmt, hora: agoraHHMM, destino,
+    alertados: mensagens.flatMap(m => m.chaves.map(c => `${m.dona}: ${c.item}`)),
+    descartados,
+    mensagens: soCalcular ? mensagens.map(m => m.texto) : mensagens.length,
   };
 }
 
@@ -594,7 +704,7 @@ serve(async (req) => {
 
     // conferência card × agenda (cron da manhã) — não dispara nada nos grupos
     if (body.conferir) {
-      const { data: gs } = await sb.from('grupos_whatsapp_alertas').select('link_convite, instancia_override').eq('ativo', true);
+      const { data: gs } = await sb.from('grupos_whatsapp_alertas').select('nome, link_convite, jid_evolution, instancia_override').eq('ativo', true);
       const destino = body.destino || cfg?.conciliacao_destino || 'codina';
       const r = await conferirDia(agora, destino === 'canal' ? 'canal' : 'codina', dryRun, gs || []);
       return new Response(JSON.stringify({ ok: true, ...r }), { headers: { 'Content-Type': 'application/json' } });

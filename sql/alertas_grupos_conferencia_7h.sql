@@ -27,3 +27,9 @@ select jobid, jobname, schedule from cron.job where jobname = 'alertas-grupos-co
 
 -- coluna de destino (codina = prévia no DM; canal = #novo-grupo-pinguim marcando a dona)
 -- alter table pinguim.alertas_grupos_config add column if not exists conciliacao_destino text not null default 'codina' check (conciliacao_destino in ('codina','canal'));
+
+-- PRODUÇÃO (Andre 13/11): #avisos-de-calls marcando a dona, a cada 30 min 7h–18h30 BRT, 1x por pendência/dia
+create table if not exists pinguim.alertas_conferencia_enviados (id bigserial primary key, data_ref date not null, chave text not null, tipo text not null, dona text not null, item text not null, enviado_em timestamptz not null default now(), unique (data_ref, chave));
+alter table pinguim.alertas_conferencia_enviados enable row level security;
+update pinguim.alertas_grupos_config set conciliacao_destino = 'canal' where id = 1;
+select cron.alter_job(63, schedule := '0,30 10-21 * * 1-5');
