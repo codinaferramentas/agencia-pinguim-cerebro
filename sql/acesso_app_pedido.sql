@@ -36,3 +36,12 @@ on conflict (discord_msg_id) do nothing;
 -- cron a cada 10 min (mesmo padrão dos outros workers)
 select cron.unschedule(jobid) from cron.job where jobname = 'acesso-apps-worker';
 select cron.schedule('acesso-apps-worker', '*/10 * * * *', $$select pinguim.disparar_edge_function('acesso-apps-worker')$$);
+
+-- #vendas (André 13/11): cada venda informada é conferida (apps + área da Hotmart) e recebe retorno no #liberacao-de-acessos.
+-- Liga só depois do OK do André no teste (vendas_ativo). Começa nas vendas de 13/11 (Claudia e Marcelo):
+-- update pinguim.acesso_area_config set vendas_ultimo_id = '1570857621739544666' where id = 1;
+alter table pinguim.acesso_app_pedido add column if not exists origem text not null default 'pedido'; -- 'pedido' (#liberacao-de-acessos) | 'vendas'
+alter table pinguim.acesso_area_config
+  add column if not exists vendas_ativo boolean not null default false,
+  add column if not exists vendas_ultimo_id text,
+  add column if not exists vendas_canal_id text not null default '1570542927929942157';

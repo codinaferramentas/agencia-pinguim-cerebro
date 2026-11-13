@@ -10,14 +10,20 @@
 //   Conta nova: senha padrão mudar@1234. Conta existente: NUNCA troca a senha.
 //   Nunca encurta validade nem rebaixa plano (Sirius com plano de R$ 997+ ou vitalício fica como está).
 // Depois de liberar, confere no app e responde no canal marcando quem pediu.
+// #vendas (André 13/11): cada "NOVA VENDA" informada é conferida — apps pela regra do produto
+//   (ProAlt/Taurus LT → ProAlt · Elo/Lyra → Elo+Sirius · Taurus Master/Plus → ProAlt+Elo+Sirius · Orion → ProAlt+Elo,
+//   Sirius do Orion só se pedirem · Express → nada) + área de membros da Hotmart. Libera o app que faltar e SEMPRE
+//   dá retorno no #liberacao-de-acessos (mesmo com tudo certo). Hotmart faltando → marca Rafa e Jairo e entra na cobrança das 8h.
 // Ficha no CRM: crm_acesso_registrar cria o cliente se ele não existir.
 // Modos (body): {} = cron · {dry_run:true} = só lê e mostra o que faria (não libera, não responde)
 //   {simular:{texto}} = teste com pedido escrito à mão (libera de verdade; resposta só no privado do Codina)
+//   {vendas_teste:N} = confere as N últimas vendas do #vendas e manda o retorno só no privado do Codina (não grava nada)
 // ========================================================================
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { getChave } from '../_shared/cofre.ts';
+import { AREA_NOME, normEmail, areasAtivas } from '../_shared/hotmart-areas.ts';
 
 const SUPA_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -34,8 +40,6 @@ const umAno = () => new Date(Date.now() + 365 * 864e5);
 // data gravada como meia-noite UTC (Sirius) é só data: não puxa para o dia anterior no fuso de SP
 const dataBR = (s: string | Date) => { const t = new Date(s); const d = t.toISOString().endsWith('T00:00:00.000Z') ? t : new Date(t.getTime() - 3 * 3600e3); return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`; };
 const maior = (a: string | null | undefined, b: Date) => (a && new Date(a) > b ? new Date(a) : b);
-const normEmail = (e: string) => String(e || '').trim().toLowerCase().replace(/[.,;:)\]]+$/, '')
-  .replace(/@(gmail|icloud|outlook|live|msn|me)\.com\.br$/, '@$1.com');
 
 // ---------------- Discord ----------------
 let _bot = '';
@@ -175,6 +179,23 @@ async function liberarSirius(p: any, emails: string[], clienteId: string | null)
   return { ok: true, texto: `App Sirius: plano **${nomePlano}**${manteve ? ' (já era igual ou maior que o CICLO, mantido)' : ''} até **${dataBR(v.plan_expires_at)}**, todas as funcionalidades · ${criou ? `conta criada, senha inicial **${SENHA_PADRAO}**` : `já tinha conta (${conta.email}), senha não alterada`}` };
 }
 
+// libera (ou garante) os apps de uma pessoa, na ordem, e devolve as linhas para a mensagem
+async function liberarApps(p: any, ordem: string[]) {
+  const { clienteId, emails } = await emailsDaFicha(p.email);
+  const linhas: string[] = [], resultado: any[] = [];
+  let oks = 0, falhas = 0;
+  for (const app of ordem) {
+    let r: { ok: boolean; texto: string };
+    try {
+      r = app === 'proalt' ? await liberarProalt(p, emails, clienteId) : app === 'elo' ? await liberarElo(p, emails, clienteId) : await liberarSirius(p, emails, clienteId);
+    } catch (e) { r = { ok: false, texto: `App ${app}: erro ${String((e as Error).message || e).slice(0, 120)}` }; }
+    r.ok ? oks++ : falhas++;
+    resultado.push({ email: p.email, app, ...r });
+    linhas.push(`   ${r.ok ? '✅' : '⚠️'} ${r.texto}`);
+  }
+  return { linhas, resultado, oks, falhas, clienteId };
+}
+
 // ---------------- pedido ----------------
 async function atender(m: any, pedido: any) {
   const apps = new Set<string>();
@@ -190,17 +211,9 @@ async function atender(m: any, pedido: any) {
     const email = normEmail(pe.email);
     if (!/^[\w.+-]+@[\w-]+\.[\w.]+$/.test(email)) { falhas++; blocos.push(`• **${pe.nome || '?'}**\n   ⚠️ sem e-mail válido no pedido`); continue; }
     const p = { email, nome: String(pe.nome || '').trim(), tel: String(pe.whatsapp || '').replace(/\D/g, '') || null };
-    const { clienteId, emails } = await emailsDaFicha(email);
-    const linhas: string[] = [];
-    for (const app of ordem) {
-      let r: { ok: boolean; texto: string };
-      try {
-        r = app === 'proalt' ? await liberarProalt(p, emails, clienteId) : app === 'elo' ? await liberarElo(p, emails, clienteId) : await liberarSirius(p, emails, clienteId);
-      } catch (e) { r = { ok: false, texto: `App ${app}: erro ${String((e as Error).message || e).slice(0, 120)}` }; }
-      r.ok ? oks++ : falhas++;
-      resultado.push({ email, app, ...r });
-      linhas.push(`   ${r.ok ? '✅' : '⚠️'} ${r.texto}`);
-    }
+    const lib = await liberarApps(p, ordem);
+    oks += lib.oks; falhas += lib.falhas; resultado.push(...lib.resultado);
+    const linhas = lib.linhas;
     blocos.push(`• **${p.nome || email}** · ${email}\n${linhas.join('\n')}`);
   }
   const nomes = ordem.map((a) => ({ proalt: 'ProAlt', elo: 'Elo', sirius: 'Sirius' } as any)[a]);
@@ -211,6 +224,129 @@ async function atender(m: any, pedido: any) {
   const texto = `${topo}\n\n${blocos.join('\n')}\n\nA área de membros da Hotmart continua com o Rafa e o Jairo.\n🤖 _Liberação feita automaticamente pela IA da Pinguim._`;
   const status = falhas === 0 ? 'liberado' : oks ? 'parcial' : 'falhou';
   return { texto, status, resultado };
+}
+
+// ---------------- #vendas: conferência de cada venda informada ----------------
+const VENDA_REGRA: Record<string, { apps: string[]; areas: string[] }> = {
+  'ProAlt': { apps: ['proalt'], areas: ['proalt'] },
+  'Taurus Low Ticket': { apps: ['proalt'], areas: ['proalt'] },
+  'Elo': { apps: ['elo', 'sirius'], areas: ['elo'] },
+  'Lyra': { apps: ['elo', 'sirius'], areas: ['elo'] },
+  'Taurus Master': { apps: ['proalt', 'elo', 'sirius'], areas: ['proalt', 'elo'] },
+  'Taurus Plus': { apps: ['proalt', 'elo', 'sirius'], areas: ['proalt', 'elo'] },
+  'Orion': { apps: ['proalt', 'elo'], areas: ['proalt', 'elo'] }, // Sirius do Orion só se pedirem no #liberacao-de-acessos
+  'Sirius': { apps: ['sirius'], areas: [] },
+  'Mentoria Express': { apps: [], areas: [] },
+};
+const SCHEMA_VENDA = { type: 'object', additionalProperties: false, required: ['tipo', 'produtos', 'pessoas'], properties: {
+  tipo: { type: 'string', enum: ['nova_venda', 'outro'] },
+  produtos: { type: 'array', items: { type: 'string', enum: [...Object.keys(VENDA_REGRA), 'Outro'] } },
+  pessoas: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['nome', 'email', 'whatsapp'],
+    properties: { nome: { type: 'string' }, email: { type: 'string' }, whatsapp: { type: 'string' } } } },
+} };
+const INSTRUCAO_VENDA = `Você lê o canal "vendas" de uma escola de cursos (Agência Pinguim). O time comercial informa cada venda no modelo "NOVA VENDA 🐧 / Produto(s) adquirido(s) / Nome completo / E-mail de compra / WhatsApp / …".
+tipo: "nova_venda" quando a mensagem INFORMA uma venda (no modelo ou não); "outro" para qualquer outra coisa (avisos, dúvidas, combinados, correções sem venda nova).
+produtos: os produtos vendidos. "Mentoria Elo", "Elo Black", "Comunidade Elo" = Elo. "Taurus LT"/"Taurus Low Ticket" = Taurus Low Ticket. "Mastermind Orion" = Orion. "Pro Alt"/"Proalt" = ProAlt. "Mentoria Lyra" = Lyra. Express = Mentoria Express. Produto fora da lista = "Outro".
+pessoas: TODOS os alunos da venda (inclusive 2ª cadeira / sócio), com nome, e-mail e WhatsApp como escritos (vazio se não houver). Não invente e-mail.`;
+async function lerVenda(modelo: string, texto: string) {
+  const k = await getChave('OPENAI_API_KEY', CONSUMIDOR);
+  const r = await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', headers: { Authorization: `Bearer ${k}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: modelo, messages: [{ role: 'system', content: INSTRUCAO_VENDA }, { role: 'user', content: texto.slice(0, 4000) }],
+      response_format: { type: 'json_schema', json_schema: { name: 'venda', strict: true, schema: SCHEMA_VENDA } } }) });
+  const j = await r.json();
+  if (!j.choices) throw new Error('OpenAI: ' + JSON.stringify(j.error || j).slice(0, 200));
+  return JSON.parse(j.choices[0].message.content);
+}
+
+const NOMES_TIME: Record<string, string> = { '1083728715726463068': 'Rafa', '1083731934238228590': 'Jairo', '1084804999151878206': 'Luiz Guilherme', [CODINA]: 'Codina' };
+// teste = vai para o privado do Codina, com menções só em texto (ninguém é acionado)
+async function conferirVenda(cfg: any, m: any, venda: any, teste: boolean) {
+  const autorNome = m.author?.global_name || m.author?.username;
+  const marca = (id: string) => (teste ? `@${NOMES_TIME[id] || (id === m.author.id ? autorNome : id)}` : `<@${id}>`);
+  const url = `https://discord.com/channels/${m.guild_id || '1083429941300969574'}/${cfg.vendas_canal_id}/${m.id}`;
+  const quando = dataBR(m.timestamp).slice(0, 5);
+  const produtos = venda.produtos.filter((x: string) => VENDA_REGRA[x]);
+  const apps = ['proalt', 'elo', 'sirius'].filter((a) => produtos.some((x: string) => VENDA_REGRA[x].apps.includes(a)));
+  const areas = ['proalt', 'elo'].filter((a) => produtos.some((x: string) => VENDA_REGRA[x].areas.includes(a)));
+  const blocos: string[] = [], resultado: any[] = [];
+  let falhasApp = 0, hotFaltando = false, hotNaFila = false;
+  for (const pe of venda.pessoas) {
+    const email = normEmail(pe.email);
+    if (!/^[\w.+-]+@[\w-]+\.[\w.]+$/.test(email)) { falhasApp++; blocos.push(`• **${pe.nome || '?'}**\n   ⚠️ a venda não traz um e-mail válido: não consegui conferir`); continue; }
+    const p = { email, nome: String(pe.nome || '').trim(), tel: String(pe.whatsapp || '').replace(/\D/g, '') || null };
+    const lib = apps.length ? await liberarApps(p, apps) : { linhas: [] as string[], resultado: [] as any[], oks: 0, falhas: 0, clienteId: null };
+    falhasApp += lib.falhas; resultado.push(...lib.resultado);
+    const linhas = [...lib.linhas];
+    if (areas.length) {
+      let ok: string[] = [];
+      try { ok = await areasAtivas(sb, email, areas, CONSUMIDOR); }
+      catch (e) { linhas.push(`   ⚠️ Área de membros da Hotmart: não consegui conferir (${String((e as Error).message || e).slice(0, 80)})`); ok = areas; }
+      const faltam = areas.filter((a) => !ok.includes(a));
+      for (const a of areas) linhas.push(ok.includes(a) ? `   ✅ Área de membros da Hotmart (${AREA_NOME[a]}): ativa` : `   ⏳ Área de membros da Hotmart (${AREA_NOME[a]}): **ainda não liberada**`);
+      if (faltam.length) {
+        // já está na cobrança das 8h por outra entrada (ex.: compra na Hotmart)? então não cobra de novo agora
+        const { data: aberto } = await sb.from('acesso_area_pendencia').select('areas').eq('email', email).in('status', ['pendente', 'dispensado']);
+        const cobertas = new Set((aberto || []).flatMap((x: any) => x.areas));
+        if (faltam.every((a) => cobertas.has(a))) hotNaFila = true; else hotFaltando = true;
+      }
+      resultado.push({ email, hotmart: { areas, ok } });
+      if (!teste) {
+        await sb.from('acesso_area_pendencia').upsert({ email, nome: p.nome || null, whatsapp: pe.whatsapp || null, cliente_id: lib.clienteId || null,
+          produto: produtos.join(' + '), areas, areas_ok: ok, origem: 'vendas-discord', referencia: m.id, referencia_url: url,
+          anunciado_por: `#vendas, ${autorNome} em ${quando}`, status: faltam.length ? 'pendente' : 'liberado', ultimo_check_em: new Date().toISOString(),
+          avisado_em: faltam.length ? new Date().toISOString() : null, liberado_em: faltam.length ? null : new Date().toISOString(),
+        }, { onConflict: 'email,produto,referencia', ignoreDuplicates: true });
+      }
+    }
+    if (!linhas.length) linhas.push(`   ℹ️ ${venda.produtos.join(' + ')} não leva app nem área de membros`);
+    blocos.push(`• **${p.nome || email}** · ${email} · ${venda.produtos.join(' + ')}\n${linhas.join('\n')}`);
+  }
+  const fim: string[] = [];
+  if (falhasApp) fim.push(`⚠️ Algo nos apps não saiu como deveria. ${marca(CODINA)} vai olhar.`);
+  if (hotFaltando) fim.push(`${(cfg.marcar || []).map(marca).join(' ')}, falta liberar a área de membros da Hotmart acima. Amanhã às 8h eu confiro de novo e cobro só se ainda faltar.`);
+  else if (hotNaFila) fim.push('A área de membros da Hotmart que falta já está na cobrança das 8h.');
+  if (!falhasApp && !hotFaltando && !hotNaFila) fim.push('Tudo certo: todos os acessos desta venda estão liberados. ✅');
+  const texto = `🛒 **Venda informada no #vendas** por ${marca(m.author.id)} em ${quando} · [ver venda](<${url}>)\n\n${blocos.join('\n')}\n\n${fim.join('\n')}\n🤖 _Conferência feita automaticamente pela IA da Pinguim._`;
+  const status = falhasApp ? (resultado.some((r) => r.ok) ? 'parcial' : 'falhou') : 'liberado';
+  return { texto, status, resultado, mencoes: [m.author.id, ...(hotFaltando ? cfg.marcar || [] : []), ...(falhasApp ? [CODINA] : [])] };
+}
+
+async function dmCodina(texto: string) {
+  const dm = await discord('/users/@me/channels', { method: 'POST', body: JSON.stringify({ recipient_id: CODINA }) });
+  return discord(`/channels/${dm.id}/messages`, { method: 'POST', body: JSON.stringify({ content: texto.slice(0, 1990), allowed_mentions: { parse: [] } }) });
+}
+
+// lê o #vendas desde a última mensagem vista e confere cada venda (máx. MAX_PEDIDOS por rodada)
+async function rodarVendas(cfg: any) {
+  const lote = await discord(`/channels/${cfg.vendas_canal_id}/messages?limit=100${cfg.vendas_ultimo_id ? '&after=' + cfg.vendas_ultimo_id : ''}`);
+  if (!Array.isArray(lote)) throw new Error('Discord #vendas: ' + JSON.stringify(lote).slice(0, 200));
+  const msgs = lote.sort((a: any, b: any) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
+  const feitos: any[] = [];
+  let ultimoId: string | null = null, n = 0;
+  for (const m of msgs) {
+    const t = String(m.content || '');
+    const candidato = !m.author?.bot && /[\w.+-]+@[\w-]+\.[\w.]+/.test(t);
+    if (candidato && n >= MAX_PEDIDOS) break; // fica para a próxima rodada
+    ultimoId = m.id;
+    if (!candidato) continue;
+    const { data: ja } = await sb.from('acesso_app_pedido').select('id').eq('discord_msg_id', m.id).limit(1);
+    if (ja?.length) continue;
+    const venda = await lerVenda(cfg.modelo_extracao || 'gpt-5.5', t);
+    const autor = m.author?.global_name || m.author?.username;
+    if (venda.tipo !== 'nova_venda' || !venda.pessoas.length) {
+      await sb.from('acesso_app_pedido').insert({ discord_msg_id: m.id, origem: 'vendas', autor_id: m.author.id, autor_nome: autor, texto: t, produtos: venda.produtos, pessoas: venda.pessoas, status: 'ignorado' });
+      feitos.push({ msg: m.id, ignorado: venda.tipo });
+      continue;
+    }
+    n++;
+    const r = await conferirVenda(cfg, m, venda, false);
+    const resp = await discord(`/channels/${cfg.apps_canal_id}/messages`, { method: 'POST', body: JSON.stringify({ content: r.texto.slice(0, 1990), allowed_mentions: { users: [...new Set(r.mencoes)] } }) });
+    await sb.from('acesso_app_pedido').insert({ discord_msg_id: m.id, origem: 'vendas', autor_id: m.author.id, autor_nome: autor, texto: t,
+      produtos: venda.produtos, pessoas: venda.pessoas, resultado: r.resultado, status: r.status, resposta_msg_id: resp?.id || null });
+    feitos.push({ msg: m.id, autor, status: r.status });
+  }
+  if (ultimoId) await sb.from('acesso_area_config').update({ vendas_ultimo_id: ultimoId }).eq('id', 1);
+  return feitos;
 }
 
 async function rodar(body: any) {
@@ -224,8 +360,33 @@ async function rodar(body: any) {
     await discord(`/channels/${dm.id}/messages`, { method: 'POST', body: JSON.stringify({ content: ('🧪 SIMULAÇÃO\n' + r.texto).slice(0, 1990), allowed_mentions: { parse: [] } }) });
     return { pedido, ...r };
   }
+  // {vendas_teste:N}: confere as N últimas vendas do #vendas e manda o retorno só no privado do Codina (não grava nada)
+  if (body.vendas_teste) {
+    const lote = await discord(`/channels/${cfg.vendas_canal_id}/messages?limit=50`);
+    const vendas = (Array.isArray(lote) ? lote : []).filter((m: any) => !m.author?.bot && /[\w.+-]+@[\w-]+\.[\w.]+/.test(String(m.content || ''))).slice(0, Number(body.vendas_teste) || 1);
+    const out: any[] = [];
+    for (const m of vendas.reverse()) {
+      const venda = await lerVenda(cfg.modelo_extracao || 'gpt-5.5', String(m.content));
+      if (venda.tipo !== 'nova_venda') { out.push({ msg: m.id, venda }); continue; }
+      const r = await conferirVenda(cfg, m, venda, true);
+      await dmCodina('🧪 TESTE (iria no #liberacao-de-acessos)\n' + r.texto);
+      out.push({ msg: m.id, venda, status: r.status, texto: r.texto });
+    }
+    return { vendas_teste: out };
+  }
+  // {simular_venda:{texto}}: venda escrita à mão (libera os apps de verdade; retorno só no privado do Codina; não grava pendência)
+  if (body.simular_venda?.texto) {
+    const venda = await lerVenda(cfg.modelo_extracao || 'gpt-5.5', body.simular_venda.texto);
+    if (venda.tipo !== 'nova_venda') return { venda };
+    const r = await conferirVenda(cfg, { id: '0', author: { id: CODINA, username: 'Codina' }, timestamp: new Date().toISOString() }, venda, true);
+    await dmCodina('🧪 SIMULAÇÃO DE VENDA\n' + r.texto);
+    return { venda, status: r.status, texto: r.texto };
+  }
   const dryRun = !!body.dry_run;
-  if (!cfg.apps_ativo && !dryRun && !body.forcar) return { ativo: false };
+  // #vendas roda à parte: se der erro lá, os pedidos do #liberacao-de-acessos seguem
+  let vendas: any = null;
+  if (cfg.vendas_ativo && !dryRun) { try { vendas = await rodarVendas(cfg); } catch (e) { vendas = { erro: String((e as Error).message || e) }; } }
+  if (!cfg.apps_ativo && !dryRun && !body.forcar) return { ativo: false, vendas };
   const canal = cfg.apps_canal_id;
   // mensagens depois da última lida (até 100 por rodada; o canal é de baixo volume)
   const lote = await discord(`/channels/${canal}/messages?limit=100${cfg.apps_ultimo_id ? '&after=' + cfg.apps_ultimo_id : ''}`);
@@ -258,7 +419,7 @@ async function rodar(body: any) {
     feitos.push({ msg: m.id, autor, status: r.status, resultado: r.resultado });
   }
   if (!dryRun && ultimoId) await sb.from('acesso_area_config').update({ apps_ultimo_id: ultimoId }).eq('id', 1);
-  return { lidas: msgs.length, feitos };
+  return { lidas: msgs.length, feitos, vendas };
 }
 
 serve(async (req) => {
