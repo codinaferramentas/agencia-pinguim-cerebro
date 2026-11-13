@@ -19,6 +19,7 @@
 // Corpo opcional (POST, service_role):
 //   { dry_run: true }        → calcula e devolve JSON, não envia nem grava
 //   { simular_agora: "ISO" } → trava o relógio (testes)
+//   { conferir: true, destino?: 'codina'|'canal' } → conferência card × agenda do dia
 // ========================================================================
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
@@ -166,7 +167,8 @@ function parseCard(c: { id: string; name: string; desc: string }, lista: string)
 }
 
 // ---------- google (confirmação na agenda contato@) ----------
-async function linksNaAgendaHoje(inicioDia: Date, fimDia: Date): Promise<Set<string>> {
+interface AgendaDia { links: Set<string>; titulos: string[]; eventos: { titulo: string; hora: string }[] }
+async function linksNaAgendaHoje(inicioDia: Date, fimDia: Date): Promise<AgendaDia> {
   const { data: conexao } = await sb.from('conexoes_google')
     .select('refresh_token').eq('email_google', CONTA_ROBO).is('revogado_em', null).limit(1).maybeSingle();
   if (!conexao) throw new Error('conexão Google ferramenta@ não encontrada');
@@ -182,6 +184,7 @@ async function linksNaAgendaHoje(inicioDia: Date, fimDia: Date): Promise<Set<str
   if (!tr.ok) throw new Error(`token Google: ${tj.error}`);
   const links = new Set<string>();
   const titulos: string[] = [];
+  const eventos: { titulo: string; hora: string }[] = [];
   for (const agenda of AGENDAS_CONFIRMACAO) {
     const params = new URLSearchParams({
       singleEvents: 'true', maxResults: '100',
@@ -196,9 +199,10 @@ async function linksNaAgendaHoje(inicioDia: Date, fimDia: Date): Promise<Set<str
     for (const e of j.items || []) {
       for (const l of (`${e.description || ''} ${e.location || ''}`).match(/https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]+/g) || []) links.add(l);
       if (e.summary) titulos.push(e.summary);
+      if (e.summary) eventos.push({ titulo: e.summary, hora: e.start?.dateTime ? horaBRT(new Date(e.start.dateTime)) : 'dia todo' });
     }
   }
-  return { links, titulos };
+  return { links, titulos, eventos };
 }
 
 // ---------- casamento card ↔ evento pelo TÍTULO ----------
@@ -413,6 +417,115 @@ async function comentarCard(cardId: string, texto: string) {
   }
 }
 
+// ---------- CONFERÊNCIA DO DIA: card × agenda (Andre 13/11) ----------
+// Roda 1x de manhã (antes do 1º aviso). Cruza os dois lados com a MESMA regra
+// de título que o disparo usa, então mostra exatamente o que NÃO vai sair:
+//   (a) card na lista do dia sem encontro na agenda → o robô vai pular;
+//   (b) encontro DE GRUPO na agenda sem card → nenhum aviso programado.
+// Avisa a dona do produto (Fernanda = Micha, Ingrid = Pedro). Destino em
+// alertas_grupos_config.conciliacao_destino: 'codina' (prévia, DM sem marcar
+// ninguém) ou 'canal' (#novo-grupo-pinguim marcando a dona).
+const CODINA_DISCORD = '1077338884981133413';
+const PRODUTO_INGRID = /taurus|proalt|orion/i;
+const PRODUTO_FERNANDA = /\belo\b|lyra|lo-?fi|micha/i;
+// encontro individual/interno — não tem aviso em grupo, então não exige card
+const ENCONTRO_INDIVIDUAL = /1:1|individual|<>|express|^\s*interno|onboarding(?!\s+em\s+grupo)|\(/i;
+const NOME_DONA: Record<string, string> = { [INST_INGRID]: 'Ingrid', [INST_FERNANDA]: 'Fernanda' };
+
+function donaDoEvento(titulo: string): string | null {
+  const prefixo = titulo.split('|')[0];
+  for (const t of [prefixo, titulo]) {
+    if (PRODUTO_INGRID.test(t)) return INST_INGRID;
+    if (PRODUTO_FERNANDA.test(t)) return INST_FERNANDA;
+  }
+  return null;
+}
+const semHora = (nome: string) => nome.replace(/^\s*\d{1,2}:\d{2}\s*\|?\s*/, '').replace(/\s*\|\s*/g, ' | ').trim();
+
+async function conferirDia(
+  agora: Date, destino: 'codina' | 'canal', soCalcular: boolean,
+  grupos: { link_convite: string; instancia_override: string | null }[],
+): Promise<any> {
+  const b = brt(agora);
+  const dataBRT = b.toISOString().slice(0, 10);
+  const listaHoje = LISTAS_DIA[b.getUTCDay()];
+  if (!listaHoje) return { conferencia: 'fim de semana — nada a conferir' };
+  const inicioDia = new Date(`${dataBRT}T03:00:00Z`);
+  const agenda = await linksNaAgendaHoje(inicioDia, new Date(inicioDia.getTime() + 864e5));
+
+  const listas = await trello(`boards/${BOARD}/lists`) as any[];
+  const l = listas.find(x => x.name === listaHoje);
+  const cards = l ? (await trello(`lists/${l.id}/cards?fields=name,desc`) as any[]).map(c => parseCard(c, listaHoje)) : [];
+  const donaPorLink = new Map(grupos.map(g => [g.link_convite, g.instancia_override || INST_INGRID]));
+
+  // (a) card sem agenda — agrupa os avisos do mesmo encontro (09:00/12:00/13:50…)
+  const semAgenda = new Map<string, { dona: string; nome: string; horas: string[] }>();
+  for (const c of cards) {
+    if (!c.links.length || !c.mensagem) continue;
+    const ok = tituloBate(c.nome, agenda.titulos) || c.links.some(x => agenda.links.has(x));
+    if (ok) continue;
+    const dona = c.links.map(x => donaPorLink.get(x)).find(Boolean) || INST_INGRID;
+    const chave = `${dona}|${tokens(c.nome).join(' ')}`;
+    const it = semAgenda.get(chave) || { dona, nome: semHora(c.nome), horas: [] };
+    if (c.hora) it.horas.push(c.hora);
+    semAgenda.set(chave, it);
+  }
+
+  // (b) encontro de grupo na agenda sem card (mesmo encontro em 2 agendas = 1)
+  const semCard = new Map<string, { dona: string; nome: string; hora: string }>();
+  for (const ev of agenda.eventos) {
+    if (ENCONTRO_INDIVIDUAL.test(ev.titulo)) continue;
+    const dona = donaDoEvento(ev.titulo);
+    if (!dona) continue;
+    if (cards.some(c => tituloBate(c.nome, [ev.titulo]))) continue;
+    semCard.set(`${ev.hora}|${tokens(ev.titulo).join(' ')}`, { dona, nome: ev.titulo.trim(), hora: ev.hora });
+  }
+
+  const diaFmt = `${listaHoje.toLowerCase()}, ${dataBRT.slice(8, 10)}/${dataBRT.slice(5, 7)}`;
+  const mensagens: { dona: string; texto: string }[] = [];
+  for (const dona of [INST_FERNANDA, INST_INGRID]) {
+    const a = [...semAgenda.values()].filter(x => x.dona === dona);
+    const e = [...semCard.values()].filter(x => x.dona === dona).sort((x, y) => x.hora.localeCompare(y.hora));
+    if (!a.length && !e.length) continue;
+    const quem = destino === 'canal' ? `<@${DISCORD_DA_INSTANCIA[dona]}>` : `**@${NOME_DONA[dona]}**`;
+    let t = `${quem}, bom dia! Conferi os avisos de grupo de hoje (${diaFmt}) e encontrei ${a.length + e.length === 1 ? 'um ponto' : 'alguns pontos'} que precisam da sua atenção:\n`;
+    if (a.length) {
+      t += `\n⚠️ **Tem card no Trello, mas o encontro não está na agenda** — estes avisos NÃO vão sair:\n`;
+      for (const x of a) t += `• ${x.nome}${x.horas.length ? ` (avisos das ${x.horas.sort().join(', ')})` : ''}\n`;
+      t += `Esse encontro vai acontecer hoje? Se sim, coloque na agenda com o mesmo nome do card que eu disparo normalmente, ou envie manual pela lista 🔁 Enviar Agora. Se não vai acontecer, pode desconsiderar.\n`;
+    }
+    if (e.length) {
+      t += `\n📅 **Está na agenda, mas não tem card no Trello** — nenhum aviso vai sair no grupo:\n`;
+      for (const x of e) t += `• ${x.hora} — ${x.nome}\n`;
+      t += `Esse encontro precisa de aviso no grupo? Se sim, crie o card na lista de ${listaHoje} (ou em Avulso). Se não precisa, pode desconsiderar.\n`;
+    }
+    t += `\nO restante dos avisos de hoje segue comigo. 🤖`;
+    mensagens.push({ dona: NOME_DONA[dona], texto: t });
+  }
+
+  if (soCalcular) { /* dry_run: só devolve */ }
+  else if (destino === 'canal') {
+    for (const m of mensagens) await postarDiscord(m.texto, null, CANAL_DISCORD);
+  } else {
+    const bot = await getChave('DISCORD_BOT_TOKEN', 'alertas-grupos-worker');
+    const r = await fetch('https://discord.com/api/v10/users/@me/channels', {
+      method: 'POST', headers: { Authorization: `Bot ${bot}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient_id: CODINA_DISCORD }),
+    });
+    const dm = await r.json();
+    if (!r.ok) throw new Error(`abrir DM Codina: ${r.status}`);
+    const cab = `🧪 **Prévia da conferência card × agenda — ${diaFmt}** (só pra você; no #novo-grupo-pinguim sai marcando a dona)`;
+    if (!mensagens.length) await postarDiscord(`${cab}\n✅ Hoje está tudo certo: todo card tem encontro na agenda e todo encontro de grupo tem card.`, null, dm.id);
+    for (const m of mensagens) await postarDiscord(`${cab}\n———\n${m.texto}`, null, dm.id);
+  }
+  return {
+    conferencia: diaFmt, destino,
+    card_sem_agenda: [...semAgenda.values()].map(x => ({ ...x, dona: NOME_DONA[x.dona] })),
+    agenda_sem_card: [...semCard.values()].map(x => ({ ...x, dona: NOME_DONA[x.dona] })),
+    mensagens: soCalcular ? mensagens : mensagens.length,
+  };
+}
+
 serve(async (req) => {
   if (req.method !== 'POST') return new Response(JSON.stringify({ erro: 'Use POST' }), { status: 405 });
   const auth = (req.headers.get('Authorization') || '').replace('Bearer ', '').trim();
@@ -438,6 +551,14 @@ serve(async (req) => {
     const { data: cfg } = await sb.from('alertas_grupos_config').select('*').eq('id', 1).maybeSingle();
     const modoTeste = cfg?.modo_teste !== false;
     log.modo = modoTeste ? 'TESTE' : 'PRODUCAO';
+
+    // conferência card × agenda (cron da manhã) — não dispara nada nos grupos
+    if (body.conferir) {
+      const { data: gs } = await sb.from('grupos_whatsapp_alertas').select('link_convite, instancia_override').eq('ativo', true);
+      const destino = body.destino || cfg?.conciliacao_destino || 'codina';
+      const r = await conferirDia(agora, destino === 'canal' ? 'canal' : 'codina', dryRun, gs || []);
+      return new Response(JSON.stringify({ ok: true, ...r }), { headers: { 'Content-Type': 'application/json' } });
+    }
 
     // TRAVA DE CONCORRÊNCIA (02/09): dois ticks do cron podem se sobrepor (um
     // ainda enviando quando o outro começa) e um veria os envios do outro como
@@ -556,7 +677,7 @@ serve(async (req) => {
     }
 
     // agenda de confirmação (1 leitura por tick)
-    let agendaHoje: { links: Set<string>; titulos: string[] } | null = null;
+    let agendaHoje: AgendaDia | null = null;
 
     for (const { parsed: card, manual } of cards) {
       const pulo = (motivo: string) => log.pulados.push({ card: card.nome, lista: card.lista, motivo });
