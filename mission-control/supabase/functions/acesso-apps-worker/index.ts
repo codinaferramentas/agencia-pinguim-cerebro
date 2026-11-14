@@ -247,7 +247,8 @@ const SCHEMA_VENDA = { type: 'object', additionalProperties: false, required: ['
 const INSTRUCAO_VENDA = `Você lê o canal "vendas" de uma escola de cursos (Agência Pinguim). O time comercial informa cada venda no modelo "NOVA VENDA 🐧 / Produto(s) adquirido(s) / Nome completo / E-mail de compra / WhatsApp / …".
 tipo: "nova_venda" quando a mensagem INFORMA uma venda (no modelo ou não); "outro" para qualquer outra coisa (avisos, dúvidas, combinados, correções sem venda nova).
 produtos: os produtos vendidos. "Mentoria Elo", "Elo Black", "Comunidade Elo" = Elo. "Taurus LT"/"Taurus Low Ticket" = Taurus Low Ticket. "Mastermind Orion" = Orion. "Pro Alt"/"Proalt" = ProAlt. "Mentoria Lyra" = Lyra. Express = Mentoria Express. Produto fora da lista = "Outro".
-pessoas: TODOS os alunos da venda (inclusive 2ª cadeira / sócio), com nome, e-mail e WhatsApp como escritos (vazio se não houver). Não invente e-mail.`;
+pessoas: o comprador (campos "Nome completo" / "E-mail de compra") e quem a venda diz EXPLICITAMENTE que é 2ª cadeira / aluno adicional, com nome, e-mail e WhatsApp como escritos (vazio se não houver). Não invente e-mail.
+  NÃO inclua quem aparece só como contato nas observações (ex.: "marido faz a gestão da conta", assessor, secretária): esse acesso extra é pedido à parte no canal de liberação.`;
 async function lerVenda(modelo: string, texto: string) {
   const k = await getChave('OPENAI_API_KEY', CONSUMIDOR);
   const r = await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', headers: { Authorization: `Bearer ${k}`, 'Content-Type': 'application/json' },
