@@ -141,7 +141,7 @@ async function coletarDiscord(cfg: any, dryRun: boolean) {
 // ---------------- mensagens ----------------
 const linhaPessoa = (p: any, faltam: string[]) =>
   `• **${p.nome || p.email}** · ${p.email}${p.whatsapp ? ` · ${p.whatsapp}` : ''}\n   ${p.produto} → liberar **${faltam.map((a) => AREA_NOME[a]).join(' e ')}**  ·  ${p.anunciado_por}${p.referencia_url ? ` · [mensagem](<${p.referencia_url}>)` : ''}`;
-const NOMES: Record<string, string> = { '1083728715726463068': 'Rafa', '1083731934238228590': 'Jairo', '1084804999151878206': 'Luiz Guilherme' };
+const NOMES: Record<string, string> = { '1083728715726463068': 'Rafa', '1083731934238228590': 'Djairo', '1084804999151878206': 'Luiz Guilherme' };
 function mencoes(cfg: any) {
   const m = (i: string) => cfg.modo_teste ? `@${NOMES[i] || i}` : `<@${i}>`; // no teste, só texto: ninguém é acionado
   return `${cfg.marcar.map(m).join(' ')}${cfg.copia.length ? ` · cc ${cfg.copia.map(m).join(' ')}` : ''}`;

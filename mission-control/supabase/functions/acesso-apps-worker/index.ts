@@ -222,7 +222,7 @@ async function atender(m: any, pedido: any) {
   const topo = falhas === 0
     ? `<@${m.author.id}>, o acesso ${nomesApps} foi liberado ✅ (somente o app)`
     : `<@${m.author.id}>, liberei o que deu (acesso ${nomesApps}), mas algo não saiu como deveria. <@${CODINA}> vai olhar.`;
-  const texto = `${topo}\n\n${blocos.join('\n')}\n\nA área de membros da Hotmart continua com o Rafa e o Jairo.\n🤖 _Liberação feita automaticamente pela IA da Pinguim._`;
+  const texto = `${topo}\n\n${blocos.join('\n')}\n\nA área de membros da Hotmart continua com o Rafa e o Djairo.\n🤖 _Liberação feita automaticamente pela IA da Pinguim._`;
   const status = falhas === 0 ? 'liberado' : oks ? 'parcial' : 'falhou';
   return { texto, status, resultado };
 }
@@ -260,7 +260,7 @@ async function lerVenda(modelo: string, texto: string) {
   return JSON.parse(j.choices[0].message.content);
 }
 
-const NOMES_TIME: Record<string, string> = { '1083728715726463068': 'Rafa', '1083731934238228590': 'Jairo', '1084804999151878206': 'Luiz Guilherme', [CODINA]: 'Codina' };
+const NOMES_TIME: Record<string, string> = { '1083728715726463068': 'Rafa', '1083731934238228590': 'Djairo', '1084804999151878206': 'Luiz Guilherme', [CODINA]: 'Codina' };
 // teste = vai para o privado do Codina, com menções só em texto (ninguém é acionado)
 async function conferirVenda(cfg: any, m: any, venda: any, teste: boolean) {
   const autorNome = m.author?.global_name || m.author?.username;
