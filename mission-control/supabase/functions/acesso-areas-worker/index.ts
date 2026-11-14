@@ -183,6 +183,16 @@ async function processarNovos(cfg: any, candidatos: any[], dryRun: boolean) {
   return { novos, jaTinham };
 }
 
+// venda do #vendas toda liberada (todas as pessoas dela) → troca a reação ⏳ do bot por ✅ na mensagem da venda
+async function vendaResolvida(cfg: any, msgId: string) {
+  const { data: resto } = await sb.from('acesso_area_pendencia').select('id').eq('referencia', msgId).eq('origem', 'vendas-discord').eq('status', 'pendente').limit(1);
+  if (resto?.length || !cfg.vendas_canal_id) return;
+  const base = `https://discord.com/api/v10/channels/${cfg.vendas_canal_id}/messages/${msgId}/reactions`;
+  const h = { Authorization: `Bot ${await bot()}` };
+  await fetch(`${base}/${encodeURIComponent('⏳')}/@me`, { method: 'DELETE', headers: h });
+  await fetch(`${base}/${encodeURIComponent('✅')}/@me`, { method: 'PUT', headers: h });
+}
+
 // rodada diária: confere todos os pendentes e lista só quem ainda não tem
 async function diario(cfg: any, dryRun: boolean) {
   const { data: pend } = await sb.from('acesso_area_pendencia').select('*').eq('status', 'pendente').order('criado_em');
@@ -192,6 +202,7 @@ async function diario(cfg: any, dryRun: boolean) {
     const faltam = p.areas.filter((a: string) => !ok.includes(a));
     if (!dryRun) await sb.from('acesso_area_pendencia').update({ areas_ok: ok, ultimo_check_em: new Date().toISOString(),
       ...(faltam.length ? {} : { status: 'liberado', liberado_em: new Date().toISOString() }) }).eq('id', p.id);
+    if (!faltam.length && !dryRun && p.origem === 'vendas-discord') await vendaResolvida(cfg, p.referencia);
     if (faltam.length) { // dias contam da venda/anúncio (não de quando entrou na lista), em dias de calendário de SP
       const desde = new Date(p.data_origem || p.criado_em);
       const dia = (d: Date) => Date.UTC(sp(d).getUTCFullYear(), sp(d).getUTCMonth(), sp(d).getUTCDate());

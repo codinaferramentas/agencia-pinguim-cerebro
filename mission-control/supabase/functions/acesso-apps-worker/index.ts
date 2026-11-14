@@ -14,6 +14,7 @@
 //   (ProAlt/Taurus LT → ProAlt · Elo/Lyra → Elo+Sirius · Taurus Master/Plus → ProAlt+Elo+Sirius · Orion → ProAlt+Elo,
 //   Sirius do Orion só se pedirem · Express → nada) + área de membros da Hotmart. Libera o app que faltar e SEMPRE
 //   dá retorno no #liberacao-de-acessos (mesmo com tudo certo). Hotmart faltando → marca Rafa e Jairo e entra na cobrança das 8h.
+//   Na própria venda o bot reage 🤖 + ✅ (tudo certo) / ⏳ (falta Hotmart; vira ✅ na cobrança das 8h) / ⚠️ (erro).
 // Ficha no CRM: crm_acesso_registrar cria o cliente se ele não existir.
 // Modos (body): {} = cron · {dry_run:true} = só lê e mostra o que faria (não libera, não responde)
 //   {simular:{texto}} = teste com pedido escrito à mão (libera de verdade; resposta só no privado do Codina)
@@ -309,7 +310,17 @@ async function conferirVenda(cfg: any, m: any, venda: any, teste: boolean) {
   if (!falhasApp && !hotFaltando && !hotNaFila) fim.push('Tudo certo: todos os acessos desta venda estão liberados. ✅');
   const texto = `🛒 **Venda informada no #vendas** por ${marca(m.author.id)} em ${quando} · [ver venda](<${url}>)\n\n${blocos.join('\n')}\n\n${fim.join('\n')}\n🤖 _Conferência feita automaticamente pela IA da Pinguim._`;
   const status = falhasApp ? (resultado.some((r) => r.ok) ? 'parcial' : 'falhou') : 'liberado';
-  return { texto, status, resultado, mencoes: [m.author.id, ...(hotFaltando ? cfg.marcar || [] : []), ...(falhasApp ? [CODINA] : [])] };
+  const reacao = falhasApp ? '⚠️' : (hotFaltando || hotNaFila) ? '⏳' : '✅';
+  return { texto, status, resultado, reacao, mencoes: [m.author.id, ...(hotFaltando ? cfg.marcar || [] : []), ...(falhasApp ? [CODINA] : [])] };
+}
+
+// reação do bot na mensagem (🤖 + ✅ tudo liberado / ⏳ falta Hotmart / ⚠️ deu erro). Reação não notifica ninguém.
+async function reagir(canal: string, msg: string, emojis: string[]) {
+  _bot = _bot || await getChave('DISCORD_BOT_TOKEN', CONSUMIDOR);
+  for (const e of emojis) {
+    await fetch(`https://discord.com/api/v10/channels/${canal}/messages/${msg}/reactions/${encodeURIComponent(e)}/@me`, { method: 'PUT', headers: { Authorization: `Bot ${_bot}` } });
+    await new Promise((r) => setTimeout(r, 300)); // limite de reações do Discord
+  }
 }
 
 async function dmCodina(texto: string) {
@@ -341,6 +352,7 @@ async function rodarVendas(cfg: any) {
     }
     n++;
     const r = await conferirVenda(cfg, m, venda, false);
+    await reagir(cfg.vendas_canal_id, m.id, ['🤖', r.reacao]); // check da IA na própria venda
     const resp = await discord(`/channels/${cfg.apps_canal_id}/messages`, { method: 'POST', body: JSON.stringify({ content: r.texto.slice(0, 1990), allowed_mentions: { users: [...new Set(r.mencoes)] } }) });
     await sb.from('acesso_app_pedido').insert({ discord_msg_id: m.id, origem: 'vendas', autor_id: m.author.id, autor_nome: autor, texto: t,
       produtos: venda.produtos, pessoas: venda.pessoas, resultado: r.resultado, status: r.status, resposta_msg_id: resp?.id || null });
