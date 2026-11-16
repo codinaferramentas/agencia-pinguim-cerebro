@@ -97,9 +97,12 @@ const CURSEDUCA = {
 const PLANILHA = {
   id: '1bJjWFTD5qn5o1SkvAAeMaFb4Ravcx2ozDITI7q1lZ4c',
   aba: 'black26',
+  // O time renomeia as abas (16/11 virou "black26-45q3hpn1-8kt6f0iv"): a aba é achada pelo ID interno, que não muda.
+  sheetId: 1651695511,
 };
 
-const DISCORD_CANAL_ALERTA = '1372556339578011701'; // #novo-grupo-pinguim
+// Alerta técnico vai SÓ no privado do Codina (André 16/11: nada de aviso técnico no canal do time)
+const DISCORD_CODINA = '1077338884981133413';
 
 // ========================================================================
 // Utilitários
@@ -533,16 +536,20 @@ function dataBR(iso: string | null): string {
 // aparece como número serial (46310,74455). Aplica "dd/mm/yyyy hh:mm:ss" na
 // coluna A (sem o cabeçalho) — idempotente, mesmo truque do hotmart-planilha-worker.
 // Não é fatal: a venda já entrou; só a exibição da data ficaria errada.
+// nome ATUAL da aba (pelo sheetId; se a aba for recriada, cai no 1º título que começa com "black26")
+async function nomeAba(base: string, H: Record<string, string>): Promise<string> {
+  const r = await fetch(`${base}?fields=sheets.properties(title,sheetId)`, { headers: H });
+  if (!r.ok) throw new Error(`Sheets listar abas ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  const abas = ((await r.json()).sheets || []).map((x: any) => x.properties);
+  const a = abas.find((x: any) => x.sheetId === PLANILHA.sheetId) || abas.find((x: any) => String(x.title).startsWith(PLANILHA.aba));
+  if (!a) throw new Error(`aba ${PLANILHA.aba} não existe mais na planilha`);
+  _sheetIdAba = a.sheetId;
+  return a.title;
+}
 let _sheetIdAba: number | null = null;
 async function formatarColunaData(base: string, H: Record<string, string>): Promise<void> {
   try {
-    if (_sheetIdAba === null) {
-      const r = await fetch(`${base}?fields=sheets.properties(title,sheetId)`, { headers: H });
-      const j = await r.json();
-      const aba = (j.sheets || []).find((s: any) => s.properties?.title === PLANILHA.aba);
-      if (!aba) return;
-      _sheetIdAba = aba.properties.sheetId;
-    }
+    if (_sheetIdAba === null) return;
     const r = await fetch(`${base}:batchUpdate`, {
       method: 'POST', headers: H,
       body: JSON.stringify({ requests: [{ repeatCell: {
@@ -564,10 +571,11 @@ async function registrarPlanilha(row: any, c: Comprador): Promise<{ resultado: s
     const token = await tokenGoogle();
     const H = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const base = `https://sheets.googleapis.com/v4/spreadsheets/${PLANILHA.id}`;
-    const faixa = (r: string) => encodeURIComponent(`'${PLANILHA.aba}'!${r}`);
+    const aba = await nomeAba(base, H);
+    const faixa = (r: string) => encodeURIComponent(`'${aba}'!${r}`);
 
     const rD = await fetch(`${base}/values/${faixa('D:D')}`, { headers: H });
-    if (!rD.ok) throw new Error(`Sheets ler aba ${PLANILHA.aba} ${rD.status}: ${(await rD.text()).slice(0, 200)}`);
+    if (!rD.ok) throw new Error(`Sheets ler aba ${aba} ${rD.status}: ${(await rD.text()).slice(0, 200)}`);
     const emails = ((await rD.json()).values || []).map((v: string[]) => String(v[0] || '').trim().toLowerCase());
     if (emails.includes(c.email)) return { resultado: 'mantido' };
 
@@ -575,7 +583,7 @@ async function registrarPlanilha(row: any, c: Comprador): Promise<{ resultado: s
     const rA = await fetch(`${base}/values/${faixa('A1')}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
       method: 'POST', headers: H, body: JSON.stringify({ majorDimension: 'ROWS', values: [linha] }),
     });
-    if (!rA.ok) throw new Error(`Sheets append ${PLANILHA.aba} ${rA.status}: ${(await rA.text()).slice(0, 200)}`);
+    if (!rA.ok) throw new Error(`Sheets append ${aba} ${rA.status}: ${(await rA.text()).slice(0, 200)}`);
     await formatarColunaData(base, H);
     return { resultado: 'adicionado' };
   });
@@ -679,7 +687,10 @@ async function refletirNoCrm(app: string, c: Comprador, idNoApp: string, plano: 
 async function alertarDiscord(texto: string): Promise<void> {
   try {
     const botToken = await getChave('DISCORD_BOT_TOKEN', CONSUMIDOR);
-    await fetch(`https://discord.com/api/v10/channels/${DISCORD_CANAL_ALERTA}/messages`, {
+    const dm = await (await fetch('https://discord.com/api/v10/users/@me/channels', {
+      method: 'POST', headers: { Authorization: `Bot ${botToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient_id: DISCORD_CODINA }),
+    })).json();
+    await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bot ${botToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: texto.slice(0, 1900) }),
