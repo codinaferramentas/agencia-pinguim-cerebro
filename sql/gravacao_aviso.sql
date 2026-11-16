@@ -33,7 +33,7 @@ create table if not exists pinguim.gravacao_config (
   ativo boolean not null default false,
   canal_id text not null default '1571928848617181244',
   marcar text[] not null default '{1084804999151878206,1083728715726463068}', -- Luiz Guilherme, Rafa
-  desde timestamptz not null default now(),
+  desde timestamptz not null default now(), -- ligado 16/11 com desde = 09/11 (semana anterior inteira, pedido do André)
   ultimo_lembrete date
 );
 alter table pinguim.gravacao_config enable row level security;

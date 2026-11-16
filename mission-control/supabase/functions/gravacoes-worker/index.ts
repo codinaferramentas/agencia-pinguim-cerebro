@@ -8,6 +8,7 @@
 //   2. Google Meet do contato@: as reuniões que o mentoria-call-raiox-worker marcou como grupo (status 'ignorado').
 // Produto pelo título (mesmo de-para do CRM). Destino provável: ProAlt, Elo e lançamentos → Hotmart ·
 //   Taurus, Orion e Lyra → Escola. Quem sobe confirma o lugar (resposta na mensagem = histórico para aprender).
+// Marca Luiz Guilherme + Rafa (sobem) e a dona do produto (Fernanda: Elo, Lyra, Lo-fi · Ingrid: produtos do Pedro).
 // Baixa: reação ✅ (subiu) ou ❌ (não precisa subir) na mensagem do aviso. Lembrete às 9h SP do que segue sem baixa.
 // Modos (body): {} = cron · {teste:true} = lista os encontros desde config.desde e manda só no privado do Codina (não grava)
 // ========================================================================
@@ -43,6 +44,13 @@ const NOME: Record<string, string> = { 'lancamento-lofi': 'Desafio Lo-fi', 'lanc
   'taurus-lt': 'Taurus Low Ticket', 'taurus-master': 'Taurus Master', 'taurus-plus': 'Taurus Plus', lyra: 'Lyra', orion: 'Orion', proalt: 'ProAlt', elo: 'Elo', black: 'Black Absurda' };
 const DESTINO: Record<string, string> = { proalt: 'Hotmart', elo: 'Hotmart', 'lancamento-lofi': 'Hotmart', 'lancamento-lt-vivo': 'Hotmart', 'lancamento-lowticket': 'Hotmart',
   black: 'Hotmart', 'taurus-lt': 'Escola', 'taurus-master': 'Escola', 'taurus-plus': 'Escola', orion: 'Escola', lyra: 'Escola' };
+
+// dona do produto (mesma regra dos disparos nos grupos): os alunos perguntam a ela sobre a gravação
+const FERNANDA = '1210285892489449603', INGRID = '1205120597433122846';
+const DONAS: Record<string, string[]> = { elo: [FERNANDA], lyra: [FERNANDA], 'lancamento-lofi': [FERNANDA], black: [FERNANDA, INGRID] };
+const donas = (produto: string) => DONAS[produto] || [INGRID]; // produtos do Pedro: ProAlt, Taurus, Orion, lives de Low Ticket
+const NOMES_TIME: Record<string, string> = { '1084804999151878206': 'Luiz Guilherme', '1083728715726463068': 'Rafa', [FERNANDA]: 'Fernanda', [INGRID]: 'Ingrid' };
+const quemMarcar = (cfg: any, produto: string) => [...new Set([...cfg.marcar, ...donas(produto)])];
 
 const sp = (d: Date) => new Date(d.getTime() - 3 * 3600e3);
 const quando = (s: string) => { const d = sp(new Date(s)); const p = (n: number) => String(n).padStart(2, '0'); return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)} às ${p(d.getUTCHours())}h${p(d.getUTCMinutes())}`; };
@@ -111,7 +119,7 @@ function filtrar(lista: any[]) {
 
 // ---------------- mensagens ----------------
 function textoAviso(e: any, marcar: string[], teste: boolean) {
-  const m = teste ? '@Luiz Guilherme @Rafa' : marcar.map((i) => `<@${i}>`).join(' ');
+  const m = marcar.map((i) => (teste ? `@${NOMES_TIME[i] || i}` : `<@${i}>`)).join(' ');
   return `🎬 **Gravação para subir: ${NOME[e.produto] || e.produto}**\n${m}\n\n`
     + `**${e.titulo}**\n📅 ${quando(e.inicio)}${e.duracao_min ? ` · ${e.duracao_min} min` : ''}\n`
     + `📁 Onde está: ${e.conta}${e.origem === 'meet' ? ` · [abrir pasta](<${e.link}>)` : ''}\n`
@@ -153,10 +161,11 @@ async function lembrete(cfg: any) {
   await sb.from('gravacao_config').update({ ultimo_lembrete: hoje }).eq('id', 1);
   if (!pend?.length) return 0;
   const link = (a: any) => `https://discord.com/channels/1083429941300969574/${cfg.canal_id}/${a.discord_msg_id}`;
+  const marcar = [...new Set(pend.flatMap((a: any) => quemMarcar(cfg, a.produto)))];
   const linhas = pend.map((a: any) => `• **${NOME[a.produto] || a.produto}** · ${a.titulo} · ${quando(a.inicio)} → ${a.destino || 'confirmar'} · [ver aviso](<${link(a)}>)`);
   await discord(`/channels/${cfg.canal_id}/messages`, { method: 'POST', body: JSON.stringify({
-    content: (`☀️ **Gravações ainda sem baixa (${pend.length})**\n${cfg.marcar.map((i: string) => `<@${i}>`).join(' ')}\n\n${linhas.join('\n')}\n\nReaja com ✅ no aviso de cada uma depois de subir (ou ❌ se não precisar).\n🤖 _Aviso automático do agente IA Pinguim_`).slice(0, 1990),
-    allowed_mentions: { users: cfg.marcar } }) });
+    content: (`☀️ **Gravações ainda sem baixa (${pend.length})**\n${marcar.map((i: string) => `<@${i}>`).join(' ')}\n\n${linhas.join('\n')}\n\nReaja com ✅ no aviso de cada uma depois de subir (ou ❌ se não precisar).\n🤖 _Aviso automático do agente IA Pinguim_`).slice(0, 1990),
+    allowed_mentions: { users: marcar } }) });
   return pend.length;
 }
 
@@ -167,7 +176,7 @@ async function rodar(body: any) {
     const { entram, fora } = filtrar([...(await encontrosZoom(desde)), ...(await encontrosMeet(desde))]);
     entram.sort((a, b) => +new Date(a.inicio) - +new Date(b.inicio));
     await dmCodina(`🧪 **TESTE: avisos de gravação** (iriam no #gravacoes-para-subir), encontros desde ${quando(desde.toISOString())}: ${entram.length}`);
-    for (const e of entram.slice(0, Number(body.max) || 3)) await dmCodina(textoAviso(e, cfg.marcar, true));
+    for (const e of entram.slice(0, Number(body.max) || 3)) await dmCodina(textoAviso(e, quemMarcar(cfg, e.produto), true));
     return { entram: entram.map((e) => `${quando(e.inicio)} · ${e.produto} → ${e.destino} · ${e.titulo} · ${e.conta}`), fora: fora.map((e) => `${quando(e.inicio)} · ${e.motivo} · ${e.titulo}`) };
   }
   if (!cfg.ativo) return { ativo: false };
@@ -180,7 +189,7 @@ async function rodar(body: any) {
     const { data: row, error } = await sb.from('gravacao_aviso').insert({ origem: e.origem, referencia: e.referencia, titulo: e.titulo, produto: e.produto, destino: e.destino,
       inicio: e.inicio, duracao_min: e.duracao_min, conta: e.conta, link: e.link }).select('id').single();
     if (error) continue; // corrida com outra rodada: a outra avisa
-    const msg = await discord(`/channels/${cfg.canal_id}/messages`, { method: 'POST', body: JSON.stringify({ content: textoAviso(e, cfg.marcar, false), allowed_mentions: { users: cfg.marcar } }) });
+    const msg = await discord(`/channels/${cfg.canal_id}/messages`, { method: 'POST', body: JSON.stringify({ content: textoAviso(e, quemMarcar(cfg, e.produto), false), allowed_mentions: { users: quemMarcar(cfg, e.produto) } }) });
     await sb.from('gravacao_aviso').update({ discord_msg_id: msg?.id || null }).eq('id', row.id);
     novos.push(e.titulo);
   }
