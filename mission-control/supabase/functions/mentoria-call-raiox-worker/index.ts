@@ -2,15 +2,20 @@
 // Edge Function: mentoria-call-raiox-worker
 // ========================================================================
 // Raio-X INTERNO das calls 1:1 de mentoria (André 10/11/2026).
-//   1. Lista as subpastas novas em "Google Meet" (Drive do contato@; o Meet cria uma por reunião,
-//      com a gravação e o doc "Anotações do Gemini", que já traz a TRANSCRIÇÃO com o nome de quem fala).
-//   2. Confere na agenda do contato@ se é call individual: organizada pelo contato@ (não pelas agendas
-//      das turmas) e com 1 ou 2 convidados de fora (casal no Taurus Plus). Grupo/interna → 'ignorado'.
+//   1. Lê a AGENDA do contato@ (ele é convidado de toda call 1:1, não importa quem marcou nem em qual
+//      agenda o evento mora) e pega as calls encerradas. O doc "Anotações do Gemini" (que já traz a
+//      TRANSCRIÇÃO com o nome de quem fala) e a gravação vêm como ANEXOS do evento, e o contato@ lê os
+//      dois mesmo quando ficam no Drive do sócio. (André 17/11: a busca pela pasta "Google Meet" ficou
+//      cega: o Meet abriu outra pasta em 11/11 e call na agenda do sócio grava no Drive dele.)
+//   2. É call individual quando tem 1 ou 2 convidados de fora (casal no Taurus Plus) e não é de turma
+//      (organizador = agenda de grupo). O resto nem é registrado.
 //   3. OpenAI (modelo da config) → raio-X em JSON (só o que foi dito; nada inventado).
-//   4. Google Doc (editável) + PDF na própria subpasta.
+//   4. Google Doc (editável) + PDF na subpasta da call: a que o Meet criou, se for do contato@; senão
+//      uma subpasta criada em config.pasta_meet_id.
 //   5. Registro em pinguim.crm_call_mentoria (aba "Calls de mentoria" no CRM) + aviso no Discord.
 // Modos (body): {} = cron (só depois de config.desde, se config.ativo) · {de, ate} = histórico sob pedido
-//               · {pasta_id} = uma call · {dry_run:true} = só lista o que faria.
+//               · {evento_id} = uma call pela agenda · {pasta_id} = uma call pela subpasta do Meet (modo antigo)
+//               · {so: "trecho do título"} = filtra o período · {dry_run:true} = só lista o que faria.
 // Config: pinguim.crm_call_mentoria_config (UPDATE, sem deploy).
 // ========================================================================
 
@@ -23,14 +28,21 @@ const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SE
   db: { schema: 'pinguim' },
 });
 const CONSUMIDOR = 'mentoria-call-raiox-worker';
-const CONTA_ROBO = 'ferramenta@agenciapinguim.com';
+const CONTA_ROBO = 'ferramenta@agenciapinguim.com'; // dona dos raio-X de antes de 17/11 (só para apagar no refazer_docs)
+const CONTA_CALLS = 'contato@agenciapinguim.com'; // convidada de toda call: lê agenda e anexos, dona das pastas
 const SEM_TRANSCRICAO_DESISTE_H = 24; // o Gemini publica o doc minutos depois da call; passou disso, desiste
-const INTERNO = /@agenciapinguim\.com$|agenciapinguim@gmail\.com$|\.agenciapinguim@gmail\.com$/i;
+// Call na agenda do sócio: o Meet dele só gera as anotações do Gemini (resumo + detalhes), sem a transcrição.
+// O raio-X sai dessas anotações e avisa disso no Doc e no Discord.
+const SO_NOTAS = 'feito pelas anotações do Gemini (a call não teve transcrição)';
+const SO_NOTAS_MIN = 2500; // menos que isso não sustenta um raio-X
+const SO_NOTAS_ESPERA_MIN = 60; // dá tempo de a transcrição aparecer antes de aceitar só as anotações
+// gente da casa (não conta como aluno): equipe Pinguim e o Codina, que faz reuniões de automação com o time
+const INTERNO = /@agenciapinguim\.com$|agenciapinguim@gmail\.com$|\.agenciapinguim@gmail\.com$|^codinaandre@gmail\.com$/i;
 
 // ---------------- Google ----------------
-async function tokenGoogle(): Promise<string> {
-  const { data: c } = await sb.from('conexoes_google').select('refresh_token').eq('email_google', CONTA_ROBO).is('revogado_em', null).limit(1).maybeSingle();
-  if (!c) throw new Error('conexão Google da conta robô não encontrada');
+async function tokenGoogle(conta = CONTA_CALLS): Promise<string> {
+  const { data: c } = await sb.from('conexoes_google').select('refresh_token').eq('email_google', conta).is('revogado_em', null).limit(1).maybeSingle();
+  if (!c) throw new Error(`conexão Google de ${conta} não encontrada`);
   const [id, sec] = await Promise.all([getChave('GOOGLE_OAUTH_CLIENT_ID', CONSUMIDOR), getChave('GOOGLE_OAUTH_CLIENT_SECRET', CONSUMIDOR)]);
   const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ refresh_token: c.refresh_token, client_id: id, client_secret: sec, grant_type: 'refresh_token' }) });
@@ -49,6 +61,20 @@ async function textoDoc(tok: string, id: string): Promise<string> {
   const r = await fetch(`https://www.googleapis.com/drive/v3/files/${id}/export?mimeType=text/plain`, { headers: { Authorization: `Bearer ${tok}` } });
   if (!r.ok) throw new Error('exportar doc: ' + r.status);
   return await r.text();
+}
+async function arquivo(tok: string, id: string, fields = 'id,name,mimeType,parents,webViewLink,videoMediaMetadata,capabilities(canAddChildren)') {
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?fields=${encodeURIComponent(fields)}&supportsAllDrives=true`, { headers: { Authorization: `Bearer ${tok}` } });
+  return r.ok ? await r.json() : null;
+}
+// subpasta da call dentro da pasta-mãe (reaproveita se já existe com o mesmo nome)
+async function pastaDaCall(tok: string, mae: string, nome: string): Promise<string> {
+  const ja = await drive(tok, `'${mae}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false and name='${nome.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`);
+  if (ja[0]) return ja[0].id;
+  const r = await fetch('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id', { method: 'POST', headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: nome, mimeType: 'application/vnd.google-apps.folder', parents: [mae] }) });
+  const j = await r.json();
+  if (!j.id) throw new Error('criar pasta da call: ' + JSON.stringify(j).slice(0, 200));
+  return j.id;
 }
 // sobe um arquivo na pasta; se mimeDestino = Google Doc, o Drive converte o HTML
 async function subir(tok: string, pasta: string, nome: string, conteudo: Uint8Array | string, mimeOrigem: string, mimeDestino?: string) {
@@ -101,7 +127,9 @@ async function gerarRaio(modelo: string, titulo: string, quando: string, notas: 
   const r = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST', headers: { Authorization: `Bearer ${k}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: modelo, messages: [{ role: 'system', content: SISTEMA },
-      { role: 'user', content: `Call: ${titulo}\nData: ${quando}\n\nNOTAS AUTOMÁTICAS DO GEMINI (apoio):\n${notas.slice(0, 6000)}\n\nTRANSCRIÇÃO COMPLETA:\n${transcricao.slice(0, 180000)}` }],
+      { role: 'user', content: transcricao
+        ? `Call: ${titulo}\nData: ${quando}\n\nNOTAS AUTOMÁTICAS DO GEMINI (apoio):\n${notas.slice(0, 6000)}\n\nTRANSCRIÇÃO COMPLETA:\n${transcricao.slice(0, 180000)}`
+        : `Call: ${titulo}\nData: ${quando}\n\nESTA CALL NÃO TEVE TRANSCRIÇÃO. A única fonte são as anotações automáticas do Gemini abaixo: trate-as como a "transcrição" das regras e use somente o que está nelas. Como não há falas literais, devolva "frases_marcantes" vazio.\n\nANOTAÇÕES DO GEMINI:\n${notas.slice(0, 60000)}` }],
       response_format: { type: 'json_schema', json_schema: { name: 'raio_x', strict: true, schema: SCHEMA } } }),
   });
   const j = await r.json();
@@ -140,7 +168,7 @@ ${r.sinais_de_alerta.length ? h2('Sinais de alerta', '#b42318') + `<ul>${r.sinai
 ${r.frases_marcantes.length ? h2('Frases marcantes') + r.frases_marcantes.map((f: any) => `<p style="background:#f4f4f2;padding:6pt;border-left:3px solid #111111">“${esc(f.frase)}”<br><span style="font-size:8pt;color:#555555">${esc(f.quem)}</span></p>`).join('') : ''}
 ${h2('Para checar na próxima call')}${ul(r.checar_na_proxima_call)}
 ${h2('Arquivos da call')}<p><a href="${esc(c.gravacao_url)}">Gravação</a> · <a href="${esc(c.transcricao_url)}">Transcrição e anotações do Gemini</a> · <a href="${esc(c.pasta_url)}">Pasta da call</a></p>
-<p style="font-size:8pt;color:#8a8a8a">Gerado automaticamente a partir da transcrição do Google Meet. Documento interno da equipe Pinguim, não enviar ao aluno.</p>
+<p style="font-size:8pt;color:#8a8a8a">${c.motivo === SO_NOTAS ? 'Gerado automaticamente a partir das anotações do Gemini: esta call não teve transcrição, por isso o raio-X é mais resumido e não traz frases literais.' : 'Gerado automaticamente a partir da transcrição do Google Meet.'} Documento interno da equipe Pinguim, não enviar ao aluno.</p>
 </body></html>`;
 }
 
@@ -197,7 +225,9 @@ async function contatoAluno(emails: string[], aluno: any): Promise<{ email: stri
   return { email, telefone: dig.length === 10 || dig.length === 11 ? dig : null };
 }
 const telFmt = (d: string) => `(${d.slice(0, 2)}) ${d.slice(2, d.length - 4)}-${d.slice(-4)}`;
-const pdfDownload = (url: string | null) => { const id = String(url || '').match(/\/d\/([^/]+)/)?.[1]; return id ? `https://drive.google.com/uc?export=download&id=${id}` : url; };
+// PDF abre na página de visualização do Drive (tem botão de baixar). O download direto (uc?export=download)
+// dava "sem acesso" para quem tem mais de uma conta Google no navegador (André 11/11).
+const pdfDownload = (url: string | null) => url;
 
 // aviso no Discord a partir do registro gravado (usado na geração e no "reavisar"); apaga o aviso antigo se houver
 async function avisarDiscord(cfg: any, c: any): Promise<string | null> {
@@ -224,10 +254,11 @@ async function avisarDiscord(cfg: any, c: any): Promise<string | null> {
     '',
     `🎯 **Tema:** ${r.tema_principal}`,
     `✅ ${r.plano_de_acao_do_aluno?.length || 0} ação(ões) combinada(s) com o aluno${nAlertas ? `  ·  ⚠️ ${nAlertas} sinal(is) de alerta` : ''}`,
+    c.motivo === SO_NOTAS ? '📝 *Raio-X feito pelas anotações do Gemini: esta call não teve transcrição.*' : '',
     '',
     '**Arquivos da call**',
     `📄 [Abrir o raio-X completo](<${c.doc_url}>)`,
-    `⬇️ [Baixar o PDF](<${pdfDownload(c.pdf_url)}>)`,
+    `⬇️ [Abrir o PDF (para baixar)](<${pdfDownload(c.pdf_url)}>)`,
     c.gravacao_url ? `🎥 [Assistir à gravação](<${c.gravacao_url}>)` : '',
     '​',
   ].filter((l, i, a) => l !== '' || (a[i - 1] !== '' && a[i - 1] !== undefined));
@@ -262,36 +293,93 @@ async function processarPasta(tok: string, cfg: any, pasta: any, dryRun: boolean
   if (arqs.some((a: any) => /Raio-X da mentoria/i.test(a.name))) { await gravar({ status: 'ok', motivo: 'raio-X já existia na pasta' }); return 'já tinha raio-X'; }
   const doc = arqs.find((a: any) => a.mimeType === 'application/vnd.google-apps.document' && /Gemini|Transcri/i.test(a.name));
   const video = arqs.find((a: any) => String(a.mimeType).startsWith('video/'));
+  return await concluir(tok, cfg, reg, gravar, doc, video, externos, dryRun, async () => pasta.id);
+}
+
+// ---------------- uma call, achada pela agenda do contato@ ----------------
+const fimDe = (e: any) => new Date(e.end?.dateTime || e.start?.dateTime || 0);
+// 1:1 = evento com hora, não cancelado, organizado por alguém da casa (não agenda de turma) e 1 ou 2 convidados de fora
+function externosDaCall(ev: any): string[] | null {
+  if (ev.status === 'cancelled' || !ev.start?.dateTime) return null;
+  const org = String(ev.organizer?.email || '');
+  if (/@group\.calendar\.google\.com$/i.test(org) || !INTERNO.test(org)) return null;
+  const ext = (ev.attendees || []).filter((a: any) => !a.resource && !INTERNO.test(a.email || '')).map((a: any) => String(a.email).toLowerCase());
+  return ext.length >= 1 && ext.length <= 2 ? ext : null;
+}
+async function processarEvento(tok: string, cfg: any, ev: any, dryRun: boolean): Promise<string> {
+  const externos = externosDaCall(ev);
+  if (!externos) return 'fora: não é call 1:1';
+  const titulo = String(ev.summary || 'Call sem título').trim();
+  const inicio = new Date(ev.start.dateTime);
+  const { data: ant } = await sb.from('crm_call_mentoria').select('id, pasta_id').eq('evento_id', ev.id).limit(1);
+  const reg: any = { pasta_id: ant?.[0]?.pasta_id || `evento:${ev.id}`, evento_id: ev.id, titulo, inicio: inicio.toISOString(), emails_convite: externos, atualizado_em: new Date().toISOString() };
+  const gravar = async (extra: any) => {
+    if (dryRun) return;
+    const linha = { ...reg, ...extra };
+    const { error } = ant?.[0] ? await sb.from('crm_call_mentoria').update(linha).eq('id', ant[0].id) : await sb.from('crm_call_mentoria').upsert(linha, { onConflict: 'pasta_id' });
+    if (error) throw new Error('gravar a call: ' + error.message);
+  };
+  // gravação e anotações do Gemini chegam como anexos do evento (o contato@ lê os dois, de quem for o Drive)
+  const anexos = ev.attachments || [];
+  const aDoc = anexos.find((a: any) => a.mimeType === 'application/vnd.google-apps.document' && /Gemini|Anota|Transcri|Notes/i.test(a.title || ''));
+  const aVid = anexos.find((a: any) => String(a.mimeType).startsWith('video/'));
+  const doc = aDoc ? await arquivo(tok, aDoc.fileId) : null;
+  const video = aVid ? await arquivo(tok, aVid.fileId) : null;
+  if (aDoc && !doc) throw new Error('o contato@ não conseguiu abrir as anotações do Gemini anexadas ao evento');
+  const p = (x: number) => String(x).padStart(2, '0');
+  const l = new Date(+inicio - 3 * 3600e3); // horário de Brasília
+  const nomePasta = `${titulo} - ${l.getUTCFullYear()}/${p(l.getUTCMonth() + 1)}/${p(l.getUTCDate())} ${p(l.getUTCHours())}:${p(l.getUTCMinutes())} GMT-03:00`;
+  // Doc + PDF: na subpasta que o Meet criou, se for do contato@; senão (Drive do sócio) numa subpasta nossa
+  const destino = async () => {
+    const mae = doc?.parents?.[0] ? await arquivo(tok, doc.parents[0]) : null;
+    return mae?.capabilities?.canAddChildren ? mae.id : await pastaDaCall(tok, cfg.pasta_meet_id, nomePasta);
+  };
+  return await concluir(tok, cfg, reg, gravar, doc, video, externos, dryRun, destino, fimDe(ev));
+}
+
+// ---------------- comum: transcrição → raio-X → Doc + PDF → registro + aviso ----------------
+async function concluir(tok: string, cfg: any, reg: any, gravar: (extra: any) => Promise<void>, doc: any, video: any, externos: string[], dryRun: boolean,
+  destino: () => Promise<string>, fim?: Date): Promise<string> {
+  const titulo = reg.titulo, inicio = new Date(reg.inicio);
   reg.gravacao_url = video?.webViewLink || null;
   reg.duracao_min = video?.videoMediaMetadata?.durationMillis ? Math.round(+video.videoMediaMetadata.durationMillis / 60000) : null;
   const texto = doc ? await textoDoc(tok, doc.id) : '';
   const iT = texto.search(/ - Transcrição\s*\n|Transcript\s*\n/);
-  if (!doc || iT < 0 || texto.length - iT < 2000) {
-    const horas = (Date.now() - +inicio) / 3600e3;
+  const temTranscricao = !!doc && iT >= 0 && texto.length - iT >= 2000;
+  const horas = (Date.now() - +(fim || inicio)) / 3600e3;
+  const soNotas = !temTranscricao && !!doc && texto.trim().length >= SO_NOTAS_MIN;
+  if (soNotas && horas * 60 < SO_NOTAS_ESPERA_MIN) return 'aguardando: só as anotações por enquanto';
+  if (!temTranscricao && !soNotas) {
     if (horas < SEM_TRANSCRICAO_DESISTE_H) return 'aguardando: transcrição ainda não publicada';
-    await gravar({ status: 'sem_transcricao', motivo: 'a call não tem transcrição nas anotações do Gemini' });
+    await gravar({ status: 'sem_transcricao', motivo: 'a call não tem transcrição nem anotações do Gemini' });
     return 'sem transcrição';
   }
   reg.transcricao_url = doc.webViewLink;
-  const transcricao = texto.slice(iT), notas = texto.slice(0, iT);
+  reg.motivo = soNotas ? SO_NOTAS : null;
+  const transcricao = soNotas ? '' : texto.slice(iT), notas = soNotas ? texto : texto.slice(0, iT);
 
-  // mentor = quem da lista de mentores mais falou
+  // mentor = quem da lista de mentores mais falou (sem transcrição: quem mais aparece no título e nas anotações)
   const falas: Record<string, number> = {};
   for (const x of transcricao.matchAll(/^([^:\n]{3,40}): /gm)) falas[x[1].trim()] = (falas[x[1].trim()] || 0) + 1;
-  const mentor = Object.keys(cfg.mentores || {}).filter((n) => falas[n]).sort((a, b) => falas[b] - falas[a])[0] || null;
+  const citado = (n: string) => (titulo + '\n' + notas).split(n).length - 1;
+  const nomes = Object.keys(cfg.mentores || {});
+  const mentor = (soNotas ? nomes.filter((n) => citado(n)).sort((a, b) => citado(b) - citado(a))[0] : nomes.filter((n) => falas[n]).sort((a, b) => falas[b] - falas[a])[0]) || null;
   const aluno = (await alunoPorEmails(externos)) || (await alunoPorFalantes(falas, Object.keys(cfg.mentores || {})));
   const contato = await contatoAluno(externos, aluno);
-  if (dryRun) return `faria: ${titulo} · mentor ${mentor || '?'} · aluno ${aluno?.nome || 'não achado no CRM (' + externos.join(', ') + ')'}`;
+  if (dryRun) return `faria${soNotas ? ' (só anotações)' : ''}: ${titulo} · mentor ${mentor || '?'} · aluno ${aluno?.nome || 'não achado no CRM (' + externos.join(', ') + ')'}`;
 
   const quando = inicio.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   const { raio, tokens, custo } = await gerarRaio(cfg.modelo, titulo, quando, notas, transcricao);
   const call = { ...reg, raio, aluno, mentor_nome: mentor || raio.nome_do_mentor, aluno_email: contato.email, aluno_telefone: contato.telefone };
-  const nome = `Raio-X da mentoria · ${aluno?.nome || raio.nome_do_aluno} · ${m[4]}-${m[3]}-${m[2]}`;
-  const gdoc = await subir(tok, pasta.id, nome, docHtml(call), 'text/html', 'application/vnd.google-apps.document');
+  const dia = inicio.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }).split('/');
+  const nome = `Raio-X da mentoria · ${aluno?.nome || raio.nome_do_aluno} · ${dia[0]}-${dia[1]}-${dia[2]}`;
+  const pastaId = await destino();
+  reg.pasta_id = pastaId; reg.pasta_url = call.pasta_url = `https://drive.google.com/drive/folders/${pastaId}`;
+  const gdoc = await subir(tok, pastaId, nome, docHtml(call), 'text/html', 'application/vnd.google-apps.document');
   const pdfR = await fetch(`https://www.googleapis.com/drive/v3/files/${gdoc.id}/export?mimeType=application/pdf`, { headers: { Authorization: `Bearer ${tok}` } });
-  const pdf = await subir(tok, pasta.id, nome + '.pdf', new Uint8Array(await pdfR.arrayBuffer()), 'application/pdf');
+  const pdf = await subir(tok, pastaId, nome + '.pdf', new Uint8Array(await pdfR.arrayBuffer()), 'application/pdf');
 
-  const final = { ...reg, status: 'ok', motivo: null, mentor_nome: call.mentor_nome, cliente_id: aluno?.cliente_id || null, aluno_nome: aluno?.nome || raio.nome_do_aluno,
+  const final = { ...reg, status: 'ok', motivo: reg.motivo || null, mentor_nome: call.mentor_nome, cliente_id: aluno?.cliente_id || null, aluno_nome: aluno?.nome || raio.nome_do_aluno,
     aluno_email: contato.email, aluno_telefone: contato.telefone,
     raio, doc_url: gdoc.webViewLink, pdf_url: pdf.webViewLink, discord_msg_id: null as string | null, modelo: cfg.modelo, tokens, custo_usd: +custo.toFixed(4) };
   if (cfg.aviso_discord) final.discord_msg_id = await avisarDiscord(cfg, final);
@@ -303,7 +391,7 @@ async function rodar(body: any) {
   const { data: cfg } = await sb.from('crm_call_mentoria_config').select('*').eq('id', 1).single();
   // refazer_docs: remonta Doc + PDF das calls prontas a partir do raio-X guardado (sem OpenAI), apaga os antigos e refaz o aviso
   if (body.refazer_docs) {
-    const tok = await tokenGoogle();
+    const tok = await tokenGoogle(), tokRobo = await tokenGoogle(CONTA_ROBO).catch(() => '');
     let q = sb.from('crm_call_mentoria').select('*').eq('status', 'ok').order('inicio');
     if (body.id) q = q.eq('id', body.id);
     const { data: prontas } = await q;
@@ -316,9 +404,12 @@ async function rodar(body: any) {
       const gdoc = await subir(tok, c.pasta_id, nome, docHtml(call), 'text/html', 'application/vnd.google-apps.document');
       const pdfR = await fetch(`https://www.googleapis.com/drive/v3/files/${gdoc.id}/export?mimeType=application/pdf`, { headers: { Authorization: `Bearer ${tok}` } });
       const pdf = await subir(tok, c.pasta_id, nome + '.pdf', new Uint8Array(await pdfR.arrayBuffer()), 'application/pdf');
-      for (const u of [c.doc_url, c.pdf_url]) { // apaga os arquivos antigos (criados pelo robô)
+      for (const u of [c.doc_url, c.pdf_url]) { // apaga os arquivos antigos (os de antes de 17/11 são da conta robô)
         const id = String(u || '').match(/\/d\/([^/]+)/)?.[1];
-        if (id) await fetch(`https://www.googleapis.com/drive/v3/files/${id}?supportsAllDrives=true`, { method: 'DELETE', headers: { Authorization: `Bearer ${tok}` } }).catch(() => {});
+        for (const t of id ? [tok, tokRobo].filter(Boolean) : []) {
+          const d = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?supportsAllDrives=true`, { method: 'DELETE', headers: { Authorization: `Bearer ${t}` } }).catch(() => null);
+          if (d?.ok) break;
+        }
       }
       Object.assign(c, { doc_url: gdoc.webViewLink, pdf_url: pdf.webViewLink, aluno_nome: aluno?.nome || c.aluno_nome });
       if (cfg.aviso_discord) c.discord_msg_id = await avisarDiscord(cfg, c);
@@ -359,37 +450,66 @@ async function rodar(body: any) {
     }
     return { reavisados: out };
   }
-  const manual = !!(body.de || body.pasta_id);
+  const manual = !!(body.de || body.pasta_id || body.evento_id);
   if (!cfg.ativo && !manual && !body.dry_run) return { ativo: false };
   const tok = await tokenGoogle();
-  let pastas: any[];
+  const res: string[] = [];
+  const erro = (e: unknown) => String((e as Error).message || e).slice(0, 300);
+  // modo antigo, sob pedido: uma subpasta do Meet
   if (body.pasta_id) {
-    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${body.pasta_id}?fields=id,name,createdTime&supportsAllDrives=true`, { headers: { Authorization: `Bearer ${tok}` } });
-    pastas = [await r.json()];
+    const p = await arquivo(tok, body.pasta_id, 'id,name,createdTime');
+    if (!p) return { erro: 'pasta não encontrada' };
+    try { res.push(`${p.name.slice(0, 70)} → ${await processarPasta(tok, cfg, p, !!body.dry_run)}`); }
+    catch (e) {
+      if (!body.dry_run) await sb.from('crm_call_mentoria').upsert({ pasta_id: p.id, status: 'erro', motivo: erro(e), atualizado_em: new Date().toISOString() }, { onConflict: 'pasta_id' });
+      res.push(`${p.name.slice(0, 70)} → ERRO ${erro(e)}`);
+    }
+    return { resultado: res };
+  }
+  // agenda do contato@: calls 1:1 já encerradas no período
+  const AG = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cfg.agenda_id)}/events`;
+  let evs: any[] = [];
+  if (body.evento_id) {
+    const r = await fetch(`${AG}/${encodeURIComponent(body.evento_id)}`, { headers: { Authorization: `Bearer ${tok}` } });
+    if (!r.ok) return { erro: 'evento não encontrado na agenda do contato@' };
+    evs = [await r.json()];
   } else {
     const de = body.de ? new Date(body.de) : new Date(Math.max(+new Date(cfg.desde), Date.now() - 7 * 864e5));
     const ate = body.ate ? new Date(body.ate) : new Date();
-    pastas = await drive(tok, `'${cfg.pasta_meet_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false and createdTime >= '${de.toISOString()}' and createdTime <= '${ate.toISOString()}'`);
+    let pagina = '';
+    do {
+      const r = await fetch(`${AG}?singleEvents=true&orderBy=startTime&maxResults=250&timeMin=${de.toISOString()}&timeMax=${ate.toISOString()}${pagina ? `&pageToken=${pagina}` : ''}`, { headers: { Authorization: `Bearer ${tok}` } });
+      const j = await r.json();
+      if (j.error) throw new Error('Agenda: ' + j.error.message);
+      evs.push(...(j.items || [])); pagina = j.nextPageToken || '';
+    } while (pagina);
+    // só o que começou dentro do período e já terminou (com folga para o Gemini publicar as anotações)
+    evs = evs.filter((e) => e.start?.dateTime && +new Date(e.start.dateTime) >= +de && +fimDe(e) < Date.now() - 10 * 60e3 && externosDaCall(e));
+    if (body.so) evs = evs.filter((e) => String(e.summary || '').toLowerCase().includes(String(body.so).toLowerCase()));
   }
   // já resolvidas (ok/ignorado/sem transcrição) não voltam
-  const { data: feitas } = await sb.from('crm_call_mentoria').select('pasta_id').in('pasta_id', pastas.map((p) => p.id)).neq('status', 'erro');
-  const ja = new Set((feitas || []).map((x: any) => x.pasta_id));
-  const fila = pastas.filter((p) => body.pasta_id || !ja.has(p.id));
-  const res: string[] = [];
+  const { data: feitas } = evs.length ? await sb.from('crm_call_mentoria').select('evento_id').in('evento_id', evs.map((e) => e.id)).neq('status', 'erro') : { data: [] };
+  const ja = new Set((feitas || []).map((x: any) => x.evento_id));
+  const fila = evs.filter((e) => body.evento_id || !ja.has(e.id));
   let pesadas = 0;
-  for (const p of fila) {
-    if (pesadas >= (body.max || cfg.max_por_execucao)) { res.push(`(restam ${fila.length - fila.indexOf(p)} para a próxima execução)`); break; }
+  for (const e of fila) {
+    const rot = `${String(e.start?.dateTime || '').slice(0, 16)} ${String(e.summary || '').slice(0, 60)}`;
+    if (pesadas >= (body.max || cfg.max_por_execucao)) { res.push(`(restam ${fila.length - fila.indexOf(e)} para a próxima execução)`); break; }
     try {
-      const r = await processarPasta(tok, cfg, p, !!body.dry_run);
+      const r = await processarEvento(tok, cfg, e, !!body.dry_run);
       if (r.startsWith('ok')) pesadas++;
-      res.push(`${p.name.slice(0, 70)} → ${r}`);
-    } catch (e) {
-      const msg = String((e as Error).message || e).slice(0, 300);
-      if (!body.dry_run) await sb.from('crm_call_mentoria').upsert({ pasta_id: p.id, status: 'erro', motivo: msg, atualizado_em: new Date().toISOString() }, { onConflict: 'pasta_id' });
-      res.push(`${p.name.slice(0, 70)} → ERRO ${msg}`);
+      res.push(`${rot} → ${r}`);
+    } catch (x) {
+      if (!body.dry_run) {
+        const { data: ant } = await sb.from('crm_call_mentoria').select('id').eq('evento_id', e.id).limit(1);
+        const linha = { evento_id: e.id, titulo: String(e.summary || '').trim(), inicio: e.start?.dateTime ? new Date(e.start.dateTime).toISOString() : null, status: 'erro', motivo: erro(x), atualizado_em: new Date().toISOString() };
+        if (ant?.[0]) await sb.from('crm_call_mentoria').update(linha).eq('id', ant[0].id);
+        else await sb.from('crm_call_mentoria').upsert({ pasta_id: `evento:${e.id}`, ...linha }, { onConflict: 'pasta_id' });
+      }
+      res.push(`${rot} → ERRO ${erro(x)}`);
     }
   }
-  return { pastas: pastas.length, novas: fila.length, resultado: res };
+  return { calls: evs.length, novas: fila.length, resultado: res };
 }
 
 serve(async (req) => {
