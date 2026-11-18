@@ -342,6 +342,29 @@ async function convidarContato(tok: string, dryRun: boolean): Promise<string[]> 
   }
   return out;
 }
+// O vídeo da gravação demora mais que as anotações para aparecer no evento. Call que ficou pronta sem a gravação
+// é conferida de novo por 3 dias; quando o vídeo chega, entra no registro e o aviso do Discord é refeito com o link.
+async function completarGravacao(tok: string, cfg: any, dryRun: boolean): Promise<string[]> {
+  const out: string[] = [];
+  const { data: sem } = await sb.from('crm_call_mentoria').select('*').eq('status', 'ok').is('gravacao_url', null).not('evento_id', 'is', null)
+    .gte('inicio', new Date(Date.now() - 3 * 864e5).toISOString());
+  for (const c of sem || []) {
+    try {
+      const r = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cfg.agenda_id)}/events/${encodeURIComponent(c.evento_id)}`, { headers: { Authorization: `Bearer ${tok}` } });
+      if (!r.ok) continue;
+      const aVid = ((await r.json()).attachments || []).find((a: any) => String(a.mimeType).startsWith('video/'));
+      const video = aVid ? await arquivo(tok, aVid.fileId) : null;
+      if (!video?.webViewLink) continue;
+      if (dryRun) { out.push(`gravação chegou: ${c.titulo}`); continue; }
+      c.gravacao_url = video.webViewLink;
+      c.duracao_min = video.videoMediaMetadata?.durationMillis ? Math.round(+video.videoMediaMetadata.durationMillis / 60000) : null;
+      if (cfg.aviso_discord) c.discord_msg_id = await avisarDiscord(cfg, c);
+      await sb.from('crm_call_mentoria').update({ gravacao_url: c.gravacao_url, duracao_min: c.duracao_min, discord_msg_id: c.discord_msg_id, atualizado_em: new Date().toISOString() }).eq('id', c.id);
+      out.push(`gravação incluída: ${c.titulo}`);
+    } catch (e) { out.push(`gravação de ${c.titulo}: ERRO ${String((e as Error).message || e).slice(0, 150)}`); }
+  }
+  return out;
+}
 async function processarEvento(tok: string, cfg: any, ev: any, dryRun: boolean): Promise<string> {
   const externos = externosDaCall(ev);
   if (!externos) return 'fora: não é call 1:1';
@@ -495,6 +518,11 @@ async function rodar(body: any) {
     const conv = await convidarContato(tok, !!body.dry_run);
     if (body.convidar) return { convidar: conv };
     res.push(...conv);
+  }
+  if (body.gravacoes || !manual) {
+    const g = await completarGravacao(tok, cfg, !!body.dry_run);
+    if (body.gravacoes) return { gravacoes: g };
+    res.push(...g);
   }
   // modo antigo, sob pedido: uma subpasta do Meet
   if (body.pasta_id) {
