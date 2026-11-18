@@ -68,6 +68,7 @@ Deno.serve(async (req: Request) => {
     }
 
     let novas = 0, atualizadas = 0, semCliente = 0, maxMarca = desde;
+    const nomeAcertado = new Set<string>();
 
     for (const t of txs) {
       if (t.updated_at > maxMarca) maxMarca = t.updated_at;
@@ -76,6 +77,13 @@ Deno.serve(async (req: Request) => {
 
       // resolve cliente por email, senao telefone canonico, senao cria
       let clienteId = await resolverCliente(b);
+      // nome padrão do cliente = nome do comprador na Hotmart (a função não mexe em nome editado à mão
+      // e guarda o nome antigo, de perfil de app/Instagram, em nome_perfil). Uma vez por cliente na rodada.
+      if (clienteId && b.name && !nomeAcertado.has(clienteId)) {
+        nomeAcertado.add(clienteId);
+        const { error: eNome } = await sb.rpc('crm_cliente_nome_hotmart', { p_cliente: clienteId, p_nome: b.name });
+        if (eNome) console.error('nome hotmart', clienteId, eNome.message);
+      }
 
       const idExterno = t.transaction_code;
       const status = String(t.status || '').toLowerCase();
@@ -154,7 +162,7 @@ async function resolverCliente(b: any): Promise<string | null> {
   if (!cid) {
     // cliente inedito: cria ficha + identidades (documento = identificador FORTE)
     const { data: novo, error } = await sb.from('crm_cliente')
-      .insert({ nome: b.name || null, cpf: doc, tel_canon: tc, email_canon: email || null })
+      .insert({ nome: b.name || null, nome_hotmart: b.name || null, nome_origem: b.name ? 'hotmart' : null, cpf: doc, tel_canon: tc, email_canon: email || null })
       .select('cliente_id').single();
     if (error || !novo) {
       // corrida: outra rodada criou a ficha com este email no meio do caminho
