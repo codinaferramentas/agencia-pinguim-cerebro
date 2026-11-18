@@ -21,11 +21,15 @@
 //   - CONFERÊNCIA NA HOTMART na hora do envio (André 18/11): o robô pergunta direto à Hotmart, nas duas contas,
 //     se existe pagamento aprovado do produto desde o vencimento. Existe → não envia e o caso vai para
 //     conferência manual. A Hotmart não respondeu → não envia e tenta de novo mais tarde. Só envia com «sem pagamento».
+//   - LINK DE PAGAMENTO (André 18/11): para Pix e boleto, logo antes do envio o robô gera na Hotmart um Pix da
+//     dívida (negociação de parcelas) e manda o link na mensagem. Vale 48 horas. Se a Hotmart não gerar,
+//     o alerta sai sem o link. Parcelamento Hotmart e cartão não têm esse link.
 //   - Forma de pagamento fora das Regras (padrão: só Pix e boleto): o caso fica no quadro, mas o robô não envia.
 //   - Número sem WhatsApp: marca o caso para contato manual, sem nova tentativa.
 //   - Falha técnica: DM só para o Codina, nunca em canal do time.
 // Modos (body): {} = cron · {id, por} = «Enviar alerta agora» da tela · {dry_run:true} = lista o que faria, sem enviar
 //               · {id, teste_para, teste_nome?} = envia o texto do caso para um número de teste, sem carimbar
+//               · {id, gerar_link:true, por} = «Gerar link de pagamento» da tela: devolve o Pix do caso (reaproveita o que ainda vale)
 //               · {id, teste_pausa:true} = manda o aviso de pausa do caso só no privado do Codina
 //               · {conferir:true} = confere na Hotmart todos os pendentes e devolve quem aparece pago (só leitura)
 //               · {conferir:'pagos'} = prova inversa: os casos já fechados como pagos têm de aparecer pagos na Hotmart
@@ -52,9 +56,9 @@ const PROD: [RegExp, string][] = [[/taurus.*low/i, 'Taurus Low Ticket'], [/tauru
 const EXPERT: Record<string, string> = { 'ProAlt': 'Pedro Aredes', 'Taurus Low Ticket': 'Pedro Aredes', 'Taurus Master': 'Pedro Aredes', 'Mastermind Orion': 'Pedro Aredes', 'Comunidade Elo': 'Micha Menezes', 'Lyra': 'Micha Menezes' };
 const GRUPO: Record<string, string> = { PIX: 'pix', PIX_AUTOMATIC: 'pix', BILLET: 'boleto', HOTMART_INSTALLMENTS: 'parcelado', CREDIT_CARD: 'cartao', WALLET: 'cartao', APPLE_PAY: 'cartao' };
 const OPCOES: Record<string, any[]> = { alerta: [3, 5, 7, 10], pausa: [15, 20, 30, 45], hora: ['8h', '9h', '10h', '14h'], modo: ['auto', 'aprovacao'], lote: [1, 2], imin: [1, 2, 3, 5], imax: [5, 10, 15], teto: [10, 20, 30, 40], antiga: [30, 45, 60] };
-const PADRAO: any = { alerta: 7, pausa: 15, hora: '9h', modo: 'auto', lote: 1, imin: 2, imax: 10, teto: 20, antiga: 30, formas: { pix: true, boleto: true, parcelado: false, cartao: false },
+const PADRAO: any = { alerta: 7, pausa: 15, hora: '10h', modo: 'auto', lote: 1, imin: 2, imax: 10, teto: 20, antiga: 30, formas: { pix: true, boleto: true, parcelado: false, cartao: false },
   dono: { 'ProAlt': 'ingrid', 'Taurus Low Ticket': 'ingrid', 'Taurus Master': 'ingrid', 'Mastermind Orion': 'ingrid', 'Comunidade Elo': 'fernanda', 'Lyra': 'fernanda' },
-  copy: 'Olá, {nome}! Tudo bem?\n\nAqui é a {tutora}, da equipe do {expert}. Identificamos uma parcela em aberto do {produto}:\n\n*{valor}*, com vencimento em {vencimento}.\n\nEstou avisando para ajudar você a regularizar o quanto antes e manter os seus acessos liberados.\n\nSe o pagamento já foi feito, por favor desconsidere esta mensagem. Se precisar de ajuda ou de outra forma de pagamento, responda por aqui.',
+  copy: 'Olá, {nome}! Tudo bem?\n\nAqui é a {tutora}, da equipe do {expert}. Identificamos uma parcela em aberto do {produto}:\n\n*{valor}*, com vencimento em {vencimento}.\n\n{pagamento}Estou avisando para ajudar você a regularizar o quanto antes e manter os seus acessos liberados.\n\nSe o pagamento já foi feito, por favor desconsidere esta mensagem. Se precisar de ajuda ou de outra forma de pagamento, responda por aqui.',
   envio: false, envio_desde: '', discord_canal: '' };
 function normalizarConfig(d: any) {
   const x = d && typeof d === 'object' ? d : {}, c: any = { ...PADRAO, formas: { ...PADRAO.formas }, dono: { ...PADRAO.dono } };
@@ -87,7 +91,11 @@ function etapa(p: any, cfg: any, hoje: string) {
   if (p.dias >= cfg.pausa && diasEntre(brt(new Date(ref)).dia, hoje) >= cfg.pausa - cfg.alerta) return 'pausa';
   return 'alerta';
 }
-const mensagem = (p: any, cfg: any) => cfg.copy.replace(/\{nome\}/g, primeiro(p.nome)).replace(/\{tutora\}/g, VIA[p.via].nome).replace(/\{expert\}/g, EXPERT[p.prod] || 'Pedro Aredes').replace(/\{produto\}/g, p.prod)
+// trecho do link de pagamento: entra no lugar de {pagamento} (ou no fim, se o texto das Regras não tiver o campo)
+const quandoBR = (iso: string) => { const x = new Date(Date.parse(iso) - 3 * 3600e3).toISOString(); return `${x.slice(8, 10)}/${x.slice(5, 7)} às ${x.slice(11, 13)}h${x.slice(14, 16) === '00' ? '' : x.slice(14, 16)}`; };
+const linkVale = (p: any, folgaH = 0) => !!p.link_url && !!p.link_expira && Date.parse(p.link_expira) > Date.now() + folgaH * 3600e3;
+const trechoLink = (l: any) => (l ? `Para facilitar, este é o link para pagamento por Pix (${brl(l.link_valor)}), válido até ${quandoBR(l.link_expira)}:\n${l.link_url}\n\n` : '');
+const mensagem = (p: any, cfg: any, link: any = null) => (cfg.copy.includes('{pagamento}') ? cfg.copy.replace(/\{pagamento\}/g, trechoLink(link)) : cfg.copy + (link ? '\n\n' + trechoLink(link).trim() : '')).replace(/\{nome\}/g, primeiro(p.nome)).replace(/\{tutora\}/g, VIA[p.via].nome).replace(/\{expert\}/g, EXPERT[p.prod] || 'Pedro Aredes').replace(/\{produto\}/g, p.prod)
   .replace(/\{valor\}/g, p.n_abertas > 1 ? `${p.n_abertas} parcelas de ${brl(p.parcela)}` : `Parcela de ${brl(p.parcela)}`)
   .replace(/\{vencimento\}/g, dm(p.venc) + (p.n_abertas > 1 ? ' (a mais antiga)' : ''));
 
@@ -156,6 +164,55 @@ async function pagamentoNaHotmart(p: any): Promise<{ quando: string; produto: st
   return null;
 }
 
+// ---------------- Hotmart: link de pagamento (negociação de parcelas) ----------------
+// Gera um Pix com as parcelas vencidas depois do último pagamento (no máximo 5, limite da Hotmart) e guarda no caso.
+// Reaproveita o link do caso enquanto ele valer por mais de `folgaH` horas. Qualquer falha vira erro (quem chama decide).
+async function hot(suf: string, caminho: string, init: any = {}) {
+  let r: Response | null = null;
+  for (let k = 0; k < 3; k++) {
+    r = await fetch('https://developers.hotmart.com' + caminho, { ...init, headers: { Authorization: `Bearer ${await tokenHotmart(suf)}`, Accept: 'application/json', 'Content-Type': 'application/json' } });
+    if (r.status === 401 && k === 0) { delete tokHotmart[suf]; continue; }
+    if (r.status === 429) { await new Promise((ok) => setTimeout(ok, 800 * (k + 1))); continue; }
+    break;
+  }
+  return r!;
+}
+const VENCIDA = ['OVERDUE', 'DELAYED', 'EXPIRED'], PAGA = ['APPROVED', 'COMPLETE'];
+async function gerarLink(p: any, por: string, folgaH = 24) {
+  if (linkVale(p, folgaH)) return { link_url: p.link_url, link_pix: p.link_pix, link_valor: p.link_valor, link_parcelas: p.link_parcelas, link_expira: p.link_expira, reaproveitado: true };
+  if (p.grp !== 'pix' && p.grp !== 'boleto') throw new Error('o link de pagamento só existe para Pix e boleto');
+  const { data: ids } = await sb.from('crm_cliente_identidade').select('valor').eq('cliente_id', p.cliente_id).eq('tipo', 'email').limit(8);
+  const emails = [...new Set([p.email, ...(ids || []).map((i: any) => i.valor)].map((e) => String(e || '').trim().toLowerCase()).filter((e) => e.includes('@')))];
+  let conta = '', ass: any = null;
+  busca: for (const suf of CONTAS_HOTMART) for (const email of emails) {
+    const r = await hot(suf, '/payments/api/v1/subscriptions?' + new URLSearchParams({ subscriber_email: email, max_results: '50' }));
+    if (!r.ok) throw new Error('a Hotmart não respondeu à busca da assinatura (' + r.status + ')');
+    const j = await r.json().catch(() => ({}));
+    ass = (j.items || []).find((i: any) => VENCIDA.includes(String(i.status).toUpperCase()) && familia(i?.product?.name) === p.prod);
+    if (ass) { conta = suf; break busca; }
+  }
+  if (!ass) throw new Error('não achei na Hotmart a assinatura em atraso deste aluno');
+  const rc = await hot(conta, `/payments/api/v1/subscriptions/${ass.subscriber_code}/purchases`);
+  const compras = rc.ok ? await rc.json().catch(() => null) : null;
+  if (!Array.isArray(compras)) throw new Error('a Hotmart não devolveu as parcelas da assinatura (' + rc.status + ')');
+  const st = (c: any) => String(c.status || '').toUpperCase();
+  const ultPaga = Math.max(0, ...compras.filter((c) => PAGA.includes(st(c))).map((c) => Number(c.recurrency_number) || 0));
+  const preco = new Map<number, number>();
+  for (const c of compras) { const n = Number(c.recurrency_number) || 0; if (n > ultPaga && VENCIDA.includes(st(c))) preco.set(n, Number(c?.price?.value) || 0); }
+  let nums = [...preco.keys()].sort((a, b) => a - b).slice(-5);
+  if (!nums.length) throw new Error('a Hotmart não mostra parcela vencida nesta assinatura');
+  const negociar = (rec: number[]) => hot(conta, '/payments/api/v1/installments/negotiate', { method: 'POST', body: JSON.stringify({ subscription_id: ass.subscription_id, recurrences: rec, payment_type: 'PIX' }) });
+  let r = await negociar(nums);
+  if (!r.ok && nums.length > 1) { nums = nums.slice(-1); r = await negociar(nums); } // área de membros da Hotmart: só a última parcela
+  const j = r.ok ? await r.json().catch(() => null) : null;
+  if (!j?.payment?.pix_qrcode) throw new Error('a Hotmart não gerou o Pix (' + r.status + ')' + (r.ok ? '' : ': ' + (await r.text().catch(() => '')).slice(0, 160)));
+  const link = { link_url: String(j.payment.pix_qrcode), link_pix: String(j.payment.pix_code || ''), link_valor: Math.round(nums.reduce((s, n) => s + (preco.get(n) || 0), 0) * 100) / 100, link_parcelas: nums.length,
+    link_em: new Date().toISOString(), link_expira: new Date(Date.now() + 48 * 3600e3 - 10 * 60e3).toISOString(), link_erro: null };
+  await sb.from('crm_cobranca').update({ ...link, link_txs: [...(p.link_txs || []), String(j.transaction || '')].filter(Boolean) }).eq('id', p.id);
+  await evento(p.id, 'link', `Link de pagamento por Pix gerado na Hotmart (${brl(link.link_valor)}, válido até ${quandoBR(link.link_expira)})`, por);
+  return link;
+}
+
 // ---------------- Discord ----------------
 let botCache: string | null = null;
 const bot = async () => (botCache ??= await getChave('DISCORD_BOT_TOKEN', CONSUMIDOR));
@@ -203,7 +260,6 @@ const ordemFila = (cfg: any) => (a: any, b: any) => (+(a.dias >= cfg.antiga) - +
 
 // Envia o alerta de um caso (carimbo antes do envio). Devolve o que aconteceu.
 async function alertar(p: any, cfg: any, por: string) {
-  const texto = mensagem(p, cfg);
   let pg: { quando: string; produto: string } | null = null;
   try { pg = await pagamentoNaHotmart(p); } catch (e) {
     // sem a resposta da Hotmart não envia: volta para a fila daqui a 10 minutos
@@ -216,6 +272,16 @@ async function alertar(p: any, cfg: any, por: string) {
     await evento(p.id, 'conferir', `Alerta de ${curto(p.nome)} não enviado: a Hotmart mostra um pagamento em ${dm(pg.quando)}. Fica para conferência`, por);
     return { enviado: false, pagoNaHotmart: true, motivo: 'a Hotmart mostra pagamento em ' + dm(pg.quando) };
   }
+  // link de pagamento (só Pix e boleto): se a Hotmart não gerar, o alerta sai sem o link
+  let link: any = null;
+  if (p.grp === 'pix' || p.grp === 'boleto') {
+    try { link = await gerarLink(p, por); } catch (e) {
+      const erro = String((e as Error).message || e).slice(0, 300);
+      await sb.from('crm_cobranca').update({ link_erro: erro }).eq('id', p.id);
+      await evento(p.id, 'link', `Link de pagamento não gerado para ${curto(p.nome)}: ${erro}. O alerta segue sem o link`, por);
+    }
+  }
+  const texto = mensagem(p, cfg, link);
   let trava = sb.from('crm_cobranca').update({ alerta_em: new Date().toISOString(), alerta_status: 'enviando', alerta_erro: null, alerta_via: p.via, alerta_texto: texto, alerta_por: por, alerta_tentativas: (p.alerta_tentativas || 0) + 1 })
     .eq('id', p.id).is('fechado_em', null).eq('alerta_tentativas', p.alerta_tentativas || 0);
   trava = p.alerta_em ? trava.eq('alerta_status', 'erro') : trava.is('alerta_em', null);
@@ -224,7 +290,7 @@ async function alertar(p: any, cfg: any, por: string) {
   try {
     const para = await enviarWhats(p.via, p.tel, texto);
     await sb.from('crm_cobranca').update({ alerta_status: 'enviado', alerta_em: new Date().toISOString(), alerta_para: para, manual: p.manual === 'alerta' ? null : p.manual }).eq('id', p.id);
-    await evento(p.id, 'alerta', `Alerta enviado a ${curto(p.nome)} pelo WhatsApp da ${VIA[p.via].nome} (conferido na Hotmart: sem pagamento)`, por);
+    await evento(p.id, 'alerta', `Alerta enviado a ${curto(p.nome)} pelo WhatsApp da ${VIA[p.via].nome}${link ? ', com o link de pagamento' : ''} (conferido na Hotmart: sem pagamento)`, por);
     return { enviado: true };
   } catch (e) {
     const erro = String((e as Error).message || e).slice(0, 300), sem = e instanceof SemWhatsApp;
@@ -323,7 +389,12 @@ async function avulso(id: string, por: string, testePara?: string, extra: any = 
   const [p] = await carregar(cfg, id);
   if (!p) return { ok: false, erro: 'Caso não encontrado.' };
   if (extra.teste_pausa) { await dmCodina('🧪 TESTE (iria no #liberacao-de-acessos)\n' + textoPausa(p)); return { ok: true, teste: true }; }
-  if (testePara) { await enviarWhats(p.via, testePara, mensagem(extra.teste_nome ? { ...p, nome: String(extra.teste_nome) } : p, cfg)); return { ok: true, teste: true, via: p.via }; }
+  if (testePara) { await enviarWhats(p.via, testePara, mensagem(extra.teste_nome ? { ...p, nome: String(extra.teste_nome) } : p, cfg, linkVale(p) ? p : null)); return { ok: true, teste: true, via: p.via, com_link: linkVale(p) }; }
+  if (extra.gerar_link) {
+    if (p.fechado_em) return { ok: false, erro: 'Este caso já foi encerrado.' };
+    try { return { ok: true, link: await gerarLink(p, por, 12) }; }
+    catch (e) { const erro = String((e as Error).message || e).slice(0, 300); await sb.from('crm_cobranca').update({ link_erro: erro }).eq('id', p.id); return { ok: false, erro: 'O link não foi gerado: ' + erro + '.' }; }
+  }
   if (!ligado(cfg, hoje)) return { ok: false, erro: cfg.envio ? `Os envios começam em ${dm(cfg.envio_desde)}. Nenhuma mensagem foi enviada.` : 'Os envios estão desligados. Nenhuma mensagem foi enviada.' };
   if (p.fechado_em) return { ok: false, erro: 'Este caso já foi encerrado.' };
   if (!p.tel) return { ok: false, erro: 'O aluno não tem WhatsApp no cadastro.' };

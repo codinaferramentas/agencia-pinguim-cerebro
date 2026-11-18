@@ -58,6 +58,14 @@ create table if not exists pinguim.crm_cobranca_evento (
 create index if not exists crm_cobranca_evento_caso on pinguim.crm_cobranca_evento (cobranca_id, criado_em);
 create index if not exists crm_cobranca_evento_data on pinguim.crm_cobranca_evento (criado_em desc);
 
+-- Link de pagamento (André 18/11): Pix gerado na Hotmart pela negociação de parcelas, enviado junto com o alerta.
+-- link_txs guarda todas as cobranças de negociação já criadas para o caso (a leitura da dívida as ignora).
+alter table pinguim.crm_cobranca add column if not exists link_url text, add column if not exists link_pix text,
+  add column if not exists link_valor numeric, add column if not exists link_parcelas integer,
+  add column if not exists link_em timestamptz, add column if not exists link_expira timestamptz,
+  add column if not exists link_erro text, add column if not exists link_txs text[] not null default '{}';
+create index if not exists crm_cobranca_link_txs on pinguim.crm_cobranca using gin (link_txs);
+
 alter table pinguim.crm_cobranca_config enable row level security;
 alter table pinguim.crm_cobranca enable row level security;
 alter table pinguim.crm_cobranca_evento enable row level security;
@@ -72,6 +80,9 @@ with c as (
   select cliente_id, produto_nome, (data_compra at time zone 'America/Sao_Paulo')::date d, status, payment_type, valor_brl
   from pinguim.crm_compra
   where produto_nome ~* '(proalt|taurus|orion|lyra|elo|express)' and data_compra > now() - interval '15 months' and cliente_id is not null
+    -- a cobrança criada pelo link de pagamento (negociação) não é uma parcela nova: só conta quando for paga
+    and (status in ('approved','completed') or transaction_code is null
+         or not exists (select 1 from pinguim.crm_cobranca k where k.link_txs @> array[crm_compra.transaction_code]))
 ), dia as (
   select cliente_id, produto_nome, d,
     bool_or(status in ('approved','completed')) pago,
@@ -140,12 +151,12 @@ grant execute on function pinguim.crm_cobranca_sincronizar() to service_role;
 alter table pinguim.crm_anotacao drop constraint if exists crm_anotacao_origem_check;
 alter table pinguim.crm_anotacao add constraint crm_anotacao_origem_check check (origem = any (array['crm', 'painel', 'carga_inicial', 'cobranca']));
 
--- Decisões do André em 18/11: alerta automático para Pix, boleto e Parcelamento Hotmart (cartão fica no quadro),
--- 20 por número ao dia (40 nos dois), carteira antiga a partir de 30 dias, aviso de pausa no canal de
+-- Decisões do André em 18/11: alerta automático só para Pix e boleto (cartão e Parcelamento Hotmart ficam no quadro, desligados nas Regras),
+-- 20 por número ao dia (40 nos dois), envio às 10h, carteira antiga a partir de 30 dias, aviso de pausa no canal de
 -- liberação de acessos e envios valendo a partir de 19/11/2026.
 update pinguim.crm_cobranca_config
-set dados = dados || jsonb_build_object('teto', 20, 'antiga', 30,
-      'formas', jsonb_build_object('pix', true, 'boleto', true, 'parcelado', true, 'cartao', false),
+set dados = dados || jsonb_build_object('teto', 20, 'antiga', 30, 'hora', '10h',
+      'formas', jsonb_build_object('pix', true, 'boleto', true, 'parcelado', false, 'cartao', false),
       'envio', true, 'envio_desde', '2026-11-19',
       'discord_canal', (select apps_canal_id::text from pinguim.acesso_area_config where id = 1))
 where id = 1;
