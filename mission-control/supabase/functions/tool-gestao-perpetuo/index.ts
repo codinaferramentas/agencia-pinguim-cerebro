@@ -70,7 +70,9 @@ async function actBuscarUsuario(body: any) {
 
 async function actCriarUsuario(body: any) {
   const email = String(body.email || '').trim();
-  const nome = String(body.full_name || body.nome || '').trim();
+  // A Curseduca não grava emoji no nome (devolve erro de banco com status 201): o nome vai sem emoji e sem o que vem depois de «|».
+  const nome = String(body.full_name || body.nome || '').replace(/[\u{10000}-\u{10FFFF}‍️]/gu, '').split('|')[0].replace(/\s+/g, ' ').trim()
+    || String(body.full_name || body.nome || '').replace(/[\u{10000}-\u{10FFFF}‍️]/gu, '').replace(/\s+/g, ' ').trim();
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return jsonRespTool({ ok: false, erro: 'email inválido' }, 400);
   if (!nome) return jsonRespTool({ ok: false, erro: 'nome obrigatorio' }, 400);
 
@@ -94,6 +96,12 @@ async function actCriarUsuario(body: any) {
     return jsonRespTool({ ok: true, user_id: '', ja_existia: true });
   }
   const j = await r.json().catch(() => ({}));
+  // Sem id na resposta = o membro NÃO foi criado, mesmo com status de sucesso. Nunca devolver ok nesse caso.
+  if (r.status === 409) return jsonRespTool({ ok: true, user_id: String(j.id ?? ''), ja_existia: true });
+  if (!j.id && !j.uuid) return jsonRespTool({ ok: false, erro: 'a Curseduca não criou o membro: ' + String(j.originalError?.meta?.driverAdapterError?.cause?.originalMessage || j.reason || j.message || 'resposta sem id').slice(0, 180) }, 502);
+  // Conferência: o membro precisa existir na base depois da criação.
+  const c = await fetch(`${CURSEDUCA_BASE}/members/by?email=${encodeURIComponent(email)}`, { headers: headers(api, tok) });
+  if (c.status === 404) return jsonRespTool({ ok: false, erro: 'a Curseduca respondeu que criou, mas o membro não aparece na base' }, 502);
   return jsonRespTool({ ok: true, user_id: String(j.id ?? j.uuid ?? '') });
 }
 
