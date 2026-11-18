@@ -306,6 +306,42 @@ function externosDaCall(ev: any): string[] | null {
   const ext = (ev.attendees || []).filter((a: any) => !a.resource && !INTERNO.test(a.email || '')).map((a: any) => String(a.email).toLowerCase());
   return ext.length >= 1 && ext.length <= 2 ? ext : null;
 }
+// Call de aluno marcada só na agenda do sócio: sem o contato@ no convite, a gravação e as anotações ficam no Drive
+// do sócio e o robô não abre. Então, ANTES da call, o contato@ entra como convidado (sem e-mail para ninguém).
+// Só vale para call que ainda não terminou: incluir depois não dá acesso aos arquivos. (André 18/11/2026)
+const AGENDAS_SOCIOS = ['micha@agenciapinguim.com', 'pedro@agenciapinguim.com', 'luiz@agenciapinguim.com'];
+const CALL_DE_ALUNO = /taurus|orion|lyra|express|mentoria|onboarding|1:1/i;
+async function convidarContato(tok: string, dryRun: boolean): Promise<string[]> {
+  const out: string[] = [], H = { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' };
+  const series = new Set<string>();
+  const incluir = async (base: string, ev: any) => {
+    const r = await fetch(`${base}/${encodeURIComponent(ev.id)}?sendUpdates=none`, { method: 'PATCH', headers: H,
+      body: JSON.stringify({ attendees: [...(ev.attendees || []), { email: CONTA_CALLS, responseStatus: 'accepted' }] }) });
+    if (!r.ok) throw new Error(`incluir o contato@: ${r.status} ${(await r.text()).slice(0, 150)}`);
+  };
+  const tem = (ev: any) => (ev.attendees || []).some((a: any) => String(a.email).toLowerCase() === CONTA_CALLS);
+  for (const ag of AGENDAS_SOCIOS) {
+    const base = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(ag)}/events`;
+    try {
+      const j = await (await fetch(`${base}?singleEvents=true&orderBy=startTime&maxResults=250&timeMin=${new Date().toISOString()}&timeMax=${new Date(Date.now() + 30 * 864e5).toISOString()}`, { headers: H })).json();
+      if (j.error) throw new Error(j.error.message);
+      for (const ev of j.items || []) {
+        // só evento do próprio sócio, com Meet, de aluno (1 ou 2 convidados de fora) e ainda sem o contato@
+        if (ev.organizer?.email !== ag || !ev.hangoutLink || !CALL_DE_ALUNO.test(ev.summary || '') || !externosDaCall(ev) || tem(ev)) continue;
+        const rot = `${String(ev.start.dateTime).slice(0, 16)} ${String(ev.summary).trim().slice(0, 60)} (${ag.split('@')[0]})`;
+        if (dryRun) { out.push(`incluiria o contato@: ${rot}`); continue; }
+        // call que se repete: inclui na série inteira de uma vez; se a série já tem, esta data foi alterada à parte
+        if (ev.recurringEventId && !series.has(ev.recurringEventId)) {
+          series.add(ev.recurringEventId);
+          const m = await (await fetch(`${base}/${encodeURIComponent(ev.recurringEventId)}`, { headers: H })).json();
+          if (m.id && !tem(m)) { await incluir(base, m); out.push(`contato@ incluído na série: ${rot}`); continue; }
+        } else if (ev.recurringEventId) continue;
+        await incluir(base, ev); out.push(`contato@ incluído: ${rot}`);
+      }
+    } catch (e) { out.push(`agenda ${ag}: ERRO ${String((e as Error).message || e).slice(0, 200)}`); }
+  }
+  return out;
+}
 async function processarEvento(tok: string, cfg: any, ev: any, dryRun: boolean): Promise<string> {
   const externos = externosDaCall(ev);
   if (!externos) return 'fora: não é call 1:1';
@@ -455,6 +491,11 @@ async function rodar(body: any) {
   const tok = await tokenGoogle();
   const res: string[] = [];
   const erro = (e: unknown) => String((e as Error).message || e).slice(0, 300);
+  if (body.convidar || !manual) {
+    const conv = await convidarContato(tok, !!body.dry_run);
+    if (body.convidar) return { convidar: conv };
+    res.push(...conv);
+  }
   // modo antigo, sob pedido: uma subpasta do Meet
   if (body.pasta_id) {
     const p = await arquivo(tok, body.pasta_id, 'id,name,createdTime');
