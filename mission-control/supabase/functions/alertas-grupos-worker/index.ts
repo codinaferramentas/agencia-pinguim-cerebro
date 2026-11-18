@@ -566,6 +566,25 @@ async function conferirDia(
   const cards = l ? (await trello(`lists/${l.id}/cards?fields=name,desc`) as any[]).map(c => parseCard(c, listaHoje)) : [];
   const donaPorLink = new Map(grupos.map(g => [g.link_convite, g.instancia_override || INST_INGRID]));
   const jidPorLink = new Map(grupos.map(g => [g.link_convite, g.jid_evolution]));
+  const lAvulso = listas.find(x => x.name === 'Avulso');
+  const avulsos = lAvulso ? (await trello(`lists/${lAvulso.id}/cards?fields=name,desc`) as any[]).map(c => parseCard(c, 'Avulso'))
+    .filter(c => !c.dataExplicita || c.dataExplicita === `${dataBRT.slice(8, 10)}/${dataBRT.slice(5, 7)}`) : [];
+
+  // (c) CARD COM DEFEITO (lição 18/11: os 4 cards do Orion estavam sem o título
+  // **MENSAGEM** → o robô pulava em silêncio "sem MENSAGEM"). Lista do dia +
+  // Avulso: avisa a dona antes do horário, enquanto ainda dá pra corrigir.
+  const defeitos = new Map<string, { dona: string; nome: string; hora: string; problema: string }>();
+  for (const c of [...cards, ...avulsos]) {
+    if (!c.hora) continue;
+    const conhecidos = c.links.filter(x => donaPorLink.has(x));
+    let problema = '';
+    if (!c.links.length) problema = 'falta o link do grupo na seção **PÚBLICO**';
+    else if (!conhecidos.length) problema = 'o link do grupo no **PÚBLICO** não está cadastrado no robô (avise o Codina)';
+    else if (!c.mensagem) problema = 'falta o título **MENSAGEM** em cima do texto da mensagem';
+    if (!problema) continue;
+    const dona = conhecidos.map(x => donaPorLink.get(x)).find(Boolean) || INST_INGRID;
+    defeitos.set(`defeito|${c.id}`, { dona, nome: semHora(c.nome), hora: c.hora, problema: `${problema} (lista ${c.lista})` });
+  }
 
   // (a) card sem agenda — agrupa os avisos do mesmo encontro (09:00/12:00/13:50…)
   const semAgenda = new Map<string, { dona: string; nome: string; horas: string[]; jids: string[] }>();
@@ -593,7 +612,7 @@ async function conferirDia(
     if (ENCONTRO_INDIVIDUAL.test(ev.titulo)) continue;
     const dona = donaDoEvento(ev.titulo);
     if (!dona) continue;
-    if (cards.some(c => tituloBate(c.nome, [ev.titulo]))) continue;
+    if ([...cards, ...avulsos].some(c => tituloBate(c.nome, [ev.titulo]))) continue;
     const k = `ev|${chaveEv(ev)}`;
     if (semCard.has(k)) continue;
     semCard.set(k, { dona, nome: ev.titulo.trim(), hora: ev.hora, soPessoal: ev.dono });
@@ -627,6 +646,12 @@ async function conferirDia(
     if (await jaAvisadoNaMao(x.nome, jidsDoEvento(x.nome, grupos), x.dona, inicioDia, hashesRobo)) { descartados.push({ item: x.nome, motivo: 'já avisado na mão no grupo' }); continue; }
     pendE.push([k, x]);
   }
+  const pendD: [string, { dona: string; nome: string; hora: string; problema: string }][] = [];
+  for (const [k, x] of defeitos) {
+    if (x.hora < agoraHHMM) { descartados.push({ item: x.nome, motivo: `card com defeito, mas o horário (${x.hora}) já passou` }); continue; }
+    if (jaAlertado.has(k)) { descartados.push({ item: x.nome, motivo: 'já alertado hoje' }); continue; }
+    pendD.push([k, x]);
+  }
 
   const diaFmt = `${listaHoje.toLowerCase()}, ${dataBRT.slice(8, 10)}/${dataBRT.slice(5, 7)}`;
   const saudacao = b.getUTCHours() < 12 ? 'bom dia' : b.getUTCHours() < 18 ? 'boa tarde' : 'boa noite';
@@ -634,9 +659,15 @@ async function conferirDia(
   for (const dona of [INST_FERNANDA, INST_INGRID]) {
     const a = pendA.filter(([, x]) => x.dona === dona);
     const e = pendE.filter(([, x]) => x.dona === dona).sort((p, q) => p[1].hora.localeCompare(q[1].hora));
-    if (!a.length && !e.length) continue;
+    const d = pendD.filter(([, x]) => x.dona === dona).sort((p, q) => p[1].hora.localeCompare(q[1].hora));
+    if (!a.length && !e.length && !d.length) continue;
     const quem = destino === 'canal' ? `<@${DISCORD_DA_INSTANCIA[dona]}>` : `**@${NOME_DONA[dona]}**`;
-    let t = `${quem}, ${saudacao}! Conferi os avisos de grupo de hoje (${diaFmt}) e encontrei ${a.length + e.length === 1 ? 'um ponto' : 'alguns pontos'} que precisam da sua atenção:\n`;
+    let t = `${quem}, ${saudacao}! Conferi os avisos de grupo de hoje (${diaFmt}) e encontrei ${a.length + e.length + d.length === 1 ? 'um ponto' : 'alguns pontos'} que precisam da sua atenção:\n`;
+    if (d.length) {
+      t += `\n🛠️ **Card com problema no Trello** — estes avisos NÃO vão sair enquanto não forem corrigidos:\n`;
+      for (const [, x] of d) t += `• ${x.hora} — ${x.nome}: ${x.problema}\n`;
+      t += `Corrigindo o card antes do horário, eu disparo normalmente.\n`;
+    }
     if (a.length) {
       t += `\n⚠️ **Tem card no Trello, mas o encontro não está na agenda** — estes avisos NÃO vão sair:\n`;
       for (const [, x] of a) t += `• ${x.nome}${x.horas.length ? ` (avisos das ${x.horas.sort().join(', ')})` : ''}\n`;
@@ -650,7 +681,11 @@ async function conferirDia(
     t += `\nO restante dos avisos de hoje segue comigo. 🤖`;
     mensagens.push({
       dona: NOME_DONA[dona], texto: t,
-      chaves: [...a.map(([k, x]) => ({ chave: k, tipo: 'card_sem_agenda', item: x.nome })), ...e.map(([k, x]) => ({ chave: k, tipo: 'agenda_sem_card', item: x.nome }))],
+      chaves: [
+        ...a.map(([k, x]) => ({ chave: k, tipo: 'card_sem_agenda', item: x.nome })),
+        ...e.map(([k, x]) => ({ chave: k, tipo: 'agenda_sem_card', item: x.nome })),
+        ...d.map(([k, x]) => ({ chave: k, tipo: 'card_com_defeito', item: `${x.hora} ${x.nome}` })),
+      ],
     });
   }
 
