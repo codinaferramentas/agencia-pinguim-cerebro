@@ -279,6 +279,7 @@ async function alertar(p: any, cfg: any, por: string) {
       const erro = String((e as Error).message || e).slice(0, 300);
       await sb.from('crm_cobranca').update({ link_erro: erro }).eq('id', p.id);
       await evento(p.id, 'link', `Link de pagamento não gerado para ${curto(p.nome)}: ${erro}. O alerta segue sem o link`, por);
+      await dmCodina(`⚠️ **Cobrança:** a Hotmart não gerou o link de pagamento, então o alerta saiu sem o link.\n${p.nome} · ${p.prod}\nMotivo: ${erro}`);
     }
   }
   const texto = mensagem(p, cfg, link);
