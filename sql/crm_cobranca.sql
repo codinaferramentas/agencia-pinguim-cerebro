@@ -140,12 +140,12 @@ grant execute on function pinguim.crm_cobranca_sincronizar() to service_role;
 alter table pinguim.crm_anotacao drop constraint if exists crm_anotacao_origem_check;
 alter table pinguim.crm_anotacao add constraint crm_anotacao_origem_check check (origem = any (array['crm', 'painel', 'carga_inicial', 'cobranca']));
 
--- Decisões do André em 18/11: alerta automático só para Pix e boleto (cartão e parcelamento ficam no quadro),
+-- Decisões do André em 18/11: alerta automático para Pix, boleto e Parcelamento Hotmart (cartão fica no quadro),
 -- 20 por número ao dia (40 nos dois), carteira antiga a partir de 30 dias, aviso de pausa no canal de
 -- liberação de acessos e envios valendo a partir de 19/11/2026.
 update pinguim.crm_cobranca_config
 set dados = dados || jsonb_build_object('teto', 20, 'antiga', 30,
-      'formas', jsonb_build_object('pix', true, 'boleto', true, 'parcelado', false, 'cartao', false),
+      'formas', jsonb_build_object('pix', true, 'boleto', true, 'parcelado', true, 'cartao', false),
       'envio', true, 'envio_desde', '2026-11-19',
       'discord_canal', (select apps_canal_id::text from pinguim.acesso_area_config where id = 1))
 where id = 1;
