@@ -32,3 +32,7 @@ insert into pinguim.mentoria_aviso_config (id) values (1) on conflict do nothing
 
 select cron.schedule('mentoria-aluno-novo-worker', '*/2 * * * *',
   $$select pinguim.disparar_edge_function('mentoria-aluno-novo-worker')$$);
+
+-- André 18/11/2026: o aviso é de venda, então sai no #vendas (antes #novo-grupo-pinguim). A tutora marcada passa a ser
+-- a dona do produto (Lyra → Fernanda; Taurus, Orion e Express → Ingrid), decidida na edge; `marcar` segue com os demais.
+update pinguim.mentoria_aviso_config set canal_id = '1570542927929942157' where id = 1;

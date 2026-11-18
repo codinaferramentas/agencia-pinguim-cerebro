@@ -2,7 +2,8 @@
 // Edge Function: mentoria-aluno-novo-worker
 // ========================================================================
 // Aluno NOVO de mentoria (Taurus, Orion, Lyra, Express) → celebração no
-// Discord #novo-grupo-pinguim pedindo pra Ingrid marcar o onboarding.
+// Discord #vendas (André 18/11: é venda, sai no canal de vendas) pedindo o onboarding
+// à tutora dona do produto: Lyra → Fernanda (Micha); Taurus, Orion e Express → Ingrid (Pedro).
 // Só a 1ª parcela/recorrência (recurrence_number 1 ou vazio) e só aprovadas.
 // Fonte: Dash (hotmart_transactions, recebe a venda da Hotmart em ~1 min).
 // Cron */2 (sql/mentoria_aluno_novo_discord.sql). Config editável por UPDATE
@@ -56,6 +57,10 @@ function mensagem(produto: string, b: any, dataIso: string, marcar: string[]): s
   ].join('\n');
 }
 
+// Dona do onboarding pelo produto (mesmo critério dos alertas de grupo e da cobrança)
+const INGRID = '1205120597433122846', FERNANDA = '1210285892489449603';
+const marcarDe = (produto: string, marcar: string[]) => [/lyra|lira|elo/i.test(produto) ? FERNANDA : INGRID, ...marcar.filter((id) => id !== INGRID && id !== FERNANDA)];
+
 const GRUPO_MENTORIA = /taurus|orion|lyra|lira|mastermind|mentoria|express/i;
 async function jaEraAluno(t: any, email: string, produtoIds: string[], dash: { url: string; key: string }): Promise<string | null> {
   const dataIso = t.approved_date || t.purchase_date;
@@ -104,7 +109,7 @@ async function rodar(dryRun: boolean, testeDm = false) {
     const dm = await (await fetch('https://discord.com/api/v10/users/@me/channels', { method: 'POST', headers: { Authorization: `Bot ${bot}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient_id: '1077338884981133413' }) })).json();
     for (const t of txs.slice(-2)) {
       await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, { method: 'POST', headers: { Authorization: `Bot ${bot}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: mensagem(produtos[t.hotmart_products.hotmart_product_id], t.hotmart_buyers || {}, t.approved_date || t.purchase_date, cfg.marcar), allowed_mentions: { parse: [] } }) });
+        body: JSON.stringify({ content: mensagem(produtos[t.hotmart_products.hotmart_product_id], t.hotmart_buyers || {}, t.approved_date || t.purchase_date, marcarDe(produtos[t.hotmart_products.hotmart_product_id] || '', cfg.marcar)), allowed_mentions: { parse: [] } }) });
       await new Promise((ok) => setTimeout(ok, 1200));
     }
     return { teste_dm: 2 };
@@ -143,7 +148,7 @@ async function rodar(dryRun: boolean, testeDm = false) {
     const resp = await fetch(`https://discord.com/api/v10/channels/${cfg.canal_id}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bot ${bot}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: mensagem(produto, b, dataIso, cfg.marcar), allowed_mentions: { users: cfg.marcar } }),
+      body: JSON.stringify({ content: mensagem(produto, b, dataIso, marcarDe(produto, cfg.marcar)), allowed_mentions: { users: marcarDe(produto, cfg.marcar) } }),
     });
     const j = await resp.json().catch(() => ({}));
     if (resp.ok) {
