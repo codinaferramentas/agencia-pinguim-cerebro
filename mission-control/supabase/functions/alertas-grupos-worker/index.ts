@@ -422,6 +422,42 @@ async function comentarCard(cardId: string, texto: string) {
   }
 }
 
+// ---------- FOTO DO QUADRO pro painel do CRM (Andre 19/11) ----------
+// O painel lê `pinguim.alertas_grupos_cards` em vez do Trello. 1 chamada
+// (todos os cards do quadro), upsert por card; card que sumiu do quadro
+// ganha `removido_em`. Só leitura pro painel — não interfere no disparo.
+async function sincronizarQuadro(
+  listas: any[],
+  grupos: { nome: string; link_convite: string; jid_evolution: string | null; instancia_override: string | null }[],
+  mapaResp: Map<string, { nome: string; instancia_chave: string }>,
+) {
+  const nomeLista = new Map(listas.map(l => [l.id, l.name]));
+  const porLink = new Map(grupos.map(g => [g.link_convite, g]));
+  const nomeDe = (k: string) => [...mapaResp.values()].find(v => v.instancia_chave === k)?.nome || k;
+  const todos = await trello(`boards/${BOARD}/cards?fields=name,desc,idList,shortUrl`) as any[];
+  const agoraIso = new Date().toISOString();
+  const linhas = todos.map(c => {
+    const p = parseCard(c, nomeLista.get(c.idList) || '?');
+    const conhecidos = p.links.map(x => porLink.get(x)).filter(Boolean) as typeof grupos;
+    const problema = !p.links.length ? 'sem link de grupo no PÚBLICO'
+      : !conhecidos.length ? 'link de grupo não cadastrado no robô'
+      : !p.mensagem ? 'sem o título MENSAGEM'
+      : !p.hora ? 'sem horário' : null;
+    return {
+      card_id: c.id, nome: c.name, lista: p.lista, hora: p.hora, dia_semana: p.diaSemana, data_explicita: p.dataExplicita,
+      grupos: conhecidos.map(g => g.nome), links_desconhecidos: p.links.length - conhecidos.length,
+      dona: conhecidos.length ? nomeDe(conhecidos[0].instancia_override || INST_INGRID) : null,
+      mensagem: p.mensagem || null, problema, url: c.shortUrl || null, atualizado_em: agoraIso, removido_em: null,
+    };
+  });
+  for (let i = 0; i < linhas.length; i += 200) {
+    const { error } = await sb.from('alertas_grupos_cards').upsert(linhas.slice(i, i + 200), { onConflict: 'card_id' });
+    if (error) throw new Error(`sync quadro: ${error.message}`);
+  }
+  // o que não veio nesta leitura saiu do quadro (arquivado/apagado)
+  await sb.from('alertas_grupos_cards').update({ removido_em: agoraIso }).lt('atualizado_em', agoraIso).is('removido_em', null);
+}
+
 // ---------- CONFERÊNCIA DO DIA: card × agenda (Andre 13/11) ----------
 // Roda 1x de manhã (antes do 1º aviso). Cruza os dois lados com a MESMA regra
 // de título que o disparo usa, então mostra exatamente o que NÃO vai sair:
@@ -745,6 +781,17 @@ serve(async (req) => {
     const modoTeste = cfg?.modo_teste !== false;
     log.modo = modoTeste ? 'TESTE' : 'PRODUCAO';
 
+    // só a foto do quadro pro painel (manual/teste) — não dispara nada
+    if (body.sincronizar_quadro) {
+      const [{ data: gs }, { data: rs }, listas] = await Promise.all([
+        sb.from('grupos_whatsapp_alertas').select('nome, link_convite, jid_evolution, instancia_override').eq('ativo', true),
+        sb.from('alertas_responsaveis').select('trello_member_id, nome, instancia_chave').eq('ativo', true),
+        trello(`boards/${BOARD}/lists`),
+      ]);
+      await sincronizarQuadro(listas as any[], gs || [], new Map((rs || []).map(r => [r.trello_member_id, { nome: r.nome, instancia_chave: r.instancia_chave }])));
+      return new Response(JSON.stringify({ ok: true, sincronizado: true }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     // conferência card × agenda (cron da manhã) — não dispara nada nos grupos
     if (body.conferir) {
       const { data: gs } = await sb.from('grupos_whatsapp_alertas').select('nome, link_convite, jid_evolution, instancia_override').eq('ativo', true);
@@ -871,9 +918,27 @@ serve(async (req) => {
 
     // agenda de confirmação (1 leitura por tick)
     let agendaHoje: AgendaDia | null = null;
+    const pulosDoTick: { card_id: string; card_nome: string; lista: string; horario: string | null; motivo: string }[] = [];
+
+    // foto do quadro pro painel do CRM (a cada 5 min; não afeta o disparo)
+    if (!dryRun && b.getUTCMinutes() % 5 === 0) {
+      await sincronizarQuadro(listas, grupos || [], mapaResp).catch(e => { log.sync_quadro_erro = e instanceof Error ? e.message : String(e); });
+    }
 
     for (const { parsed: card, manual } of cards) {
-      const pulo = (motivo: string) => log.pulados.push({ card: card.nome, lista: card.lista, motivo });
+      // Card no horário dele (janela de disparo) que for pulado vai pro
+      // registro `alertas_grupos_pulos` (painel: "o que não saiu e por quê").
+      // Fora da janela ("ainda não é", "janela passou") é só log do tick.
+      const naJanela = (() => {
+        if (!card.hora) return false;
+        const [hh, mm] = card.hora.split(':').map(Number);
+        const at = (agora.getTime() - (inicioDia.getTime() + (hh * 60 + mm) * 60000)) / 60000;
+        return at >= 0 && at <= ATRASO_MAX_MIN;
+      })();
+      const pulo = (motivo: string) => {
+        log.pulados.push({ card: card.nome, lista: card.lista, motivo });
+        if (naJanela && !/≠ hoje/.test(motivo)) pulosDoTick.push({ card_id: card.id, card_nome: card.nome, lista: card.lista, horario: card.hora, motivo });
+      };
 
       if (!card.links.length) { pulo('sem link de grupo no PÚBLICO'); continue; }
       if (!card.mensagem) { pulo('sem MENSAGEM'); continue; }
@@ -957,7 +1022,7 @@ serve(async (req) => {
           .neq('card_id', card.id)                 // mesmo card+grupo+dia = trava, não loop
           .gte('enviado_em', desde).lte('enviado_em', ate).neq('status', 'erro');
         if ((repetidas ?? 0) >= 1) {
-          log.pulados.push({ card: card.nome, motivo: `🛑 FREIO: a MESMA mensagem já foi pro grupo ${dest.nome} nos últimos 10min (outro card) — bloqueado (anti-loop)` });
+          pulo(`🛑 FREIO: a MESMA mensagem já foi pro grupo ${dest.nome} nos últimos 10min (outro card) — bloqueado (anti-loop)`);
           if (!dryRun) {
             const ultimoFreio = cfg?.freio_ultimo_alerta ? new Date(cfg.freio_ultimo_alerta).getTime() : 0;
             if (agora.getTime() - ultimoFreio > 30 * 60000) {
@@ -999,7 +1064,7 @@ serve(async (req) => {
           const { error: insErr } = await sb.from('disparos_grupos_whatsapp').insert({
             card_id: card.id, card_nome: card.nome, grupo_jid: dest.jid, grupo_nome: dest.nome,
             data_ref: dataBRT, horario_previsto: card.hora, tipo: 'automatico',
-            modo: modoTeste ? 'teste' : 'producao', agenda_confirmada: agendaOk, msg_hash: msgHash,
+            modo: modoTeste ? 'teste' : 'producao', agenda_confirmada: agendaOk, msg_hash: msgHash, mensagem: card.mensagem,
           });
           if (insErr) {
             if (String(insErr.code) !== '23505') throw new Error(`trava: ${insErr.message}`);
@@ -1043,7 +1108,7 @@ serve(async (req) => {
           await sb.from('disparos_grupos_whatsapp').insert({
             card_id: card.id, card_nome: card.nome, grupo_jid: dest.jid, grupo_nome: dest.nome,
             data_ref: dataBRT, horario_previsto: horaBRT(agora), tipo: 'manual',
-            modo: modoTeste ? 'teste' : 'producao', agenda_confirmada: agendaOk, msg_hash: msgHash,
+            modo: modoTeste ? 'teste' : 'producao', agenda_confirmada: agendaOk, msg_hash: msgHash, mensagem: card.mensagem,
           });
         }
 
@@ -1105,6 +1170,14 @@ serve(async (req) => {
       };
       // (manual já foi movido ANTES do envio — blindagem 31/08)
       if (card.lista === 'Avulso') await mover('Concluidos');
+    }
+
+    // registro do que não saiu (último motivo do dia por card) — painel do CRM
+    if (!dryRun && pulosDoTick.length) {
+      const porCard = new Map(pulosDoTick.map(p => [p.card_id, p]));
+      await sb.from('alertas_grupos_pulos')
+        .upsert([...porCard.values()].map(p => ({ ...p, data_ref: dataBRT, registrado_em: agora.toISOString() })), { onConflict: 'data_ref,card_id' })
+        .then(({ error }) => { if (error) log.pulos_erro = error.message; });
     }
 
     // ---------- Reserva: card ali NUNCA dispara (bloqueio consciente do time).
