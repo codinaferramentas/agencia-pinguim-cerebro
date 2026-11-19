@@ -13,17 +13,27 @@ language sql stable as $fn$
   -- a mesma venda recusada vira varias linhas delayed/waiting (Hotmart retenta dia apos dia);
   -- o id_externo so muda na DATA no meio (buyer-DATA-produto). Agrupamos pela RAIZ (data trocada por 'D')
   -- + produto, e contamos 1 divida por venda com 1 valor (o maximo, que e o valor cheio).
+  -- Cobranças já conferidas na Hotmart (cobranca-worker, André 19/11/2026): o número da Hotmart vale no lugar da conta
+  -- pela base (mesmo valor na ficha, no Financeiro e na Cobrança). Sem dívida na Hotmart = não é pendência.
+  cob as (
+    select cliente_id, produto_nome, hot_status, hot_parcelas, hot_valor from pinguim.crm_cobranca
+    where fechado_em is null and hot_status in ('confirmada','cancelada','encerrada','sem_divida')
+  ),
   comp_dedup as (
     select c.cliente_id,
            regexp_replace(c.id_externo, '\d{4}-\d{2}-\d{2}', 'D') as raiz,
            max(case when c.valor_brl <= 50000 then c.valor_brl else 0 end) as val
     from pinguim.crm_compra c
     where c.status in ('delayed','waiting_payment','billet_printed')
+      and not exists (select 1 from cob where cob.cliente_id = c.cliente_id and cob.produto_nome = c.produto_nome)
     group by c.cliente_id, regexp_replace(c.id_externo, '\d{4}-\d{2}-\d{2}', 'D')
   ),
   comp as (
-    select cliente_id, count(*) n, coalesce(sum(val),0) val
-    from comp_dedup group by cliente_id
+    select cliente_id, sum(n) n, sum(val) val from (
+      select cliente_id, count(*) n, coalesce(sum(val),0) val from comp_dedup group by cliente_id
+      union all
+      select cliente_id, sum(hot_parcelas) n, sum(hot_valor) val from cob where hot_status = 'confirmada' group by cliente_id
+    ) x group by cliente_id
   ),
   assin as (
     select distinct ce.cliente_id
@@ -31,6 +41,9 @@ language sql stable as $fn$
     join (select distinct cliente_id, substring(id_externo from '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}') buyer from pinguim.crm_compra) ce
       on ce.buyer = a.buyer_id
     where a.status = 'PAST_DUE'
+      -- assinatura já conferida na Hotmart: a situação real está na cobrança (a cópia do Dash pode estar atrasada)
+      and not exists (select 1 from pinguim.crm_cobranca cb, jsonb_array_elements(coalesce(cb.hot_assinatura, '[]'::jsonb)) e
+                      where cb.hot_em is not null and e->>'code' = a.subscriber_code)
   ),
   -- boleto tambem dedup pela raiz do sale_id (se houver retentativa) — na pratica sale_id ja e unico por venda,
   -- mas agrupamos defensivamente por (cliente, product_name) pegando o maior valor.

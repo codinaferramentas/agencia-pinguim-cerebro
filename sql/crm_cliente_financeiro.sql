@@ -5,6 +5,13 @@ language sql stable as $fn$
     select email_canon, (select valor from pinguim.crm_cliente_identidade i where i.cliente_id=p_cliente and i.tipo='cpf' limit 1) cpf
     from pinguim.crm_cliente where cliente_id = p_cliente
   ),
+  -- Cobranças já conferidas na Hotmart (cobranca-worker, André 19/11/2026): o número da Hotmart vale no lugar da conta pela base,
+  -- para a ficha, o Financeiro e a Cobrança mostrarem o mesmo valor. Sem dívida na Hotmart (assinatura cancelada,
+  -- encerrada ou em dia) = não é pendência.
+  cob as (
+    select * from pinguim.crm_cobranca
+    where cliente_id = p_cliente and fechado_em is null and hot_status in ('confirmada','cancelada','encerrada','sem_divida')
+  ),
   -- DEDUP tentativas de cobranca: mesma venda recusada vira varias linhas (id_externo so muda na DATA).
   -- 1 linha por venda (raiz = data trocada por 'D'), valor = o cheio (max).
   compras_dedup as (
@@ -13,6 +20,7 @@ language sql stable as $fn$
            max(c.valor_brl) valor, max(c.data_compra) quando, count(*) tentativas
     from pinguim.crm_compra c
     where c.cliente_id = p_cliente and c.status in ('delayed','waiting_payment','billet_printed')
+      and not exists (select 1 from cob where cob.produto_nome = c.produto_nome)
     group by regexp_replace(c.id_externo, '\d{4}-\d{2}-\d{2}', 'D'), c.produto_nome, c.status
   ),
   -- agora consolida por produto+situacao (vendas DISTINTAS do mesmo produto somam; tentativas nao)
@@ -24,6 +32,11 @@ language sql stable as $fn$
     from compras_dedup cd
     group by cd.produto_nome, cd.status
   ),
+  conferidas as (
+    select 'Compra'::text fonte, cob.produto_nome produto, 'Em atraso (conferido na Hotmart)'::text situacao,
+      cob.hot_valor valor, cob.hot_venc vencimento, cob.hot_parcelas parcelas, null::text link, cob.hot_em quando
+    from cob where cob.hot_status = 'confirmada'
+  ),
   assin as (
     select 'Assinatura'::text fonte, a.plan_name produto, 'Mensalidade em atraso'::text situacao,
       null::numeric valor, null::date vencimento, null::int parcelas, null::text link, a.started_at quando
@@ -33,6 +46,9 @@ language sql stable as $fn$
         select distinct substring(c.id_externo from '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
         from pinguim.crm_compra c where c.cliente_id = p_cliente
       )
+      -- assinatura já conferida na Hotmart: a situação real está na cobrança (a cópia do Dash pode estar atrasada)
+      and not exists (select 1 from pinguim.crm_cobranca cb, jsonb_array_elements(coalesce(cb.hot_assinatura, '[]'::jsonb)) e
+                      where cb.cliente_id = p_cliente and cb.hot_em is not null and e->>'code' = a.subscriber_code)
   ),
   boletos as (
     select 'Financiamento'::text fonte, b.product_name produto,
@@ -45,6 +61,7 @@ language sql stable as $fn$
        or (cli.cpf is not null and regexp_replace(coalesce(b.buyer_document,''),'[^0-9]','','g') = cli.cpf)
   )
   select * from compras
+  union all select * from conferidas
   union all select * from assin
   union all select * from boletos
   order by quando desc nulls last;
