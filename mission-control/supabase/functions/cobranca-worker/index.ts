@@ -475,7 +475,8 @@ async function rodada(dryRun: boolean) {
   }
 
   // avisos de pausa no Discord (só aviso)
-  for (const p of casos.filter((p) => etapa(p, cfg, hoje) === 'pausa' && !p.pausa_em)) {
+  // só com a dívida confirmada hoje na Hotmart (quem recebeu alerta e depois se viu que não devia nunca vira aviso de pausa)
+  for (const p of casos.filter((p) => etapa(p, cfg, hoje) === 'pausa' && !p.pausa_em && conferidaHoje(p, hoje))) {
     if (dryRun || !cfg.discord_canal) { out.fez.push(`${cfg.discord_canal ? 'avisaria' : 'sem canal definido, não avisa'} a pausa de ${p.nome} (${p.dias} dias, ${p.prod})`); continue; }
     const { data: minha } = await sb.from('crm_cobranca').update({ pausa_em: new Date().toISOString(), pausa_status: 'enviando', pausa_erro: null }).eq('id', p.id).is('pausa_em', null).select('id');
     if (!minha?.length) continue;
