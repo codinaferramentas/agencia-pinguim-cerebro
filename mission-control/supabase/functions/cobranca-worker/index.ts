@@ -83,9 +83,13 @@ function normalizarConfig(d: any) {
 const ligado = (cfg: any, hoje: string) => cfg.envio && (!cfg.envio_desde || hoje >= cfg.envio_desde);
 // Dia de envio (André 19/11): nunca sábado, domingo ou feriado. A fonte do feriado são os avisos dos grupos (Trello → alertas-grupos-worker):
 // em dia útil o primeiro aviso sai às 9h; se nenhum aviso de produção saiu hoje, o dia é tratado como feriado e nada sai.
+// trava fixa (vale mesmo se algum aviso do Trello sair no feriado): feriados nacionais, Carnaval, Sexta-feira Santa e Corpus Christi
+const FERIADOS = ['2026-01-01', '2026-02-16', '2026-02-17', '2026-04-03', '2026-04-21', '2026-05-01', '2026-06-04', '2026-09-07', '2026-10-12', '2026-11-02', '2026-11-20', '2026-12-25',
+  '2027-01-01', '2027-02-08', '2027-02-09', '2027-03-26', '2027-04-21', '2027-05-01', '2027-05-27', '2027-09-07', '2027-10-12', '2027-11-02', '2027-11-15', '2027-11-20', '2027-12-25'];
 async function diaDeEnvio(hoje: string): Promise<{ ok: boolean; motivo?: string }> {
   const dow = new Date(hoje + 'T12:00:00Z').getUTCDay();
   if (dow === 0 || dow === 6) return { ok: false, motivo: 'sábado e domingo não há envio' };
+  if (FERIADOS.includes(hoje)) return { ok: false, motivo: 'feriado nacional' };
   const { count, error } = await sb.from('disparos_grupos_whatsapp').select('id', { count: 'exact', head: true }).eq('data_ref', hoje).eq('modo', 'producao').eq('status', 'enviado');
   if (error) return { ok: false, motivo: 'não consegui ler os avisos dos grupos para saber se hoje é feriado' };
   return count ? { ok: true } : { ok: false, motivo: 'nenhum aviso do Trello saiu nos grupos hoje: tratado como feriado' };
