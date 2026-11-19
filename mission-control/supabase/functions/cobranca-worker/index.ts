@@ -77,6 +77,9 @@ function normalizarConfig(d: any) {
   c.envio = x.envio === true;
   c.envio_desde = /^\d{4}-\d\d-\d\d$/.test(String(x.envio_desde || '')) ? String(x.envio_desde) : '';
   c.discord_canal = /^\d{17,20}$/.test(String(x.discord_canal || '')) ? String(x.discord_canal) : '';
+  // resumo diário (André 19/11): começa no privado do Codina; vai para o canal só com resumo_no_canal=true
+  c.resumo_canal = /^\d{17,20}$/.test(String(x.resumo_canal || '')) ? String(x.resumo_canal) : '';
+  c.resumo_no_canal = x.resumo_no_canal === true;
   return c;
 }
 // envios valendo: trava ligada e, se houver data de início, só a partir dela
@@ -118,7 +121,10 @@ const linkVale = (p: any, folgaH = 0) => !!p.link_url && !!p.link_expira && Date
 // parcelas com valores diferentes (reajuste, oferta) saem como total
 const valorTxt = (p: any) => (p.n_abertas > 1 ? (p.parcela ? `${p.n_abertas} parcelas de ${brl(p.parcela)}` : `${p.n_abertas} parcelas, total de ${brl(p.total)}`) : `Parcela de ${brl(p.parcela || p.total)}`);
 const trechoLink = (l: any) => (l ? `Para facilitar, este é o link para pagamento por Pix (${brl(l.link_valor)}), válido até ${quandoBR(l.link_expira)}:\n${l.link_url}\n\n` : '');
-const mensagem = (p: any, cfg: any, link: any = null) => (cfg.copy.includes('{pagamento}') ? cfg.copy.replace(/\{pagamento\}/g, trechoLink(link)) : cfg.copy + (link ? '\n\n' + trechoLink(link).trim() : '')).replace(/\{nome\}/g, primeiro(p.nome)).replace(/\{tutora\}/g, VIA[p.via].nome).replace(/\{expert\}/g, EXPERT[p.prod] || 'Pedro Aredes').replace(/\{produto\}/g, p.prod)
+// {pagamento}: no cartão (assinatura com o cartão recusado) explica o que houve e dá as duas saídas — trocar o cartão ou pagar por Pix
+const trechoPag = (p: any, l: any) => (p.grp !== 'cartao' ? trechoLink(l)
+  : 'O pagamento no seu cartão não foi aprovado. Para regularizar, você pode atualizar o cartão na Hotmart, em «Minhas compras» (consumer.hotmart.com)' + (l ? `, ou pagar por Pix por este link (${brl(l.link_valor)}), válido até ${quandoBR(l.link_expira)}:\n${l.link_url}\n\nUse só uma das duas opções, para não pagar a mesma parcela duas vezes.\n\n` : '.\n\n'));
+const mensagem = (p: any, cfg: any, link: any = null) => (cfg.copy.includes('{pagamento}') ? cfg.copy.replace(/\{pagamento\}/g, trechoPag(p, link)) : cfg.copy + (trechoPag(p, link) ? '\n\n' + trechoPag(p, link).trim() : '')).replace(/\{nome\}/g, primeiro(p.nome)).replace(/\{tutora\}/g, VIA[p.via].nome).replace(/\{expert\}/g, EXPERT[p.prod] || 'Pedro Aredes').replace(/\{produto\}/g, p.prod)
   .replace(/\{valor\}/g, valorTxt(p))
   .replace(/\{vencimento\}/g, dm(p.venc) + (p.n_abertas > 1 ? ' (a mais antiga)' : ''));
 
@@ -303,7 +309,8 @@ async function hot(suf: string, caminho: string, init: any = {}) {
 const VENCIDA = ['OVERDUE', 'DELAYED', 'EXPIRED'], PAGA = ['APPROVED', 'COMPLETE'];
 async function gerarLink(p: any, por: string, folgaH = 24, alvo: any = null) {
   if (linkVale(p, folgaH)) return { link_url: p.link_url, link_pix: p.link_pix, link_valor: p.link_valor, link_parcelas: p.link_parcelas, link_expira: p.link_expira, reaproveitado: true };
-  if (p.grp !== 'pix' && p.grp !== 'boleto') throw new Error('o link de pagamento só existe para Pix e boleto');
+  // Pix, boleto e cartão são assinatura (a negociação gera um Pix das parcelas vencidas); o Parcelamento Hotmart não tem esse link
+  if (p.grp === 'parcelado') throw new Error('o link de pagamento não existe para o Parcelamento Hotmart');
   // a assinatura e as parcelas vêm da conferência da dívida (mesma regra do alerta)
   if (!alvo) { const d = await conferirCaso(p); if (d.hot_status !== 'confirmada') throw new Error('a Hotmart não confirma dívida neste caso (' + d.hot_motivo + ')'); alvo = d.alvo; }
   const conta = alvo.conta, preco = new Map<number, number>(alvo.nums.map((n: number, i: number) => [n, alvo.precos[i]]));
@@ -341,6 +348,62 @@ async function postarPausa(canal: string, p: any) {
   const r = await fetch(`https://discord.com/api/v10/channels/${canal}/messages`, { method: 'POST', headers: { Authorization: `Bot ${await bot()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ content: textoPausa(p), allowed_mentions: { users: [DISCORD_RAFAEL, DISCORD_DJAIRO, VIA[p.via].discord] } }) });
   if (!r.ok) throw new Error('o Discord recusou o aviso (' + r.status + '): ' + (await r.text()).slice(0, 160));
+}
+
+// ---------------- resumo diário (André 19/11) ----------------
+// Todo dia útil, depois do último envio (20h05): o que saiu hoje, quanto voltou, o que está em recuperação, a carteira confirmada
+// na Hotmart e o mês. Valor de cada caso = o confirmado na Hotmart (hot_valor); sem conferência, o da base.
+const DIA_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+function proximoDiaUtil(hoje: string) {
+  let d = new Date(hoje + 'T12:00:00Z');
+  do d = new Date(+d + 864e5); while ([0, 6].includes(d.getUTCDay()) || FERIADOS.includes(d.toISOString().slice(0, 10)));
+  return d.toISOString().slice(0, 10);
+}
+async function textoResumo(cfg: any, hoje: string) {
+  const ini = new Date(Date.parse(hoje + 'T00:00:00-03:00')).toISOString(), iniMes = new Date(Date.parse(hoje.slice(0, 8) + '01T00:00:00-03:00')).toISOString();
+  const val = (x: any) => Number(x.hot_valor ?? x.total) || 0, soma = (l: any[]) => l.reduce((s, x) => s + val(x), 0);
+  const [{ data: alertMes }, { data: pagosMes }] = await Promise.all([
+    sb.from('crm_cobranca').select('id, alerta_em, alerta_via, fechado_motivo, fechado_em, hot_valor, total').eq('alerta_status', 'enviado').gte('alerta_em', iniMes),
+    sb.from('crm_cobranca').select('id, alerta_em, alerta_status, manual, manual_em, fechado_em, hot_valor, total').eq('fechado_motivo', 'pago').gte('fechado_em', iniMes),
+  ]);
+  const casos = await carregar(cfg);
+  const alertHoje = (alertMes || []).filter((x) => x.alerta_em >= ini), porVia: Record<string, number> = {};
+  for (const x of alertHoje) porVia[x.alerta_via] = (porVia[x.alerta_via] || 0) + 1;
+  const pagosHoje = (pagosMes || []).filter((x) => x.fechado_em >= ini), comAlerta = (l: any[]) => l.filter((x) => alertaRef(x));
+  const recHoje = comAlerta(pagosHoje), recMes = comAlerta(pagosMes || []);
+  const emRec = casos.filter((p) => alertaRef(p) && p.hot_status === 'confirmada');
+  const conf = casos.filter((p) => p.hot_status === 'confirmada'), semDiv = casos.filter((p) => ['cancelada', 'encerrada', 'sem_divida'].includes(p.hot_status));
+  const foraForma = conf.filter((p) => !cfg.formas[p.grp]);
+  const fila = conf.filter((p) => etapa(p, cfg, hoje) === 'pendente' && !!p.tel && cfg.formas[p.grp] && !['sem_whatsapp', 'conferir'].includes(p.alerta_status));
+  const pausas = casos.filter((p) => etapa(p, cfg, hoje) === 'pausa' && !p.pausa_em && p.hot_status === 'confirmada');
+  const alertadosMes = (alertMes || []).length, pagaramMes = (alertMes || []).filter((x) => x.fechado_motivo === 'pago').length;
+  const prox = proximoDiaUtil(hoje), dsem = (d: string) => DIA_SEMANA[new Date(d + 'T12:00:00Z').getUTCDay()];
+  return [
+    `📊 **Cobrança · resumo de ${dm(hoje)} (${dsem(hoje)})**`,
+    '',
+    '**Hoje**',
+    `• Alertas enviados: **${alertHoje.length}**` + (alertHoje.length ? ` (${Object.entries(porVia).map(([v, n]) => `${VIA[v]?.nome || v} ${n}`).join(' · ')})` : ''),
+    `• Pagaram depois do alerta: **${recHoje.length}** · recuperado **${brl(soma(recHoje))}**` + (pagosHoje.length > recHoje.length ? ` (+${pagosHoje.length - recHoje.length} pagaram sem alerta)` : ''),
+    '',
+    `**Em recuperação** (receberam alerta e ainda não pagaram): **${emRec.length}** · ${brl(soma(emRec))}`,
+    `**Carteira confirmada na Hotmart:** **${conf.length}** alunos · ${brl(soma(conf))}` + (foraForma.length ? ` (${foraForma.length} no cartão ou Parcelamento Hotmart, envio desligado)` : ''),
+    `**Fora da cobrança:** ${semDiv.length} sem dívida na Hotmart (assinatura cancelada, encerrada ou aluno em dia)`,
+    '',
+    `**No mês:** recuperado **${brl(soma(recMes))}** · ${pagaramMes} de ${alertadosMes} alertados pagaram` + (alertadosMes ? ` (${Math.round((100 * pagaramMes) / alertadosMes)}%)` : ''),
+    `**Próximo dia de envio (${dm(prox)}, ${dsem(prox)}):** até ${Math.min(fila.length, cfg.teto * 2)} na fila (reconferidos na Hotmart às 8h) · ${pausas.length} ${pausas.length === 1 ? 'aviso de pausa previsto' : 'avisos de pausa previstos'}`,
+    '',
+    'Detalhes: https://crm-pinguim.vercel.app/cobranca',
+  ].join('\n');
+}
+async function enviarResumo(cfg: any, hoje: string) {
+  const texto = await textoResumo(cfg, hoje);
+  if (cfg.resumo_no_canal && cfg.resumo_canal) {
+    const r = await fetch(`https://discord.com/api/v10/channels/${cfg.resumo_canal}/messages`, { method: 'POST', headers: { Authorization: `Bot ${await bot()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ content: texto.slice(0, 1990), allowed_mentions: { parse: [] } }) });
+    if (!r.ok) { await dmCodina(`⚠️ **Cobrança:** o resumo não foi publicado no canal (${r.status}). Segue aqui:\n\n` + texto); return 'dm (canal falhou)'; }
+    return 'canal';
+  }
+  await dmCodina(texto);
+  return 'dm';
 }
 
 // ---------------- base ----------------
@@ -386,7 +449,7 @@ async function alertar(p: any, cfg: any, por: string) {
   p = { ...p, n_abertas: d.hot_parcelas, total: d.hot_valor, parcela: d.hot_parcela, venc: d.hot_venc || p.venc };
   // link de pagamento (só Pix e boleto): se a Hotmart não gerar, o alerta sai sem o link
   let link: any = null;
-  if (p.grp === 'pix' || p.grp === 'boleto') {
+  if (p.grp !== 'parcelado') {
     try { link = await gerarLink(p, por, 24, d.alvo); } catch (e) {
       const erro = String((e as Error).message || e).slice(0, 300);
       await sb.from('crm_cobranca').update({ link_erro: erro }).eq('id', p.id);
@@ -428,6 +491,11 @@ async function rodada(dryRun: boolean) {
   }
   // conferência diária na Hotmart (roda mesmo com os envios desligados: é só leitura na Hotmart e mantém as telas com o número real)
   if (!dryRun && agora.min >= 8 * 60 && agora.min < FIM_DO_DIA) out.conferencia = await conferirLote(await carregar(cfg), hoje, 12);
+  // resumo do dia: uma vez, depois do último envio (20h05), só em dia de envio
+  if (!dryRun && agora.min >= FIM_DO_DIA + 5 && estado.resumo_dia !== hoje && (await diaDeEnvio(hoje)).ok) {
+    await sb.from('crm_cobranca_config').update({ estado: { ...estado, resumo_dia: hoje } }).eq('id', 1); estado.resumo_dia = hoje;
+    out.resumo = await enviarResumo(cfg, hoje);
+  }
   if (agora.min < hora || agora.min >= FIM_DO_DIA) return { ...out, fora_do_horario: true };
   if (!ligado(cfg, hoje) && !dryRun) return { ...out, travado: cfg.envio ? 'os envios começam em ' + cfg.envio_desde + ': o robô só fez a leitura' : 'envios desligados: o robô só fez a leitura' };
   const dia = await diaDeEnvio(hoje);
@@ -551,14 +619,15 @@ serve(async (req) => {
   if (cracha !== SERVICE && papel !== 'service_role') return new Response(JSON.stringify({ ok: false, erro: 'nao autorizado' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
   let body: any = {}; try { body = await req.json(); } catch (_) { /* cron sem corpo */ }
   try {
-    const out = body.divida_id ? await (async () => { const { data: l } = await sb.from('crm_cobranca_config').select('dados').eq('id', 1).maybeSingle(); const [p] = await carregar(normalizarConfig(l?.dados), String(body.divida_id)); if (!p) return { ok: false, erro: 'caso não encontrado' }; const { alvo, ...d } = await dividaNaHotmart(p); return { ok: true, caso: { nome: p.nome, produto: p.produto_nome, base: { parcelas: p.n_abertas, total: p.total } }, hotmart: d }; })()
+    const out = body.resumo_teste ? await (async () => { const { data: l } = await sb.from('crm_cobranca_config').select('dados').eq('id', 1).maybeSingle(); const cfg = normalizarConfig(l?.dados); const t = await textoResumo(cfg, brt().dia); await dmCodina('🧪 TESTE do resumo diário (o real sai às 20h05 nos dias de envio)\n\n' + t); return { ok: true, texto: t }; })()
+      : body.divida_id ?await (async () => { const { data: l } = await sb.from('crm_cobranca_config').select('dados').eq('id', 1).maybeSingle(); const [p] = await carregar(normalizarConfig(l?.dados), String(body.divida_id)); if (!p) return { ok: false, erro: 'caso não encontrado' }; const { alvo, ...d } = await dividaNaHotmart(p); return { ok: true, caso: { nome: p.nome, produto: p.produto_nome, base: { parcelas: p.n_abertas, total: p.total } }, hotmart: d }; })()
       : body.conferir === 'divida' ? await (async () => { const { data: l } = await sb.from('crm_cobranca_config').select('dados').eq('id', 1).maybeSingle(); return conferirLote(await carregar(normalizarConfig(l?.dados)), brt().dia, Math.min(Number(body.max) || 30, 60)); })()
       : body.prova ?{ ok: true, pagamento: await pagamentoNaHotmart({ cliente_id: String(body.prova.cliente_id), email: '', venc: String(body.prova.venc), prod: String(body.prova.prod) }) }
       : body.conferir ? await conferirTodos(body.conferir === 'pagos') : body.id ? await avulso(String(body.id), String(body.por || 'tutora').slice(0, 80), body.teste_para ? String(body.teste_para) : undefined, body) : await rodada(!!body.dry_run);
     return new Response(JSON.stringify(out), { headers: { 'Content-Type': 'application/json' } });
   } catch (e) {
     const erro = String((e as Error).message || e);
-    if (!body.dry_run && !body.prova && !body.conferir && !body.divida_id) await dmCodina(`⚠️ **Cobrança:** o robô falhou.\n${erro.slice(0, 500)}`);
+    if (!body.dry_run && !body.prova && !body.conferir && !body.divida_id && !body.resumo_teste) await dmCodina(`⚠️ **Cobrança:** o robô falhou.\n${erro.slice(0, 500)}`);
     return new Response(JSON.stringify({ ok: false, erro }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 });
