@@ -122,8 +122,10 @@ const linkVale = (p: any, folgaH = 0) => !!p.link_url && !!p.link_expira && Date
 const valorTxt = (p: any) => (p.n_abertas > 1 ? (p.parcela ? `${p.n_abertas} parcelas de ${brl(p.parcela)}` : `${p.n_abertas} parcelas, total de ${brl(p.total)}`) : `Parcela de ${brl(p.parcela || p.total)}`);
 const trechoLink = (l: any) => (l ? `Para facilitar, este é o link para pagamento por Pix (${brl(l.link_valor)}), válido até ${quandoBR(l.link_expira)}:\n${l.link_url}\n\n` : '');
 // {pagamento}: no cartão (assinatura com o cartão recusado) explica o que houve e dá as duas saídas — trocar o cartão ou pagar por Pix
+// Cartão (André 23/11): uma saída só, atualizar o cartão na Hotmart. Sem link de Pix, para não haver risco de a mesma parcela
+// ser paga duas vezes (Pix + nova tentativa no cartão). Quem quiser outra forma responde a mensagem e a tutora resolve.
 const trechoPag = (p: any, l: any) => (p.grp !== 'cartao' ? trechoLink(l)
-  : 'O pagamento no seu cartão não foi aprovado. Para regularizar, você pode atualizar o cartão na Hotmart, em «Minhas compras» (consumer.hotmart.com)' + (l ? `, ou pagar por Pix por este link (${brl(l.link_valor)}), válido até ${quandoBR(l.link_expira)}:\n${l.link_url}\n\nUse só uma das duas opções, para não pagar a mesma parcela duas vezes.\n\n` : '.\n\n'));
+  : 'O pagamento no seu cartão não foi aprovado. Para regularizar, é só atualizar o cartão na Hotmart, em «Minhas compras» (consumer.hotmart.com). Assim que o cartão for atualizado, a Hotmart cobra a parcela uma única vez.\n\n');
 const mensagem = (p: any, cfg: any, link: any = null) => (cfg.copy.includes('{pagamento}') ? cfg.copy.replace(/\{pagamento\}/g, trechoPag(p, link)) : cfg.copy + (trechoPag(p, link) ? '\n\n' + trechoPag(p, link).trim() : '')).replace(/\{nome\}/g, primeiro(p.nome)).replace(/\{tutora\}/g, VIA[p.via].nome).replace(/\{expert\}/g, EXPERT[p.prod] || 'Pedro Aredes').replace(/\{produto\}/g, p.prod)
   .replace(/\{valor\}/g, valorTxt(p))
   .replace(/\{vencimento\}/g, dm(p.venc) + (p.n_abertas > 1 ? ' (a mais antiga)' : ''));
@@ -309,8 +311,8 @@ async function hot(suf: string, caminho: string, init: any = {}) {
 const VENCIDA = ['OVERDUE', 'DELAYED', 'EXPIRED'], PAGA = ['APPROVED', 'COMPLETE'];
 async function gerarLink(p: any, por: string, folgaH = 24, alvo: any = null) {
   if (linkVale(p, folgaH)) return { link_url: p.link_url, link_pix: p.link_pix, link_valor: p.link_valor, link_parcelas: p.link_parcelas, link_expira: p.link_expira, reaproveitado: true };
-  // Pix, boleto e cartão são assinatura (a negociação gera um Pix das parcelas vencidas); o Parcelamento Hotmart não tem esse link
-  if (p.grp === 'parcelado') throw new Error('o link de pagamento não existe para o Parcelamento Hotmart');
+  // só Pix e boleto: no cartão o aluno atualiza o cartão na Hotmart (Pix junto arrisca pagar a parcela duas vezes); Parcelamento Hotmart não tem link
+  if (p.grp !== 'pix' && p.grp !== 'boleto') throw new Error('o link de Pix só é gerado para Pix e boleto (no cartão, o aluno atualiza o cartão na Hotmart)');
   // a assinatura e as parcelas vêm da conferência da dívida (mesma regra do alerta)
   if (!alvo) { const d = await conferirCaso(p); if (d.hot_status !== 'confirmada') throw new Error('a Hotmart não confirma dívida neste caso (' + d.hot_motivo + ')'); alvo = d.alvo; }
   const conta = alvo.conta, preco = new Map<number, number>(alvo.nums.map((n: number, i: number) => [n, alvo.precos[i]]));
@@ -449,7 +451,7 @@ async function alertar(p: any, cfg: any, por: string) {
   p = { ...p, n_abertas: d.hot_parcelas, total: d.hot_valor, parcela: d.hot_parcela, venc: d.hot_venc || p.venc };
   // link de pagamento (só Pix e boleto): se a Hotmart não gerar, o alerta sai sem o link
   let link: any = null;
-  if (p.grp !== 'parcelado') {
+  if (p.grp === 'pix' || p.grp === 'boleto') { // cartão vai sem link (ver trechoPag)
     try { link = await gerarLink(p, por, 24, d.alvo); } catch (e) {
       const erro = String((e as Error).message || e).slice(0, 300);
       await sb.from('crm_cobranca').update({ link_erro: erro }).eq('id', p.id);
