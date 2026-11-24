@@ -45,7 +45,7 @@ Deno.serve(async (req: Request) => {
 
     // 3) puxa transacoes do Dash com updated_at > marca (inclui novas E mudancas de status).
     // limit 150/rodada — em regime 1/min sao poucas; se houver backlog, proximas rodadas drenam.
-    const url = `${dashUrl}/rest/v1/hotmart_transactions?select=transaction_code,status,product_id,hotmart_products(name),buyer_id,price_value,purchase_date,approved_date,refund_date,updated_at,src,offer_id,payment_type,payment_installments&updated_at=gt.${encodeURIComponent(desde)}&order=updated_at.asc&limit=150`;
+    const url = `${dashUrl}/rest/v1/hotmart_transactions?select=transaction_code,status,product_id,hotmart_products(name),buyer_id,price_value,purchase_date,approved_date,refund_date,updated_at,src,sck,offer_id,payment_type,payment_installments&updated_at=gt.${encodeURIComponent(desde)}&order=updated_at.asc&limit=150`;
     const txRes = await fetch(url, { headers: { apikey: dashKey, Authorization: `Bearer ${dashKey}` } });
     if (!txRes.ok) throw new Error(`Dash tx ${txRes.status}`);
     const txs = await txRes.json();
@@ -99,6 +99,7 @@ Deno.serve(async (req: Request) => {
         data_compra: t.purchase_date || null,
         data_reembolso: t.refund_date || null,
         src: t.src || null,
+        sck: t.sck && !/\[field id=/i.test(t.sck) ? t.sck : null, // origem do checkout (ex.: sales-queren); placeholder vazio da Hotmart fica de fora
         offer_id: t.offer_id || null,
         payment_type: t.payment_type || null,
         installments: t.payment_installments ?? null,
