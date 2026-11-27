@@ -26,8 +26,9 @@ language sql stable as $fn$
   -- agora consolida por produto+situacao (vendas DISTINTAS do mesmo produto somam; tentativas nao)
   compras as (
     select 'Compra'::text fonte, cd.produto_nome produto,
-      case cd.status when 'delayed' then 'Em atraso' when 'waiting_payment' then 'Aguardando pagamento'
-        when 'billet_printed' then 'Boleto gerado' else cd.status end situacao,
+      -- 27/11: o que NÃO foi conferido na Hotmart não é dívida cobrada: a tela mostra à parte e fora do total
+      case cd.status when 'delayed' then 'Em atraso · não conferido' when 'waiting_payment' then 'Aguardando pagamento · não conferido'
+        when 'billet_printed' then 'Boleto gerado · não conferido' else cd.status || ' · não conferido' end situacao,
       sum(cd.valor) valor, null::date vencimento, count(*)::int parcelas, null::text link, max(cd.quando) quando
     from compras_dedup cd
     group by cd.produto_nome, cd.status
@@ -38,7 +39,7 @@ language sql stable as $fn$
     from cob where cob.hot_status = 'confirmada'
   ),
   assin as (
-    select 'Assinatura'::text fonte, a.plan_name produto, 'Mensalidade em atraso'::text situacao,
+    select 'Assinatura'::text fonte, a.plan_name produto, 'Mensalidade em atraso · não conferida'::text situacao,
       null::numeric valor, null::date vencimento, null::int parcelas, null::text link, a.started_at quando
     from pinguim.crm_assinatura a
     where a.status = 'PAST_DUE'
@@ -52,7 +53,7 @@ language sql stable as $fn$
   ),
   boletos as (
     select 'Financiamento'::text fonte, b.product_name produto,
-      coalesce(b.current_step, b.status) situacao, b.price valor, b.payment_due_date vencimento,
+      'Principia: ' || coalesce(b.current_step, b.status) || ' · não conferido' situacao, b.price valor, b.payment_due_date vencimento,
       b.installments parcelas, b.payment_url link, b.made_effective_at quando
     from pinguim.crm_boleto b, cli
     -- qualquer email do cliente (principal ou antigo) ou o CPF

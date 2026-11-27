@@ -1,3 +1,8 @@
+-- Financeiro global do CRM (/financeiro).
+-- 27/11/2026 (André): "onde aparece valor tem que estar conciliado" — a pendência com valor é SÓ a dívida que a Cobrança
+-- conferiu na Hotmart (crm_cobranca hot_status='confirmada', já conciliada por contrato no cobranca-worker). É o mesmo número da
+-- ficha (crm_cliente_financeiro), da tela de Cobrança e do Mapa. Compras com boleto/Pix gerado e não pago, atraso que a Hotmart
+-- não confirmou e financiamentos Principia não entram aqui (aparecem na ficha como "não conferido", fora do total).
 drop function if exists pinguim.crm_financeiro_global(text,integer,integer);
 drop function if exists pinguim.crm_financeiro_global(text,integer,integer,text);
 create function pinguim.crm_financeiro_global(p_busca text default null, p_limit integer default 20, p_offset integer default 0, p_produto_padrao text default null)
@@ -9,70 +14,12 @@ language sql stable as $fn$
     select distinct cliente_id from pinguim.crm_compra
     where p_produto_padrao is not null and produto_nome ilike p_produto_padrao
   ),
-  -- DEDUP DE TENTATIVAS DE COBRANCA:
-  -- a mesma venda recusada vira varias linhas delayed/waiting (Hotmart retenta dia apos dia);
-  -- o id_externo so muda na DATA no meio (buyer-DATA-produto). Agrupamos pela RAIZ (data trocada por 'D')
-  -- + produto, e contamos 1 divida por venda com 1 valor (o maximo, que e o valor cheio).
-  -- Cobranças já conferidas na Hotmart (cobranca-worker, André 19/11/2026): o número da Hotmart vale no lugar da conta
-  -- pela base (mesmo valor na ficha, no Financeiro e na Cobrança). Sem dívida na Hotmart = não é pendência.
-  cob as (
-    select cliente_id, produto_nome, hot_status, hot_parcelas, hot_valor from pinguim.crm_cobranca
-    where fechado_em is null and hot_status in ('confirmada','cancelada','encerrada','sem_divida')
-  ),
-  comp_dedup as (
-    select c.cliente_id,
-           regexp_replace(c.id_externo, '\d{4}-\d{2}-\d{2}', 'D') as raiz,
-           max(case when c.valor_brl <= 50000 then c.valor_brl else 0 end) as val
-    from pinguim.crm_compra c
-    where c.status in ('delayed','waiting_payment','billet_printed')
-      and not exists (select 1 from cob where cob.cliente_id = c.cliente_id and cob.produto_nome = c.produto_nome)
-    group by c.cliente_id, regexp_replace(c.id_externo, '\d{4}-\d{2}-\d{2}', 'D')
-  ),
-  comp as (
-    select cliente_id, sum(n) n, sum(val) val from (
-      select cliente_id, count(*) n, coalesce(sum(val),0) val from comp_dedup group by cliente_id
-      union all
-      select cliente_id, sum(hot_parcelas) n, sum(hot_valor) val from cob where hot_status = 'confirmada' group by cliente_id
-    ) x group by cliente_id
-  ),
-  assin as (
-    select distinct ce.cliente_id
-    from pinguim.crm_assinatura a
-    join (select distinct cliente_id, substring(id_externo from '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}') buyer from pinguim.crm_compra) ce
-      on ce.buyer = a.buyer_id
-    where a.status = 'PAST_DUE'
-      -- assinatura já conferida na Hotmart: a situação real está na cobrança (a cópia do Dash pode estar atrasada)
-      and not exists (select 1 from pinguim.crm_cobranca cb, jsonb_array_elements(coalesce(cb.hot_assinatura, '[]'::jsonb)) e
-                      where cb.hot_em is not null and e->>'code' = a.subscriber_code)
-  ),
-  -- boleto tambem dedup pela raiz do sale_id (se houver retentativa) — na pratica sale_id ja e unico por venda,
-  -- mas agrupamos defensivamente por (cliente, product_name) pegando o maior valor.
-  -- boleto liga ao cliente por QUALQUER email dele (identidades): troca de email principal não solta boleto antigo
-  bol as (
-    select coalesce(i.cliente_id, c.cliente_id) cliente_id, count(*) n, coalesce(sum(b.price),0) val
-    from pinguim.crm_boleto b
-    left join pinguim.crm_cliente_identidade i on i.tipo = 'email' and i.valor = lower(b.buyer_email)
-    left join pinguim.crm_cliente c on c.email_canon = lower(b.buyer_email)
-    where coalesce(i.cliente_id, c.cliente_id) is not null
-    group by 1
-  ),
-  uni as (
-    select cliente_id from comp
-    union select cliente_id from assin
-    union select cliente_id from bol
-  ),
   agg as (
-    select u.cliente_id,
-      coalesce(cp.n,0) + case when a.cliente_id is not null then 1 else 0 end + coalesce(b.n,0) as n_pend,
-      coalesce(cp.val,0) + coalesce(b.val,0) as val_total,
-      trim(both ', ' from concat_ws(', ',
-        case when cp.cliente_id is not null then 'compra' end,
-        case when a.cliente_id is not null then 'assinatura' end,
-        case when b.cliente_id is not null then 'boleto' end)) as fontes
-    from uni u
-    left join comp cp on cp.cliente_id = u.cliente_id
-    left join assin a on a.cliente_id = u.cliente_id
-    left join bol b on b.cliente_id = u.cliente_id
+    select cb.cliente_id, sum(cb.hot_parcelas)::bigint n_pend, sum(cb.hot_valor) val_total,
+           'Cobrança conferida na Hotmart: ' || string_agg(distinct cb.produto_nome, ', ') fontes
+    from pinguim.crm_cobranca cb
+    where cb.fechado_em is null and cb.hot_status = 'confirmada'
+    group by cb.cliente_id
   ),
   filtrado as (
     select ag.*, c.nome, c.email_canon, c.tel_canon
@@ -89,3 +36,5 @@ language sql stable as $fn$
   order by f.val_total desc nulls last, f.n_pend desc
   limit p_limit offset p_offset
 $fn$;
+grant execute on function pinguim.crm_financeiro_global(text,integer,integer,text) to service_role, authenticated;
+revoke execute on function pinguim.crm_financeiro_global(text,integer,integer,text) from public, anon;
