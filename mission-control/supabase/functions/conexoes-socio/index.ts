@@ -51,6 +51,12 @@ const SCOPES = [
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',
 ].join(' ');
+// Conta que só sobe vídeo no YouTube (ex.: cs@ = canal do Micha, gravações dos encontros): pede só isso
+const SCOPES_YOUTUBE = [
+  'https://www.googleapis.com/auth/youtube.upload',
+  'https://www.googleapis.com/auth/youtube.readonly',
+  'https://www.googleapis.com/auth/userinfo.email',
+].join(' ');
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -86,13 +92,13 @@ p{color:#94a3b8;margin:.55rem 0;line-height:1.55}
 const PAGE_END = `</div></body></html>`;
 const esc = (s: string) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
-function htmlOk(args: { email: string; label: string; nome: string; is_padrao: boolean }) {
+function htmlOk(args: { email: string; label: string; nome: string; is_padrao: boolean; youtube?: boolean }) {
   return `${PAGE_BASE}
     <div class="icon ok">🐧</div>
     <h1 class="ok">Conta conectada <span>com sucesso</span></h1>
     <p>Olá <strong>${esc(args.nome)}</strong> — sua conta Google foi conectada ao Pinguim OS.</p>
     <p class="email">${esc(args.email)} <span class="tag">${esc(args.label)}</span>${args.is_padrao ? '<span class="badge">⭐ padrão</span>' : ''}</p>
-    <p>Permissões: Gmail (ler + responder) · Calendar (ler + criar) · Drive (ler + editar)</p>
+    <p>Permissões: ${args.youtube ? 'YouTube (enviar vídeos e ver o canal)' : 'Gmail (ler + responder) · Calendar (ler + criar) · Drive (ler + editar)'}</p>
     <p class="tip">Pode fechar essa aba. Sua conta já está pronta pra ser usada.</p>
   ${PAGE_END}`;
 }
@@ -120,6 +126,7 @@ async function gerarStateToken(dados: {
   label: string;
   marcar_padrao: boolean | null;
   incluir_em_relatorio: boolean;
+  youtube?: boolean;
 }): Promise<string> {
   const bytes = new Uint8Array(24);
   crypto.getRandomValues(bytes);
@@ -132,6 +139,7 @@ async function gerarStateToken(dados: {
     telefone: dados.telefone,
     marcar_padrao: dados.marcar_padrao,
     incluir_em_relatorio: dados.incluir_em_relatorio,
+    youtube: !!dados.youtube,
   });
 
   // Hash sintetico de "origem" — pra essa edge, usa hash do anon key (publico, mas previne reuso cruzado)
@@ -181,18 +189,20 @@ async function actIniciar(body: any) {
   const client_id = await getChave('GOOGLE_OAUTH_CLIENT_ID', 'conexoes-socio-iniciar');
   if (!client_id) return jsonResp({ ok: false, error: 'GOOGLE_OAUTH_CLIENT_ID nao cadastrado no cofre' }, 500);
 
-  const state = await gerarStateToken({ nome, telefone, label, marcar_padrao, incluir_em_relatorio });
+  const youtube = body.youtube === true;
+  const state = await gerarStateToken({ nome, telefone, label, marcar_padrao, incluir_em_relatorio: youtube ? false : incluir_em_relatorio, youtube });
 
   const params = new URLSearchParams({
     client_id,
     redirect_uri: REDIRECT_URI,
     response_type: 'code',
-    scope: SCOPES,
+    scope: youtube ? SCOPES_YOUTUBE : SCOPES,
     access_type: 'offline',
-    prompt: 'consent',
-    include_granted_scopes: 'true',
+    prompt: youtube ? 'consent select_account' : 'consent',
     state,
   });
+  if (!youtube) params.set('include_granted_scopes', 'true');
+  if (body.login_hint) params.set('login_hint', String(body.login_hint));
   const authorize_url = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 
   return jsonResp({
@@ -369,6 +379,7 @@ async function actCallback(url: URL) {
         label: stateRow.label,
         nome: dadosAux.nome || socio.apelido || '',
         is_padrao: !!(reg && reg.is_padrao),
+        youtube: !!dadosAux.youtube,
       }),
       200,
     );
