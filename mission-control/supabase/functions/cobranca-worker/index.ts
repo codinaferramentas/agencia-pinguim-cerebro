@@ -244,7 +244,8 @@ async function dividaNaHotmart(p: any) {
       const nums = [...preco.keys()].sort((x, y) => x - y);
       subs.push({ conta, code: a.subscriber_code, id: a.subscription_id, produto: String(a?.product?.name || ''), status: String(a.status || '').toUpperCase(),
         vencidas: nums.length, valor: r2(nums.reduce((s, n) => s + (preco.get(n) || 0), 0)), nums, precos: nums.map((n) => preco.get(n) || 0),
-        venc: nums.length && a.accession_date ? vencParcela(Number(a.accession_date), nums[0]) : null });
+        venc: nums.length && a.accession_date ? vencParcela(Number(a.accession_date), nums[0]) : null,
+        adesao: Number(a.accession_date) || null, pagas: pagas.size });
     }
   }
   const norm = (s: string) => String(s || '').trim().toLowerCase();
@@ -253,9 +254,32 @@ async function dividaNaHotmart(p: any) {
   const base = { hot_em: new Date().toISOString(), hot_assinatura: subs.map(({ nums, precos, ...s }) => s) };
   const vivas = daqui.filter((s) => VIVA.includes(s.status) && s.vencidas > 0);
   if (vivas.length) {
-    const precos = vivas.flatMap((s) => s.precos), n = precos.length, total = r2(precos.reduce((s, v) => s + v, 0));
+    // CONCILIAÇÃO POR CONTRATO (André 27/11, caso Roberta: trocou de plano e as duas assinaturas cobravam).
+    // Assinaturas vivas do mesmo programa em sequência: cada uma vale da adesão até a adesão da seguinte (troca de plano/migração).
+    // Saldo = Σ (vencimentos na janela − parcelas pagas). Só REDUZ a cobrança (nunca aumenta) e fica só no plano vigente (o mais novo).
+    const contrato = subs.filter((s) => VIVA.includes(s.status) && s.adesao).sort((x, y) => x.adesao - y.adesao);
+    const hojeDia = brt(new Date()).dia;
+    let saldo = 0;
+    contrato.forEach((s, i) => {
+      const fim = i + 1 < contrato.length ? new Date(contrato[i + 1].adesao - 3 * 3600e3 - 864e5).toISOString().slice(0, 10) : hojeDia;
+      let vencidas = 0; for (let n = 1; n < 400 && vencParcela(s.adesao, n) <= (fim < hojeDia ? fim : hojeDia); n++) vencidas++;
+      s.saldo = Math.max(0, vencidas - s.pagas); saldo += s.saldo;
+    });
+    const vigente = contrato[contrato.length - 1];
+    const dataBr = (ms: number) => { const d = brt(new Date(ms)).dia; return d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4); };
+    const nada = { hot_parcelas: 0, hot_valor: 0, hot_parcela: null, hot_venc: null };
+    if (contrato.length > 1 && vigente && !vivas.includes(vigente))
+      return { ...base, ...nada, hot_status: 'sem_divida', hot_motivo: `conciliado por contrato: o aluno trocou de plano para «${vigente.produto}» em ${dataBr(vigente.adesao)}; a cobrança fica só no plano vigente, não nesta assinatura antiga` };
+    const precosAll = vivas.flatMap((s) => s.precos);
+    // sem data de adesão a conciliação não tem base: fica o que a Hotmart mostra
+    const n = contrato.length ? Math.min(precosAll.length, saldo) : precosAll.length;
+    if (n === 0)
+      return { ...base, ...nada, hot_status: 'sem_divida', hot_motivo: `conciliado por contrato: os pagamentos do ${p.prod} (${contrato.map((s) => s.pagas).reduce((a, b) => a + b, 0)} parcelas pagas) já cobrem os vencimentos até hoje` };
+    const precos = precosAll.slice(0, n), total = r2(precos.reduce((s, v) => s + v, 0));
+    const alvo = n < precosAll.length ? { ...vivas[0], nums: vivas[0].nums.slice(0, n), precos: vivas[0].precos.slice(0, n), vencidas: Math.min(n, vivas[0].vencidas) } : vivas[0];
+    const conc = n < precosAll.length ? ` · conciliado por contrato: a Hotmart mostra ${precosAll.length}, mas pelos pagamentos de todos os planos do ${p.prod} faltam ${n}` : '';
     return { ...base, hot_status: 'confirmada', hot_parcelas: n, hot_valor: total, hot_parcela: precos.every((v) => Math.abs(v - precos[0]) < 0.01) ? precos[0] : null,
-      hot_venc: vivas.map((s) => s.venc).filter(Boolean).sort()[0] || null, hot_motivo: `${n} ${n > 1 ? 'parcelas vencidas' : 'parcela vencida'} na Hotmart (${brl(total)})`, alvo: vivas[0] };
+      hot_venc: vivas.map((s) => s.venc).filter(Boolean).sort()[0] || null, hot_motivo: `${n} ${n > 1 ? 'parcelas vencidas' : 'parcela vencida'} na Hotmart (${brl(total)})${conc}`, alvo };
   }
   const nada = { hot_parcelas: 0, hot_valor: 0, hot_parcela: null, hot_venc: null };
   if (!subs.length) return { ...base, ...nada, hot_status: 'nao_achou', hot_motivo: p.grp === 'cartao' || p.grp === 'parcelado' ? 'compra no cartão ou no Parcelamento Hotmart: não é assinatura e precisa de conferência própria' : 'nenhuma assinatura deste produto na Hotmart com os e-mails do aluno' };
